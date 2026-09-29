@@ -271,6 +271,54 @@ test("outcomes that end together are each said, one per next action", async ({ p
   expect(errors.filter((error) => !error.includes("status of 503"))).toEqual([]);
 });
 
+test("another word arriving leaves the open takeover and its focus alone", async ({ page }) => {
+  const errors = collectBrowserErrors(page);
+  const passage = await admitWikiPassage(page, VIEWPORTS[0]);
+  await expectMarkCount(page, 1);
+
+  // The next admission's transcript waits until the takeover is open.
+  let releaseTranscript!: () => void;
+  const transcriptBarrier = new Promise<void>((resolve) => {
+    releaseTranscript = resolve;
+  });
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
+    await transcriptBarrier;
+    await route.fallback();
+  });
+  const count = await page.locator("[data-thought-id]").count();
+  await page.getByRole("button", {
+    name: fixtureUiCopy.voiceTool.recordTopLevelThought,
+    exact: true,
+  }).click({ timeout: 30_000 });
+  const stop = page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+    .getByRole("button", { name: fixtureUiCopy.voiceTool.stopRecording, exact: true });
+  await expect(stop).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(MIN_SYNTHETIC_CAPTURE_MS);
+  await stop.click();
+
+  await tapWord(page, passage, CANONICAL);
+  const takeover = page.getByRole("group", { name: TAKEOVER.changed(HEARD, CANONICAL) });
+  const keep = takeover.getByRole("button", { name: TAKEOVER.keepLabel(CANONICAL) });
+  const restore = takeover.getByRole("button", { name: TAKEOVER.restoreLabel(HEARD) });
+  await expect(keep).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(restore).toBeFocused();
+
+  // A second Wiki word commits and publishes while the person rests on Restore.
+  releaseTranscript();
+  await expect(page.locator("[data-thought-id]")).toHaveCount(count + 1, { timeout: 15_000 });
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  await expect(takeover).toBeVisible();
+  await expect(restore).toBeFocused();
+
+  // Enter records the choice the person is on, not the one focus was pulled to.
+  await page.keyboard.press("Enter");
+  await expect(passage.locator(".spatial-thought__text")).toHaveText(REVERTED);
+  expect(errors).toEqual([]);
+});
+
 test("informed silence settles after two further admissions", async ({ page }) => {
   const errors = collectBrowserErrors(page);
   const passage = await admitWikiPassage(page, VIEWPORTS[0]);
