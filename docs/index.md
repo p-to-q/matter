@@ -16,6 +16,7 @@ Read only when the change needs it:
 - [`release-readiness.md`](release-readiness.md) — current release gates, publication state, and the latest receipts;
 - [`deployment-owner-handoff.md`](deployment-owner-handoff.md) — tokenless Vercel operator checklist and external-control receipt;
 - [`deployment-handoff.md`](deployment-handoff.md) — the live deployment's history, risk acceptances, and incident notes;
+- [`handoff-preview-64.md`](handoff-preview-64.md) — the Preview.64 campaign: every change, decision, verification round, and open item;
 - [`public-discovery.md`](public-discovery.md) — canonical origin, SEO metadata, and machine-readable surfaces;
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — change and validation discipline.
 

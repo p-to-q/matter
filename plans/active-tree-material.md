@@ -16,6 +16,8 @@ at the end of this plan lists them.
 
 ## Active campaign — nothing a person does is silently lost; Wiki becomes addressable
 
+Handoff: [`../docs/handoff-preview-64.md`](../docs/handoff-preview-64.md).
+
 State: frozen 2026-09-29 after a nine-part audit of `c6027c8` and five external
 research passes (bounded undo, local durability, exit motion, IME/Escape/pen
 input, implicit feedback). Every code slice except the bundle budget is merged
