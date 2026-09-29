@@ -5,8 +5,10 @@ import {
   MAX_AUDIO_REQUEST_BYTES,
   MAX_INTERACTION_ID_LENGTH,
   MAX_LOCALE_LENGTH,
+  TRANSCRIPTION_PURPOSE_QUERY_PARAMETER,
   TRANSCRIPTION_SERVER_TIMEOUT_MS,
   isAcceptedAudioType,
+  isTranscriptionPurpose,
   type TranscriptionPurpose,
   type TranscriptionRequest,
 } from "../protocol/transcription-contract";
@@ -57,11 +59,17 @@ async function handleBoundedTranscriptionRequest(
   signal: AbortSignal,
 ): Promise<Response> {
   let adapter: TranscriptionAdapter;
+  let declaredPurpose: TranscriptionPurpose | null;
   let declaredLength: number | null;
   try {
     // Deployment capability is known before any recording byte is read. An
     // unavailable deployment must not buffer and parse audio it would discard.
     adapter = resolveTranscriptionAdapter();
+    // So is a purpose the URL declares: a closed surface refuses before the
+    // upload is buffered, and before size or duration could misreport it as a
+    // non-retryable recording fault.
+    declaredPurpose = parseDeclaredPurpose(request.url);
+    if (declaredPurpose !== null) assertTranscriptionPurposeAvailable(declaredPurpose);
     declaredLength = parseOptionalContentLength(request.headers.get("content-length"));
   } catch (error) {
     cancelBody(request.body);
@@ -97,9 +105,14 @@ async function handleBoundedTranscriptionRequest(
     throw invalidRequest("The transcription protocol version is unsupported.");
   }
   const purpose = requiredString(form, "purpose", 16);
-  if (purpose !== "admission" && purpose !== "direction" && purpose !== "swap-direction") {
+  if (!isTranscriptionPurpose(purpose)) {
     throw invalidRequest("The transcription purpose is invalid.");
   }
+  if (declaredPurpose !== null && declaredPurpose !== purpose) {
+    throw invalidRequest("The transcription purpose does not match its request.");
+  }
+  // Every later field check describes a recording this surface may not take.
+  if (declaredPurpose === null) assertTranscriptionPurposeAvailable(purpose);
   const locale = requiredString(form, "locale", MAX_LOCALE_LENGTH);
   if (!isMatterLocale(locale)) {
     throw invalidRequest("The transcription locale is invalid.");
@@ -151,12 +164,11 @@ async function handleBoundedTranscriptionRequest(
     protocolVersion: PROTOCOL_VERSION,
     interactionId,
     attempt,
-    purpose: purpose as TranscriptionPurpose,
+    purpose,
     locale,
     durationMs,
     audio: audioValue,
   };
-  assertTranscriptionPurposeAvailable(parsed.purpose);
   throwIfRequestInterrupted(signal);
   return Response.json(await transcribeRecording(parsed, signal, adapter), {
     headers: { "Cache-Control": "no-store" },
@@ -313,6 +325,21 @@ function requiredPositiveSafeInteger(form: FormData, field: string): number {
     throw invalidRequest(`The ${field} field is invalid.`);
   }
   return parsed;
+}
+
+/**
+ * The optional URL declaration of the purpose. It may occur at most once and
+ * must name a purpose exactly; the multipart field is still required and must
+ * agree with it, so the URL can refuse early but never select a surface alone.
+ */
+function parseDeclaredPurpose(url: string): TranscriptionPurpose | null {
+  const values = new URL(url).searchParams.getAll(TRANSCRIPTION_PURPOSE_QUERY_PARAMETER);
+  if (values.length === 0) return null;
+  const [value] = values;
+  if (values.length !== 1 || !isTranscriptionPurpose(value)) {
+    throw invalidRequest("The transcription purpose is invalid.");
+  }
+  return value;
 }
 
 function parseOptionalContentLength(value: string | null): number | null {

@@ -223,7 +223,7 @@ test("real spoken admissions promote, persist, reload, and apply Wiki fitting", 
   await installSyntheticMicrophone(page);
   await prewarmAdmissionRoutes(page);
   let transcript = "Englebart spoke.";
-  await page.route("**/api/transcribe", async (route) => {
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
     const body = route.request().postDataBuffer()?.toString("utf8") ?? "";
     const interactionId = multipartField(body, "interactionId");
     const attempt = Number.parseInt(multipartField(body, "attempt"), 10);
