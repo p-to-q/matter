@@ -3063,6 +3063,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
   }, [interruptIndexCameraMotion, setViewport]);
 
+  const cancelLassoPointer = lasso.pointerCancel;
+  const cancelLassoStroke = lasso.cancelActiveStroke;
   const cancelCanvasPointerOwnership = useCallback(() => {
     pointerArbiter.reset();
     settleTouchFounderEffects(false);
@@ -3071,10 +3073,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     multiTouchNavigationRef.current = false;
     const shell = shellRef.current;
     for (const pointerId of touchPointerIds) {
-      lasso.pointerCancel(pointerId);
+      cancelLassoPointer(pointerId);
       if (shell?.hasPointerCapture(pointerId)) shell.releasePointerCapture(pointerId);
     }
-    const lassoPointerId = lasso.cancelActiveStroke();
+    const lassoPointerId = cancelLassoStroke();
     if (lassoPointerId !== null && shell?.hasPointerCapture(lassoPointerId)) {
       shell.releasePointerCapture(lassoPointerId);
     }
@@ -3082,7 +3084,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
     pointerOriginNodeRef.current = null;
     cancelNodeDragOwnership();
     updateViewport({ type: "gesture-cancel" });
-  }, [cancelNodeDragOwnership, lasso, pointerArbiter, settleTouchFounderEffects, updateViewport]);
+  }, [
+    cancelLassoPointer,
+    cancelLassoStroke,
+    cancelNodeDragOwnership,
+    pointerArbiter,
+    settleTouchFounderEffects,
+    updateViewport,
+  ]);
 
   // A pen that lands anywhere just after a palm revokes it: the palm's lasso
   // stroke restores its prior selection, its pan returns the camera to where it
@@ -3093,14 +3102,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const shell = shellRef.current;
     for (const pointerId of pointerIds) {
       canvasTouchContactsRef.current.delete(pointerId);
-      if (lasso.pointerCancel(pointerId)) lassoClickOriginNodeRef.current = null;
+      if (cancelLassoPointer(pointerId)) lassoClickOriginNodeRef.current = null;
       if (nodeDragRef.current?.pointerId === pointerId) cancelNodeDragOwnership();
       updateViewport({ type: "pointer-revert", pointerId });
       if (shell?.hasPointerCapture(pointerId)) shell.releasePointerCapture(pointerId);
     }
     multiTouchNavigationRef.current = false;
     pointerOriginNodeRef.current = null;
-  }, [cancelNodeDragOwnership, lasso, settleTouchFounderEffects, updateViewport]);
+  }, [cancelLassoPointer, cancelNodeDragOwnership, settleTouchFounderEffects, updateViewport]);
+
+  // The window listeners below live as long as the paper. They reach the
+  // current owners through refs, so a render or a camera change never
+  // detaches and re-attaches them mid-gesture.
+  const revokeTouchesForPenRef = useRef(revokeTouchesForPen);
+  const cancelCanvasPointerOwnershipRef = useRef(cancelCanvasPointerOwnership);
+  useLayoutEffect(() => {
+    revokeTouchesForPenRef.current = revokeTouchesForPen;
+    cancelCanvasPointerOwnershipRef.current = cancelCanvasPointerOwnership;
+  });
 
   useEffect(() => {
     // Capture phase: a control that stops propagation must not strand a pen
@@ -3114,7 +3133,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         ? null
         : Object.freeze({ pointerId: event.pointerId, occurrenceId: takeover.id });
       const revoked = pointerArbiter.notePointerDown(arbitratedPointer(event));
-      if (revoked.length > 0) revokeTouchesForPen(revoked);
+      if (revoked.length > 0) revokeTouchesForPenRef.current(revoked);
     };
     const noteMove = (event: PointerEvent) => pointerArbiter.notePointerMove(arbitratedPointer(event));
     const noteEnd = (event: PointerEvent) => pointerArbiter.notePointerEnd(arbitratedPointer(event));
@@ -3128,25 +3147,26 @@ export function RootedMaterial(props: RootedMaterialProps) {
       window.removeEventListener("pointerup", noteEnd, true);
       window.removeEventListener("pointercancel", noteEnd, true);
     };
-  }, [pointerArbiter, revokeTouchesForPen, wikiOccurrences]);
+  }, [pointerArbiter, wikiOccurrences]);
 
   useEffect(() => {
+    const cancelOwnership = () => cancelCanvasPointerOwnershipRef.current();
     const handleVisibilityChange = () => {
-      if (document.visibilityState !== "visible") cancelCanvasPointerOwnership();
+      if (document.visibilityState !== "visible") cancelOwnership();
     };
-    window.addEventListener("blur", cancelCanvasPointerOwnership);
-    window.addEventListener("pagehide", cancelCanvasPointerOwnership);
-    window.addEventListener("orientationchange", cancelCanvasPointerOwnership);
+    window.addEventListener("blur", cancelOwnership);
+    window.addEventListener("pagehide", cancelOwnership);
+    window.addEventListener("orientationchange", cancelOwnership);
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.screen.orientation?.addEventListener?.("change", cancelCanvasPointerOwnership);
+    window.screen.orientation?.addEventListener?.("change", cancelOwnership);
     return () => {
-      window.removeEventListener("blur", cancelCanvasPointerOwnership);
-      window.removeEventListener("pagehide", cancelCanvasPointerOwnership);
-      window.removeEventListener("orientationchange", cancelCanvasPointerOwnership);
+      window.removeEventListener("blur", cancelOwnership);
+      window.removeEventListener("pagehide", cancelOwnership);
+      window.removeEventListener("orientationchange", cancelOwnership);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.screen.orientation?.removeEventListener?.("change", cancelCanvasPointerOwnership);
+      window.screen.orientation?.removeEventListener?.("change", cancelOwnership);
     };
-  }, [cancelCanvasPointerOwnership]);
+  }, []);
 
   const cancelViewportGesture = () => {
     // A tool transfer ends the old camera owner and its browser capture as one
@@ -4883,8 +4903,15 @@ function StretchHandleButton({
   );
 }
 
-function arbitratedPointer(event: Pick<PointerEvent, "pointerId" | "pointerType" | "timeStamp">): ArbitratedPointer {
-  return { pointerId: event.pointerId, pointerType: event.pointerType, timeStamp: event.timeStamp };
+function arbitratedPointer(
+  event: Pick<PointerEvent, "buttons" | "pointerId" | "pointerType" | "timeStamp">,
+): ArbitratedPointer {
+  return {
+    pointerId: event.pointerId,
+    pointerType: event.pointerType,
+    buttons: event.buttons,
+    timeStamp: event.timeStamp,
+  };
 }
 
 function isEditableEventTarget(target: EventTarget | null): boolean {

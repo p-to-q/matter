@@ -174,7 +174,12 @@ a mouse alone behaves as before. Pen contact is noted in the window capture
 phase, so a control that stops propagation cannot strand it. A pointer-down
 that reuses an id still held as owned or rejected settles that earlier contact
 first: ids are unique among active pointers, so an end the page never received
-cannot leave every later touch joining a pinch that no longer exists.
+cannot leave every later touch joining a pinch that no longer exists. A move
+with nothing pressed settles its own pointer the same way, and a hovering pen
+settles every pen contact still recorded, because a stylus returns into range
+under a fresh id and one screen carries one stylus. A settled pen keeps the
+grace of its last real contact event: hover never extends palm rejection, and
+a barrel press while hovering is not contact.
 
 ## Chrome accessibility
 

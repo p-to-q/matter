@@ -75,7 +75,7 @@ describe("mobile canvas touch ownership", () => {
     expect(down).toContain("pendingTouchEffects.effects.push(props.admission.clearRepairPresentations)");
     const revoke = rooted.slice(
       rooted.indexOf("const revokeTouchesForPen"),
-      rooted.indexOf("}, [cancelNodeDragOwnership, lasso, settleTouchFounderEffects, updateViewport]);"),
+      rooted.indexOf("}, [cancelLassoPointer, cancelNodeDragOwnership, settleTouchFounderEffects, updateViewport]);"),
     );
     expect(revoke).toContain("settleTouchFounderEffects(false);");
   });
@@ -91,16 +91,16 @@ describe("mobile canvas touch ownership", () => {
   });
 
   it("cancels transient canvas ownership on browser lifecycle loss", () => {
-    expect(rooted).toContain('window.addEventListener("pagehide", cancelCanvasPointerOwnership)');
-    expect(rooted).toContain('window.addEventListener("blur", cancelCanvasPointerOwnership)');
-    expect(rooted).toContain('window.addEventListener("orientationchange", cancelCanvasPointerOwnership)');
+    expect(rooted).toContain('window.addEventListener("pagehide", cancelOwnership)');
+    expect(rooted).toContain('window.addEventListener("blur", cancelOwnership)');
+    expect(rooted).toContain('window.addEventListener("orientationchange", cancelOwnership)');
     expect(rooted).toContain('document.addEventListener("visibilitychange", handleVisibilityChange)');
 
     const lifecycleCancellation = rooted.slice(
       rooted.indexOf("const cancelCanvasPointerOwnership"),
       rooted.indexOf("const cancelViewportGesture"),
     );
-    expect(lifecycleCancellation).toContain("const lassoPointerId = lasso.cancelActiveStroke()");
+    expect(lifecycleCancellation).toContain("const lassoPointerId = cancelLassoStroke()");
     expect(lifecycleCancellation).toContain("shell.releasePointerCapture(lassoPointerId)");
     expect(lifecycleCancellation).toContain("cancelNodeDragOwnership()");
   });
