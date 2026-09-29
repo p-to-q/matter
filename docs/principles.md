@@ -44,7 +44,8 @@ the running product, not how ambitious a feature sounds.
    message inside material. A Wiki correction is disclosed once, restrained,
    with a quiet mark only while its occurrence is unsettled; it never becomes a
    badge, queue, or success notice. Transient surfaces leave crisply: a
-   finished one holds briefly, a dismissed one fades, and a displaced one cuts.
+   finished one holds briefly, a dismissed one fades, a displaced one gives
+   way quickly, and only a modal or a hidden page cuts.
 7. **Local authority is configuration, not agency.** Wiki may suggest one
    deterministic spelling through a narrow captured capability; it cannot
    choose scope, authorize or publish a command, or become model context.

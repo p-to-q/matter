@@ -90,8 +90,14 @@ canvas appearance, or the right-rail editing tools.
   `48px`-high targets. Focus follows the visible button, not the invisible
   extension.
 - One measured frosted action field prefers the upper-left clear space of a
-  hovered or keyboard-focused passage, then tries the other above, below, and
-  side positions in a fixed collision-safe order. The field and all available
+  hovered, keyboard-focused, or selected passage, then tries the other above,
+  below, and
+  side positions in a fixed collision-safe order. A fine pointer's click
+  selects the passage it will act on, so the selection keeps the field after
+  the pointer leaves, and a press on a passage never closes that passage's
+  field; hover or focus elsewhere still takes precedence, and `Escape`
+  dismisses the selection's field until that passage is pressed or selected
+  again. The field and all available
   actions reveal together. Its left control is the supplied AI placeholder and
   opens the node-local Point-and-Talk direction field; its right control reuses the
   material index's working-context transition: `−` sets the active branch aside
@@ -147,7 +153,8 @@ capture-phase click suppression for a rejected palm is a click, not a key).
 After a submit Escape only dismisses
 presentation: Elastic loses its visible degree, its range staying addressed with
 both grips at zero, and Point and Talk detaches, while the submitted request
-continues. `escape-ownership.test.ts` holds the boundary
+continues. Escape on the Point and Talk field is the person's close: its
+frozen copy fades and shrinks for 200 ms, never a cut. `escape-ownership.test.ts` holds the boundary
 by scanning the source tree.
 
 ## Canvas pointer ownership

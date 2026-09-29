@@ -129,8 +129,8 @@ selected lineage   → LineageContext                lineage
        planToTreeCommand → tree engine → exact inverse
 ```
 
-Point and Talk is Text Swap's current passage-local UI owner. The hover/focus AI
-mark freezes the complete current node as its explicit reference and lazily opens
+Point and Talk is Text Swap's current passage-local UI owner. The AI mark of a
+hovered, focused, or selected passage freezes the complete current node as its explicit reference and lazily opens
 one viewport-fixed typed/Voice direction field aligned to that passage's upper-left
 glyph bounds; Lasso remains owned only by Elastic. The full driver, Voice, and
 request graph stays out of the initial canvas bundle until that explicit click.
@@ -527,7 +527,8 @@ transcription or a submitted model request. Returning visible reopens delivery
 after global pointer-idle and exact target checks. `pagehide`, unmount, document
 owner replacement, explicit cancellation, or exact-basis conflict are terminal
 operation boundaries, except that a back-forward-cache `pagehide` only suspends
-Voice admission: its submitted or held words wait for the page's return. Read-only Inquiry follows the same submitted-owner rule
+Voice admission, a submitted Point-and-Talk or Elastic turn, and on-device
+transcription: their submitted or held work waits for the page's return. Read-only Inquiry follows the same submitted-owner rule
 without a material commit.
 Hooks adapt browser events to those owners through one narrow browser adapter;
 they do not each invent a partial copy of another lifecycle.
