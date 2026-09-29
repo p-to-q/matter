@@ -139,6 +139,8 @@ export type MaterialArchiveActionResult =
  * storage refused.
  */
 export type MaterialArchiveActions = Readonly<{
+  /** Opening Archive is the intent signal: its actions' code loads before a press. */
+  prepare?: () => void;
   exportCopy: () => Promise<MaterialArchiveActionResult>;
   validateImport: (file: File) => Promise<MaterialArchiveActionResult>;
   replaceImport: (
@@ -806,6 +808,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setArchiveError(null);
     setPreparedImport(null);
     setArchiveHistoryNotice(persistenceStatus.historyNotice);
+    props.archive?.prepare?.();
     setMode("archive");
     props.persistence.acknowledgeHistoryNotice?.();
   };

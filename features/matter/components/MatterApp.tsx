@@ -6,8 +6,6 @@ import { useMatterStore, useWikiOccurrences } from "./use-matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
 import { useAdmission } from "../interaction/use-admission";
 import { useMaterialPersistence } from "../persistence/use-material-persistence";
-import { exportSnapshotArchive, importSnapshotArchive } from "../persistence/archive-transport";
-import { treeToBundle } from "../persistence/snapshot-codec";
 import { useCanvasPreferences } from "./use-canvas-preferences";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
@@ -32,6 +30,20 @@ import { useWikiAuthority } from "../persistence/use-wiki-authority";
 import { useStoragePersistence } from "../persistence/use-storage-persistence";
 import type { MaterialFilesCopy } from "./material-files-copy";
 import type { MatterLocale } from "../config/locales";
+import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
+
+// Archive bytes move only after a Files-panel gesture. The transport and its
+// snapshot encoder load after first paint, and the zip codec when Archive
+// opens, so neither Export nor a chosen file waits on a code fetch.
+const loadArchiveTransport = () => Promise.all([
+  import("../persistence/archive-transport"),
+  import("../persistence/snapshot-codec"),
+]).then(([transport, codec]) => Object.freeze({
+  exportSnapshotArchive: transport.exportSnapshotArchive,
+  importSnapshotArchive: transport.importSnapshotArchive,
+  preloadArchiveCodec: transport.preloadArchiveCodec,
+  treeToBundle: codec.treeToBundle,
+}));
 
 export function MatterApp() {
   useWikiAuthority();
@@ -139,6 +151,7 @@ export function MatterApp() {
       });
     }
     // Always exported from memory: superseded or cleared storage cannot be read.
+    const { exportSnapshotArchive, treeToBundle } = await loadArchiveTransport();
     const archive = await exportSnapshotArchive(treeToBundle(tree));
     if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     downloadLocalBytes(archive.bytes, `${tree.id}.matter.zip`, "application/zip");
@@ -147,6 +160,7 @@ export function MatterApp() {
     return Object.freeze({ ok: true } as const);
   }, [archiveLanguage, persistence, requestStoragePersistence, tree, wikiOccurrences]);
   const validateArchive = useCallback(async (file: File) => {
+    const { importSnapshotArchive } = await loadArchiveTransport();
     const archive = await importSnapshotArchive(file);
     if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     return archive.tree.id === tree.id
@@ -163,6 +177,7 @@ export function MatterApp() {
       revision: tree.revision,
       documentEpoch,
     });
+    const { importSnapshotArchive } = await loadArchiveTransport();
     const archive = await importSnapshotArchive(file);
     if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     const imported = await persistence.importMaterial(archive.tree, basis, options);
@@ -170,7 +185,10 @@ export function MatterApp() {
       ? Object.freeze({ ok: true } as const)
       : archiveFailure(imported.errorCode, archiveLanguage);
   }, [archiveLanguage, documentEpoch, persistence, requestStoragePersistence, tree.id, tree.revision]);
+  useEffect(() => preloadWhenIdle([loadArchiveTransport]), []);
   const archive = useMemo(() => Object.freeze({
+    prepare: () => preloadNow(() => loadArchiveTransport()
+      .then((transport) => transport.preloadArchiveCodec())),
     exportCopy: exportArchive,
     validateImport: validateArchive,
     replaceImport: replaceArchive,
