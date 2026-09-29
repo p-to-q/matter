@@ -28,11 +28,19 @@ import { LOADING_PERSISTENCE_STATUS } from "./persistence-status";
  */
 export type HistoryNotice = "released" | "unavailable";
 
+/**
+ * A storage answer, or `PERSISTENCE_ENGINE_UNAVAILABLE`: the code that saves
+ * material could not be fetched (typically a dropped connection), so no
+ * storage was ever opened. Only the deferred facade reports it; it says
+ * nothing about whether this browser can save.
+ */
+export type PersistenceErrorCode = RepositoryErrorCode | "PERSISTENCE_ENGINE_UNAVAILABLE";
+
 export type PersistenceStatus = Readonly<{
   phase: "loading" | "saved" | "saving" | "error";
   persistedRevision: number | null;
   dirtyRevision: number | null;
-  errorCode: RepositoryErrorCode | null;
+  errorCode: PersistenceErrorCode | null;
   historyNotice: HistoryNotice | null;
   /**
    * This tab holds material the person made, or an import, that no stored row
@@ -209,7 +217,7 @@ const UNKNOWN_BASIS: SnapshotBasis = Object.freeze({ writeGeneration: null, jour
  */
 const RETENTION_RESTORE_MARGIN_BYTES = 1_024 * 1_024;
 /** Storage refused material, not the row's basis: an archive may replace it. */
-const REPLACEABLE_ERRORS: ReadonlySet<RepositoryErrorCode | null> = new Set([
+const REPLACEABLE_ERRORS: ReadonlySet<PersistenceErrorCode | null> = new Set([
   "PERSISTENCE_STORAGE_FULL",
   "PERSISTENCE_WRITE_FAILED",
 ]);
@@ -261,7 +269,7 @@ export function createPersistenceController(
     activeImportAttempt !== null;
   // Storage refused the pending material and nothing is writing it: the one
   // state in which an archive may replace unsaved material.
-  const importMayReplace = (errorCode: RepositoryErrorCode | null) =>
+  const importMayReplace = (errorCode: PersistenceErrorCode | null) =>
     pending !== null && !writing && activeImportAttempt === null && REPLACEABLE_ERRORS.has(errorCode);
 
   // A compare that fails while this tab never read or wrote a row (a first

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { MATTER_LOCALES } from "../config/locales";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
 import {
   isTerminalDurability,
@@ -45,6 +46,7 @@ describe("durability line", () => {
     ["PERSISTENCE_WRITE_FAILED", "Not saved on this device"],
     ["PERSISTENCE_CORRUPT", "Not saved on this device"],
     ["PERSISTENCE_UNAVAILABLE", "Not saving in this browser"],
+    ["PERSISTENCE_ENGINE_UNAVAILABLE", "Saving could not load"],
     ["PERSISTENCE_CONFLICT", "A newer copy is open in another tab"],
     ["PERSISTENCE_SUPERSEDED", "A newer Matter is open in another tab"],
     ["PERSISTENCE_CLEARED", "Local storage was cleared"],
@@ -59,6 +61,17 @@ describe("durability line", () => {
     expect(projectArchiveNote(failed("PERSISTENCE_CONFLICT"), null, null, copy)).toBe(copy.archiveNoteConflict);
     for (const text of [copy.durabilityDiverged, copy.archiveNoteDiverged, copy.durabilityCleared, copy.archiveNoteCleared]) {
       expect(text).not.toMatch(/in another tab/);
+    }
+  });
+
+  it("never blames the browser when only the saving code failed to load, in any locale", () => {
+    for (const locale of MATTER_LOCALES) {
+      const localized = materialFilesCopy(locale);
+      const line = projectDurabilityLine(failed("PERSISTENCE_ENGINE_UNAVAILABLE"), false, localized);
+      expect(line).toEqual({ tone: "risk", text: localized.durabilityEngineUnavailable });
+      expect(line.text).not.toBe(localized.durabilityNotSaving);
+      expect(localized.archiveNoteEngineUnavailable).not.toBe(localized.archiveNoteUnavailable);
+      expect(localized.archiveNoteEngineUnavailable).toContain(localized.archiveRetrySaving);
     }
   });
 
@@ -81,6 +94,8 @@ describe("durability line", () => {
   it("explains each state in Archive and adds the eviction sentence only when storage is not persistent", () => {
     expect(projectArchiveNote(failed("PERSISTENCE_SUPERSEDED"), null, false, copy)).toBe(copy.archiveNoteSuperseded);
     expect(projectArchiveNote(failed("PERSISTENCE_UNAVAILABLE"), null, false, copy)).toBe(copy.archiveNoteUnavailable);
+    expect(projectArchiveNote(failed("PERSISTENCE_ENGINE_UNAVAILABLE"), null, false, copy))
+      .toBe(copy.archiveNoteEngineUnavailable);
     expect(projectArchiveNote(SAVED, "unavailable", false, copy)).toBe(copy.archiveNoteHistoryUnavailable);
     expect(projectArchiveNote(SAVED, null, true, copy)).toBe(copy.archiveNoteDefault);
     expect(projectArchiveNote(SAVED, null, null, copy)).toBe(copy.archiveNoteDefault);

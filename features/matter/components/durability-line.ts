@@ -42,6 +42,10 @@ export function projectDurabilityLine(
       return risk(copy.durabilityNotSaved);
     case "PERSISTENCE_UNAVAILABLE":
       return risk(copy.durabilityNotSaving);
+    // A fetch that failed says nothing about this browser: it is not the
+    // private-window line.
+    case "PERSISTENCE_ENGINE_UNAVAILABLE":
+      return risk(copy.durabilityEngineUnavailable);
     default:
       break;
   }
@@ -74,6 +78,8 @@ export function projectArchiveNote(
       return copy.archiveNoteStorageFull;
     case "PERSISTENCE_UNAVAILABLE":
       return copy.archiveNoteUnavailable;
+    case "PERSISTENCE_ENGINE_UNAVAILABLE":
+      return copy.archiveNoteEngineUnavailable;
     case "PERSISTENCE_WRITE_FAILED":
       return copy.archiveNoteSaveFailed;
     default:

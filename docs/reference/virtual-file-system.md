@@ -338,7 +338,9 @@ The material-index footer is deliberately not a recovery control, but it no
 longer claims the material is kept when it is not. Its one localized line under
 the non-account identity reads, until resolved: "Not saved on this device"
 (write failed, storage full, damaged row), "Not saving in this browser"
-(IndexedDB unavailable, as in a private window), "A newer copy is open in
+(IndexedDB unavailable, as in a private window), "Saving could not load" (the
+storage code itself could not be fetched; it is fetched again when the
+connection or the page returns), "A newer copy is open in
 another tab" (conflict), "A newer Matter is open in another tab" (superseded
 schema), "Local storage was cleared" (by another tab or by the browser), "This
 page and stored material differ" (the page met a stored row it never read), "Close other Matter tabs to finish updating" (blocked upgrade), or the

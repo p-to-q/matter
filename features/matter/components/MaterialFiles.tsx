@@ -1111,7 +1111,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
             retryable={
               storageFull ||
               persistenceStatus.errorCode === "PERSISTENCE_WRITE_FAILED" ||
-              persistenceStatus.errorCode === "PERSISTENCE_UNAVAILABLE"
+              persistenceStatus.errorCode === "PERSISTENCE_UNAVAILABLE" ||
+              persistenceStatus.errorCode === "PERSISTENCE_ENGINE_UNAVAILABLE"
             }
             terminal={terminalDurability}
             onClose={closeArchive}

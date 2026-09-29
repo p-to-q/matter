@@ -88,12 +88,13 @@ test("an engine that cannot load guards the person's material and meets the stor
   await page.reload();
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   const sidebar = page.locator("aside.material-files");
-  // The same truthful answer storage that cannot open gives: nothing is being
-  // saved, and the paper stays usable.
-  await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
-  expect(failedFetches).toBeGreaterThan(0);
+  // The fetch retries on a short backoff while the status stays loading, then
+  // says the saving code did not load: never that this browser cannot save.
+  // The paper stays usable throughout.
+  await expect(sidebar).toHaveAttribute("data-persistence-phase", "error", { timeout: 10_000 });
+  expect(failedFetches).toBeGreaterThan(1);
   await expect(sidebar.locator(".material-files__profile-meta"))
-    .toHaveText(fixtureUiCopy.materialFiles.durabilityNotSaving);
+    .toHaveText(fixtureUiCopy.materialFiles.durabilityEngineUnavailable);
 
   // Material the person makes now is guarded on exit although no controller
   // has received it yet, and nothing reaches the stored row.

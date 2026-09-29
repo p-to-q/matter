@@ -52,6 +52,7 @@ export type MaterialFilesCopy = Readonly<{
   archiveErrorUnsupported: string;
   archiveNoteCleared: string;
   archiveNoteDiverged: string;
+  archiveNoteEngineUnavailable: string;
   archiveNoteHistoryReleased: string;
   archiveNoteHistoryUnavailable: string;
   archiveNoteNotPersisted: string;
@@ -61,6 +62,7 @@ export type MaterialFilesCopy = Readonly<{
   archiveReloadPage: string;
   durabilityCleared: string;
   durabilityDiverged: string;
+  durabilityEngineUnavailable: string;
   durabilityNewerCopy: string;
   durabilityNewerMatter: string;
   durabilityNotSaved: string;
@@ -153,6 +155,7 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   archiveErrorUnsupported: "This archive contains unsupported files or paths.",
   archiveNoteCleared: "Local storage for Matter was cleared, by another tab or by the browser. Export a copy of this page’s material before reloading.",
   archiveNoteDiverged: "This page changed while stored material was loading, and the two differ. Reload the stored material here, or export this page’s copy first.",
+  archiveNoteEngineUnavailable: "Matter could not load the part that saves material, usually because the connection dropped. It tries again when the connection returns or you come back to this page; Retry saving tries now. Export a copy if this material matters.",
   archiveNoteHistoryReleased: "Storage is nearly full, so older undo steps are not being saved. The material is saved, and this tab can still undo them until it closes.",
   archiveNoteHistoryUnavailable: "Some earlier changes could not be restored and can no longer be undone. The material itself is intact.",
   archiveNoteNotPersisted: "This browser may clear local storage when space runs low, so keep an exported copy.",
@@ -162,6 +165,7 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   archiveReloadPage: "Reload",
   durabilityCleared: "Local storage was cleared",
   durabilityDiverged: "This page and stored material differ",
+  durabilityEngineUnavailable: "Saving could not load",
   durabilityNewerCopy: "A newer copy is open in another tab",
   durabilityNewerMatter: "A newer Matter is open in another tab",
   durabilityNotSaved: "Not saved on this device",
@@ -257,6 +261,7 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveErrorUnsupported: "这份归档包含不支持的文件或路径。",
   archiveNoteCleared: "Matter 的本地存储已被另一个标签页或浏览器清除。重新载入前，请先导出这一页的材料副本。",
   archiveNoteDiverged: "载入已存材料期间，这一页发生了改动，两者现已不一致。可在这里重新载入已存材料，或先导出这一页的副本。",
+  archiveNoteEngineUnavailable: "Matter 未能加载负责保存材料的部分，通常是连接中断所致。连接恢复或你回到此页时会自动再试；点“重新保存”可立即再试。若这份材料很重要，请导出副本。",
   archiveNoteHistoryReleased: "存储空间将满，较早的撤销步骤不再保存。材料已保存；在这个标签页关闭前仍可撤销它们。",
   archiveNoteHistoryUnavailable: "部分更早的更改无法恢复，已不能撤销。材料本身完好无损。",
   archiveNoteNotPersisted: "空间不足时，浏览器可能清除本地存储，请保留一份导出的副本。",
@@ -266,6 +271,7 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveReloadPage: "重新载入",
   durabilityCleared: "本地存储已被清除",
   durabilityDiverged: "这一页与已存材料不一致",
+  durabilityEngineUnavailable: "保存功能未能加载",
   durabilityNewerCopy: "另一个标签页有更新的副本",
   durabilityNewerMatter: "另一个标签页打开了更新版的 Matter",
   durabilityNotSaved: "尚未存到这台设备",
@@ -358,6 +364,7 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveErrorUnsupported: "這份封存包含不支援的檔案或路徑。",
   archiveNoteCleared: "Matter 的本機儲存已被另一個分頁或瀏覽器清除。重新載入前，請先匯出這一頁的材料副本。",
   archiveNoteDiverged: "載入已存材料期間，這一頁有了改動，兩者現已不一致。可在這裡重新載入已存材料，或先匯出這一頁的副本。",
+  archiveNoteEngineUnavailable: "Matter 未能載入負責儲存材料的部分，通常是連線中斷所致。連線恢復或你回到此頁時會自動再試；點「重新儲存」可立即再試。若這份材料很重要，請匯出副本。",
   archiveNoteHistoryReleased: "儲存空間將滿，較早的復原步驟不再儲存。材料已儲存；在這個分頁關閉前仍可復原它們。",
   archiveNoteHistoryUnavailable: "部分較早的變更無法還原，已不能復原。材料本身完好無損。",
   archiveNoteNotPersisted: "空間不足時，瀏覽器可能清除本機儲存，請保留一份匯出的副本。",
@@ -367,6 +374,7 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveReloadPage: "重新載入",
   durabilityCleared: "本機儲存已被清除",
   durabilityDiverged: "這一頁與已存材料不一致",
+  durabilityEngineUnavailable: "儲存功能未能載入",
   durabilityNewerCopy: "另一個分頁有較新的副本",
   durabilityNewerMatter: "另一個分頁開啟了較新版的 Matter",
   durabilityNotSaved: "尚未存到這台裝置",
@@ -459,6 +467,7 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   archiveErrorUnsupported: "このアーカイブには対応していないファイルやパスが含まれています。",
   archiveNoteCleared: "Matter の端末内ストレージが、別のタブまたはブラウザによって消去されました。再読み込みする前に、このページの素材のコピーを書き出してください。",
   archiveNoteDiverged: "保存済みの素材を読み込んでいる間にこのページが変更され、両者が異なっています。ここで保存済みの素材を再読み込みするか、先にこのページのコピーを書き出してください。",
+  archiveNoteEngineUnavailable: "Matter は素材を保存する部分を読み込めませんでした。多くは接続が途切れたためです。接続が戻るか、このページに戻ると自動で再試行します。「保存を再試行」ですぐに試せます。この素材が大切なら、コピーを書き出してください。",
   archiveNoteHistoryReleased: "ストレージが残りわずかなため、古い取り消し履歴は保存していません。素材は保存済みで、このタブを閉じるまでは取り消せます。",
   archiveNoteHistoryUnavailable: "以前の変更の一部を復元できず、取り消せなくなりました。素材そのものは無事です。",
   archiveNoteNotPersisted: "空き容量が少なくなると、ブラウザが端末内ストレージを消去することがあります。書き出したコピーを保管してください。",
@@ -468,6 +477,7 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   archiveReloadPage: "再読み込み",
   durabilityCleared: "端末内ストレージが消去されました",
   durabilityDiverged: "このページと保存済みの素材が異なります",
+  durabilityEngineUnavailable: "保存機能を読み込めませんでした",
   durabilityNewerCopy: "別のタブに新しいコピーがあります",
   durabilityNewerMatter: "別のタブで新しい Matter が開いています",
   durabilityNotSaved: "この端末に保存されていません",
@@ -560,6 +570,7 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   archiveErrorUnsupported: "Dieses Archiv enthält nicht unterstützte Dateien oder Pfade.",
   archiveNoteCleared: "Der lokale Speicher von Matter wurde von einem anderen Tab oder vom Browser gelöscht. Exportieren Sie vor dem Neuladen eine Kopie des Materials dieser Seite.",
   archiveNoteDiverged: "Diese Seite wurde geändert, während gespeichertes Material geladen wurde, und beide weichen voneinander ab. Laden Sie hier das gespeicherte Material neu oder exportieren Sie zuerst die Kopie dieser Seite.",
+  archiveNoteEngineUnavailable: "Matter konnte den Teil, der Material speichert, nicht laden, meist wegen einer unterbrochenen Verbindung. Es versucht es erneut, sobald die Verbindung zurück ist oder Sie zu dieser Seite zurückkehren; „Speichern erneut versuchen“ versucht es sofort. Exportieren Sie eine Kopie, wenn dieses Material wichtig ist.",
   archiveNoteHistoryReleased: "Der Speicher ist fast voll, daher werden ältere Rückgängig-Schritte nicht gespeichert. Das Material ist gespeichert; in diesem Tab lassen sie sich bis zum Schließen noch rückgängig machen.",
   archiveNoteHistoryUnavailable: "Einige frühere Änderungen konnten nicht wiederhergestellt werden und lassen sich nicht mehr rückgängig machen. Das Material selbst ist unversehrt.",
   archiveNoteNotPersisted: "Dieser Browser kann lokalen Speicher bei Platzmangel löschen; bewahren Sie daher eine exportierte Kopie auf.",
@@ -569,6 +580,7 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   archiveReloadPage: "Neu laden",
   durabilityCleared: "Lokaler Speicher wurde gelöscht",
   durabilityDiverged: "Diese Seite und das gespeicherte Material weichen ab",
+  durabilityEngineUnavailable: "Speichern konnte nicht geladen werden",
   durabilityNewerCopy: "In einem anderen Tab ist eine neuere Kopie offen",
   durabilityNewerMatter: "In einem anderen Tab ist ein neueres Matter offen",
   durabilityNotSaved: "Nicht auf diesem Gerät gespeichert",
