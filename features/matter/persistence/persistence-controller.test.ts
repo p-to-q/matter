@@ -1198,6 +1198,35 @@ describe("persistence controller", () => {
     expect(seen.some((entry) => entry.includes("another-tab"))).toBe(false);
   });
 
+  it("names a conflict met by a first save after a failed load a difference, never another tab", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository();
+    const controller = createPersistenceController({
+      ...repository.port,
+      load: async () => ({ ok: false, error: { code: "PERSISTENCE_UNAVAILABLE", message: "closed" } }),
+    });
+    await startAccepted(controller, tree);
+    expect(controller.getStatus()).toMatchObject({ errorCode: "PERSISTENCE_UNAVAILABLE" });
+    controller.publish({ ...tree, revision: tree.revision + 1 });
+    controller.retry();
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.expectedGeneration).toBeNull();
+    // Storage opened this time and holds a row this tab never read.
+    repository.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "row exists" } });
+    await waitFor(() => controller.getStatus().errorCode === "PERSISTENCE_CONFLICT");
+    expect(controller.getStatus().conflictOrigin).toBe("load-window");
+
+    // With a row this tab saved, a failed compare is another tab's newer copy.
+    const saved = controlledRepository(stored(tree, 2));
+    const savedController = createPersistenceController(saved.port);
+    await startAccepted(savedController, tree);
+    savedController.publish({ ...tree, revision: tree.revision + 1 });
+    await waitFor(() => saved.pending.length === 1);
+    saved.settleNext({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "newer" } });
+    await waitFor(() => savedController.getStatus().errorCode === "PERSISTENCE_CONFLICT");
+    expect(savedController.getStatus().conflictOrigin).toBe("another-tab");
+  });
+
   it("invalidates a corrupt export when newer local material arrives", async () => {
     const tree = createSeededDocument().tree;
     let settleExport!: (result: RepositoryResult<CorruptSnapshotExport>) => void;

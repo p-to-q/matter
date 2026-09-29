@@ -248,13 +248,21 @@ export function createPersistenceController(
   const importMayReplace = (errorCode: RepositoryErrorCode | null) =>
     pending !== null && !writing && activeImportAttempt === null && REPLACEABLE_ERRORS.has(errorCode);
 
+  // A compare that fails while this tab never read or wrote a row (a first
+  // save after a failed load, a corrupt row that changed) proves only that
+  // stored material differs from the page, not that another tab exists.
+  const unattributedConflictOrigin = (): ConflictOrigin =>
+    basis.writeGeneration === null ? "load-window" : "another-tab";
+
   const update = (next: StatusFields) => {
     const errorCode = terminal ?? next.errorCode;
     status = Object.freeze({
       ...next,
       phase: terminal === null ? next.phase : "error",
       errorCode,
-      conflictOrigin: errorCode === "PERSISTENCE_CONFLICT" ? next.conflictOrigin ?? "another-tab" : null,
+      conflictOrigin: errorCode === "PERSISTENCE_CONFLICT"
+        ? next.conflictOrigin ?? unattributedConflictOrigin()
+        : null,
       unsaved: holdsUnsavedMaterial(),
       replaceableByImport: importMayReplace(errorCode),
     });

@@ -134,9 +134,10 @@ Runtime persistence state tracks base generation, persisted revision, queued
 revision, dirty revision, error, whether the tab holds unsaved material the
 person made (a pending or in-flight write of it, or an import), whether an
 archive may replace material storage refused, a blocked upgrade, and the
-history notice, and where a conflict came from: another tab's row, or material that
-changed while the first load was in flight (the line then says the page and
-stored material differ, never that another tab exists). Write failure does not
+history notice, and where a conflict came from: another tab's row, or a row
+this tab never read — material that changed while the first load was in
+flight, or a first save after a failed load meeting a stored row (the line then
+says the page and stored material differ, never that another tab exists). Write failure does not
 roll back material; pointer retry saves the
 latest dirty bundle for transient write failures; generation conflict instead
 requires explicit reload. Browser crash between commit and IndexedDB completion
@@ -331,8 +332,7 @@ the non-account identity reads, until resolved: "Not saved on this device"
 (IndexedDB unavailable, as in a private window), "A newer copy is open in
 another tab" (conflict), "A newer Matter is open in another tab" (superseded
 schema), "Local storage was cleared" (by another tab or by the browser), "This
-page and stored material differ" (the first load met material changed while it
-read), "Close other Matter tabs to finish updating" (blocked upgrade), or the
+page and stored material differ" (the page met a stored row it never read), "Close other Matter tabs to finish updating" (blocked upgrade), or the
 history notice; otherwise the local-device line, with a brief saving phrase
 while a write is in flight. An attention line carries a static ink dot, is
 announced once through a polite live region that sits outside the index (a
