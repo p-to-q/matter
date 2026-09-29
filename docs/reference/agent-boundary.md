@@ -90,8 +90,10 @@ judgement are one scenario on the common spine in
 proved against frozen fixtures. Their managed provider gates
 (`MATTER_TRANSFORM_ADAPTER`, `MATTER_TEXT_SWAP_ADAPTER`) stay off until each
 promotion receipt exists; a person's own Model API key can supply the provider
-once the independent `MATTER_*_SURFACE=public` gate is open, which is how
-production currently serves live output on both surfaces. Freezing the prompt
+once the independent `MATTER_*_SURFACE=public` gate is open. That is the
+current production shape for both surfaces, though Production reports them
+`unavailable` until issue #104's session-sealing ring is installed (see
+[`../release-readiness.md`](../release-readiness.md)). Freezing the prompt
 early is deliberate, because it decides what a person's material becomes.
 
 **Document context is labeled.** Lineage text is passed as reference material

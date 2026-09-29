@@ -11,9 +11,10 @@ the running product, not how ambitious a feature sounds.
    surface. Material turns become local, perceivable, pointer-undoable changes;
    the small inquiry exception may orient from lassoed passages or the bounded
    active working projection, but never edits material. A person may hold a
-   passage aside from that projection without changing the document; a prior
-   exchange never replays when the inquiry is opened again, and it never becomes
-   model context or a chat thread.
+   passage aside from that projection without changing the document; a settled
+   exchange never replays when the inquiry is opened again (only a question
+   still in flight is carried until the person has seen it answered), and no
+   exchange ever becomes model context or a chat thread.
 3. **Structure is restraint.** One rooted tree is simultaneously presentation,
    lineage, and the model's context boundary. Hidden retrieval is not context.
    Language and camera motion may reveal structure, but never author coordinates.
@@ -31,32 +32,50 @@ the running product, not how ambitious a feature sounds.
 5. **The primary path is bodily.** Voice is sufficient to admit a thought;
    pointer is sufficient to address, stretch, confirm, and undo. Normal web
    accessibility remains supported; keyboard absence is never an excuse to make
-   semantics inaccessible.
+   semantics inaccessible. A key that belongs to an input method never commits
+   or cancels, one `Escape` closes at most one layer, and a resting palm never
+   steals a pen's stroke.
 6. **Quietness is functional.** Controls appear where material needs a handle.
    Status, AI, and infrastructure do not become permanent chrome; inquiry stays
-   closed until the person explicitly opens it. Provider availability is kept
-   in operational receipts, never rendered as another message inside material.
-   Local lexical authority remains invisible when it works and discloses only
-   the correction needed at an error the person has chosen to address.
+   closed until the person explicitly opens it. A status line may stay only
+   while a problem it names is unresolved, and a submitted request that ended
+   without its change is said once, then released by the next action. Provider
+   availability is kept in operational receipts, never rendered as another
+   message inside material. A Wiki correction is disclosed once, restrained,
+   with a quiet mark only while its occurrence is unsettled; it never becomes a
+   badge, queue, or success notice. Transient surfaces leave crisply: a
+   finished one holds briefly, a dismissed one fades, and a displaced one cuts.
 7. **Local authority is configuration, not agency.** Wiki may suggest one
    deterministic spelling through a narrow captured capability; it cannot
    choose scope, authorize or publish a command, or become model context.
    The system may observe and score bounded human-admission evidence before a
-   person ever opens settings, but ambiguity always means abstention. When a
-   result is wrong, changing or removing its canonical word becomes the final
-   authority for all hidden aliases. Matter owns validation and publication
-   before and after every suggestion.
+   person ever opens settings, but ambiguity always means abstention. Informed
+   silence is approval: once a disclosure was perceivable, leaving the word in
+   place retains the rule that made it, but approval never creates, activates,
+   or confirms authority, and Wiki never observes Material Undo. When a result
+   is wrong, the person's correction wins: restoring the heard form at the word
+   is an ordinary edit that counts against the rule, and changing or removing
+   its canonical word is the final authority for all hidden aliases. Matter
+   owns validation and
+   publication before and after every suggestion, and a suggestion that would
+   break a valid result is withheld rather than costing it.
 
 **Submission authority stays strict; result delivery stays resilient.** A
 read-only Inquiry answer belongs to the question and bounded snapshot that were
 submitted, so ordinary edits, selection changes, and a temporarily hidden tab
 do not erase it. Dismissing a presentation is not cancellation after submit;
 explicit cancellation, page exit, document-owner replacement, or a real target
-conflict is. A result that changes material may rebase across unrelated history,
-but it waits for a visible pointer-idle delivery window and must revalidate the
-exact material it read and will write before the tree engine creates one
-undoable commit. A real target conflict is never permission to overwrite newer
-human material silently.
+conflict is. `Escape` after an Elastic confirmation dismisses only the degree.
+A result that changes material may rebase across unrelated history, but it
+waits for a visible pointer-idle delivery window and must revalidate the exact
+material it read and will write before the tree engine creates one undoable
+commit; it keeps the part of the Redo future that still replays. A real target
+conflict is never permission to overwrite newer human material silently, and a
+failed commit holds a person's spoken words rather than dropping them. Stored
+material from another tab replaces nothing while a turn, a question held in Ask
+Matter, or a name edit is in progress, and seed relocalization waits for every
+material turn. Undo is bounded (1,000 steps, 32 MiB); Archive export is
+long-term recovery.
 
 A material interaction must declare reference + degree + direction + lineage
 without letting the model infer a missing signal. Elastic Language 2 takes

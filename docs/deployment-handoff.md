@@ -1,9 +1,13 @@
 # Matter deployment handoff
 
-Status: **live — the root-seeded browser preview is deployed and all three model
-gates are open on `matter.ptoq.io`. The required abuse- and spend-control
-receipts in issue #34 are still outstanding, so this remains an unverified live
-exposure rather than a completed release boundary.**
+Status: **live — the root-seeded browser preview is deployed on
+`matter.ptoq.io` with the three managed model gates (label, repair, inquiry)
+enabled; Elastic and Text Swap are public surfaces that only a user Model API
+lease may supply, and Production reports them `unavailable` until issue #104
+closes (see [`release-readiness.md`](release-readiness.md)). The required
+abuse- and spend-control receipts in issue #34 are still outstanding, so this
+remains an unverified live exposure rather than a completed release
+boundary.**
 
 The deployment owner enabled labels, transcript repair, and inquiry together on
 2026-08-08, ahead of the staged order below, so that the deployed origin matches

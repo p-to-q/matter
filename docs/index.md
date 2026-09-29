@@ -15,12 +15,13 @@ Read only when the change needs it:
 - [`../plans/active-tree-material.md`](../plans/active-tree-material.md) — the active first-release plan: current phase, campaign, and open work only;
 - [`release-readiness.md`](release-readiness.md) — current release gates, publication state, and the latest receipts;
 - [`deployment-owner-handoff.md`](deployment-owner-handoff.md) — tokenless Vercel operator checklist and external-control receipt;
+- [`deployment-handoff.md`](deployment-handoff.md) — the live deployment's history, risk acceptances, and incident notes;
 - [`public-discovery.md`](public-discovery.md) — canonical origin, SEO metadata, and machine-readable surfaces;
 - [`../CONTRIBUTING.md`](../CONTRIBUTING.md) — change and validation discipline.
 
 ## Context
 
-- [`reference/`](reference/index.md) — optional implementation research, including the prompt harness every model call goes through;
+- [`reference/`](reference/index.md) — implementation notes, including the prompt harness every model call goes through; a note marked **binding** holds exact rules a contract document delegates to it;
 - [`surfaces.md`](surfaces.md) — what runs today and what is only specified;
 - [`open.md`](open.md) — unresolved product possibilities;
 - [`changes.md`](changes.md) — short record of form-changing decisions.

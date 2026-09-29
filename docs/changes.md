@@ -17,6 +17,325 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-29 — a reference note binds where a contract delegates to it
+
+Changed: `docs/reference/` stays context, except where `product.md`,
+`principles.md`, `material.md`, `architecture.md`, or `protocol.md` hands an
+exact rule to a note by link. That rule binds as part of the contract, and
+`docs/reference/index.md` marks the nine notes that hold such rules (Wiki,
+history and undo, virtual file system, voice input, inquiry record, working
+context, prompt harness, runtime cache and delivery, ambient workbench UI).
+
+Why: the documentation split had moved exact product rules — corner optical
+geometry, the index structure grammar, Wiki's spoken aliases and evidence
+policy — into notes that `AGENTS.md` called "context, not contract", so a
+binding rule had no binding home. Copying them back would bloat the contract
+documents with mechanics and create a second, drifting copy.
+
+Forecloses: treating a delegated rule as optional because of its file's
+location, and changing one without the same review and change record as the
+contract that delegated it.
+
+## 2026-09-29 — a Wiki observation batch publishes whole or not at all
+
+Changed: an observation batch (aging, up to 64 observations, phase
+reconciliation) stages its steps without validation and validates the final
+state once; the batch is published whole or rejected whole with
+`INVALID_STATE`. Standalone transitions still validate every commit.
+
+Why: revalidating the complete state after every staged step cost about 594 ms
+median on a large Wiki; one final validation costs about 31 ms with every
+policy scenario unchanged.
+
+Forecloses: a partially published batch, and relying on an intermediate staged
+state being valid.
+
+## 2026-09-29 — a vLLM stop-token id is a normal stop (`completion-outcome/2`)
+
+Changed: the compatible chat-completions classifier accepts a non-negative
+safe integer `stop_reason` only beside `finish_reason: "stop"`; any other
+number, or a token id beside another finish, stays unknown. The official
+OpenAI and DeepSeek chat wires still refuse any `stop_reason`. Both lanes read
+one parser, `server/openai-chat-completion.ts`. The completion policy version
+moves to `completion-outcome/2` because accepted completions change.
+
+Why: vLLM reports the id of the token that ended generation, and refusing every
+numeric report meant those relays never answered.
+
+Forecloses: reading a numeric `stop_reason` as success in any other position,
+and reusing an older completion-policy receipt for this behavior.
+
+## 2026-09-29 — a transcription request declares its purpose in the URL
+
+Changed: the browser sends `?purpose=admission|direction|swap-direction` on
+`POST /api/transcribe`. A closed purpose is refused with retryable
+`TRANSCRIPTION_UNAVAILABLE` (503) before a recording byte is read. The
+multipart `purpose` field stays authoritative: a repeated, invalid, or
+mismatched URL value is `INVALID_REQUEST` (400), and a request without it is
+gated as soon as the field is parsed.
+
+Why: a closed surface otherwise buffered and parsed up to 2 MiB of audio it
+would discard, and size or duration checks could misreport the refusal as a
+recording fault.
+
+Forecloses: selecting a transcription surface by the URL alone, and a
+recording being read by a route whose purpose is closed.
+
+## 2026-09-29 — Latin words in Chinese and Japanese speech route to the English ledger
+
+Changed: inside a `zh-CN`, `zh-TW`, or `ja-JP` turn, a word segment whose
+letters are all Latin belongs to the `en-US` ledger for evidence, aging, and
+matching on both channels. The turn's own rules match first; the routed pass is
+additive and never overrides them. Full-width ASCII folds to ASCII for reading,
+protection, and voting, decided by the word's script; committed text is never
+width-normalized, and a full-width Latin spelling is never collected as a term.
+Every runtime producer was requalified; the current identities are fitting
+`latin-internal-edit-v2` 2.2.0 with resource 1.2.0, both term producers 1.2.0,
+their corpora at version 3, and learning-policy corpus 2 with 18 scenarios.
+
+Why: the recognition errors Wiki exists for cluster on Latin names inside
+Chinese speech (`Engelbart`, `Morphogenesis`), and the one released fitting
+producer never saw them. This is routing by a span's own script before any rule
+is consulted, not the cross-locale fallback that the 2026-09-27 entry
+forecloses; that foreclosure stands. It replaces corpus 1's isolation of CJK
+turns from `en-US` evidence.
+
+Forecloses: a separate `latin` pseudo-locale, width-normalizing committed text,
+routing anything toward a CJK ledger, and multi-word Latin phrase terms without
+their own corpus proof.
+
+## 2026-09-29 — Wiki discloses each change once and is addressable at the word
+
+Changed: a word Wiki changed in admitted, repaired, or generated text settles
+once from the heard form into the canonical one at its first perceivable
+arrival, through an inert overlay and Matter's first shipped Custom
+Highlights, then keeps a quiet dotted mark while its occurrence is unsettled. A
+tap on the word, or **Review Wiki change** among a focused or selected
+passage's actions, opens one takeover at the word: Keep (confirm), the heard
+form (an ordinary pointer-undoable human restoration through
+`restoreHumanTextRange`, which no lexical port touches), or Wiki… (settings
+focused on that term). Occurrences carry opaque one-shot tokens in a bounded
+in-memory registry and are owned by one lazy browser driver. A late rewrite
+that re-applies the same correction inherits the earlier disclosure. Elastic
+canonicalizes over the final node text restricted to generated gaps. Rejecting
+or replacing the mapping from the word stays reserved.
+
+Why: the owner's decision of 2026-09-29. A change nobody could see could not be
+approved or disputed, and silence over an invisible change was not informed.
+
+Forecloses: counting a double-click, a covered dialog, or an unread settle as
+approval; wrapping a word in an element to mark it; replaying the settle on
+Undo, Redo, or reload. It reverses, for Wiki only, the 2026-09-24 rule that an
+applied rule renders no visible sign until a person invokes correction, and
+makes a Wiki exception to the old-text-overlay foreclosures of 2026-08-11
+("old/new semantic overlays") and 2026-08-12 ("an old-text overlay"), which
+still bind Repair.
+
+## 2026-09-29 — Wiki evidence counts in quarter units and informed silence is approval
+
+Changed: Wiki record V7 stores every support value in quarter-observation
+units (older records scale by four on load and write back once), adds bounded
+kept evidence to every alias row, a revert-strike ledger, and a 128-entry
+window of settled occurrence identities. A candidate ages only on a comparable
+opportunity. Each applied occurrence settles once: informed implicit acceptance
+(disclosure perceived for 1.5 s at ≥ 50% visible, then two further human
+admissions, about 60 s of foreground dwell, copy or export, or leaving the
+page) adds +4 kept units, an inspection of at least 500 ms adds +8, capped at
+24. Kept evidence only retains an active relation; it never creates,
+activates, re-activates, or confirms one. The first revert zeroes the visible
+form's automatic relations and strikes; a second revert from a basis that held
+the strike tombstones. Generated-text acceptance counts behind one constant,
+which no production path can reach today.
+
+Why: the owner's decision of 2026-09-29 that informed implicit acceptance is
+approval. It supersedes the 2026-09-26 entry's single weak "survived horizon"
+observation; that entry's settle-once and no-history-mining foreclosures stand.
+
+Forecloses: implicit evidence winning a contest or promoting authority,
+stacking dwell, copy, export, and exit on one occurrence, Wiki observing
+Material Undo, and an older build loading a V7 row as corrupt (it reports Wiki
+storage unavailable and refuses reset).
+
+## 2026-09-29 — ended work is said once on one outcome line
+
+Changed: the paper's lower-left guidance line carries one queue of outcomes,
+at most one per turn owner (expansion, rewrite, Wiki), shown in order in the
+person's language, announced politely once, and acknowledged by the person's
+next non-modifier action. A submitted Elastic expansion that ends unchanged,
+a Point-and-Talk rewrite that goes stale or fails after its field closed, and a
+Wiki Keep or restore that could not be recorded use it; held admission words
+take precedence. A parked Elastic or Text Swap result waits under one line
+with an explicit Discard.
+
+Why: restoring control silently (2026-08-21) left a submitted request's end
+unperceivable, and several owners writing the line directly hid one another.
+The line states the outcome, never the provider, so that entry's foreclosure of
+provider-status chrome stands.
+
+Forecloses: a second guidance channel, timed dismissal of an outcome the person
+has not acted after, and provider or model detail in outcome copy.
+
+## 2026-09-29 — transient surfaces leave crisply and never drop spoken words
+
+Changed: `components/presence.ts` owns every transient surface's stages. A
+system-changed status label appears only after 150 ms and stays 400 ms; a
+surface closing because work finished stays 400 ms after first paint, then
+fades 140 ms, and one that finished before first paint unmounts at once; the
+person's own close fades at once; a slot takeover, modal chrome, hidden page, or
+document switch cuts at 0 ms. Every failed admission commit holds its words
+with Place and Discard; a retry never replaces them. A recording-worker lease
+that stalls through its warm-up is retired. Each return to idle settles as
+`committed`, `withdrawn`, or `released`.
+
+Why: the owner's decision of 2026-09-29 that transient surfaces leave crisply,
+and the campaign's outcome that spoken words are never silently lost.
+
+Forecloses: a one-frame disappearance, a hold that outlasts its reason, a retry
+that overwrites held words, and a new recording queueing behind a stalled
+worker.
+
+## 2026-09-29 — one canvas gesture owner rejects a resting palm
+
+Changed: `runtime/canvas-pointer-arbitration.ts` decides canvas ownership as a
+pure policy. The first pointer owns the gesture and only another touch may
+join a touch owner. While a pen is in contact, and for 400 ms after its last
+contact event, a touch is rejected with its click; a pen landing within 300 ms
+of a single finger takes the canvas over. Pen hover is not activity, and a
+hovering pen settles recorded pen contacts. Surfaces outside the canvas use the
+same press-dismissal policy.
+
+Why: a palm is itself a primary pointer, so it fell through into node drag,
+pan, or pinch and stale-epoched the stroke.
+
+Forecloses: a hidden persistent "pen mode", a second arbitration path per
+surface, and more than one stylus per screen (the hover rule assumes one).
+
+## 2026-09-29 — Ask Matter carries a waiting question and offers Cancel
+
+Changed: the bubble keeps a scrollable record of one opening's turns. Closing
+is dismissal: the next opening begins clean except for a question still in
+flight or not yet seen settled. **Cancel** replaces **Ask** while a question
+waits and is the explicit cancellation. A refusal returns the question to the
+field with one quiet localized line in the bubble, never an error turn.
+`AGENTS.md` now states the scrollable record and the per-tree completed record
+as one invariant.
+
+Why: closing the bubble after submit lost a paid question from view, and a
+refusal with no line looked like nothing happened.
+
+Forecloses: reducing the bubble to one exchange, replaying a settled exchange,
+and a failed turn in the record. It narrows the 2026-08-08 (Preview.12)
+foreclosure of a closed inquiry retaining visible history to settled
+exchanges only.
+
+## 2026-09-29 — `Escape` never cancels a submitted request
+
+Changed: `Escape` after an Elastic confirmation removes only the presented
+degree, like another surface taking the paper; the submitted request still
+lands once, and the neutral address stays armed at zero until it settles.
+
+Why: under the 2026-09-11 rule, dismissing a presentation is not cancellation
+after submit, and Escape had remained the one exception.
+
+Forecloses: a key that silently discards paid work, and reading the 2026-09-11
+entry's "explicit cancel" as including `Escape`.
+
+## 2026-09-29 — keys an input method owns never act, and one owner handles `Escape`
+
+Changed: a keydown with `isComposing` or `keyCode` 229 belongs to the input
+method and never commits or cancels (`composition-safe-keys.ts`; React sites
+pass `nativeEvent`). `components/escape-layers.ts` is the one document-level
+`Escape`: a bubble-phase window listener closes at most one registered layer,
+ordered gesture, transient menus, panels, paper surfaces (node action lens,
+Point and Talk, Wiki takeover, a submitted Elastic degree), then Lasso, and
+then by recency. Focused fields only `preventDefault()` their own key.
+
+Why: WebKit before its 2026 fix and Android keyboards report IME keys with
+`isComposing` false, so Chinese composition could submit Ask Matter or cancel
+live work; several capture-phase listeners closed several layers at once.
+
+Forecloses: capture-phase keydown listeners, `stopPropagation()` on keys, and a
+paper surface asking whether something covers it.
+
+## 2026-09-29 — a spelling suggestion is withheld rather than costing a valid result
+
+Changed: when a Wiki suggestion makes an otherwise valid admission, repair, or
+model result fail its final contract, material ingress commits the validated
+source and records `canonicalizationWithheld` in its content-free receipt. A
+canonical candidate identical to current material keeps its ordinary no-op
+rejection. An Elastic answer whose generated gaps cannot be proven keeps its
+valid raw form.
+
+Why: a spelling rule refines material; it must never cost a paid answer or a
+person's words.
+
+Forecloses: rejecting valid material because of a lexical suggestion, and
+publishing an invalid canonical candidate.
+
+## 2026-09-29 — a delivered result keeps the redo future that still replays
+
+Changed: `commitDeliveredTreeCommand` commits a delivered Elastic, Text Swap,
+or repair result without clearing Redo: steps nearer than the first one that
+carries the replaced node's memento stay; that step and everything above it
+are released. Human commands still end the redo future.
+
+Why: a result submitted before an Undo and delivered after it would otherwise
+destroy the undone step by latency alone.
+
+Forecloses: a second history clock, failing a delivery as stale because Redo
+moved, and delivering any mutation other than one exact text replacement under
+this rule.
+
+## 2026-09-29 — the durability surface tells the truth and waits for idle material
+
+Changed: under the index identity one localized line with a static dot says,
+until resolved, that material is not saved, storage is unavailable, a newer
+copy or newer Matter is open elsewhere, storage was cleared, the page and
+stored material differ, an upgrade is blocked, or undo steps were released; it
+is announced once and its only action opens Archive. Every save, import,
+rollback, and repair broadcasts a content-free generation on
+`matter.document-generation.v1`; another tab adopts a newer row in two steps
+(the store hydrates by compare-and-swap, then the controller adopts) and only
+while no turn, held Ask Matter question, or name edit is in progress. A newer
+schema or row is terminal `PERSISTENCE_SUPERSEDED` and a deleted row
+`PERSISTENCE_CLEARED`, with export-from-memory and reload only. `beforeunload`
+is armed only while material the person made is at risk. `persist()` is asked
+only inside Export, Retry, or Replace; a refusal quiets Retry and Replace for
+seven days, while Export always asks.
+
+Why: the footer said material was kept when it was not, an older tab could
+overwrite a newer schema, and a stored row could replace material mid-task.
+The line is status only while a problem is unresolved, so the principle that
+status never becomes permanent chrome holds.
+
+Forecloses: supersedes the 2026-08-22 "footer remains only identity" Changed
+line; its foreclosure of recovery actions in the footer stands. Also forecloses
+toasts, banners, and modals for durability, Web Locks, last-write-wins, and a
+prompt on every exit.
+
+## 2026-09-29 — undo is bounded and stored one step per record
+
+Changed: history keeps the newest 1,000 steps and 32 MiB of exact inverses
+across Undo and Redo; the byte bound exceeds the largest legal inverse (about
+24 MiB), so no valid change is refused. IndexedDB schema v6 adds
+`historyEntries`, one record per step written in the snapshot's
+compare-and-swap transaction. Recovery is constant-cost: a shape check and a
+dry-run of the two stack tops, with deeper steps validated at use. An
+unreadable or stale step releases its stack with one notice; storage pressure
+sheds durable undo before material; a v5 inline journal migrates on first save.
+
+Why: the owner's decision of 2026-09-29. Unbounded retention rewrote the whole
+journal on every save, replayed every step on load (17.9 s at 2,000 nodes ×
+2,000 commits), could exhaust quota before material saved, and discarded the
+whole journal on one stale entry.
+
+Forecloses: supersedes the 2026-08-08 foreclosure of "silently dropping old
+undo entries in normal operation" and the 2026-08-11 foreclosure of "silently
+dropping old local inverses": reaching the bound now releases the oldest steps
+without comment, and Archive export is long-term recovery. Also forecloses
+whole-journal validation on the main thread and opening the database from a
+pre-v6 build after rollback (it reads as superseded until v6 returns).
+
 ## 2026-09-29 — admission refusal is `RATE_LIMITED`, not a busy model
 
 Changed: `POST /api/turn` (`transform/2`) and `POST /api/text-swap`

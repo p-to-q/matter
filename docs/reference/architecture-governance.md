@@ -156,7 +156,8 @@ Use a guardrails-first, slice-by-slice route:
 2. **Make newly discovered cheap violations fail.** Add a narrow mechanical
    rule only after its seam is evidenced; do not grow an abstract lint regime.
 3. **Repair semantic seams.** Finish live-model reliability and abuse controls,
-   measure undo capacity before setting a retention policy, and preserve the
+   keep the measured undo bound and per-step journal (see the matrix row
+   below) rather than reopening retention by preference, and preserve the
    explicit local-inference cancellation proof.
 4. **Review by lifecycle.** When a current slice exposes an independent owner,
    freeze its behavior and extract only that owner. Do not schedule a component
@@ -191,8 +192,8 @@ check, and closed the manual-name durability seam. The local-inference
 cancellation proof ([#45](https://github.com/p-to-q/matter/issues/45)) and the
 interaction receipts ([#42](https://github.com/p-to-q/matter/issues/42)) remain
 covered by tests. Undo-journal capacity
-([#47](https://github.com/p-to-q/matter/issues/47)) is closed until it can be
-measured on the same rig as the large-tree gate. Component extraction remains an
+([#47](https://github.com/p-to-q/matter/issues/47)) was measured and bounded by
+the owner's 2026-09-29 decision: 1,000 steps and 32 MiB, stored per step. Component extraction remains an
 evidence-triggered future option rather than a current plan;
 [#48](https://github.com/p-to-q/matter/issues/48) is closed as not planned.
 
