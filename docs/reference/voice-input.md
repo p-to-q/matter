@@ -161,7 +161,11 @@ flight, its lane keeps the last measured height.
 Focus returns to the Voice tool with the live phase, before the box becomes
 inert. Reduced motion removes the fades and keeps the holds. The Point Talk
 field follows the same rules through an exit host that paints only a frozen
-copy after its owner has unmounted with every listener it held.
+copy after its owner has unmounted with every listener it held. A press on the
+paper, keyboard Undo, or a rail tool is the person's close and fades it; only
+another owner taking the paper's slot (Ask Matter, a grip adjustment, index
+navigation, a Wiki takeover) cuts it, as modal chrome and a document switch do.
+The CSS fade reads its duration from the same timer that unmounts it.
 
 The first-release recording policy prefers WebM/Opus and falls back to MP4/AAC
 where supported. Capture stops at 60 seconds; the route allows 65 seconds of
