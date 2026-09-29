@@ -85,6 +85,30 @@ describe("Matter store", () => {
       .toBe("被允许想象的其他生活");
   });
 
+  it("hydrates stored material only over the exact tree the caller read storage against", () => {
+    const store = createMatterStore("expanded", { documentRoot: true });
+    const read = store.getState().tree as ThoughtTree;
+    const stored = structuredClone(read) as ThoughtTree;
+    stored.title = "Saved in another tab";
+    stored.revision += 3;
+    // A commit lands after the caller read storage.
+    store.getState().renameDocument({ commandId: "rename_meanwhile", title: "Mine", createdAt: "2026-09-29T00:00:00.000Z" });
+    const committed = store.getState().tree as ThoughtTree;
+    expect(committed).not.toBe(read);
+
+    expect(store.getState().hydrateSnapshot(stored, null, read)).toMatchObject({
+      operation: "hydrate",
+      status: "rejected",
+      errorCode: "MATERIAL_CHANGED",
+      revision: committed.revision,
+    });
+    expect(store.getState().tree).toBe(committed);
+    expect(store.getState().history.entries).toHaveLength(1);
+
+    expect(store.getState().hydrateSnapshot(stored, null, committed)).toMatchObject({ status: "hydrated" });
+    expect(store.getState().tree.title).toBe("Saved in another tab");
+  });
+
   it("starts the public root-only document without descendants and grows locally", () => {
     const store = createMatterStore("root");
     const rootId = store.getState().tree.rootId;

@@ -512,6 +512,30 @@ describe("IndexedDB document repository", () => {
     expect(memory.snapshot()).toEqual({ rows: [], records: [] });
   });
 
+  it("reports a row cleared under the tab that saved it, and never recreates it", async () => {
+    const repository = createIndexedDbDocumentRepository();
+    const session = steps(seeded(), 1);
+    const saved = await save(repository, session, UNKNOWN);
+    if (!saved.ok) throw new Error(saved.error.code);
+    // Site data cleared by the browser, or the row removed; the database stays.
+    memory.stores.get("snapshots")!.clear();
+    memory.stores.get("historyEntries")!.clear();
+
+    await expect(save(repository, commitStep(session, "after_clear"), saved.value)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_CLEARED" },
+    });
+    await expect(repository.reserveImportedSnapshot(
+      session.tree.id,
+      session.tree.revision,
+      treeToBundle(session.tree),
+      saved.value.writeGeneration,
+    )).resolves.toMatchObject({ ok: false, error: { code: "PERSISTENCE_CLEARED" } });
+    expect(memory.snapshot()).toEqual({ rows: [], records: [] });
+    // Without a generation, a missing row is a first save and is created.
+    await expect(save(repository, session, UNKNOWN)).resolves.toMatchObject({ ok: true });
+  });
+
   it("maps an older build's VersionError to superseded instead of unavailable", async () => {
     vi.mocked(openDB).mockRejectedValueOnce(new DOMException("requested version is lower", "VersionError"));
     const repository = createIndexedDbDocumentRepository();

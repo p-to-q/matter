@@ -258,6 +258,10 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
           await abortTransaction(transaction);
           return superseded();
         }
+        if (existing === undefined && basis.writeGeneration !== null) {
+          await abortTransaction(transaction);
+          return cleared();
+        }
         const currentGeneration = existing === undefined ? null : generationOf(existing);
         if (currentGeneration !== basis.writeGeneration) {
           await abortTransaction(transaction);
@@ -310,6 +314,10 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
         if (isNewerSchema(previous)) {
           await abortTransaction(transaction);
           return superseded();
+        }
+        if (previous === undefined && expectedGeneration !== null) {
+          await abortTransaction(transaction);
+          return cleared();
         }
         const currentGeneration = previous?.writeGeneration ?? null;
         if (currentGeneration !== expectedGeneration) {
@@ -636,12 +644,19 @@ function superseded(): Extract<RepositoryResult<never>, { ok: false }> {
   return failure("PERSISTENCE_SUPERSEDED", "A newer Matter owns local material storage.");
 }
 
+/**
+ * A row this tab held a generation for is gone, or the database was deleted:
+ * storage was cleared, by another tab or by the browser. Writing would
+ * resurrect material the person removed, so the save stops here.
+ */
+function cleared(): Extract<RepositoryResult<never>, { ok: false }> {
+  return failure("PERSISTENCE_CLEARED", "Local material storage was cleared.");
+}
+
 function terminalFailure(error: unknown): Extract<RepositoryResult<never>, { ok: false }> | null {
   if (!(error instanceof Error)) return null;
   if (error.name === SUPERSEDED_DATABASE_ERROR) return superseded();
-  if (error.name === CLEARED_DATABASE_ERROR) {
-    return failure("PERSISTENCE_CLEARED", "Local material storage was cleared in another tab.");
-  }
+  if (error.name === CLEARED_DATABASE_ERROR) return cleared();
   return null;
 }
 

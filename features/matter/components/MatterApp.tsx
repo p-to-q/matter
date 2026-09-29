@@ -18,6 +18,7 @@ import type {
 } from "../store/matter-store";
 import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import {
+  materialIsIdle,
   materialTurnsHoldBasis,
   SETTLED_PAPER_MATERIAL_TURNS,
   type PaperMaterialTurnPhases,
@@ -62,13 +63,17 @@ export function MatterApp() {
     scope: { treeId: tree.id, revision: tree.revision, documentEpoch },
     locale: canvasPreferences.preferences.language,
   });
+  const [paperTurnPhases, setPaperTurnPhases] =
+    useState<PaperMaterialTurnPhases>(SETTLED_PAPER_MATERIAL_TURNS);
+  // One signal gates every replacement of the loaded document instance.
+  const materialTurns = { admission: admission.state.phase, paper: paperTurnPhases };
   const persistence = useMaterialPersistence(
     tree,
     history,
     documentEpoch,
     hydrateSnapshot,
     switchDocument,
-    admission.state.phase === "idle",
+    materialIsIdle(materialTurns),
   );
   const storagePersistence = useStoragePersistence();
   const requestStoragePersistence = storagePersistence.request;
@@ -114,7 +119,7 @@ export function MatterApp() {
   // Export, Replace, and Retry are the only gestures that may ask the browser
   // to keep storage persistent; each asks before its first await.
   const exportArchive = useCallback(async () => {
-    requestStoragePersistence();
+    requestStoragePersistence("export");
     if (persistence.status.errorCode === "PERSISTENCE_CORRUPT") {
       const recovery = await persistence.exportCorruptRecovery();
       if (!recovery.ok) return archiveFailure(recovery.errorCode, archiveCopy);
@@ -146,7 +151,7 @@ export function MatterApp() {
     file: File,
     options: Readonly<{ replaceUnsaved: boolean }>,
   ) => {
-    requestStoragePersistence();
+    requestStoragePersistence("replace");
     const basis = Object.freeze({
       treeId: tree.id,
       revision: tree.revision,
@@ -168,7 +173,7 @@ export function MatterApp() {
   const persistenceSurface = useMemo(() => Object.freeze({
     status: persistence.status,
     retry: () => {
-      requestStoragePersistence();
+      requestStoragePersistence("retry");
       retrySaving();
     },
     resolveConflict: persistence.resolveConflict,
@@ -182,12 +187,7 @@ export function MatterApp() {
     retrySaving,
     storagePersistence.persisted,
   ]);
-  const [paperTurnPhases, setPaperTurnPhases] =
-    useState<PaperMaterialTurnPhases>(SETTLED_PAPER_MATERIAL_TURNS);
-  const turnsHoldSeedBasis = materialTurnsHoldBasis({
-    admission: admission.state.phase,
-    paper: paperTurnPhases,
-  });
+  const turnsHoldSeedBasis = materialTurnsHoldBasis(materialTurns);
   const reportHistoryUnavailable = persistence.reportHistoryUnavailable;
   // Reconciliation completes once, after the first load; save phases are not
   // a reason to look at the seed again.
@@ -352,6 +352,8 @@ function archiveMessage(code: string, copy: MaterialFilesCopy): string {
       return copy.archiveErrorConflict;
     case "IMPORT_DIRTY":
       return copy.archiveErrorDirty;
+    case "IMPORT_SAVING":
+      return copy.archiveErrorSaving;
     case "IMPORT_FOREIGN_DOCUMENT":
       return copy.archiveErrorForeign;
     case "IMPORT_INVALID_TREE":

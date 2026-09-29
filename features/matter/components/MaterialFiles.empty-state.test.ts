@@ -40,6 +40,7 @@ function renderMaterialFiles(tree: ThoughtTree): string {
         historyNotice: null,
         unsaved: false,
         upgradeBlocked: false,
+        conflictOrigin: null,
       },
       retry: () => undefined,
       resolveConflict: () => undefined,

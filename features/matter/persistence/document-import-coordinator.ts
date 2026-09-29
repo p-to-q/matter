@@ -7,6 +7,7 @@ export type DocumentImportErrorCode =
   | "IMPORT_INVALID_TREE"
   | "IMPORT_CONFLICT"
   | "IMPORT_DIRTY"
+  | "IMPORT_SAVING"
   | "IMPORT_FOREIGN_DOCUMENT"
   | "IMPORT_STALE"
   | Exclude<RepositoryErrorCode, "PERSISTENCE_CONFLICT">;

@@ -1192,6 +1192,10 @@ test("storage exhaustion stays discoverable with the narrow material drawer clos
 
   const toggle = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFilesSavingNeedsAttention });
   await expect(toggle).toHaveAttribute("data-persistence-error", "true");
+  // One static dot on the closed toggle; no badge count, no pulse.
+  await expect(toggle).toHaveAttribute("data-durability", "risk");
+  await expect(toggle.locator(".material-files-toggle__dot")).toHaveCount(1);
+  await expect(page.locator("[data-durability-announcer]")).toHaveText(fixtureUiCopy.materialFiles.durabilityNotSaved);
   await toggle.click();
 
   const sidebar = page.locator("aside.material-files");
@@ -1232,9 +1236,10 @@ test("a docked index at desk width shows refused storage on its identity line an
   await expect(sidebar.locator(".material-files__profile-meta")).toHaveAttribute("data-tone", "risk");
   await expect(sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }))
     .toHaveAttribute("data-attention", "risk");
-  await expect(sidebar.locator("footer.material-files__identity [aria-live]")).toHaveText(
-    fixtureUiCopy.materialFiles.durabilityNotSaved,
-  );
+  // The announcer lives outside the index, so a closed, inert index is still heard.
+  const announcer = page.locator("[data-durability-announcer]");
+  await expect(announcer).toHaveText(fixtureUiCopy.materialFiles.durabilityNotSaved);
+  expect(await announcer.evaluate((node) => node.closest("aside, [inert], [aria-hidden=true]") === null)).toBe(true);
 
   await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.durabilityNotSaved }).click();
   const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });

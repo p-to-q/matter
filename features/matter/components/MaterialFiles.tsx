@@ -73,6 +73,8 @@ export type MaterialFilesProps = Readonly<{
   onFocusNode: (nodeId: string) => void;
   /** Reports only the transient narrow disclosure; docked presentation is false. */
   onOverlayChange?: (open: boolean) => void;
+  /** A thought name or the canvas title is being typed; a document switch would drop it. */
+  onEditingChange?: (editing: boolean) => void;
   /** Returns transient canvas tools before the narrow overlay takes focus. */
   onOpenOverlay?: () => void;
   /** Restores a held search result without unexpectedly narrowing full view. */
@@ -508,6 +510,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
   // What they typed, when the editor was reopened because the write failed.
   const activeRenameDraft = activeRename === null ? undefined : renaming?.draft;
   const renameEnabled = props.onRenameNode !== undefined && props.onResetNodeName !== undefined;
+  const reportEditing = props.onEditingChange;
+  const editing = activeRename !== null || renamingDocument;
+  useEffect(() => {
+    reportEditing?.(editing);
+  }, [editing, reportEditing]);
+  useEffect(() => () => reportEditing?.(false), [reportEditing]);
 
   const beginRename = (nodeId: string) => {
     // A stale projection blocks actions that depend on *which* rows are shown.
@@ -909,6 +917,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
               : copy.showMaterialFiles}
           className="material-files-toggle"
           data-canvas-interactive
+          data-durability={durability.tone === "quiet" ? undefined : durability.tone}
           data-persistence-error={durability.tone === "risk" || undefined}
           onClick={() => {
             if (!open) props.onOpenOverlay?.();
@@ -918,6 +927,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
           type="button"
         >
           <SidebarIcon />
+          {/* A closed index still shows that its line needs reading; static,
+              never a badge count or a pulse. */}
+          {durability.tone === "quiet" ? null : (
+            <span aria-hidden="true" className="material-files-toggle__dot" />
+          )}
         </button>
       )}
       <div className="material-files__clip" data-open={open || undefined}>
@@ -1460,12 +1474,14 @@ export function MaterialFiles(props: MaterialFilesProps) {
               </span>
             </span>
           </div>
-          <span aria-atomic="true" aria-live="polite" className="visually-hidden">
-            {durability.tone === "quiet" ? "" : durability.text}
-          </span>
         </footer>
       </aside>
       </div>
+      {/* Outside the aside: a closed index is aria-hidden and inert, and the
+          durability line must still be announced when it changes. */}
+      <span aria-atomic="true" aria-live="polite" className="visually-hidden" data-durability-announcer>
+        {durability.tone === "quiet" ? "" : durability.text}
+      </span>
     </>
   );
 }

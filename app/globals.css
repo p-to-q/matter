@@ -47,6 +47,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 @media (hover: hover) { .material-files-toggle:hover { background: rgba(22,29,39,.05); color: var(--ink); } }
 .material-files-toggle[aria-expanded="true"] { color: var(--ink); }
 .material-files-toggle[data-persistence-error="true"] { background: rgba(173,74,54,.1); color: var(--active); }
+.material-files-toggle__dot { position: absolute; top: 5px; right: 5px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; pointer-events: none; }
+.material-files-toggle[data-durability="notice"] .material-files-toggle__dot { background: var(--ink); }
+.material-files-toggle[aria-expanded="true"] .material-files-toggle__dot { display: none; }
 .material-files__clip { display: contents; }
 .material-files { --index-row: 40px; --index-ink: #161d27; --index-muted: rgba(22,29,39,.72); --index-faint: rgba(22,29,39,.66); --index-line: rgba(22,29,39,.09); position: fixed; z-index: 41; top: 62px; bottom: var(--shell-gutter); left: 10px; display: grid; width: calc(var(--sidebar-width) - 24px); grid-template-rows: auto auto minmax(0,1fr) auto auto; padding: 6px 4px 3px; border: 0; border-radius: 0; background: transparent; box-shadow: none; opacity: 0; overflow: hidden; pointer-events: none; touch-action: pan-y; transform: translateX(-9px); transition: opacity 150ms ease, transform 200ms cubic-bezier(.2,.8,.2,1); }
 .material-files[data-open="true"] { opacity: 1; pointer-events: auto; transform: translateX(0); }

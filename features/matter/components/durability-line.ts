@@ -34,7 +34,8 @@ export function projectDurabilityLine(
   if (status.upgradeBlocked) return risk(copy.durabilityUpgradeBlocked);
   switch (status.errorCode) {
     case "PERSISTENCE_CONFLICT":
-      return risk(copy.durabilityNewerCopy);
+      // A load-window conflict involves no other tab; it must not claim one.
+      return risk(status.conflictOrigin === "load-window" ? copy.durabilityDiverged : copy.durabilityNewerCopy);
     case "PERSISTENCE_STORAGE_FULL":
     case "PERSISTENCE_WRITE_FAILED":
     case "PERSISTENCE_CORRUPT":
@@ -68,7 +69,7 @@ export function projectArchiveNote(
     case "PERSISTENCE_CORRUPT":
       return copy.archiveNoteCorrupt;
     case "PERSISTENCE_CONFLICT":
-      return copy.archiveNoteConflict;
+      return status.conflictOrigin === "load-window" ? copy.archiveNoteDiverged : copy.archiveNoteConflict;
     case "PERSISTENCE_STORAGE_FULL":
       return copy.archiveNoteStorageFull;
     case "PERSISTENCE_UNAVAILABLE":

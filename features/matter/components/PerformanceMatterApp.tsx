@@ -121,6 +121,7 @@ export function PerformanceMatterApp({
           historyNotice: null,
           unsaved: false,
           upgradeBlocked: false,
+          conflictOrigin: null,
         },
         retry: () => undefined,
         resolveConflict: () => undefined,

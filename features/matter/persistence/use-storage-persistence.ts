@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createStoragePersistence } from "./storage-persistence";
+import { createStoragePersistence, type StoragePersistenceGesture } from "./storage-persistence";
 
 /**
  * Reads whether this origin's storage is persistent once, without prompting,
@@ -22,8 +22,8 @@ export function useStoragePersistence() {
     };
   }, [storage]);
 
-  const request = useCallback(() => {
-    void storage.request().then((value) => {
+  const request = useCallback((gesture: StoragePersistenceGesture) => {
+    void storage.request(gesture).then((value) => {
       if (value !== null) setPersisted(value);
     });
   }, [storage]);

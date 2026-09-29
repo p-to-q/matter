@@ -142,7 +142,16 @@ export type HydrationReceipt =
       /** Stored undo steps existed but could not be restored with this material. */
       historyReleased: boolean;
     }
-  | { operation: "hydrate"; status: "rejected"; revision: number; errorCode: "TREE_INVARIANT_VIOLATION" };
+  | {
+      operation: "hydrate";
+      status: "rejected";
+      revision: number;
+      /**
+       * `MATERIAL_CHANGED`: the store no longer holds the tree the caller read
+       * before loading, so replacing it would drop a commit made meanwhile.
+       */
+      errorCode: "TREE_INVARIANT_VIOLATION" | "MATERIAL_CHANGED";
+    };
 
 export type DocumentSwitchReceipt =
   | { operation: "switch-document"; status: "switched"; treeId: string; revision: number }
@@ -309,7 +318,11 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   focus: (nodeId: string) => MatterStoreReceipt;
   showFull: () => MatterStoreReceipt;
   toggleFold: (nodeId: string) => MatterStoreReceipt;
-  hydrateSnapshot: (tree: ThoughtTree, history?: RecoveredHistory | null) => MatterStoreReceipt;
+  hydrateSnapshot: (
+    tree: ThoughtTree,
+    history?: RecoveredHistory | null,
+    expectedCurrentTree?: ThoughtTree,
+  ) => MatterStoreReceipt;
   switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt;
   clearError: () => void;
 };
@@ -934,9 +947,20 @@ export function createMatterStore(
       return requireSynchronousReceipt(receipt);
     },
 
-    hydrateSnapshot: (tree, persistedHistory) => {
+    hydrateSnapshot: (tree, persistedHistory, expectedCurrentTree) => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
+        // Compare-and-swap against the material the caller last saw. A commit
+        // that landed after it read storage stays; the caller holds a conflict.
+        if (expectedCurrentTree !== undefined && current.tree !== expectedCurrentTree) {
+          receipt = {
+            operation: "hydrate",
+            status: "rejected",
+            revision: current.tree.revision,
+            errorCode: "MATERIAL_CHANGED",
+          };
+          return freezeState({ ...current, lastReceipt: protectValue(receipt) });
+        }
         const normalizedTree = options.documentRoot === true
           ? normalizeForDocumentModel(tree, options.initialTitle)
           : tree;

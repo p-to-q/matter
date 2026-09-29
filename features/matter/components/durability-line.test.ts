@@ -17,10 +17,18 @@ const SAVED: PersistenceStatus = Object.freeze({
   historyNotice: null,
   unsaved: false,
   upgradeBlocked: false,
+  conflictOrigin: null,
 });
 
 function failed(errorCode: NonNullable<PersistenceStatus["errorCode"]>): PersistenceStatus {
-  return { ...SAVED, phase: "error", dirtyRevision: 4, errorCode, unsaved: true };
+  return {
+    ...SAVED,
+    phase: "error",
+    dirtyRevision: 4,
+    errorCode,
+    unsaved: true,
+    conflictOrigin: errorCode === "PERSISTENCE_CONFLICT" ? "another-tab" : null,
+  };
 }
 
 describe("durability line", () => {
@@ -39,9 +47,19 @@ describe("durability line", () => {
     ["PERSISTENCE_UNAVAILABLE", "Not saving in this browser"],
     ["PERSISTENCE_CONFLICT", "A newer copy is open in another tab"],
     ["PERSISTENCE_SUPERSEDED", "A newer Matter is open in another tab"],
-    ["PERSISTENCE_CLEARED", "Local storage was cleared in another tab"],
+    ["PERSISTENCE_CLEARED", "Local storage was cleared"],
   ] as const)("tells the truth about %s until it is resolved", (errorCode, text) => {
     expect(projectDurabilityLine(failed(errorCode), true, copy)).toEqual({ tone: "risk", text });
+  });
+
+  it("never claims another tab for material that diverged while stored material loaded", () => {
+    const diverged = { ...failed("PERSISTENCE_CONFLICT"), conflictOrigin: "load-window" as const };
+    expect(projectDurabilityLine(diverged, false, copy)).toEqual({ tone: "risk", text: copy.durabilityDiverged });
+    expect(projectArchiveNote(diverged, null, null, copy)).toBe(copy.archiveNoteDiverged);
+    expect(projectArchiveNote(failed("PERSISTENCE_CONFLICT"), null, null, copy)).toBe(copy.archiveNoteConflict);
+    for (const text of [copy.durabilityDiverged, copy.archiveNoteDiverged, copy.durabilityCleared, copy.archiveNoteCleared]) {
+      expect(text).not.toMatch(/in another tab/);
+    }
   });
 
   it("asks for older tabs to close while an upgrade waits, below a terminal state", () => {
