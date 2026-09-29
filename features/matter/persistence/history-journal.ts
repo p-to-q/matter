@@ -5,11 +5,8 @@ import {
   type StoredHistoryJournal,
   type StoredHistoryRange,
 } from "./matter-database";
-import {
-  isPlainRecord,
-  parseHistoryEntry,
-  type RecoveredHistory,
-} from "./history-recovery";
+import { parseHistoryEntry, type RecoveredHistory } from "./history-recovery";
+import { isNonNegativeSafeInteger, isPlainRecord } from "./stored-value";
 import {
   createTreeHistory,
   retainedInverseBytes,
@@ -301,16 +298,11 @@ function stackRange(stack: PersistedHistoryStack): StoredHistoryRange {
 function isStoredRange(value: unknown): value is StoredHistoryRange {
   return Array.isArray(value) &&
     value.length === 2 &&
-    Number.isSafeInteger(value[0]) &&
-    Number.isSafeInteger(value[1]) &&
-    (value[0] as number) >= 0 &&
-    (value[0] as number) <= (value[1] as number);
+    isNonNegativeSafeInteger(value[0]) &&
+    isNonNegativeSafeInteger(value[1]) &&
+    value[0] <= value[1];
 }
 
 function rangeLength(range: StoredHistoryRange): number {
   return range[1] - range[0];
-}
-
-function isNonNegativeSafeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }

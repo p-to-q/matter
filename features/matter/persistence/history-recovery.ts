@@ -7,6 +7,7 @@ import {
   type TreeHistoryLimits,
 } from "../tree/history";
 import type { ThoughtTree, TreeCommand, TreeMutation } from "../tree/model";
+import { isNonNegativeSafeInteger, isPlainRecord } from "./stored-value";
 
 /**
  * A journal parsed at the storage boundary. `released` records that stored
@@ -139,12 +140,3 @@ function readableTop(
   return Object.freeze({ entries: entries.reverse(), released: false });
 }
 
-function isNonNegativeSafeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-export function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
