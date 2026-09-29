@@ -512,6 +512,43 @@ describe("Wiki learning policy", () => {
     ))).toEqual([]);
   });
 
+  it("ranks and measures activation on producer evidence alone", () => {
+    const qualification = qualified("en-exact-homophone-v1", "en-metaphone-v1");
+    // A: exact 3 x 12 = 36 clears the floor; B: metaphone 2 x 12 = 24.
+    const exact = alias("A", "en-exact-homophone-v1", 12);
+    const metaphone = alias("B", "en-metaphone-v1", 12);
+    expect(activeIds(resolveWikiAliasCompetition([exact, metaphone], qualification)))
+      .toEqual([]);
+    expect(activeIds(resolveWikiAliasCompetition([
+      { ...exact, kept: 24 },
+      metaphone,
+    ], qualification))).toEqual([]);
+
+    // Kept evidence cannot pick a winner between two floor-clearing candidates.
+    const exactOnly = qualified("en-exact-homophone-v1");
+    expect(activeIds(resolveWikiAliasCompetition([
+      { ...alias("A", "en-exact-homophone-v1", 12), kept: 24 },
+      alias("B", "en-exact-homophone-v1", 16),
+    ], exactOnly))).toEqual([]);
+    expect(activeIds(resolveWikiAliasCompetition([
+      alias("A", "en-exact-homophone-v1", 12),
+      alias("B", "en-exact-homophone-v1", 28),
+    ], exactOnly))).toEqual(["B"]);
+  });
+
+  it("never re-activates a demoted relation through settlements", () => {
+    const qualification = qualified("en-metaphone-v1");
+    const demoted = resolveWikiAliasCompetition([
+      alias("used", "en-metaphone-v1", 16, "active"),
+      alias("challenger", "en-metaphone-v1", 12),
+    ], qualification);
+    expect(activeIds(demoted)).toEqual([]);
+    const settled = demoted.map((candidate) => candidate.candidateId === "used"
+      ? { ...candidate, ...settleWikiKeptEvidence(candidate, 16) }
+      : candidate);
+    expect(activeIds(resolveWikiAliasCompetition(settled, qualification))).toEqual([]);
+  });
+
   it("settles implicit acceptance only when the change was informed", () => {
     expect(settleWikiImplicitOccurrence(facts({}))).toBe("pending");
     expect(settleWikiImplicitOccurrence(facts({ furtherHumanAdmissions: 1 })))

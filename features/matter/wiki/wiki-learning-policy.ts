@@ -667,10 +667,14 @@ export function advanceWikiRevertStrikeTurn(quietTurns: number): number | null {
 /**
  * Resolves one ambiguity set. Competitors are immediate counter-evidence.
  * A release must explicitly qualify a producer; presence in the weight table
- * alone never grants activation authority. Informed acceptance counts toward
- * retention and both sides of a margin, but only producer evidence can clear
- * the activation floor. Corrupt multi-active input fails closed for this
- * resolution rather than borrowing a retention threshold.
+ * alone never grants activation authority. An active relation keeps authority
+ * while its retention score (producer evidence plus informed acceptance)
+ * clears the retention floor and leads every rival's retention score by the
+ * retention margin. Otherwise candidates are ranked, and the activation floor
+ * and margin are measured, on producer relation scores alone, so informed
+ * acceptance can retain and defend a rule in use but can never activate one.
+ * Corrupt multi-active input fails closed for this resolution rather than
+ * borrowing a retention threshold.
  */
 export function resolveWikiAliasCompetition(
   candidates: readonly WikiAliasCandidate[],
@@ -695,23 +699,34 @@ export function resolveWikiAliasCompetition(
     }))
     .filter(({ candidate, relationScore }) =>
       relationScore > 0 && releaseQualifiedProducers.has(candidate.producer)
-    )
-    .sort((left, right) =>
-      right.retentionScore - left.retentionScore ||
-      compareWikiAliasProducerPrecedence(left.candidate.producer, right.candidate.producer) ||
-      compareCodeUnits(left.candidate.candidateId, right.candidate.candidateId)
     );
 
   if (eligible.length === 0) return demoteAndFreezeAliasCandidates(candidates);
 
-  const leader = eligible[0];
-  const margin = leader.retentionScore - (eligible[1]?.retentionScore ?? 0);
-  const passes = leader.candidate.phase === "active"
-    ? leader.retentionScore >= WIKI_ALIAS_SCORE_POLICY.retentionScore &&
-      margin >= WIKI_ALIAS_SCORE_POLICY.retentionMargin
-    : leader.relationScore >= WIKI_ALIAS_SCORE_POLICY.activationScore &&
-      margin >= WIKI_ALIAS_SCORE_POLICY.activationMargin;
-  const winningIndex = passes ? leader.index : -1;
+  let winningIndex = -1;
+  const incumbent = eligible.find(({ candidate }) => candidate.phase === "active");
+  if (incumbent !== undefined) {
+    const strongestRival = Math.max(0, ...eligible
+      .filter((entry) => entry !== incumbent)
+      .map((entry) => entry.retentionScore));
+    if (incumbent.retentionScore >= WIKI_ALIAS_SCORE_POLICY.retentionScore &&
+        incumbent.retentionScore - strongestRival >=
+          WIKI_ALIAS_SCORE_POLICY.retentionMargin) {
+      winningIndex = incumbent.index;
+    }
+  }
+  if (winningIndex === -1) {
+    const ranked = [...eligible].sort((left, right) =>
+      right.relationScore - left.relationScore ||
+      compareWikiAliasProducerPrecedence(left.candidate.producer, right.candidate.producer) ||
+      compareCodeUnits(left.candidate.candidateId, right.candidate.candidateId));
+    const leader = ranked[0]!;
+    const margin = leader.relationScore - (ranked[1]?.relationScore ?? 0);
+    if (leader.relationScore >= WIKI_ALIAS_SCORE_POLICY.activationScore &&
+        margin >= WIKI_ALIAS_SCORE_POLICY.activationMargin) {
+      winningIndex = leader.index;
+    }
+  }
 
   return freezeAliasCandidates(candidates.map((candidate, index) => ({
     ...candidate,
