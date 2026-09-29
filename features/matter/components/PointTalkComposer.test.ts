@@ -10,6 +10,7 @@ import {
   syncSettledStatus,
 } from "./presence";
 import {
+  condensePointTalkDirection,
   pointTalkCopy,
   pointTalkOutsidePointerDismisses,
   pointTalkPhaseLabel,
@@ -81,6 +82,14 @@ describe("Point Talk recovery", () => {
       insideVoiceTool: true,
       submitted: false,
     })).toBe(false);
+    // Ask Matter takes the slot itself; its press is not the person's close.
+    expect(pointTalkOutsidePointerDismisses({
+      insideBubble: false,
+      insideCanvasChrome: true,
+      insideSlotOwner: true,
+      insideVoiceTool: false,
+      submitted: false,
+    })).toBe(false);
   });
 
   it("keeps request retry and voice retry as distinct pointer actions", () => {
@@ -148,5 +157,17 @@ describe("Point and Talk copy", () => {
     }
     expect(pointTalkCopy("zh-TW").originalKept).toBe("原文沒有改變。");
     expect(pointTalkCopy("zh-CN").originalKept).toBe("原文没有改变。");
+  });
+});
+
+describe("Point and Talk pending echo", () => {
+  it("repeats the submitted direction as one short line", () => {
+    expect(condensePointTalkDirection("  更凝练\n一些  ")).toBe("更凝练 一些");
+    expect(condensePointTalkDirection("   ")).toBeNull();
+    const echo = condensePointTalkDirection("请把这一段改得更加凝练一些并且保留原来的语气和节奏感");
+    expect(Array.from(echo ?? "")).toHaveLength(24);
+    expect(echo?.endsWith("…")).toBe(true);
+    // Elision never splits a surrogate pair.
+    expect(condensePointTalkDirection("😀".repeat(40))).toBe(`${"😀".repeat(23)}…`);
   });
 });

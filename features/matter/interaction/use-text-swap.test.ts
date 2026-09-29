@@ -3,7 +3,21 @@ import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
 import {
   createTextSwapBasis,
   createTextSwapEnvelope,
+  pendingDwellRemainingMs,
 } from "./use-text-swap";
+
+describe("Text Swap pending dwell", () => {
+  it("holds delivery until a request has been pending the minimum time", () => {
+    const since = { atMs: 1_000 };
+    expect(pendingDwellRemainingMs(since, 600, 1_000)).toBe(600);
+    expect(pendingDwellRemainingMs(since, 600, 1_450)).toBe(150);
+    expect(pendingDwellRemainingMs(since, 600, 1_600)).toBe(0);
+    expect(pendingDwellRemainingMs(since, 600, 9_000)).toBe(0);
+    // No pending request, or no field to keep pending, never holds.
+    expect(pendingDwellRemainingMs(null, 600, 1_000)).toBe(0);
+    expect(pendingDwellRemainingMs(since, 0, 1_000)).toBe(0);
+  });
+});
 
 const TIME = "2026-08-20T00:00:00.000Z";
 const TEXT = "Rain is near. Next";

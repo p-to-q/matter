@@ -67,7 +67,8 @@ export type NodeActionLensProps = Readonly<{
   interaction: "idle" | "pending";
   locale: MatterLocale;
   navigation: NavigationState;
-  onOpenPointTalk: (nodeId: string) => void;
+  /** `origin` is the AI mark's centre in client pixels: the field grows from it. */
+  onOpenPointTalk: (nodeId: string, origin: Readonly<{ x: number; y: number }> | null) => void;
   onOpenWikiReview?: (occurrenceId: string) => void;
   onToggleHeldAside: (nodeId: string) => void;
   pointTalkEligibleNodeIds: ReadonlySet<string>;
@@ -486,8 +487,12 @@ export function NodeActionLens({
         className="node-action-lens__button node-action-lens__button--ai"
         data-node-action="point-talk"
         disabled={!pointTalkEnabled}
-        onClick={() => {
-          onOpenPointTalk(activeTarget.nodeId);
+        onClick={(event) => {
+          const mark = event.currentTarget.getBoundingClientRect();
+          onOpenPointTalk(activeTarget.nodeId, Object.freeze({
+            x: mark.left + mark.width / 2,
+            y: mark.top + mark.height / 2,
+          }));
           close();
         }}
         title={copy.rewriteShort}

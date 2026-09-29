@@ -8,11 +8,11 @@ import {
   emptySettledStatus,
   markPresencePainted,
   presenceAwaitsPaint,
-  PRESENCE_TIMING,
   projectPresence,
   projectSettledStatus,
   settledStatusDeadline,
   syncPresence,
+  surfacePresencePolicy,
   syncSettledStatus,
   type PresenceClose,
   type PresenceFrame,
@@ -26,12 +26,19 @@ import {
 /**
  * Binds one transient surface to the presence rules. The caller stays mounted
  * across the close and renders the returned frame; while the frame is not
- * `present` it must render the frozen view without handlers.
+ * `present` it must render the frozen view without handlers. `policy` belongs
+ * to the surface and is fixed for its lifetime; it is called at each
+ * transition, so a reduced-motion change applies to the next close.
  */
-export function usePresence<T>(live: PresenceLive<T>, close: PresenceClose): PresenceFrame<T> {
+export function usePresence<T>(
+  live: PresenceLive<T>,
+  close: PresenceClose,
+  policy: () => PresencePolicy = defaultPresencePolicy,
+): PresenceFrame<T> {
+  const [surfacePolicy] = useState(() => policy);
   const [store] = useState(() => createTimedStore<PresenceState<T>>(null, {
     deadline: (state) => state?.deadlineMs ?? null,
-    advance: (state, nowMs) => advancePresence(state, nowMs, presencePolicy()),
+    advance: (state, nowMs) => advancePresence(state, nowMs, surfacePolicy()),
     frame: { due: presenceAwaitsPaint, mark: markPresencePainted },
     // Fresh live content renders from props; only a stage or identity change
     // needs another render.
@@ -40,8 +47,8 @@ export function usePresence<T>(live: PresenceLive<T>, close: PresenceClose): Pre
   }));
   const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
   useLayoutEffect(() => {
-    store.update((current, nowMs) => syncPresence(current, live, close, nowMs, presencePolicy()));
-  }, [close, live, store]);
+    store.update((current, nowMs) => syncPresence(current, live, close, nowMs, surfacePolicy()));
+  }, [close, live, store, surfacePolicy]);
   useEffect(() => {
     store.attach();
     return () => store.detach();
@@ -77,15 +84,12 @@ export function useSettledStatus<K>(
   return frozen ? state.shown : projectSettledStatus(state, { scope, value, urgent, lingers });
 }
 
-function presencePolicy(): PresencePolicy {
-  return Object.freeze({
-    minVisibleMs: PRESENCE_TIMING.minVisibleMs,
-    // Reduced motion removes the fade, never the hold.
-    exitMs: prefersReducedMotion() ? 0 : PRESENCE_TIMING.exitMs,
-  });
+function defaultPresencePolicy(): PresencePolicy {
+  // Reduced motion removes the fade, never the hold.
+  return surfacePresencePolicy(prefersReducedMotion());
 }
 
-function prefersReducedMotion(): boolean {
+export function prefersReducedMotion(): boolean {
   return typeof window !== "undefined" &&
     typeof window.matchMedia === "function" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;

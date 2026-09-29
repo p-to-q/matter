@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { PRESENCE_TIMING } from "../features/matter/components/presence";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import { POINT_TALK_TIMING } from "../features/matter/components/presence";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const ROOT_ID = "thought_fixture_root";
@@ -447,6 +447,7 @@ test.describe("passage-local Point and Talk", () => {
       await page.locator("[data-node-action=point-talk]").click();
       const composer = page.locator(".point-talk");
       await expect(composer).toBeVisible();
+      await settleEntrance(composer);
       return composer.evaluate((element) => {
         const bounds = element.getBoundingClientRect();
         return {
@@ -845,7 +846,7 @@ test.describe("passage-local Point and Talk", () => {
     expect(gone?.entry).toBe("absent");
     expect(gone!.at - stages[exiting]!.at).toBeGreaterThanOrEqual(100);
     // The CSS fade lasts exactly as long as the presence timer's exit.
-    expect(stages[exiting]!.fade).toBe(`${PRESENCE_TIMING.exitMs / 1_000}s`);
+    expect(stages[exiting]!.fade).toContain(`${POINT_TALK_TIMING.exitMs.person / 1_000}s`);
   });
 
   test.describe("coarse pointer", () => {
@@ -858,6 +859,7 @@ test.describe("passage-local Point and Talk", () => {
       await page.locator("[data-node-action=point-talk]").click();
       const composer = page.locator(".point-talk");
       await expect(composer).toBeVisible();
+      await settleEntrance(composer);
       expect(await composer.evaluate((element) => {
         const rect = element.getBoundingClientRect();
         const rail = document.querySelector<HTMLElement>(".tool-rail")?.getBoundingClientRect();
@@ -875,23 +877,38 @@ test.describe("passage-local Point and Talk", () => {
       )).toHaveAttribute("data-material-address-painted", "true");
     });
 
-    test("an unusably narrow paper revokes the local turn without hidden focus", async ({ page }) => {
+    test("a briefly unusable viewport holds the local turn and re-places it", async ({ page }) => {
       await page.goto("/matter");
       await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
       await page.locator(`[data-thought-text-id="${ROOT_ID}"]`).click();
       await page.locator("[data-node-action=point-talk]").click();
       const direction = page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" });
       await expect(direction).toBeFocused();
+      await direction.fill("保留这句方向");
 
+      // A keyboard animating in can leave a sliver of viewport for a moment.
+      // Geometry is not a reason to leave: the field holds its place and its
+      // words, then re-places inside the viewport once there is room again.
       await page.setViewportSize({ width: 170, height: 844 });
-      await expect(page.locator(".point-talk")).toHaveCount(0);
+      await page.waitForTimeout(POINT_TALK_TIMING.minDwellMs);
+      await expect(page.locator('.point-talk[data-presence="present"]')).toHaveCount(1);
       await expect(page.locator("main.matter-shell"))
-        .not.toHaveAttribute("data-point-talk-node-id", /.+/u);
-      await expect(direction).toHaveCount(0);
-      expect(await page.evaluate(() => document.activeElement?.tagName)).not.toBe("INPUT");
+        .toHaveAttribute("data-point-talk-node-id", ROOT_ID);
+      await page.setViewportSize({ width: 375, height: 667 });
+      await expect(direction).toHaveValue("保留这句方向");
+      await expect.poll(() => page.locator(".point-talk").evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left >= 11 && rect.right <= innerWidth - 11;
+      })).toBe(true);
     });
   });
 });
+
+/** The field grows in from its summoning mark; measure it once it has arrived. */
+async function settleEntrance(field: Locator): Promise<void> {
+  await field.evaluate((element) =>
+    Promise.all(element.getAnimations().map((animation) => animation.finished)));
+}
 
 /**
  * Records every Point Talk field as `presence:close:typed words`, one entry per

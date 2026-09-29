@@ -1,15 +1,42 @@
-.point-talk { --point-talk-scale: 1; position: fixed; z-index: 33; width: min(calc(264px * var(--point-talk-scale)), calc(100vw - 24px), var(--point-talk-available-width, calc(100vw - 24px))); color: var(--ink); pointer-events: auto; opacity: 1; translate: 0 0; transition: opacity 180ms cubic-bezier(.2,.8,.2,1), translate 180ms cubic-bezier(.2,.8,.2,1); }
+/* Every duration below is set inline from POINT_TALK_TIMING in `presence.ts`,
+   the same values whose timers mount, hold, and unmount the field. */
+.point-talk { --point-talk-scale: 1; position: fixed; z-index: 33; width: min(calc(264px * var(--point-talk-scale)), calc(100vw - 24px), var(--point-talk-available-width, calc(100vw - 24px))); color: var(--ink); pointer-events: auto; opacity: 1; scale: 1; translate: 0 0; transform-origin: var(--point-talk-origin-x, 0px) var(--point-talk-origin-y, 100%); transition-property: none; }
 
-/* The field mounts hidden until measured, so its enter starts on placement
-   rather than on insertion. */
-.point-talk:not([data-placed]) { opacity: 0; translate: 0 3px; }
+/* Nothing inside the field transitions: the global reduced-motion clamp would
+   otherwise turn the inherited `visibility` of the first placement into a
+   1 ms transition, and the input would refuse focus in that frame. */
+.point-talk * { transition-property: none; }
+
+/* The field mounts hidden until measured, so its entrance starts on its first
+   placement rather than on insertion. It grows from the control that summoned
+   it and settles a few pixels toward its passage. Later re-placements move it
+   without replaying the entrance. */
+.point-talk:not([data-placed]) { opacity: 0; }
+.point-talk[data-placed][data-presence="present"] { animation: point-talk-enter var(--point-talk-enter-duration, 200ms) cubic-bezier(.2,.8,.2,1) both; }
+@keyframes point-talk-enter {
+  from { opacity: 0; scale: var(--point-talk-rest-scale, .98); translate: 0 var(--point-talk-enter-travel, 0px); }
+}
+@keyframes point-talk-enter-fade {
+  from { opacity: 0; }
+}
+
+/* A frozen copy leaves by the way it closed (`point-talk-close.ts`). */
 .point-talk[data-presence="holding"],
 .point-talk[data-presence="exiting"] { pointer-events: none; }
-.point-talk[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: var(--presence-exit-duration); }
-.point-talk[data-presence="exiting"][data-presence-close="finished"] { translate: 0 0; }
+.point-talk[data-presence="exiting"] { opacity: 0; transition: opacity var(--presence-exit-duration) cubic-bezier(.2,.8,.2,1), scale var(--presence-exit-duration) cubic-bezier(.2,.8,.2,1); }
+.point-talk[data-presence="exiting"][data-presence-close="person"] { scale: var(--point-talk-rest-scale, .98); }
 
 @starting-style {
-  .point-talk[data-presence="exiting"] { opacity: 1; translate: 0 0; }
+  .point-talk[data-presence="exiting"] { opacity: 1; scale: 1; }
+}
+
+/* Reduced motion keeps every duration and every hold, and only the opacity:
+   no growth, shrink, or travel. It outranks the global reduced-motion clamp. */
+@media (prefers-reduced-motion: reduce) {
+  .point-talk { transform-origin: 0 0; }
+  .point-talk[data-placed][data-presence="present"] { animation-name: point-talk-enter-fade; animation-duration: var(--point-talk-enter-duration, 200ms) !important; }
+  .point-talk[data-presence="exiting"] { transition-duration: var(--presence-exit-duration) !important; }
+  .point-talk[data-presence="exiting"][data-presence-close="person"] { scale: 1; }
 }
 
 /* The field floats above the paper, outside the element that carries the
@@ -36,6 +63,8 @@
 .point-talk__submit:focus-visible { background: color-mix(in srgb, var(--ink) 88%, transparent) !important; color: var(--paper-solid) !important; }
 .point-talk__feedback { justify-content: flex-end; padding-left: calc(7px * var(--point-talk-scale)); }
 .point-talk__feedback > span { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: calc(10px * var(--point-talk-scale)); font-weight: 400; line-height: calc(15px * var(--point-talk-scale)); text-overflow: ellipsis; white-space: nowrap; }
+/* The pending field repeats what was asked, quieter than its status. */
+.point-talk__feedback > .point-talk__echo { flex: 0 1 auto; max-width: 58%; color: color-mix(in srgb, var(--ink) 50%, transparent); }
 .point-talk[data-phase="recording"] .point-talk__feedback { border-color: color-mix(in srgb, var(--ink) 25%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ink) 7%, transparent), 0 8px 22px rgba(22,29,39,.08); }
 .point-talk[data-phase="recording"] .point-talk__feedback button { background: var(--ink); color: var(--paper-solid); }
 
