@@ -1,5 +1,7 @@
 "use client";
 
+// Loads with this lazy chunk; nothing in the initial graph renders these classes.
+import "./MaterialFiles.css";
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,

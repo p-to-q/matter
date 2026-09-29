@@ -1,0 +1,55 @@
+.node-action-lens { --lens-button: 44px; --lens-glyph: calc(var(--lens-button) * .455); --lens-core-inset: calc(var(--lens-button) * .045); --lens-core-radius: calc(var(--lens-button) * .275); --lens-gap: 6px; --lens-pad-x: 12px; --lens-pad-y: 11px; --lens-fog-outset-x: 16px; --lens-fog-outset-y: 12px; --lens-fog-core: 58%; --lens-fog-contact: calc(var(--lens-button) * .5); --lens-fog-contact-reduction: .14; --lens-material-x: var(--lens-pad-x); --lens-material-y: var(--lens-pad-y); --lens-fog: color-mix(in srgb, color-mix(in srgb, var(--paper-solid) 90%, var(--ink) 10%) 80%, transparent); isolation: isolate; position: absolute; z-index: 24; display: flex; width: max-content; box-sizing: border-box; flex-direction: row; gap: var(--lens-gap); padding: var(--lens-pad-y) var(--lens-pad-x); border: 0; background: transparent; box-shadow: none; color: var(--ink); animation: node-action-lens-in 120ms ease-out both; }
+
+/* Keep the restored capsule's material and construction, but give its field enough horizontal
+   shoulder to hold one wide wordmark beside one structural glyph. It must never carry
+   `filter`, which would make it a backdrop root and leave its own blur with nothing to sample. */
+.node-action-lens::before { position: absolute; z-index: 0; inset: calc(-1 * var(--lens-fog-outset-y)) calc(-1 * var(--lens-fog-outset-x)); border: 0; border-radius: 999px; background: var(--lens-fog); box-shadow: none; content: ""; pointer-events: none; -webkit-mask-image: radial-gradient(closest-side, #000 var(--lens-fog-core), transparent 100%); mask-image: radial-gradient(closest-side, #000 var(--lens-fog-core), transparent 100%); -webkit-backdrop-filter: blur(28px); backdrop-filter: blur(28px); }
+
+@supports (mask-composite: subtract) or (-webkit-mask-composite: source-out) {
+  .node-action-lens[data-relation="corner"]::before { -webkit-mask-image: radial-gradient(closest-side, #000 var(--lens-fog-core), transparent 100%), linear-gradient(rgba(0,0,0,var(--lens-fog-contact-reduction)) 0 0); -webkit-mask-position: 0 0, calc(var(--lens-material-x) + var(--lens-fog-outset-x)) calc(var(--lens-material-y) + var(--lens-fog-outset-y)); -webkit-mask-repeat: no-repeat; -webkit-mask-size: auto, var(--lens-fog-contact) var(--lens-fog-contact); -webkit-mask-composite: source-out; mask-image: radial-gradient(closest-side, #000 var(--lens-fog-core), transparent 100%), linear-gradient(rgba(0,0,0,var(--lens-fog-contact-reduction)) 0 0); mask-position: 0 0, calc(var(--lens-material-x) + var(--lens-fog-outset-x)) calc(var(--lens-material-y) + var(--lens-fog-outset-y)); mask-repeat: no-repeat; mask-size: auto, var(--lens-fog-contact) var(--lens-fog-contact); mask-composite: subtract; }
+}
+.node-action-lens__button { position: relative; z-index: 1; display: grid; width: var(--lens-button); height: var(--lens-button); margin: 0; padding: 0; place-items: center; border: 0; border-radius: calc(var(--lens-button) * .3); background: transparent; color: inherit; cursor: pointer; transition: background-color 120ms ease, color 120ms ease, transform 260ms cubic-bezier(.34,1.4,.64,1); }
+.node-action-lens__button svg { width: var(--lens-glyph); height: var(--lens-glyph); stroke-width: 1.6; }
+.node-action-lens__button--ai svg { width: auto; height: calc(var(--lens-glyph) * .78); transform: translateY(.25px); }
+.node-action-lens__button[data-node-action="set-aside"] svg,
+.node-action-lens__button[data-node-action="restore"] svg { stroke-width: 2; }
+.node-action-lens__button--ai:disabled { opacity: .34; }
+
+/* Hover is the fog growing denser under the glyph, not a tile laid on top of it. A radial wash
+   is a rounded rectangle that stays crisp, with the spread carried by concentric shadows of the
+   same ink. A shadow blurs the silhouette, so its falloff is even all the way round: corners and
+   edge midpoints diffuse at the same rate. Keeping the core sharp is what makes it read as
+   spreading outward rather than merely fading — and the outermost ring has reached nothing before
+   it nears the first line, which is how it gives way to the text rather than cutting across it. Keyboard focus keeps a complete fill and a hard
+   ring — that state must be unambiguous, and it is the one place a crisp edge is worth the noise. */
+.node-action-lens__button::before { position: absolute; z-index: -1; inset: var(--lens-core-inset); border-radius: var(--lens-core-radius); background: var(--ink); box-shadow: 0 0 3px 1px var(--ink), 0 0 11px 4px color-mix(in srgb, var(--ink) 62%, transparent), 0 0 20px 8px color-mix(in srgb, var(--ink) 22%, transparent); content: ""; opacity: 0; transition: opacity 120ms ease; }
+
+@media (hover: hover) {
+  .node-action-lens__button:hover:not(:disabled) { color: var(--paper); }
+}
+
+@media (hover: hover) {
+  .node-action-lens__button:hover:not(:disabled)::before { opacity: 1; }
+}
+.node-action-lens__button:focus-visible { background: var(--ink); color: var(--paper); outline: 0; box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
+.node-action-lens__button:focus-visible::before { opacity: 0; }
+
+/* Pressing compresses the control in place and releasing lets it spring back. It must not
+   travel downward: the field already rests on the first line, so any downward motion reads as
+   the control stepping onto the material it is addressing. */
+.node-action-lens__button:active:not(:disabled) { transform: scale(.88); transition: transform 90ms ease-out; }
+.node-action-lens__button:disabled { cursor: default; opacity: .34; }
+@keyframes node-action-lens-in { from { opacity: 0; } to { opacity: 1; } }
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .node-action-lens::before { background: color-mix(in srgb, var(--paper) 94%, var(--ink) 6%); -webkit-mask-image: none; mask-image: none; }
+}
+
+@media (forced-colors: active) {
+  /* Focus and selection drawn with box-shadow or a background plate vanish
+     when the system forces colors; name them with system-color outlines. */
+  .node-action-lens__button:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+  .node-action-lens { color: CanvasText; }
+  .node-action-lens__button::before { background: none; box-shadow: none; }
+  .node-action-lens::before { border: 1px solid CanvasText; background: Canvas; box-shadow: none; filter: none; -webkit-mask-image: none; mask-image: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

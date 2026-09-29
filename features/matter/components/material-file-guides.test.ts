@@ -223,7 +223,7 @@ describe("material file indentation guides", () => {
   });
 
   it("keeps the branch tail short and retracts it before compressed controls", () => {
-    const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
+    const css = readFileSync(new URL("./MaterialFiles.css", import.meta.url), "utf8");
     expect(css).toMatch(
       /\[data-guide-kind="branch-tail"\]\[data-guide-tail-end="true"\][^{]*\{[^}]*--material-file-tail-run:\s*max\(0px,\s*min\(14px,[^}]*-\s*var\(--material-file-guide-target-clearance\)\)\)\)[^}]*border-bottom:[^}]*border-left:/s,
     );

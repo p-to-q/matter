@@ -1,5 +1,7 @@
 "use client";
 
+// Loads with this lazy chunk; nothing in the initial graph renders these classes.
+import "./WikiOccurrenceLayer.css";
 import {
   useCallback,
   useEffect,
