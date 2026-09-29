@@ -111,14 +111,15 @@ test.describe("passage-local Point and Talk", () => {
       if (bubble === null || paper === null || files === null) {
         throw new Error("Point Talk chrome fixtures are missing");
       }
-      const originalBounds = bubble.getBoundingClientRect.bind(bubble);
+      // The field measures its layout box, which its entrance never scales.
+      const layoutHeight = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "offsetHeight")!;
       const originalFilesOpen = files.getAttribute("data-open");
       let reads = 0;
-      Object.defineProperty(bubble, "getBoundingClientRect", {
+      Object.defineProperty(bubble, "offsetHeight", {
         configurable: true,
-        value: () => {
+        get() {
           reads += 1;
-          return originalBounds();
+          return layoutHeight.get!.call(bubble);
         },
       });
       const afterLayout = () => new Promise<void>((resolve) => {
@@ -140,10 +141,7 @@ test.describe("passage-local Point and Talk", () => {
       });
       if (originalFilesOpen === null) files.removeAttribute("data-open");
       else files.setAttribute("data-open", originalFilesOpen);
-      Object.defineProperty(bubble, "getBoundingClientRect", {
-        configurable: true,
-        value: originalBounds,
-      });
+      delete (bubble as { offsetHeight?: number }).offsetHeight;
       return { index, modal };
     });
     expect(chromeMeasurements.modal).toBeGreaterThan(0);

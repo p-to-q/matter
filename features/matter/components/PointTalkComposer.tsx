@@ -166,7 +166,9 @@ export function PointTalkComposer({
       bubble === null || targetBounds === null ||
       boundary === null || canvas === null || positioningSurface === null
     ) return;
-    const bubbleRect = bubble.getBoundingClientRect();
+    // The layout box, not the painted one: the entrance scales the field, and
+    // a measurement taken mid-entrance must not place it a fraction off.
+    const bubbleRect = { width: bubble.offsetWidth, height: bubble.offsetHeight };
     const toolRail = visiblePointTalkToolRail(boundary);
     const projection = projectPointTalkPlacementWithinSurfaces({
       target: targetBounds,
