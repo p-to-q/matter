@@ -1,7 +1,24 @@
 # Release readiness
 
+## Preview.64 candidate — material trust and addressable Wiki
+
+The source on `claude/material-trust` identifies `0.2.0-preview.64`: the
+campaign in [`../plans/active-tree-material.md`](../plans/active-tree-material.md)
+(nothing a person does is silently lost; Wiki becomes addressable). Before
+the pull request: `npm run check` passed (3,734 unit tests; Wiki
+qualification 9/9; architecture 677 files with no leak or cycle; initial
+runtime 1,212.3 KiB raw / 385.6 KiB gzip against 1,280 / 396) and
+`npm run test:e2e` passed 240 journeys. Every slice passed an independent
+verifier and three whole-diff verifier rounds (architecture, robustness,
+documentation and browser UX) with their findings fixed. Merging to `main`
+deploys Production; the Production receipt is recorded after readback. No
+tag or GitHub prerelease is created for Preview.64: issue #104 and the strict
+pool probe still gate an immutable release, exactly as for Preview.63 below.
+
+## Preview.63 deployed receipt
+
 Matter can be deployed as an early, root-seeded proprietary preview. It is not
-the complete generative product loop yet. The current deployable source
+the complete generative product loop yet. The previous deployable source
 identifies `0.2.0-preview.63`. PR #121 introduced the bounded local Wiki slice;
 PR #122 refreshed its source-bound qualification receipt after the reviewed
 release-reconciliation fix, yielding final source commit
