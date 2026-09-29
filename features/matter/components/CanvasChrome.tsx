@@ -63,9 +63,14 @@ const ApiSettingsForm = preloadableComponent(() =>
 
 // Wiki is a low-frequency settings capability; its persistence and editor code
 // must not tax the paper's initial interaction bundle. It loads when a menu
-// offering it opens.
+// offering it opens, or when a word's takeover that links to it opens.
 const WikiSettingsSection = preloadableComponent(() =>
   import("./WikiSettingsSection").then((module) => module.WikiSettingsSection));
+
+/** Intent signal from the paper: a surface that can open Wiki has opened. */
+export function preloadWikiSettings(): void {
+  preloadNow(WikiSettingsSection.preload);
+}
 
 export type CanvasChromeProps = CanvasPreferencesBinding & Readonly<{
   inquiryContext?: () => InquiryContextPayload;
