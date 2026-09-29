@@ -187,10 +187,13 @@ is newer is superseded, never corrupt, so Repair cannot let an older build
 overwrite it. A deletion from another tab (`blocking` with no new version) is
 `PERSISTENCE_CLEARED`, equally terminal. Such a tab offers only an export from
 memory and a page reload. A superseded tab reloads by itself only while it is
-hidden, nothing the person made is unsaved, and the material is idle, and at most once per
-minute: the time of the last automatic reload is kept in session storage so a
-reload that serves the same older build cannot loop, and without session
-storage it never reloads by itself. A visible tab keeps the line and Archive's
+hidden, nothing the person made is unsaved, and the material is idle. The time
+and count of consecutive automatic reloads are kept in session storage, and
+each quiet window doubles from one minute to at most one hour, so a reload that
+serves the same older build (a rolled-back deployment) cannot loop, while a tab
+left hidden still reaches a fixed deployment; a reload two hours or more after
+the previous one starts the count again. Without session storage it never
+reloads by itself. A visible tab keeps the line and Archive's
 Reload. The newer tab, when an older one does not close, keeps waiting and says
 so.
 
@@ -462,7 +465,7 @@ manifests, v5 migration, import epochs with rollback, and quota shedding;
 cross-tab generation refresh and conflict, two-phase adoption refused by the
 store, the material-idle gate (including a hidden tab holding a submitted AI
 turn), pointer-release recovery, returning-page check, superseded and cleared
-storage (including a missing row), the one-shot superseded reload, the unload
+storage (including a missing row), the backed-off superseded reload, the unload
 guard's authorship rule, same-revision adoption, and replacing refused material
 by import; ZIP export → import;
 traversal, Unicode/case collision, compressed/expanded size, path depth, and

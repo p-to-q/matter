@@ -6,6 +6,7 @@ import { holdsUnsavedPersonMaterial } from "./persistence-status";
 import {
   createSupersededReload,
   SUPERSEDED_RELOAD_LOOP_MS,
+  SUPERSEDED_RELOAD_MAX_BACKOFF_MS,
   type SupersededReloadEnvironment,
 } from "./superseded-reload";
 import { createMatterStore } from "../store/matter-store";
@@ -96,6 +97,60 @@ describe("superseded reload", () => {
     now += 1;
     second.handle.update(SUPERSEDED_IDLE);
     expect(second.reload).toHaveBeenCalledOnce();
+  });
+
+  it("backs off exponentially while every reload serves the same older build, up to one hour", () => {
+    let now = 5_000_000;
+    const remembered = session();
+    const reloadsAt: number[] = [];
+    // A hidden tab whose visibility flickers every ten seconds for two days,
+    // each page reloaded into the same rolled-back build.
+    let current = reloader(page("hidden"), remembered, () => now);
+    const end = now + 2 * 24 * 60 * 60_000;
+    for (; now < end; now += 10_000) {
+      current.handle.update(SUPERSEDED_IDLE);
+      if (current.reload.mock.calls.length > 0) {
+        reloadsAt.push(now);
+        current = reloader(page("hidden"), remembered, () => now);
+      }
+    }
+    const gaps = reloadsAt.slice(1).map((at, index) => at - reloadsAt[index]!);
+    const minute = SUPERSEDED_RELOAD_LOOP_MS;
+    expect(gaps.slice(0, 7)).toEqual([1, 2, 4, 8, 16, 32, 60].map((factor) => factor * minute));
+    expect(gaps.slice(7).every((gap) => gap === SUPERSEDED_RELOAD_MAX_BACKOFF_MS)).toBe(true);
+    // Two days cost 53 background reloads, not the 2,880 a fixed minute would.
+    expect(reloadsAt).toHaveLength(53);
+  });
+
+  it("starts a new episode after a long run on a build that was not superseded", () => {
+    let now = 5_000_000;
+    const remembered = session();
+    for (let index = 0; index < 5; index += 1) {
+      now += SUPERSEDED_RELOAD_MAX_BACKOFF_MS;
+      reloader(page("hidden"), remembered, () => now).handle.update(SUPERSEDED_IDLE);
+    }
+    expect(JSON.parse(remembered.values.get("matter.superseded-reload.v2")!)).toMatchObject({ count: 5 });
+
+    // The newer build ran for a day before it, too, was superseded.
+    now += 24 * 60 * 60_000;
+    const later = reloader(page("hidden"), remembered, () => now);
+    later.handle.update(SUPERSEDED_IDLE);
+    expect(later.reload).toHaveBeenCalledOnce();
+    expect(JSON.parse(remembered.values.get("matter.superseded-reload.v2")!)).toEqual({ atMs: now, count: 1 });
+  });
+
+  it("treats a malformed record as none and a clock that moved backwards as too soon", () => {
+    const malformed = session();
+    malformed.values.set("matter.superseded-reload.v2", "{\"atMs\":\"soon\"}");
+    const repaired = reloader(page("hidden"), malformed, () => 1_000_000);
+    repaired.handle.update(SUPERSEDED_IDLE);
+    expect(repaired.reload).toHaveBeenCalledOnce();
+
+    const skewed = session();
+    skewed.values.set("matter.superseded-reload.v2", JSON.stringify({ atMs: 9_000_000, count: 1 }));
+    const early = reloader(page("hidden"), skewed, () => 1_000_000);
+    early.handle.update(SUPERSEDED_IDLE);
+    expect(early.reload).not.toHaveBeenCalled();
   });
 
   it("never reloads by itself where session storage is refused", () => {
