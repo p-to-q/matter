@@ -211,6 +211,7 @@ import {
 } from "../runtime/canvas-pointer-arbitration";
 import { deferUntilTouchCommits } from "./touch-commitment";
 import { useEscapeLayer } from "./escape-layers";
+import type { WikiOccurrenceDriver } from "../interaction/wiki-occurrence-driver";
 
 const PointTalkTurn = dynamic(
   () => import("./PointTalkTurn").then((module) => module.PointTalkTurn),
@@ -298,6 +299,8 @@ export type RootedMaterialProps = {
     batchSize: 32;
     source: "viewport-research";
   }>;
+  /** Committed Wiki occurrences: disclosure, takeover, and informed silence. */
+  wikiOccurrences?: WikiOccurrenceDriver;
 };
 
 type PublishedGeometry = {
@@ -459,6 +462,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => setPagePresentationAvailable(false),
     () => setPagePresentationAvailable(true),
   ), []);
+  const wikiOccurrences = props.wikiOccurrences;
+  useEffect(() => {
+    // A modal that owns the paper hides every word from perception.
+    wikiOccurrences?.setSurfaceAvailable(materialPresentationAvailable);
+  }, [materialPresentationAvailable, wikiOccurrences]);
   const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
   const [pointTalkExitHandoff] = useState(() => createPresenceHandoff<PointTalkSurfaceView>());
   const [pointTalkOutcome, setPointTalkOutcome] = useState<Readonly<{
@@ -3683,6 +3691,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         onFocusNode={(nodeId) => {
           focusIndexNodeAfterAbort(nodeId);
         }}
+        onMaterialCopied={props.wikiOccurrences?.noteMaterialCopied}
         onOpenOverlay={() => {
           abortFixedExpansion();
           indexCenterRequestRef.current = null;

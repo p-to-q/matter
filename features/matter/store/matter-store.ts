@@ -51,6 +51,10 @@ import {
 import { repairAdmittedTranscriptWords } from "../runtime/transcript-punctuation";
 import { moveNodeToParentCommand, type MoveNodeValues } from "../runtime/move";
 import type { HumanRemovalValues } from "../runtime/removal";
+import {
+  humanTextRangeRestorationCommand,
+  type HumanTextRangeRestorationValues,
+} from "../runtime/text-range-restoration";
 import { createTreeHistory } from "../tree/history";
 import { MAX_NODE_TEXT_CODE_UNITS, validateThoughtTree } from "../tree/invariants";
 import type { ThoughtNode, ThoughtTree, TreeCommand } from "../tree/model";
@@ -288,6 +292,10 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   admitHumanTranscript: (anchor: AdmissionAnchor, values: MatterAdmissionValues) => AdmissionStoreReceipt;
   settleHumanTranscriptRepair: (settlement: AdmissionRepairSettlement) => AdmissionRepairStoreReceipt;
   removeSelected: (values: HumanRemovalValues) => MatterStoreReceipt;
+  /** Restores one exact range as an ordinary, undoable human text change. */
+  restoreHumanTextRange: (values: HumanTextRangeRestorationValues & Readonly<{
+    expectedDocumentEpoch: number;
+  }>) => MatterStoreReceipt;
   moveNode: (values: MoveNodeValues) => MatterStoreReceipt;
   renameDocument: (values: RenameDocumentValues) => MatterStoreReceipt;
   undo: () => MatterStoreReceipt;
@@ -761,6 +769,48 @@ export function createMatterStore(
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
         const result = commitHumanRemoval(runtimeState(current), values, HISTORY_LIMITS);
+        receipt = result.receipt;
+        const domain = protectDomain(result.state);
+        return freezeState({
+          ...current,
+          ...domain,
+          lastError: domain.lastError,
+          lastReceipt: protectValue(receipt),
+        });
+      });
+      return requireSynchronousReceipt(receipt);
+    },
+
+    restoreHumanTextRange: (values) => {
+      let receipt: MatterStoreReceipt | undefined;
+      set((current) => {
+        const translated = values.expectedDocumentEpoch === current.documentEpoch
+          ? humanTextRangeRestorationCommand(current.tree, values)
+          : Object.freeze({
+              ok: false as const,
+              error: Object.freeze({
+                code: "REVISION_CONFLICT" as const,
+                message: "The material document changed before the restoration.",
+              }),
+            });
+        if (!translated.ok) {
+          const error: MatterStoreError = translated.error;
+          receipt = {
+            operation: "commit",
+            status: "rejected",
+            revision: current.tree.revision,
+            errorCode: error.code,
+          };
+          return freezeState({
+            ...current,
+            lastError: protectValue(error),
+            lastReceipt: protectValue(receipt),
+          });
+        }
+        // Lexical authority never touches a restoration: re-canonicalizing
+        // would rewrite exactly the form the person chose to keep.
+        const result = commitSessionCommand(runtimeState(current), translated.command, HISTORY_LIMITS);
+        pruneStaleRepairLeases(repairLeases, result.state.tree, current.documentEpoch);
         receipt = result.receipt;
         const domain = protectDomain(result.state);
         return freezeState({

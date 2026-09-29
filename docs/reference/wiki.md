@@ -108,14 +108,14 @@ proposal abstains.
 Two deterministic human decision representations are defined. Settings may create, rename,
 scope, or remove one canonical lexeme as an explicit local configuration
 decision. Domain events can confirm, reject, or replace one exact alias, and
-the occurrence settlement below routes explicit outcomes through them, but no
-production surface emits either yet. They remain reserved for the error-local
-correction path, which must land together with the occurrence owner that holds
-one short-lived, one-shot attribution token captured when the rule was
-applied. That token binds the applied basis and rule to the exact visible
-occurrence and current document/interaction epoch; it contains no surrounding
-passage and expires instead of reconstructing intent from a later whole-text
-diff. Until that complete path exists, Matter does not create an empty generic
+the occurrence settlement below routes explicit outcomes through them. The
+error-local takeover emits confirm (Keep) and revert (the heard form); reject
+and replace remain reserved. Each applied edit carries a short-lived, one-shot
+attribution token captured when the rule was applied (see
+[Occurrence attribution](#occurrence-attribution)). That token binds the
+applied basis and rule to the exact committed occurrence and document epoch;
+it contains no surrounding passage and expires instead of reconstructing intent
+from a later whole-text diff. Matter still does not create an empty generic
 decision port or claim that a canonical settings entry corrects future text by
 itself.
 
@@ -154,6 +154,35 @@ the occurrence settles. The outcomes are:
 Wiki still never observes Material Undo or Redo. "Not undone" is expressed only
 as the occurrence's address still holding the unchanged word; an address that
 disappears censors the occurrence without a Wiki event.
+
+One browser occurrence driver (`interaction/wiki-occurrence-driver.ts`, pure
+lifecycle in `wiki-occurrence-lifecycle.ts`) owns every live occurrence from
+its committed publication to its one settlement. Its address is the tree,
+document epoch, node, node timestamp, range, and canonical word; any other
+commit to that node, including repair, swap, Elastic, removal, or an Undo that
+restores older text, censors it. The only change it follows is the person's
+own revert of a sibling word in the same node. The driver attaches its page
+listeners, 250 ms perception clock, and IntersectionObserver only while an
+occurrence is live, and releases them idempotently.
+
+- Perceived means the disclosure was shown (the settle, or the static mark
+  where motion is off or unavailable) and then at least 50% of the word's
+  painted area sat inside the visual viewport, with the page visible and the
+  paper not covered by a modal, for 1.5 s cumulative. These are the named
+  constants in `WIKI_OCCURRENCE_PERCEPTION`.
+- Only after perception do informed facts accumulate: further successful human
+  admissions (the one that carried the occurrence never counts), foreground
+  visible time, a Material Files copy of the passage or a native copy whose
+  selection covers the word, an archive export, and `pagehide`. Any one closes
+  the wait through `settleWikiImplicitOccurrence`; they never stack.
+- An open takeover suspends silence. Dismissing it is `inspected-kept`, Keep is
+  `explicit-confirm`, leaving the page while it is open is `inspected-kept`,
+  and the heard form commits an ordinary human text restoration and then
+  settles `reverted`. Undoing that restoration is Material Undo and settles
+  nothing.
+- A live occurrence expires 15 s before its registry attribution would, and at
+  most 64 stay live; both censor. So does `pagehide` before perception, which
+  covers a tab that stayed hidden the whole time.
 
 Informed acceptance adds `kept` evidence to the relation that was applied: +4
 quarter-units for informed silence and +8 for an inspection, saturating at 24,
@@ -739,10 +768,9 @@ zero-weight producer and therefore cannot acquire authority during migration.
 Runtime-allowlisted fitting producers may project provisional rules only after
 their own relation evidence clears the calibrated gate; closing `近音`
 immediately selects the confirmed-only snapshot without deleting evidence. The
-occurrence-outcome policy is implemented as pure domain policy; its production
-emitter (the occurrence owner, the disclosure, and the informed-acceptance
-wiring) and the one-shot attribution token are not yet wired, so the running
-product records no occurrence outcome until those slices land.
+occurrence-outcome policy is pure domain policy; the running product emits it
+through the attribution token, the browser occurrence driver, and the
+render-edge disclosure described above. Occurrences do not survive a reload.
 
 ## Research translated into the boundary
 

@@ -210,6 +210,50 @@ describe("Matter store committed lexical occurrences", () => {
     }]);
   });
 
+  it("restores a heard form as an undoable human change that Wiki cannot rewrite", () => {
+    const published: MaterialLexicalOccurrencePublication[] = [];
+    const store = createMatterStore("root", {
+      materialLexical: attributedPort("spoken", "code x", "Codex"),
+      lexicalOccurrences: recordingPort(published),
+    });
+    const rootId = store.getState().tree.rootId!;
+    store.getState().admitHumanTranscript(childAnchor(store, rootId), {
+      interactionId: "voice_restore",
+      commandId: "human_admission_restore",
+      nodeId: "voice_node_restore",
+      createdAt: TIME,
+      transcript: "we saw code x",
+      expectedDocumentEpoch: 0,
+      repairLocale: "en-US",
+    });
+    const [edit] = published[0]!.edits;
+    const request = {
+      commandId: "human_restore_store",
+      treeId: store.getState().tree.id,
+      nodeId: "voice_node_restore",
+      expectedUpdatedAt: TIME,
+      start: edit!.start,
+      end: edit!.end,
+      expectedText: "Codex",
+      replacement: edit!.sourceText,
+      createdAt: "2026-09-29T00:00:03.000Z",
+    };
+
+    expect(store.getState().restoreHumanTextRange({ ...request, expectedDocumentEpoch: 1 }))
+      .toMatchObject({ status: "rejected", errorCode: "REVISION_CONFLICT" });
+    expect(store.getState().restoreHumanTextRange({ ...request, expectedDocumentEpoch: 0 }))
+      .toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_restore!.text).toBe("we saw code x.");
+    expect(published).toHaveLength(1);
+    expect(store.getState().undo()).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_restore!.text).toBe("we saw Codex.");
+    expect(store.getState().redo()).toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_restore!.text).toBe("we saw code x.");
+    // The same memento cannot be applied twice.
+    expect(store.getState().restoreHumanTextRange({ ...request, expectedDocumentEpoch: 0 }))
+      .toMatchObject({ status: "rejected" });
+  });
+
   it("publishes an Elastic answer's generated-gap edits in node coordinates", () => {
     const published: MaterialLexicalOccurrencePublication[] = [];
     const store = createMatterStore("root", {

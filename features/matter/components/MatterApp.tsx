@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { RootedMaterial } from "./RootedMaterial";
-import { useMatterStore } from "./use-matter-store";
+import { useMatterStore, useWikiOccurrences } from "./use-matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
 import { useAdmission } from "../interaction/use-admission";
 import { useMaterialPersistence } from "../persistence/use-material-persistence";
@@ -53,6 +53,7 @@ export function MatterApp() {
   const hydrateSnapshot = useMatterStore((state) => state.hydrateSnapshot);
   const switchDocument = useMatterStore((state) => state.switchDocument);
   const persistence = useMaterialPersistence(tree, history, documentEpoch, hydrateSnapshot, switchDocument);
+  const wikiOccurrences = useWikiOccurrences();
   const canvasPreferences = useCanvasPreferences();
   const branchTextResolverRef = useRef<SeededBranchTextResolver>(seededFallbackBranchTexts);
   const [seededSessionRelocalizer, setSeededSessionRelocalizer] =
@@ -110,8 +111,10 @@ export function MatterApp() {
     const archive = await exportSnapshotArchive(treeToBundle(tree));
     if (!archive.ok) return archiveFailure(archive.error.code);
     downloadLocalBytes(archive.bytes, `${tree.id}.matter.zip`, "application/zip");
+    // The exported copy carries every word whose address still holds.
+    wikiOccurrences.noteExported();
     return Object.freeze({ ok: true } as const);
-  }, [persistence, tree]);
+  }, [persistence, tree, wikiOccurrences]);
   const validateArchive = useCallback(async (file: File) => {
     const archive = await importSnapshotArchive(file);
     if (!archive.ok) return archiveFailure(archive.error.code);
@@ -267,6 +270,7 @@ export function MatterApp() {
       onUndo={undoWithPresentationReset}
       onRedo={redoWithPresentationReset}
       tree={tree}
+      wikiOccurrences={wikiOccurrences}
     />
   );
 }

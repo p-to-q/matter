@@ -17,7 +17,14 @@ import {
   mintMatterWikiOccurrence,
   observeMatterWikiEvidence,
   readMatterWikiBasis,
+  settleMatterWikiOccurrence,
 } from "../persistence/wiki-runtime-bridge";
+import { createBrowserWikiOccurrenceEnvironment } from "../interaction/wiki-occurrence-browser";
+import {
+  createWikiOccurrenceDriver,
+  type WikiOccurrenceDriver,
+} from "../interaction/wiki-occurrence-driver";
+import type { MaterialView } from "../interaction/wiki-occurrence-lifecycle";
 import {
   createMatterStore,
   type MatterStoreViewState,
@@ -27,18 +34,42 @@ const singletonInitialDocument = normalizeMatterInitialDocument(
   process.env.NEXT_PUBLIC_MATTER_INITIAL_DOCUMENT,
 );
 
+const readMaterial = (): MaterialView => {
+  const state = viewStore().getState();
+  return { tree: state.tree, documentEpoch: state.documentEpoch };
+};
+
+// The occurrence driver and the store are composed side by side: the store
+// publishes committed occurrences through a neutral port and never learns
+// that Wiki, the driver, or its browser resources exist.
+const wikiOccurrences: WikiOccurrenceDriver = createWikiOccurrenceDriver({
+  readMaterial,
+  settle: (occurrenceId, outcome) => {
+    void settleMatterWikiOccurrence(occurrenceId, outcome);
+  },
+  restore: (request) => matterStore.getState().restoreHumanTextRange({
+    ...request,
+    commandId: `human_restore_${createOperationId()}`,
+    createdAt: new Date().toISOString(),
+    expectedDocumentEpoch: request.documentEpoch,
+  }).status === "committed",
+  environment: createBrowserWikiOccurrenceEnvironment(readMaterial),
+});
+
 const matterStore = createMatterStore(singletonInitialDocument, {
   documentRoot: true,
   materialLexical: createWikiMaterialLexicalPort(readMatterWikiBasis, {
     phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
     mintOccurrence: mintMatterWikiOccurrence,
   }),
-  humanAdmissionObservation: createWikiMaterialLexicalObservationPort(
-    observeMatterWikiEvidence,
-  ),
+  humanAdmissionObservation: createWikiMaterialLexicalObservationPort((observation) => {
+    wikiOccurrences.noteHumanAdmission();
+    observeMatterWikiEvidence(observation);
+  }),
   lexicalOccurrences: Object.freeze({
     publishCommitted: (publication) => {
       claimMatterWikiOccurrences(publication.edits.map((edit) => edit.occurrence));
+      wikiOccurrences.admit(publication);
     },
   }),
   initialTitle: singletonInitialDocument === "empty"
@@ -46,13 +77,37 @@ const matterStore = createMatterStore(singletonInitialDocument, {
     : DEFAULT_MATTER_DOCUMENT_TITLE,
 });
 
+let reconciledTree: MatterStoreViewState["tree"] | null = null;
+let reconciledEpoch = -1;
+viewStore().subscribe((state) => {
+  if (state.tree === reconciledTree && state.documentEpoch === reconciledEpoch) return;
+  reconciledTree = state.tree;
+  reconciledEpoch = state.documentEpoch;
+  wikiOccurrences.reconcile();
+});
+
 /** The browser composition root chooses Wiki without exposing it to the store. */
 export function useMatterStore<T>(selector: (state: MatterStoreViewState) => T): T {
-  return useStore(
-    matterStore as Pick<
-      StoreApi<MatterStoreViewState>,
-      "getState" | "getInitialState" | "subscribe"
-    >,
-    selector,
-  );
+  return useStore(viewStore(), selector);
+}
+
+/** The one committed-occurrence owner for this material session. */
+export function useWikiOccurrences(): WikiOccurrenceDriver {
+  return wikiOccurrences;
+}
+
+function viewStore(): Pick<
+  StoreApi<MatterStoreViewState>,
+  "getState" | "getInitialState" | "subscribe"
+> {
+  return matterStore as Pick<
+    StoreApi<MatterStoreViewState>,
+    "getState" | "getInitialState" | "subscribe"
+  >;
+}
+
+function createOperationId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID().replaceAll("-", "")
+    : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
