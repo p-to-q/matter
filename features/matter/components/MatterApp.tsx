@@ -30,7 +30,8 @@ import {
 import type { SeededSessionRelocalizer } from "../material/seeded-session-localization";
 import { useWikiAuthority } from "../persistence/use-wiki-authority";
 import { useStoragePersistence } from "../persistence/use-storage-persistence";
-import { materialFilesCopy, type MaterialFilesCopy } from "./material-files-copy";
+import type { MaterialFilesCopy } from "./material-files-copy";
+import type { MatterLocale } from "../config/locales";
 
 export function MatterApp() {
   useWikiAuthority();
@@ -80,7 +81,7 @@ export function MatterApp() {
   );
   const storagePersistence = useStoragePersistence();
   const requestStoragePersistence = storagePersistence.request;
-  const archiveCopy = materialFilesCopy(canvasPreferences.preferences.language);
+  const archiveLanguage = canvasPreferences.preferences.language;
   const branchTextResolverRef = useRef<SeededBranchTextResolver>(seededFallbackBranchTexts);
   const [seededSessionRelocalizer, setSeededSessionRelocalizer] =
     useState<SeededSessionRelocalizer | null>(null);
@@ -125,7 +126,7 @@ export function MatterApp() {
     requestStoragePersistence("export");
     if (persistence.status.errorCode === "PERSISTENCE_CORRUPT") {
       const recovery = await persistence.exportCorruptRecovery();
-      if (!recovery.ok) return archiveFailure(recovery.errorCode, archiveCopy);
+      if (!recovery.ok) return archiveFailure(recovery.errorCode, archiveLanguage);
       downloadLocalBytes(recovery.bytes, recovery.fileName, "application/json");
       return Object.freeze({
         ok: true as const,
@@ -133,25 +134,25 @@ export function MatterApp() {
           const replaced = await persistence.replaceCorrupt();
           return replaced.ok
             ? Object.freeze({ ok: true } as const)
-            : archiveFailure(replaced.errorCode, archiveCopy);
+            : archiveFailure(replaced.errorCode, archiveLanguage);
         },
       });
     }
     // Always exported from memory: superseded or cleared storage cannot be read.
     const archive = await exportSnapshotArchive(treeToBundle(tree));
-    if (!archive.ok) return archiveFailure(archive.error.code, archiveCopy);
+    if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     downloadLocalBytes(archive.bytes, `${tree.id}.matter.zip`, "application/zip");
     // The exported copy carries every word whose address still holds.
     wikiOccurrences.noteExported();
     return Object.freeze({ ok: true } as const);
-  }, [archiveCopy, persistence, requestStoragePersistence, tree, wikiOccurrences]);
+  }, [archiveLanguage, persistence, requestStoragePersistence, tree, wikiOccurrences]);
   const validateArchive = useCallback(async (file: File) => {
     const archive = await importSnapshotArchive(file);
-    if (!archive.ok) return archiveFailure(archive.error.code, archiveCopy);
+    if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     return archive.tree.id === tree.id
       ? Object.freeze({ ok: true as const, olderThanCurrent: archive.tree.revision < tree.revision })
-      : archiveFailure("IMPORT_FOREIGN_DOCUMENT", archiveCopy);
-  }, [archiveCopy, tree.id, tree.revision]);
+      : archiveFailure("IMPORT_FOREIGN_DOCUMENT", archiveLanguage);
+  }, [archiveLanguage, tree.id, tree.revision]);
   const replaceArchive = useCallback(async (
     file: File,
     options: Readonly<{ replaceUnsaved: boolean }>,
@@ -163,12 +164,12 @@ export function MatterApp() {
       documentEpoch,
     });
     const archive = await importSnapshotArchive(file);
-    if (!archive.ok) return archiveFailure(archive.error.code, archiveCopy);
+    if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     const imported = await persistence.importMaterial(archive.tree, basis, options);
     return imported.status === "switched"
       ? Object.freeze({ ok: true } as const)
-      : archiveFailure(imported.errorCode, archiveCopy);
-  }, [archiveCopy, documentEpoch, persistence, requestStoragePersistence, tree.id, tree.revision]);
+      : archiveFailure(imported.errorCode, archiveLanguage);
+  }, [archiveLanguage, documentEpoch, persistence, requestStoragePersistence, tree.id, tree.revision]);
   const archive = useMemo(() => Object.freeze({
     exportCopy: exportArchive,
     validateImport: validateArchive,
@@ -352,8 +353,15 @@ function isHistoryUnavailable(receipt: MatterStoreReceipt): boolean {
     receipt.errorCode === "HISTORY_UNAVAILABLE";
 }
 
-function archiveFailure(code: string, copy: MaterialFilesCopy) {
-  return Object.freeze({ ok: false as const, message: archiveMessage(code, copy) });
+// A failure is reported only in answer to an archive gesture made in the Files
+// panel, whose lazy chunk already holds this copy, so the import resolves
+// without a network fetch. The copy stays out of the initial graph.
+async function archiveFailure(code: string, language: MatterLocale) {
+  const { materialFilesCopy } = await import("./material-files-copy");
+  return Object.freeze({
+    ok: false as const,
+    message: archiveMessage(code, materialFilesCopy(language)),
+  });
 }
 
 function archiveMessage(code: string, copy: MaterialFilesCopy): string {
