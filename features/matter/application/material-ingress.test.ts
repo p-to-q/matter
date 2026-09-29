@@ -246,6 +246,27 @@ describe("MaterialIngress repair preparation", () => {
 });
 
 describe("MaterialIngress repair fallback", () => {
+  it("rejects a repair that only restores a spelling the Wiki replaced", () => {
+    const tree = textSwapTree();
+    expect(prepareRepairIngress({
+      tree,
+      locale: "en-US",
+      lexicalSession: confirmedSession("spoken", "windo", "window", 16),
+      values: {
+        interactionId: "voice_repair_no_op",
+        commandId: "repair_no_op",
+        treeId: tree.id,
+        nodeId: "thought",
+        expectedText: TEXT,
+        expectedUpdatedAt: TIME,
+        text: TEXT.replace("window", "windo"),
+        createdAt: "2026-09-24T00:00:02.000Z",
+        admittedAtMs: 100,
+        settledAtMs: 200,
+      },
+    })).toMatchObject({ ok: false, error: { code: "INVALID_REPAIR" } });
+  });
+
   it("keeps the proven repair when canonicalization would break its bound", () => {
     const tree = textSwapTree();
     const values = {
@@ -416,10 +437,10 @@ describe("MaterialIngress text-swap preparation", () => {
     })).toEqual({ ok: false, reason: "INVALID_PLAN" });
   });
 
-  it("keeps the raw valid answer when canonicalization would break the contract", () => {
+  it("keeps the raw valid answer when a canonical form pushes it past its length band", () => {
     const tree = textSwapTree();
     const envelope = textSwapEnvelope();
-    const rawPlan = buildTextSwapPlan(envelope, "Rain tapped the window");
+    const rawPlan = buildTextSwapPlan(envelope, "Drops tapped against glass");
     const direct = planToTextSwapCommand(tree, envelope, rawPlan, { now: () => NOW_MS });
     if (!direct.ok) throw new Error(direct.reason);
 
@@ -427,7 +448,7 @@ describe("MaterialIngress text-swap preparation", () => {
       tree,
       envelope,
       rawPlan,
-      lexicalSession: confirmedSession("written", "tapped", "touched", 3),
+      lexicalSession: confirmedSession("written", "glass", "the very old leaded window glass", 3),
       nowMs: NOW_MS,
     })).toEqual({
       ok: true,
@@ -442,6 +463,19 @@ describe("MaterialIngress text-swap preparation", () => {
         canonicalizationWithheld: true,
       },
     });
+  });
+
+  it("rejects an answer that differs only by a spelling the Wiki forbids", () => {
+    // Canonicalized, "Rain tapped the window" is the passage itself. Keeping
+    // the raw answer would write exactly the form the person's rule replaces.
+    const envelope = textSwapEnvelope();
+    expect(prepareTextSwapIngress({
+      tree: textSwapTree(),
+      envelope,
+      rawPlan: buildTextSwapPlan(envelope, "Rain tapped the window"),
+      lexicalSession: confirmedSession("written", "tapped", "touched", 3),
+      nowMs: NOW_MS,
+    })).toEqual({ ok: false, reason: "INVALID_PLAN" });
   });
 
   it("rejects an invalid captured clock value without throwing", () => {

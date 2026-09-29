@@ -207,6 +207,9 @@ export function prepareRepairIngress(input: PrepareRepairInput): PrepareRepairRe
   }
   const values = Object.freeze({ ...input.values, text: canonical.text });
   const final = admissionRepairToTreeCommand(input.tree, values);
+  // A canonical repair equal to the admitted text changes nothing the Wiki
+  // allows; committing the raw form would reintroduce the forbidden spelling.
+  if (!final.ok && canonical.text === input.values.expectedText) return final;
   if (!final.ok) {
     return Object.freeze({
       ok: true,
@@ -264,8 +267,13 @@ export function prepareTransformIngress(
     finalPlan,
     options,
   );
+  if (!final.ok && canonical.text === parsedEnvelope.envelope.selection.selectedText) {
+    return final;
+  }
   if (!final.ok) {
-    // Local spelling authority may refine a valid answer, never cost it.
+    // Local spelling authority may refine a valid answer, never cost it. Only
+    // a real change that a canonical form pushes past a bound or policy keeps
+    // its validated raw form.
     return Object.freeze({
       ok: true,
       command: raw.command,
@@ -338,6 +346,11 @@ export function prepareTextSwapIngress(
     finalPlan,
     options,
   );
+  // An answer that differs only by spellings the person's Wiki forbids is no
+  // change at all; withholding would commit exactly the forbidden form.
+  if (!final.ok && canonical.text === parsedEnvelope.envelope.selection.selectedText) {
+    return final;
+  }
   if (!final.ok) {
     // Local spelling authority may refine a valid answer, never cost it.
     return Object.freeze({

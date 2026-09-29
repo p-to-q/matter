@@ -13,6 +13,9 @@ import {
 } from "../protocol/text-swap-contract";
 import type { ThoughtTree } from "../tree/model";
 import { selectLineage } from "../tree/selectors";
+import { compileWikiBasis } from "../wiki/wiki-basis";
+import { applyWikiEvent, createEmptyWikiState } from "../wiki/wiki-evidence";
+import { createWikiMaterialLexicalPort } from "../application/wiki-material-lexical-adapter";
 import { createMatterStore, type MatterStore } from "./matter-store";
 
 const TARGET = SEEDED_DOCUMENT_NODE_IDS.imaginedLives;
@@ -96,6 +99,64 @@ describe("Matter store material turns", () => {
     expect(store.getState().tree.nodes.thought_sibling_y).toBeDefined();
     expect(store.getState().tree.nodes.voice_node_repair_redo?.text).toBe("我觉得可以。");
   });
+
+  it.each([
+    ["code x helps.", { status: "rejected", after: "Codex helps." }],
+    ["code x helps", { status: "committed", after: "Codex helps" }],
+  ] as const)(
+    "never lets a late repair %j reintroduce a spelling the person's Wiki replaced",
+    (repairText, expected) => {
+      const confirmed = applyWikiEvent(createEmptyWikiState(), {
+        type: "confirm-rule",
+        locale: "en-US",
+        channel: "spoken",
+        boundary: "word",
+        form: "code x",
+        canonical: "Codex",
+      });
+      if (!confirmed.ok) throw new Error(confirmed.error.code);
+      const compiled = compileWikiBasis(confirmed.state, 1);
+      if (!compiled.ok) throw new Error(compiled.error.code);
+      let nowMs = 100;
+      const store = createMatterStore("root", {
+        materialLexical: createWikiMaterialLexicalPort(() => compiled.basis),
+        monotonicNow: () => nowMs,
+      });
+      const rootId = store.getState().tree.rootId;
+      if (rootId === null) throw new Error("fixture root missing");
+      const admission = store.getState().admitHumanTranscript({
+        target: "child",
+        treeId: store.getState().tree.id,
+        baseRevision: store.getState().tree.revision,
+        parentNodeId: rootId,
+      }, {
+        interactionId: "voice_wiki_repair",
+        commandId: "human_admission_wiki_repair",
+        nodeId: "voice_node_wiki_repair",
+        createdAt: "2026-09-29T00:00:00.000Z",
+        transcript: "code x helps",
+        expectedDocumentEpoch: 0,
+        admittedAtMs: 100,
+        repairLocale: "en-US",
+      });
+      if (!("repairLeaseId" in admission)) throw new Error("repair lease missing");
+      expect(store.getState().tree.nodes.voice_node_wiki_repair?.text).toBe("Codex helps.");
+
+      nowMs = 200;
+      const receipt = store.getState().settleHumanTranscriptRepair({
+        repairLeaseId: admission.repairLeaseId,
+        outcome: "candidate",
+        text: repairText,
+        source: "model",
+        createdAt: "2026-09-29T00:00:00.100Z",
+      });
+      const after = store.getState().tree.nodes.voice_node_wiki_repair?.text;
+      expect(after).not.toMatch(/code x/iu);
+      // A repair that only restores the replaced spelling changes nothing and
+      // is rejected; a real repair keeps the person's canonical spelling.
+      expect({ status: receipt.status, after }).toEqual(expected);
+    },
+  );
 
   it("keeps a human commit's convention of ending the redo future", () => {
     const store = createMatterStore("expanded", { documentRoot: true });
