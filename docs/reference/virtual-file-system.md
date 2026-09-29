@@ -175,7 +175,9 @@ unsaved, and before the first load is reconciled authorship alone answers
 (`holdsUnsavedPersonMaterial`); both exit guards use that one answer.
 `beforeunload` is attached only while such material is at risk — changed while
 stored material is still loading, refused by storage, or still writing after one
-second — and removed as soon as that ends. An untouched seed, a stored row, or
+second — or while spoken words the person submitted are in no material yet (in
+flight after Stop, or held after a failed commit), and removed as soon as that
+ends. An untouched seed, a stored row, or
 their relocalization never arms it, so a browser that refuses storage does not
 prompt on every exit.
 

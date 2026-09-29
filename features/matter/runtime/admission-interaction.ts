@@ -334,6 +334,18 @@ export function admissionHoldsTranscript(
   return state.phase === "error" && state.transcript !== undefined;
 }
 
+/**
+ * Whether the person has submitted spoken words that no material holds yet:
+ * Stop (or the duration limit) was reached and the words are still being
+ * finalized, transcribed, or committed, or a failed commit holds them.
+ */
+export function admissionHoldsSubmittedWords(state: AdmissionInteractionState): boolean {
+  return state.phase === "stopping" ||
+    state.phase === "transcribing" ||
+    state.phase === "committing" ||
+    admissionHoldsTranscript(state);
+}
+
 /** Retry and placement address the same material when these identities agree. */
 export function sameAdmissionTarget(left: AdmissionAnchor, right: AdmissionAnchor): boolean {
   return left.treeId === right.treeId && (

@@ -11,6 +11,12 @@ export type UnloadRisk = Readonly<{
   phase: PersistenceStatus["phase"];
   /** `holdsUnsavedPersonMaterial`: material the person made that no row holds. */
   unsavedPersonMaterial: boolean;
+  /**
+   * Spoken words the person submitted that no material holds yet (in flight
+   * after Stop, or held after a failed commit). No storage phase keeps them,
+   * so they are at risk for as long as they exist.
+   */
+  unplacedSpokenWords: boolean;
 }>;
 
 export type UnloadGuard = Readonly<{
@@ -24,9 +30,9 @@ export const SLOW_SAVE_MS = 1_000;
 
 /**
  * Owns the one `beforeunload` listener. It is attached only while material the
- * person made is unsaved and at risk — refused by storage, still writing after
- * `SLOW_SAVE_MS`, or changed while stored material is still loading — and
- * removed the moment that ends, so ordinary navigation keeps the page eligible
+ * person made is at risk — unsaved material refused by storage, still writing
+ * after `SLOW_SAVE_MS`, or changed while stored material is still loading, or
+ * spoken words submitted but not yet placed — and removed the moment that ends, so ordinary navigation keeps the page eligible
  * for the back-forward cache. Untouched material (the seed, a stored row, their
  * relocalization) is never at risk: a browser that blocks storage must not
  * prompt on every exit.
@@ -55,31 +61,29 @@ export function createUnloadGuard(
     slowTimer = null;
     slowSaveReached = false;
   };
-  const evaluate = () => {
+  /** Whether stored-material durability alone puts the person's work at risk. */
+  const storageAtRisk = (): boolean => {
     if (risk === null || !risk.unsavedPersonMaterial) {
       stopSlowTimer();
-      setArmed(false);
-      return;
+      return false;
     }
     const { phase } = risk;
     if (phase !== "saving") stopSlowTimer();
-    if (phase === "loading" || phase === "error") {
-      setArmed(true);
-      return;
+    if (phase === "loading" || phase === "error") return true;
+    if (phase !== "saving") return false;
+    if (!slowSaveReached && slowTimer === null) {
+      slowTimer = environment.setTimeout(() => {
+        slowTimer = null;
+        slowSaveReached = true;
+        evaluate();
+      }, slowSaveMs);
     }
-    if (phase === "saving") {
-      if (!slowSaveReached && slowTimer === null) {
-        slowTimer = environment.setTimeout(() => {
-          slowTimer = null;
-          slowSaveReached = true;
-          evaluate();
-        }, slowSaveMs);
-      }
-      setArmed(slowSaveReached);
-      return;
-    }
-    setArmed(false);
+    return slowSaveReached;
   };
+  function evaluate() {
+    const storage = storageAtRisk();
+    setArmed(storage || risk?.unplacedSpokenWords === true);
+  }
   return Object.freeze({
     update(next) {
       risk = next;

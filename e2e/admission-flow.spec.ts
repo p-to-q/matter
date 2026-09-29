@@ -431,6 +431,69 @@ test("modal chrome cancels raw Voice but holds a stopped admission until materia
   await expect(page.locator(".admission-feedback")).toHaveCount(0);
 });
 
+test("an archive Replace refuses while submitted words are in flight, then replaces once they land", async ({ page }) => {
+  let releaseTranscription!: () => void;
+  const transcriptionGate = new Promise<void>((resolve) => {
+    releaseTranscription = resolve;
+  });
+  let transcriptionRequested = false;
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
+    transcriptionRequested = true;
+    await transcriptionGate;
+    const response = await route.fetch();
+    await route.fulfill({ response });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await prewarmAdmissionRouteModules(page);
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const initialNodeCount = await page.locator("[data-thought-id]").count();
+  const sidebar = page.locator("aside.material-files");
+  const archiveButton = sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true });
+
+  // A backup of the material as it is now.
+  await archiveButton.click();
+  let archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  const download = page.waitForEvent("download");
+  await archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveExportCopy }).click();
+  const backupPath = await (await download).path();
+  if (backupPath === null) throw new Error("Archive download did not produce a local file.");
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.close, exact: true }).click();
+
+  // The person speaks and presses Stop; the words are submitted but not yet in material.
+  const voiceTool = page.locator('[data-tool-id="voice"]');
+  await voiceTool.click();
+  const recording = page.locator('.admission-feedback[data-phase="recording"]');
+  await expect(recording).toBeVisible({ timeout: FIXTURE_RECORDING_START_TIMEOUT_MS });
+  await page.waitForTimeout(350);
+  await recording.getByRole("button", { name: "停止录音", exact: true }).click();
+  await expect.poll(() => transcriptionRequested).toBe(true);
+
+  // Replacing the document now would silently drop those words: it refuses.
+  await archiveButton.click();
+  archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await archive.getByLabel(fixtureUiCopy.materialFiles.archiveChooseMaterialArchive).setInputFiles(backupPath);
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveConfirmReplace);
+  await archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveReplace, exact: true }).click();
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveErrorBusy);
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount);
+
+  // The words land as material once the paper is back.
+  releaseTranscription();
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.close, exact: true }).click();
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount + 1, { timeout: 15_000 });
+  await expect(page.locator(".admission-feedback")).toHaveCount(0, { timeout: 5_000 });
+
+  // With nothing in progress, the same Replace is the person's explicit choice.
+  await archiveButton.click();
+  archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await archive.getByLabel(fixtureUiCopy.materialFiles.archiveChooseMaterialArchive).setInputFiles(backupPath);
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveConfirmOlder);
+  await archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveReplace, exact: true }).click();
+  await expect(sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel })).toHaveCount(0);
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount);
+});
+
 test("a transcription outage keeps material unchanged and Record again can recover", async ({ page }) => {
   let transcriptionRequests = 0;
   let releaseOutage!: () => void;

@@ -306,6 +306,44 @@ describe("AdmissionDriver", () => {
     expect(h.driver.getSettlement()).toBeNull();
   });
 
+  it("keeps held and in-flight words across a back-forward-cache hide, and releases them on unload", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    h.driver.setDeliveryWindowOpen(false);
+    await settle();
+    h.driver.setDeliveryTarget(ANCHOR, "missing");
+    const held = h.driver.getState();
+    expect(held).toMatchObject({ phase: "error", transcript: "保留这句话。" });
+
+    // The page hides into the back-forward cache and later returns.
+    h.driver.suspendCapture();
+    h.driver.exit({ persisted: true });
+    h.driver.resumeDelivery();
+    expect(h.driver.getState()).toBe(held);
+    expect(h.driver.getSettlement()).toBeNull();
+
+    // A page that really unloads releases them as a system boundary.
+    h.driver.exit({ persisted: false });
+    expect(h.driver.getState().phase).toBe("idle");
+    expect(h.driver.getSettlement()).toMatchObject({ outcome: "released" });
+  });
+
+  it("keeps a transcription in flight across a back-forward-cache hide", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.driver.suspendCapture();
+    h.driver.exit({ persisted: true });
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+    expect(h.commit).not.toHaveBeenCalled();
+    h.driver.resumeDelivery();
+    await settle();
+    expect(h.commit).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps words transcribed after the parent vanished", async () => {
     let resolveTranscript!: (transcript: string) => void;
     type Transcription = Awaited<ReturnType<AdmissionDriverDependencies["transcribe"]>>;

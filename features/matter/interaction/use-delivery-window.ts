@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { subscribePageExit, subscribePageSuspension } from "./page-suspension";
+import { subscribePageExit, subscribePageSuspension, type PageExit } from "./page-suspension";
 import { trackPressedPointers } from "./pressed-pointers";
 
 /**
@@ -24,8 +24,8 @@ export type DeliveryWindowBinding = Readonly<{
   onChange: (open: boolean) => void;
   /** The page became hidden; pressed pointers are already released. */
   onSuspend?: () => void;
-  /** The page is leaving its usable lifetime. */
-  onExit?: () => void;
+  /** The page is leaving its usable lifetime, perhaps into the back-forward cache. */
+  onExit?: (exit: PageExit) => void;
 }>;
 
 export type DeliveryWindowSubscription = Readonly<{
@@ -63,7 +63,7 @@ export function subscribeDeliveryWindow(
     },
     evaluate,
   );
-  const unsubscribeExit = subscribePageExit(() => binding.onExit?.());
+  const unsubscribeExit = subscribePageExit((exit) => binding.onExit?.(exit));
   evaluate();
   return Object.freeze({
     refresh: evaluate,
@@ -97,7 +97,7 @@ export function useDeliveryWindow(
       isAvailable: () => bindingRef.current.isAvailable(),
       onChange: (open) => bindingRef.current.onChange(open),
       onSuspend: () => bindingRef.current.onSuspend?.(),
-      onExit: () => bindingRef.current.onExit?.(),
+      onExit: (exit) => bindingRef.current.onExit?.(exit),
     });
     subscriptionRef.current = subscription;
     return () => {

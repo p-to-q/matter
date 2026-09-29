@@ -11,10 +11,14 @@ import type { ThoughtTree } from "../tree/model";
 
 vi.mock("idb", () => ({ openDB: vi.fn() }));
 
-const SAVED: UnloadRisk = Object.freeze({ phase: "saved", unsavedPersonMaterial: false });
-const SAVING: UnloadRisk = Object.freeze({ phase: "saving", unsavedPersonMaterial: true });
-const REFUSED: UnloadRisk = Object.freeze({ phase: "error", unsavedPersonMaterial: true });
-const LOADING: UnloadRisk = Object.freeze({ phase: "loading", unsavedPersonMaterial: true });
+const SAVED: UnloadRisk = Object.freeze({
+  phase: "saved",
+  unsavedPersonMaterial: false,
+  unplacedSpokenWords: false,
+});
+const SAVING: UnloadRisk = Object.freeze({ ...SAVED, phase: "saving", unsavedPersonMaterial: true });
+const REFUSED: UnloadRisk = Object.freeze({ ...SAVED, phase: "error", unsavedPersonMaterial: true });
+const LOADING: UnloadRisk = Object.freeze({ ...SAVED, phase: "loading", unsavedPersonMaterial: true });
 
 function environment() {
   const listeners = new Set<(event: BeforeUnloadEvent) => void>();
@@ -104,6 +108,29 @@ describe("unload guard", () => {
     expect(guard.isArmed()).toBe(false);
   });
 
+  it("guards submitted spoken words no material holds, whatever storage does", () => {
+    const { env, listeners } = environment();
+    const guard = createUnloadGuard(env);
+
+    // Nothing stored is at risk, but words held after a failed commit are.
+    guard.update({ ...SAVED, unplacedSpokenWords: true });
+    expect(guard.isArmed()).toBe(true);
+    expect(listeners.size).toBe(1);
+
+    // A quick save meanwhile neither disarms nor restarts its slow-save clock.
+    guard.update({ ...SAVING, unplacedSpokenWords: true });
+    vi.advanceTimersByTime(SLOW_SAVE_MS - 1);
+    guard.update({ ...SAVING, unplacedSpokenWords: false });
+    expect(guard.isArmed()).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(guard.isArmed()).toBe(true);
+
+    // Placed or discarded, with material saved: the page is free again.
+    guard.update(SAVED);
+    expect(guard.isArmed()).toBe(false);
+    expect(listeners.size).toBe(0);
+  });
+
   it("removes its listener and timer when disposed", () => {
     const { env, listeners } = environment();
     const guard = createUnloadGuard(env);
@@ -136,6 +163,7 @@ describe("unload guard", () => {
       guard.update({
         phase: status.phase,
         unsavedPersonMaterial: holdsUnsavedPersonMaterial(status, true, authored),
+        unplacedSpokenWords: false,
       });
     };
 

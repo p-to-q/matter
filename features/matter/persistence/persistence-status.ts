@@ -18,6 +18,13 @@ export const LOADING_PERSISTENCE_STATUS: PersistenceStatus = Object.freeze({
 });
 
 /**
+ * What the Archive's explicit reload of stored material did: replaced this
+ * document, refused because the person's work is in progress, or found
+ * nothing to reload.
+ */
+export type StoredReloadOutcome = "reloaded" | "busy" | "unchanged";
+
+/**
  * The one answer both exit guards use: this tab holds material the person
  * made that no stored row holds. Until the first load is reconciled the
  * controller has not received that material, so authorship alone answers.

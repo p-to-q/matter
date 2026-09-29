@@ -27,6 +27,7 @@ import type { ThoughtTree } from "../tree/model";
 import type { MaterialFileRow } from "../material/material-files";
 import { ChevronIcon, CopyIcon, MinusIcon, PlusIcon, SearchIcon, SidebarIcon } from "./icons";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
+import type { StoredReloadOutcome } from "../persistence/persistence-status";
 import { allocateSnapshotPath } from "../persistence/snapshot-paths";
 import { projectMaterialFilesSurface } from "./material-files-surface";
 import {
@@ -105,7 +106,8 @@ export type MaterialFilesProps = Readonly<{
   persistence: Readonly<{
     status: PersistenceStatus;
     retry: () => void;
-    resolveConflict: () => void;
+    /** Reloads stored material over a conflict; refused while work is in progress. */
+    resolveConflict: () => Promise<StoredReloadOutcome> | void;
     /** Opening Archive, where recovery lives, is where the notice is read. */
     acknowledgeHistoryNotice?: () => void;
     /** Whether the browser keeps this origin's storage out of eviction. */
@@ -887,6 +889,21 @@ export function MaterialFiles(props: MaterialFilesProps) {
     }
   };
 
+  const reloadStoredMaterial = async () => {
+    if (archiveBusy) return;
+    const documentEpoch = props.documentEpoch;
+    setArchiveError(null);
+    try {
+      const outcome = await props.persistence.resolveConflict();
+      if (liveDocumentEpochRef.current !== documentEpoch) return;
+      if (outcome === "busy") setArchiveError(copy.archiveErrorBusy);
+    } catch {
+      if (liveDocumentEpochRef.current === documentEpoch) {
+        setArchiveError(actionErrorMessage(copy));
+      }
+    }
+  };
+
   const replaceArchiveImport = async () => {
     if (props.archive === undefined || preparedImport === null || archiveBusy) return;
     const documentEpoch = props.documentEpoch;
@@ -1119,7 +1136,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
             onPickImport={() => archiveInputRef.current?.click()}
             onReplace={() => void replaceArchiveImport()}
             onRepairCorrupt={() => void repairCorruptStorage()}
-            onReloadStored={props.persistence.resolveConflict}
+            onReloadStored={() => void reloadStoredMaterial()}
             onRetrySave={props.persistence.retry}
             onSelectImport={(file) => void validateArchiveImport(file)}
           />

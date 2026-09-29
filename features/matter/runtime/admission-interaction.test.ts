@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   admissionCaptureIsActive,
+  admissionHoldsSubmittedWords,
   admissionHoldsTranscript,
   createAdmissionInteractionState,
   reduceAdmissionInteraction,
@@ -52,6 +53,41 @@ function transcribing(): AdmissionInteractionState {
     attempt: 1,
   }).state;
 }
+
+describe("submitted spoken words", () => {
+  it("counts words from Stop until material holds them, and held words after a failed commit", () => {
+    const stopping = reduceAdmissionInteraction(recording(), { type: "stop" }).state;
+    const held = reduceAdmissionInteraction(committing("the words I said"), {
+      type: "commit-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "STALE_TARGET",
+    }).state;
+    const failedTranscription = reduceAdmissionInteraction(transcribing(), {
+      type: "transcription-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "TRANSCRIPTION_FAILED",
+    }).state;
+    const committed = reduceAdmissionInteraction(committing(), {
+      type: "commit-succeeded",
+      token: "voice_1",
+      attempt: 1,
+    }).state;
+
+    expect([stopping, transcribing(), committing(), held].map(admissionHoldsSubmittedWords))
+      .toEqual([true, true, true, true]);
+    // Live capture is not yet submitted; a failed transcription kept no words;
+    // committed words are material.
+    expect([
+      createAdmissionInteractionState(),
+      start().state,
+      recording(),
+      failedTranscription,
+      committed,
+    ].map(admissionHoldsSubmittedWords)).toEqual([false, false, false, false, false]);
+  });
+});
 
 describe("admission interaction reducer", () => {
   it("locks the shared canvas only for live microphone capture", () => {

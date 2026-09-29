@@ -105,6 +105,7 @@ import {
 } from "./canvas-guidance";
 import { useOutcomeAcknowledgement, useOutcomeLine } from "./use-outcome-line";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
+import type { StoredReloadOutcome } from "../persistence/persistence-status";
 import {
   createLayoutProjectionInput,
   layoutProjectionKey,
@@ -299,7 +300,7 @@ export type RootedMaterialProps = {
   persistence: Readonly<{
     status: PersistenceStatus;
     retry: () => void;
-    resolveConflict: () => void;
+    resolveConflict: () => Promise<StoredReloadOutcome> | void;
     acknowledgeHistoryNotice?: () => void;
     storagePersisted?: boolean | null;
   }>;

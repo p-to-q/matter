@@ -526,7 +526,8 @@ capture and closes material delivery; it does not discard finalized
 transcription or a submitted model request. Returning visible reopens delivery
 after global pointer-idle and exact target checks. `pagehide`, unmount, document
 owner replacement, explicit cancellation, or exact-basis conflict are terminal
-operation boundaries. Read-only Inquiry follows the same submitted-owner rule
+operation boundaries, except that a back-forward-cache `pagehide` only suspends
+Voice admission: its submitted or held words wait for the page's return. Read-only Inquiry follows the same submitted-owner rule
 without a material commit.
 Hooks adapt browser events to those owners through one narrow browser adapter;
 they do not each invent a partial copy of another lifecycle.

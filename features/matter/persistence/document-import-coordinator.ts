@@ -10,6 +10,8 @@ export type DocumentImportErrorCode =
   | "IMPORT_SAVING"
   | "IMPORT_FOREIGN_DOCUMENT"
   | "IMPORT_STALE"
+  /** Something the person started is in progress; replacing would end it. */
+  | "IMPORT_BUSY"
   | Exclude<RepositoryErrorCode, "PERSISTENCE_CONFLICT">;
 
 export type DocumentImportReceipt =
@@ -35,6 +37,11 @@ type DocumentSwitch = (tree: ThoughtTree) => DocumentSwitchReceipt;
 /**
  * Owns the one-way archive handoff: storage must accept the complete candidate
  * before runtime state may move to it. Archive decoding belongs outside this seam.
+ *
+ * Replacing the document instance revokes everything bound to it, so an import
+ * refuses while `materialIdle` is false: held or in-flight spoken words, a
+ * material turn, a question held in Ask Matter, or a name being typed. The
+ * person finishes or discards that first; nothing is dropped behind them.
  */
 export function createDocumentImportCoordinator(
   persistence: Pick<
@@ -43,6 +50,7 @@ export function createDocumentImportCoordinator(
   >,
   switchDocument: DocumentSwitch,
   currentBasis: () => DocumentImportBasis,
+  materialIdle: () => boolean,
 ): DocumentImportCoordinator {
   let importing = false;
   return Object.freeze({
@@ -54,6 +62,9 @@ export function createDocumentImportCoordinator(
       try {
         if (!sameBasis(currentBasis(), basis)) {
           return Object.freeze({ status: "rejected", errorCode: "IMPORT_STALE" });
+        }
+        if (!materialIdle()) {
+          return Object.freeze({ status: "rejected", errorCode: "IMPORT_BUSY" });
         }
         // The first release has no durable active-document pointer. Accepting a
         // different tree id would claim a successful switch that reload cannot
@@ -68,14 +79,17 @@ export function createDocumentImportCoordinator(
         prepared = result;
 
         // The comparison and named store switch are synchronous on one browser
-        // task. No late archive may replace material that moved while IndexedDB
-        // was accepting its candidate.
-        if (!sameBasis(currentBasis(), basis)) {
+        // task. No late archive may replace material that moved, or work that
+        // started, while IndexedDB was accepting its candidate.
+        const lateRefusal: DocumentImportErrorCode | null = !sameBasis(currentBasis(), basis)
+          ? "IMPORT_STALE"
+          : !materialIdle() ? "IMPORT_BUSY" : null;
+        if (lateRefusal !== null) {
           const cleanupError = await persistence.discardImportedDocument(prepared);
           prepared = null;
           return Object.freeze({
             status: "rejected",
-            errorCode: cleanupError === null ? "IMPORT_STALE" : importError(cleanupError),
+            errorCode: cleanupError === null ? lateRefusal : importError(cleanupError),
           });
         }
         const switchReceipt = switchDocument(prepared.tree);
