@@ -16,6 +16,13 @@ approve routine learning, place a badge on material, or expose a permanent
 management surface. A person should not need to know that Wiki exists in order
 to receive its benefit.
 
+The owner's decision of 2026-09-29 reopens one part of this posture: an applied
+change may be disclosed once, restrained and perceivable, and an unsettled
+occurrence may carry a quiet mark the person can tap to take over (campaign
+slice W3 owns that surface). Disclosure is what makes silence informed, and
+informed silence is approval; see [Occurrence outcomes](#occurrence-outcomes).
+Routine learning still never becomes a review or approval workload.
+
 A person enters the loop only after noticing that the automatic result is
 wrong. The error site may then disclose one quiet correction affordance; a
 deeper Wiki surface, labelled `词典 WIKI` in Chinese, is discoverable from settings
@@ -53,20 +60,24 @@ to clear both an activation floor and an ambiguity margin. Routine provisional
 creation and application require no human confirmation. Material frequency can
 support a candidate but can never invent the relation between two forms.
 
-Evidence is deliberately lossy and bounded. Record V6 keeps separate term and
-alias ledgers with saturating support and a candidate-local quiet counter. One
-successful human admission is one logical clock tick; after a bounded number
-of quiet ticks, only the candidate that was absent decays. It stores no passage,
-node id, tree id, timestamp,
+Evidence is deliberately lossy and bounded. Record V7 keeps separate term and
+alias ledgers of saturating integers in quarter-observation units, each with a
+candidate-local quiet counter; every alias row also carries bounded kept
+evidence, and a separate bounded ledger holds revert strikes. One successful
+human admission is one logical clock tick; a candidate ages only on a tick that
+was a comparable opportunity for it, and after a bounded number of such quiet
+ticks its support halves. It stores no passage, node id, tree id, timestamp,
 transcript, prompt, model answer, embedding, occurrence list, or source address.
 Existing trees are not rescanned because persisted nodes do not prove whether
 their text was human- or model-authored. Model-generated material contributes
-zero learning evidence: it can be corrected by Wiki, but it cannot teach Wiki. Machine
-inference counts decay with the same observation clock, including successful
-human admissions that produce no candidate, so one early false proposal cannot
-remain silently active forever. Only the successful human-admission owner may
-advance this clock or submit evidence. Repair, transform, and text-swap paths
-receive read capability only.
+zero admission evidence: it can be corrected by Wiki, but its text can never
+teach Wiki a term or a relation. An applied occurrence in generated text may
+still settle as described under [Occurrence outcomes](#occurrence-outcomes).
+Machine inference counts decay with the same observation clock, including
+comparable human admissions that produce no candidate, so one early false
+proposal cannot remain silently active forever. Only the successful
+human-admission owner may advance this clock or submit admission evidence.
+Repair, transform, and text-swap paths receive read capability only.
 
 Negative authority is bounded without sacrificing an older human decision. If
 either negative ledger has no room for a new rejection, the decision still
@@ -80,31 +91,84 @@ code. They must be calibrated against a representative error corpus before a
 provisional mapping is enabled for release; changing them is a scoring-version
 decision, not an incidental refactor.
 
-The 32-admission candidate-local quiet horizon is an evidence-aging clock, not
-a user-intent window. It says how quickly one unobserved candidate loses support
-without creating a global cohort boundary. The production `recent-material`
-source receives only a successful, validated human admission; it records one
+The 32-tick candidate-local quiet horizon is an evidence-aging clock, not a
+user-intent window. It says how quickly one unobserved candidate loses support
+without creating a global cohort boundary. A tick ages a candidate only when it
+was a comparable opportunity: a complete scan in the candidate's locale (and,
+for a relation, its channel) whose eligible, unprotected words contained every
+script the candidate needs. Absence from a turn that could not have contained
+the word is not evidence of disuse. The production `recent-material` source
+receives only a successful, validated human admission; it records one
 content-minimal candidate vote per turn and never observes a later document
-diff. One future
-interaction owner may classify an exact applied occurrence after bounded
-foreground-visible survival, but it never infers intent from generic deletion,
-Material Undo or Redo, repetition, a later whole-text diff, or nearby pointer
-activity. The ordering of authority is fixed: an addressed human decision
-bypasses scoring; an automatic proposal must pass both scoring gates; an
-ambiguous proposal abstains.
+diff. The ordering of authority is fixed: an addressed human decision bypasses
+scoring; an automatic proposal must pass both scoring gates; an ambiguous
+proposal abstains.
 
 Two deterministic human decision representations are defined. Settings may create, rename,
 scope, or remove one canonical lexeme as an explicit local configuration
-decision. Domain events can confirm, reject, or replace one exact alias, but no
-production surface is yet authorized to emit those events. The latter remains
-reserved for the error-local correction path. It must be introduced together
-with the UI that owns one short-lived, one-shot attribution token captured when
-the rule was applied. That token binds the applied basis and rule to the exact
-visible occurrence and current document/interaction epoch; it contains no
-surrounding passage and expires instead of reconstructing intent from a later
-whole-text diff. Until that complete path exists, Matter does not create an
-empty generic decision port or claim that a canonical settings entry corrects
-future text by itself.
+decision. Domain events can confirm, reject, or replace one exact alias, and
+the occurrence settlement below routes explicit outcomes through them, but no
+production surface emits either yet. They remain reserved for the error-local
+correction path, which must land together with the occurrence owner that holds
+one short-lived, one-shot attribution token captured when the rule was
+applied. That token binds the applied basis and rule to the exact visible
+occurrence and current document/interaction epoch; it contains no surrounding
+passage and expires instead of reconstructing intent from a later whole-text
+diff. Until that complete path exists, Matter does not create an empty generic
+decision port or claim that a canonical settings entry corrects future text by
+itself.
+
+### Occurrence outcomes
+
+Informed implicit acceptance is approval (owner decision, 2026-09-29). One
+exact applied occurrence settles exactly once, through the pure policy in
+`wiki-learning-policy.ts` and the state transition
+`applyWikiOccurrenceSettlement` in `wiki-evidence.ts`:
+
+- `accepted-implicit`: the change was disclosed and perceivable, the unchanged
+  word still stands at its committed address, and one informed trigger fired:
+  two further human admissions, about 60 s of foreground dwell, copy or export
+  of the unchanged word, or leaving the page after perception. Copy, export,
+  dwell, and leaving only settle the occurrence; they never stack.
+  `settleWikiImplicitOccurrence` owns that classification from content-free
+  facts.
+- `inspected-kept`: the person opened the takeover and dismissed it without
+  reverting.
+- `explicit-confirm`: Keep; the existing confirm path makes the alias human
+  authority.
+- `explicit-reject` and `explicit-replace`: the existing reject and replace
+  paths.
+- `reverted`: the person restored the heard form.
+- `censored`: neutral. The occurrence was removed or rewritten by any material
+  change, including Material Undo, document replacement, repair, swap, or
+  Elastic; its range became unmappable; or it was never perceived, because it
+  stayed hidden or could not be perceived through assistive technology.
+
+Wiki still never observes Material Undo or Redo. "Not undone" is expressed only
+as the occurrence's address still holding the unchanged word; an address that
+disappears censors the occurrence without a Wiki event.
+
+Informed acceptance adds `kept` evidence to the relation that was applied: +4
+quarter-units for informed silence and +8 for an inspection, saturating at 24,
+halving after 32 comparable ticks, and at most one implicit settlement per
+alias between comparable ticks. Kept evidence counts toward the retention
+floor and toward both sides of a competition margin, so a rule in use does not
+decay while it is used and resists a challenger. Only producer evidence can
+clear the activation floor: implicit evidence never creates a relation, never
+activates one, and never becomes human-confirmed authority, which remains a
+human act. The first revert returns every automatic relation for that visible
+form to zero, so a competing canonical cannot take over merely because the
+reverted one stepped aside, and records one strike for 128 comparable ticks. A
+second revert inside that memory, a full strike ledger, or a reject in the
+Wiki surface makes a tombstone; tombstones are permanent until a person
+decides otherwise. Confirmed human rules and tombstones stay outside scoring:
+implicit acceptance, inspection, and reversion of a confirmed rule are neutral,
+and changing that authority is an explicit Wiki decision. Explicit outcomes on
+generated text always count. Informed implicit acceptance on generated text
+counts at the same weights behind the single `countGeneratedImplicitAcceptance`
+policy switch, which defaults to counting; the risk it accepts is that silence
+over disclosed but unread generated text is weaker evidence than silence over
+a person's own dictation. Every weight and memory is a calibration candidate.
 
 No rule falls back across locales. The same form may resolve differently in
 `zh-CN`, `zh-TW`, `ja-JP`, `de-DE`, and `en-US`; an unsupported or missing
@@ -200,7 +264,12 @@ admission FIFO rehydrates, rereads capability preferences, and re-derives term
 and fitting evidence from the original human turn against the newer authority,
 with a strict retry bound; an unsaved attempt never advances the durable
 human-turn clock. The material commit itself does not wait for that background
-work. When an automatic batch
+work. The FIFO is bounded: at most 16 waiting turns and 64 Ki UTF-16 code units
+of retained text. When a new turn would exceed either bound the oldest waiting
+turn is dropped, a turn larger than the whole budget is dropped on arrival, and
+the turn in progress is never interrupted; a content-free receipt counts
+waiting, completed, and dropped turns. Learning is optional, so dropping one
+turn costs one logical tick and never delays material. When an automatic batch
 would exceed the byte budget, the coordinator retries already-known relations
 and quiet aging without unseen allocations; if even that cannot fit, it becomes
 a no-op and leaves current authority ready. Explicit decisions still return a
@@ -273,7 +342,9 @@ after provider output returns and every model payload remains Wiki-free.
 
 ## Exceptional correction surface
 
-The default release has no mark revealing that a rule was applied. Only after a
+The current release has no mark revealing that a rule was applied; the
+2026-09-29 decision adds one restrained disclosure and a quiet takeover mark
+(slice W3). Only after a
 person invokes correction from an erroneous word may the surface reveal what is
 necessary to repair that visible occurrence and, if requested, add the corrected
 relation as local authority. It must also permit rejecting the responsible
@@ -298,7 +369,14 @@ existing scope while splitting the former aggregate, and strict V5 migration
 maps producer-less term evidence to a zero-authority legacy producer.
 The repository writes that V5-to-V6 normalization back once with a monotonic
 record generation. If the optional migration write cannot commit, the valid V5
-row remains readable and a later ordinary write may converge it.
+row remains readable and a later ordinary write may converge it. Schema V7
+stores evidence in quarter-observation units, adds kept evidence to every alias
+row, and adds a bounded revert-strike ledger. Strict V6 migration multiplies
+every stored support value by four, starts with no kept evidence and no
+strikes, and preserves every former phase, gate, and projection; older schemas
+migrate through the same scaling. A current-record V6 row is migrated in
+memory on load and persisted as V7 by the next ordinary write. Raw rows are
+bounded by the schema that wrote them.
 Strictly corrupt local state
 exposes an explicit reset that rechecks the row inside the write transaction and
 refuses to replace data that has become valid. It must not require the person
@@ -330,7 +408,10 @@ Locale word segmentation may collect ordinary Latin, Han, and Japanese words
 after recurrence; all-caps, internal-capital identifiers such as `OpenAI`, and
 Katakana may surface after one turn. Ordinary title case does not receive that
 shortcut. Stop words, numeric-only tokens, protected literals, generated
-ranges, malformed ranges, and over-capacity batches produce no evidence. Host
+ranges, and malformed ranges produce no evidence. A producer scans eligible
+words in text order and stops before the 33rd distinct candidate: that turn is
+a partial scan, which scores what it saw and ages nothing, because a candidate
+absent from the scanned prefix may sit in the unscanned remainder. Host
 `Intl.Segmenter` behavior must pass a pinned multi-locale conformance fixture or
 collection fails closed.
 
@@ -356,12 +437,20 @@ versions participate in disposable cache and qualification identity; changing
 either cannot reinterpret durable human authority or tombstones.
 
 Collection and fitting remain separate ledgers, but their events share one
-admission boundary. When exactly one runtime-allowlisted internal-edit relation
-targets an existing eligible canonical, that admission does not also teach the
-same observed source as a new broad locale term. Multiple candidate targets do
-not suppress collection and remain ambiguous. This narrow arbitration prevents
-soft discovery from racing the more specific relation while preserving every
-human-confirmed or already-collected canonical as a hard no-op veto.
+admission boundary. One versioned producer precedence table owns every choice
+between producers. When exactly one relation from a producer whose entry claims
+its collection source targets an existing eligible canonical, that admission
+does not also teach the same observed source as a new broad locale term. The
+orthographic internal-edit producer claims its source, because such a form is
+a misspelling rather than a word; pronunciation producers do not, because their
+sources are often real words, and letting one become canonical is a deliberate
+no-op veto on a risky rewrite. Multiple candidate targets do not suppress
+collection and remain ambiguous. When two producers describe the same term or
+relation in one turn, the lower rank wins regardless of event order, and tied
+competitors order by rank and then code units. This narrow arbitration
+prevents soft discovery from racing the more specific relation while
+preserving every human-confirmed or already-collected canonical as a hard
+no-op veto.
 
 Confirmed corrections and the deterministic ingress boundary do not depend on
 that gate. Bulk editing, imports, public sharing, vector search, cross-account
@@ -382,55 +471,66 @@ until a concrete ASR adapter owns their privacy and evaluation contract.
 
 ## Automatic-learning calibration boundary
 
-`wiki-learning-policy.ts` is the pure domain policy used by V6 evidence aging,
-competition, and offline calibration. It has no DOM, persistence, provider,
-model, or settings dependency. Runtime projection accepts only complete
-qualified release identities; a producer name or preference alone cannot
-activate an automatic alias.
+`wiki-learning-policy.ts` is the pure domain policy used by V7 evidence aging,
+competition, occurrence outcomes, and offline calibration. It has no DOM,
+persistence, provider, model, or settings dependency. Runtime projection
+accepts only complete qualified release identities; a producer name or
+preference alone cannot activate an automatic alias.
 
-Record V6 separates two facts which the former V4 aggregate mixed:
+Record V7 keeps three facts apart:
 
 - term evidence asks whether one canonical word should become a collected Wiki
-  entry; and
+  entry;
 - alias evidence asks whether one particular local `form → canonical` relation
-  may become provisional rewrite authority.
+  may become provisional rewrite authority; and
+- kept evidence records informed acceptance of that relation's applied
+  occurrences. It supports retention and never activation.
 
 Term frequency cannot contribute to alias authority. A successful human
 admission is one logical clock tick and an identical candidate contributes at
 most once in that tick. Each candidate owns a bounded quiet counter instead of
-sharing a global cohort boundary. Term support uses one bounded integer:
+sharing a global cohort boundary. Every stored quantity is a saturating integer
+in quarter-observation units:
 
 ```text
-support = min(255, support + one observation)
-observed: quiet = 0
-absent from 32 successful human admissions:
-          support = floor(support / 2), quiet = 0
+one observation = 4 units; support = min(1020, support + units)
+observed:                              quiet = 0
+absent from 32 comparable ticks:       support = floor(support / 2), quiet = 0
+one observation therefore fades        4 -> 2 -> 1 -> 0
 
-candidate -> collected at support >= 2
-collected -> candidate only at support = 0
+term candidate -> collected at support >= 8   (two observations)
+term collected -> candidate below support 4   (one observation)
 ```
 
-The first and second independent turns are therefore meaningful immediately at
+The unit change preserves every former gate exactly. What changes is memory:
+short-range evidence still acts at once, while a remnant persists across three
+half-lives instead of vanishing at the first, stays visible to competition,
+and is evicted later, so newer evidence weighs more while older evidence still
+counts. The first and second independent turns are meaningful immediately at
 any position in the product lifetime; no global boundary can erase the second
-vote. Thirty-two consecutive quiet human admissions are a candidate-local
-far-horizon aging boundary, never an activation requirement. The one-count
-retention band prevents a collected term from flickering out at the first quiet
-horizon; without new evidence it sinks at the next aging, while stronger
-repeated support survives proportionally longer. Fully decayed machine-only candidates
-may be evicted only when they have no authority, alias evidence, or tombstone.
-Human decisions and product seeds never enter that eviction policy.
+vote. Thirty-two consecutive quiet comparable ticks are a candidate-local
+far-horizon aging boundary, never an activation requirement. The retention
+band prevents a collected term from flickering out at the first quiet horizon;
+without new evidence it sinks at the next aging, while stronger repeated
+support survives proportionally longer. A partial scan scores what it saw and
+ages nothing. Fully decayed machine-only candidates may be evicted only when
+they have no authority, alias evidence, or tombstone. Human decisions and
+product seeds never enter that eviction policy.
 
-Alias evidence is producer-specific. Exact pronunciation producers have
-calibration weight `3`; restricted near-sound and internal orthographic
-producers have weight `2`; migrated legacy evidence has weight `0`. Activation
-score `8` makes the earliest unopposed gates three independent turns for exact
-relations and four for restricted relations. Activation margin `4` accepts
-exact `3 versus 1` and restricted `4 versus 2`, but abstains on exact `3 versus
-2` or restricted `4 versus 3`. Retention uses score `5` and margin `3`; a
-challenger never inherits that lower gate. Competition is immediate
-counter-evidence, while one addressed human reject or replacement bypasses the
-score and becomes durable authority. Production projection supplies complete
-runtime-allowlisted identities for two term producers and one fitting producer.
+Alias evidence is producer-specific. The relation score is producer weight
+times support: exact pronunciation producers have weight `3`; restricted
+near-sound and internal orthographic producers have weight `2`; migrated legacy
+evidence has weight `0`. Activation score `32` makes the earliest unopposed
+gates three independent turns for exact relations and four for restricted
+relations. Activation margin `16` accepts exact `3 versus 1` and restricted `4
+versus 2`, but abstains on exact `3 versus 2` or restricted `4 versus 3`
+(observations). Retention uses score `20` and margin `12`; a challenger never
+inherits that lower gate. Kept evidence adds to the retention score and to both
+sides of a margin, but only the relation score can clear the activation floor.
+Competition is immediate counter-evidence, while one addressed human reject or
+replacement bypasses the score and becomes durable authority. Production
+projection supplies complete runtime-allowlisted identities for two term
+producers and one fitting producer.
 The offline qualification catalog also contains three higher-ambiguity
 pronunciation producers, but qualification is not product authority. Evidence
 stores the versioned producer family id; qualification admits it only while one
@@ -444,7 +544,7 @@ cannot grant runtime authority.
 These values are versioned calibration candidates, not evidence that a language
 producer is ready. The bounded replay harness admits observations only from the
 `human-admission` environment. Generated output and protected text produce zero
-votes and do not advance the learning clock. Offline producer evaluation
+admission votes and do not advance the learning clock. Offline producer evaluation
 compares one frozen case set lexicographically: false and protected/generated
 applications remain the first vetoes, followed by misses, before correct
 applications, latency, or transition churn can improve. Producer qualification
@@ -468,7 +568,9 @@ removal/reopening, and over-bound recovery tests. The 15,000-row structural
 lexeme ceiling exists only to load every formerly valid V2-V5 state and is not
 an allowance for new human entries. Neither bound is misreported as the
 automatic hot-index size. The persistence ceiling is 9 MiB plus a proved
-256 KiB V5-to-V6 producer-field allowance. Every committed receipt reports zero
+256 KiB V5-to-V6 producer-field allowance and a proved 160 KiB V6-to-V7
+allowance for the kept fields, one quarter-unit digit per evidence row, and the
+empty strike ledger. Every committed receipt reports zero
 false applications for cases labelled adversarial or ambiguous by its frozen
 corpus, plus zero cross-locale, protected, or generated applications, and stays
 below the background-compile and hot-lookup budgets. That bounded result is not
@@ -479,58 +581,68 @@ or output drift invalidates the compact runtime identity. The synthetic generic
 fixture continues to prove only the parser and gate.
 
 The default-on learning policy has its own controlled receipt rather than
-borrowing producer success. A manifest-owned replay runs the production state
-transitions and projection over six scenarios: exact three-turn activation,
-restricted four-turn activation, ambiguity-margin abstention, quiet decay and
-retention, two-turn ordinary-term collection, and generated/protected zero-vote
-behavior. Its compact release binds policy and scoring versions, all gates and
-weights, the policy source digest, the exact qualification catalog, corpus
-digest, and result digest. Any change to those inputs invalidates
-`npm run qualify:wiki` until the expected replay is deliberately requalified.
+borrowing producer success. A manifest-owned replay (policy V4,
+`scripts/wiki/qualification/learning-policy-v4.ts`) runs the production state
+transitions, occurrence settlements, and projection over fourteen scenarios:
+exact three-turn activation, restricted four-turn activation, ambiguity-margin
+abstention and later activation, quiet decay and retention, quarter-unit
+gradual decay, two-turn ordinary-term collection, non-comparable turns that do
+not age, a partial scan that scores only what it saw, informed acceptance that
+retains a used rule, generated-text implicit acceptance under the policy
+switch, two-strike reversion, strike-memory expiry, confirmed authority outside
+scoring, and generated/protected zero-vote behavior. Its compact release binds
+policy and scoring versions, all units, gates, weights, precedence, and
+occurrence-outcome constants, the policy source digest, the exact
+qualification catalog, corpus digest, and result digest. Any change to those
+inputs invalidates `npm run qualify:wiki` until the expected replay is
+deliberately requalified: rerun the controlled harnesses, confirm every
+manifest scenario and producer decision still matches, then record the
+reported digests. The manifest owns the expected outcomes; a requalification
+may never edit an expectation to match an unexplained result.
 
 Interaction evaluation is a separate labelled corpus. One exact applied
 occurrence reaches exactly one terminal state:
 
 ```text
-pending -> explicit-confirm | explicit-reject | explicit-replace
-        -> survived-horizon | censored
+pending -> accepted-implicit | inspected-kept | explicit-confirm
+        -> explicit-reject | explicit-replace | reverted | censored
 ```
 
-`survived-horizon` is the bounded form of foreground dwell plus no addressed
-reversal. Visible exposure accumulates only while that exact occurrence remains
-current and emits once at a corpus-calibrated horizon. It is weak implicit
-retention evidence, never human confirmation and never permission to bootstrap
-an inactive relation. A later independent application creates another
-occurrence; the first one cannot award nested dwell, next-action, and reuse
-votes to itself. Hidden-tab time, hover, selection, copy, unrelated edits, page
-exit, and generic silence remain censored or invalid proxies. Censoring stays
-neutral and is reported with its denominator, so evaluation cannot improve by
-manufacturing attribution.
+A later independent application creates another occurrence; the first one
+cannot award itself nested dwell, copy, export, or exit settlements. Censoring
+stays neutral and is reported with its denominator, so evaluation cannot
+improve by manufacturing attribution, and censored exposure is never counted as
+either acceptance or rejection.
 
 Material Undo and Redo are a separate tree-history system. Wiki neither
 observes nor interprets them, and no Wiki authority, evidence, or terminal
 metric changes because that history moved. If a material mutation removes the
-visible address, the transient occurrence simply ceases to exist without a Wiki
-event. A future Wiki reversal, if the product ever needs one, owns a separate
-explicit decision, implementation, and persistence lifecycle. It may reuse
-strict contract principles but never the material history framework, command
-types, stack, or state. Generated output may
-receive an explicit addressed human decision, but contributes zero implicit
-learning; protected text may never receive an application. The interaction evaluator
-reports unsafe attribution, false implicit positives, explicit reject rate,
-survived counts, exposure counts, censor rate, and decision latency on a fixed
-corpus. It does not turn censored exposure into a failed survival. No arbitrary
-energy weights, adaptive optimizer, telemetry, or online reinforcement learning
-enters the running product.
+visible address, the transient occurrence is censored without a Wiki event. A
+revert chosen at the takeover is an ordinary pointer-undoable material change
+whose settlement is `reverted`; it is not an observation of history. A future
+Wiki reversal, if the product ever needs one, owns a separate explicit
+decision, implementation, and persistence lifecycle. It may reuse strict
+contract principles but never the material history framework, command types,
+stack, or state. Protected text may never receive an application. The
+interaction evaluator reports explicit, inspected, and implicit acceptances,
+rejections (explicit reject, replace, and revert), unsafe attribution, false
+implicit positives, generated exclusions under the policy switch, censor rate,
+and decision latency on a fixed corpus, and can compare the alternative
+generated-text setting. No arbitrary energy weights, adaptive optimizer,
+telemetry, or online reinforcement learning enters the running product; the
+weights stay versioned integers.
 
-V6 persists term and alias evidence as separate bounded ledgers and records the
-producer family for automatic term evidence. Legacy aggregate evidence migrates
-to a zero-weight producer and therefore cannot acquire authority during
-migration.
+V7 persists term and alias evidence as separate bounded ledgers, records the
+producer family for automatic term evidence, and keeps kept evidence and revert
+strikes bounded beside them. Legacy aggregate evidence migrates to a
+zero-weight producer and therefore cannot acquire authority during migration.
 Runtime-allowlisted fitting producers may project provisional rules only after
 their own relation evidence clears the calibrated gate; closing `近音`
-immediately selects the confirmed-only snapshot without deleting evidence.
-Implicit survival reward and one-shot occurrence attribution remain gated.
+immediately selects the confirmed-only snapshot without deleting evidence. The
+occurrence-outcome policy is implemented as pure domain policy; its production
+emitter (the occurrence owner, the disclosure, and the informed-acceptance
+wiring) and the one-shot attribution token are not yet wired, so the running
+product records no occurrence outcome until those slices land.
 
 ## Research translated into the boundary
 
