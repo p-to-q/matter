@@ -89,6 +89,39 @@ test.describe("pen-active palm rejection", () => {
     }
   });
 
+  test("a finger tap outside Point and Talk dismisses it even if the paper re-renders first", async ({ page }) => {
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const passage = page.locator("[data-thought-text-id]").first();
+    await passage.tap();
+    await page.locator("[data-node-action=point-talk]").tap();
+    const pointTalk = page.locator(".point-talk");
+    await expect(pointTalk.locator("input")).toBeVisible();
+    // Quiet index text owns no action of its own: only the field's outside
+    // press can close the field from here.
+    const quiet = await page.locator("aside.material-files").getByText(/次修改/u).boundingBox();
+    if (quiet === null) throw new Error("index text is not visible");
+    const session = await page.context().newCDPSession(page);
+    try {
+      await touch(session, "touchStart", { x: quiet.x + 4, y: quiet.y + quiet.height / 2 });
+      // The paper renders again while the touch is still deciding whether it
+      // is a palm (the pen takeover window is 300 ms).
+      await session.send("Emulation.setDeviceMetricsOverride", {
+        width: 1024,
+        height: 740,
+        deviceScaleFactor: 1,
+        mobile: false,
+      });
+      await page.evaluate(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }));
+      await touch(session, "touchEnd");
+      await expect(pointTalk).toHaveCount(0);
+    } finally {
+      await session.detach();
+    }
+  });
+
   test("two fingers still pinch when no pen is touching", async ({ page }) => {
     const { paper, shell, session } = await openPanCanvas(page);
     try {

@@ -168,14 +168,17 @@ export function PointTalkTurn({
   useEffect(() => {
     if (pointTalkTurnReleasesOwner(presented, phase)) onReleased();
   }, [onReleased, phase, presented]);
+  // Bound to the driver's stable action, not the controller snapshot, so the
+  // field's dismissal handlers survive every phase change.
+  const detachPresentation = controller.detachPresentation;
   const closeFor = useCallback((reason: "person" | "placement") => {
     if (reason === "person") exitHandoff?.intend(presenceIdentity, "person");
-    const retained = controller.detachPresentation();
+    const retained = detachPresentation();
     onClose();
     // Geometry failure or dismissal before submit owns no durable job. Release
     // the host synchronously so a stale idle effect cannot reopen the surface.
     if (!retained) onReleased();
-  }, [controller, exitHandoff, onClose, onReleased, presenceIdentity]);
+  }, [detachPresentation, exitHandoff, onClose, onReleased, presenceIdentity]);
   const close = useCallback(() => closeFor("person"), [closeFor]);
   const closeForPlacement = useCallback(() => closeFor("placement"), [closeFor]);
 
