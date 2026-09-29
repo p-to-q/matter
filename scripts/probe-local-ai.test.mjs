@@ -105,13 +105,44 @@ test("does not mistake fallback floors for a usable provider", () => {
   assert.deepEqual(
     classifyLocalAiResponse("transform", "available", 429, {
       error: {
-        code: "TURN_UNAVAILABLE",
+        code: "RATE_LIMITED",
         message: "Synthetic admission limit.",
+        retryable: true,
+      },
+    }),
+    { ok: false, outcome: "busy", reason: "HTTP_429" },
+  );
+  assert.deepEqual(
+    classifyLocalAiResponse("text-swap", "available", 503, {
+      error: {
+        code: "RATE_LIMITED",
+        message: "Synthetic admission concurrency.",
+        retryable: true,
+      },
+    }),
+    { ok: false, outcome: "busy", reason: "HTTP_503" },
+  );
+  assert.deepEqual(
+    classifyLocalAiResponse("transform", "available", 429, {
+      error: {
+        code: "TURN_UNAVAILABLE",
+        message: "Admission is not a model outcome.",
         retryable: true,
         fallbackReason: "MODEL_BUSY",
       },
     }),
-    { ok: false, outcome: "busy", reason: "MODEL_BUSY" },
+    { ok: false, outcome: "refused", reason: "INVALID_ENVELOPE" },
+  );
+  assert.deepEqual(
+    classifyLocalAiResponse("transform", "available", 429, {
+      error: {
+        code: "RATE_LIMITED",
+        message: "Admission carries no model reason.",
+        retryable: true,
+        fallbackReason: "MODEL_BUSY",
+      },
+    }),
+    { ok: false, outcome: "refused", reason: "INVALID_ENVELOPE" },
   );
   assert.deepEqual(
     classifyLocalAiResponse("transform", "available", 429, {

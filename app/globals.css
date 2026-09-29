@@ -36,7 +36,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-header { position: fixed; z-index: 30; top: 27px; left: 24px; display: flex; align-items: center; gap: 8px; color: var(--muted); font: 400 12px/1 var(--header-face); letter-spacing: .01em; }
 .matter-brand { display: inline-flex; min-height: 31px; align-items: center; margin: -8px -4px; padding: 8px 4px; color: var(--ink); text-decoration: none; }
 .matter-brand__logo { display: block; width: auto; height: 15px; opacity: .58; }
-.matter-brand:hover { opacity: .6; }
+@media (hover: hover) { .matter-brand:hover { opacity: .6; } }
 .matter-brand__divider { color: var(--faint); font-size: 12px; }
 .matter-brand__product { color: inherit; font-size: 12px; line-height: 1; letter-spacing: .01em; }
 
@@ -44,7 +44,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
    compact structural outline; spatial geometry stays on the canvas. */
 .material-files-toggle { position: fixed; z-index: 42; top: 21px; right: calc(100% - var(--sidebar-width) + 14px); left: auto; display: grid; width: 32px; height: 32px; padding: 0; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; touch-action: auto; transition: color 140ms ease, background 140ms ease; }
 .material-files-toggle svg { width: 15px; height: 15px; }
-.material-files-toggle:hover { background: rgba(22,29,39,.05); color: var(--ink); }
+@media (hover: hover) { .material-files-toggle:hover { background: rgba(22,29,39,.05); color: var(--ink); } }
 .material-files-toggle[aria-expanded="true"] { color: var(--ink); }
 .material-files-toggle[data-persistence-error="true"] { background: rgba(173,74,54,.1); color: var(--active); }
 .material-files__clip { display: contents; }
@@ -58,11 +58,11 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__up { display: flex; min-width: 0; height: 24px; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--index-faint); cursor: pointer; text-align: left; transition: color 120ms ease, background 120ms ease, opacity 120ms ease; }
 .material-files__up svg { width: 11px; height: 11px; flex: 0 0 auto; }
 .material-files__up span { min-width: 0; overflow: hidden; font: 9px/1 var(--mono); letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
-.material-files__up:hover:not(:disabled) { background: rgba(22,29,39,.05); color: var(--index-ink); }
+@media (hover: hover) { .material-files__up:hover:not(:disabled) { background: rgba(22,29,39,.05); color: var(--index-ink); } }
 .material-files__up:disabled { cursor: default; opacity: .22; }
 .material-files__context-title { display: flex; min-width: 0; height: 34px; align-items: center; padding: 0 10px 0 20px; border: 0; border-radius: 8px; background: transparent; color: var(--index-ink); cursor: pointer; text-align: left; transition: background 120ms ease; }
 .material-files__context-title span { min-width: 0; overflow: hidden; font: 600 15px/1.25 var(--matter-face); letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
-.material-files__context-title:hover:not(:disabled) { background: rgba(22,29,39,.05); }
+@media (hover: hover) { .material-files__context-title:hover:not(:disabled) { background: rgba(22,29,39,.05); } }
 .material-files__context-title[data-active="true"] { background: transparent; color: var(--index-ink); }
 .material-files__context-title:disabled { cursor: default; color: var(--index-faint); }
 .material-files__context-title-input { box-sizing: border-box; width: 100%; height: 34px; padding: 0 10px 0 20px; border: 0; border-radius: 6px; outline: 1px solid rgba(22,29,39,.16); background: transparent; color: var(--index-ink); font: 600 15px/1.25 var(--matter-face); letter-spacing: 0; }
@@ -71,7 +71,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__controls { display: grid; min-width: 0; height: 38px; grid-template-columns: minmax(0,1fr) max-content max-content; align-items: center; column-gap: 1px; margin: 0 3px 6px; padding-bottom: 4px; border-bottom: 1px solid var(--index-line); }
 .material-files__mode-action { display: flex; height: 32px; align-items: center; gap: 6px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--index-muted); font: 10px/1 var(--mono); letter-spacing: .02em; cursor: pointer; transition: color 120ms ease, background 120ms ease; }
 .material-files__mode-action svg { width: 13px; height: 13px; }
-.material-files__mode-action:hover:not(:disabled) { background: rgba(22,29,39,.05); color: var(--index-ink); }
+@media (hover: hover) { .material-files__mode-action:hover:not(:disabled) { background: rgba(22,29,39,.05); color: var(--index-ink); } }
 .material-files__mode-action--search,
 .material-files__search,
 .material-files__section-label { grid-column: 1; }
@@ -96,7 +96,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__search input::placeholder { color: var(--index-faint); letter-spacing: -.02em; }
 .material-files__search input::-webkit-search-cancel-button { display: none; }
 .material-files__search-close { display: grid; width: 32px; height: 32px; flex: 0 0 auto; padding: 0; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--index-muted); font: 15px/1 var(--mono); cursor: pointer; }
-.material-files__search-close:hover { background: rgba(22,29,39,.05); color: var(--index-ink); }
+@media (hover: hover) { .material-files__search-close:hover { background: rgba(22,29,39,.05); color: var(--index-ink); } }
 .material-files[data-mode="search"] .material-files__search { gap: 5px; }
 
 /* Structural depth advances by one restrained step without imitating canvas geometry. */
@@ -105,7 +105,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-file__spacer { display: block; min-height: 0; pointer-events: none; }
 .material-file { --material-file-step: 14px; position: relative; display: grid; min-width: 0; min-height: var(--index-row); grid-template-columns: var(--material-file-action-width) minmax(0,1fr) var(--material-file-context-width); align-items: center; padding-left: min(calc(var(--material-file-depth, 0) * var(--material-file-step)), var(--material-file-max-indent)); color: var(--index-muted); transition: color 120ms ease; }
 .material-file:focus-visible { border-radius: 7px; outline: 2px solid var(--index-ink); outline-offset: -2px; }
-.material-file:hover { color: var(--index-ink); }
+@media (hover: hover) { .material-file:hover { color: var(--index-ink); } }
 .material-file[data-active="true"] { color: var(--index-ink); }
 .material-file[data-lasso-selected="true"] .material-file__open { border-radius: 8px; background: rgba(22,29,39,.065); color: var(--index-ink); }
 .material-file[data-lasso-selected="true"] .material-file__title { font-weight: 600; }
@@ -123,7 +123,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-file__terminal-marker::before { width: 2.5px; height: 2.5px; border-radius: 50%; background: currentColor; content: ""; opacity: .48; }
 .material-file__structure-control { cursor: pointer; opacity: .46; transition: opacity 120ms ease, color 120ms ease; }
 .material-file__structure-control:disabled { cursor: default; opacity: 0; }
-.material-file:hover .material-file__structure-control:not(:disabled),
+@media (hover: hover) { .material-file:hover .material-file__structure-control:not(:disabled) { opacity: 1; } }
 .material-file[data-expanded="true"] .material-file__structure-control,
 .material-file__structure-control:focus-visible { opacity: 1; }
 .material-file__structure-glyph { position: relative; display: block; width: var(--material-file-context-icon); height: var(--material-file-context-icon); pointer-events: none; }
@@ -137,9 +137,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-file__context-control svg { width: var(--material-file-context-icon); height: var(--material-file-context-icon); }
 .material-file__context-control--set-aside { grid-column: 3; opacity: 0; pointer-events: none; }
 .material-file__context-control--set-aside svg { transform: rotate(-15deg) scale(.86); transition: transform 140ms cubic-bezier(.2,.8,.2,1); }
-.material-file:hover .material-file__context-control--set-aside,
+@media (hover: hover) { .material-file:hover .material-file__context-control--set-aside { opacity: .68; pointer-events: auto; } }
 .material-file__context-control--set-aside:focus-visible { opacity: .68; pointer-events: auto; }
-.material-file:hover .material-file__context-control--set-aside svg,
+@media (hover: hover) { .material-file:hover .material-file__context-control--set-aside svg { transform: rotate(0deg) scale(1); } }
 .material-file__context-control--set-aside:focus-visible svg { transform: rotate(0deg) scale(1); }
 .material-file__context-control--set-aside:focus-visible { opacity: 1; }
 .material-file__context-control--restore { width: var(--material-file-action-width); color: var(--index-muted); opacity: .86; }
@@ -152,8 +152,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__tree-guides { position: absolute; z-index: 0; inset: 0; pointer-events: none; }
 .material-files__tree-guide { position: absolute; top: var(--material-file-guide-top); left: calc(min(calc(var(--material-file-guide-child-depth) * var(--material-file-step)), var(--material-file-max-indent)) + (var(--material-file-action-width) / 2)); width: var(--material-file-guide-width); height: var(--material-file-guide-height); background: rgba(22,29,39,.18); transform: translateX(-50%); transition: background 120ms ease; }
 .material-files__tree-guide[data-guide-kind="branch-tail"][data-guide-tail-end="true"] { --material-file-tail-run: max(0px, min(14px, calc(min(calc(var(--material-file-guide-target-depth) * var(--material-file-step)), var(--material-file-max-indent)) - min(calc(var(--material-file-guide-child-depth) * var(--material-file-step)), var(--material-file-max-indent)) - var(--material-file-guide-target-clearance)))); width: var(--material-file-tail-run); box-sizing: border-box; border-bottom: var(--material-file-guide-width) solid rgba(22,29,39,.18); border-left: var(--material-file-guide-width) solid rgba(22,29,39,.18); border-bottom-left-radius: 2px; background: transparent; transform: translateX(-.5px); transition: border-color 120ms ease; }
-.material-files:hover .material-files__tree-guide { background: rgba(22,29,39,.24); }
-.material-files:hover .material-files__tree-guide[data-guide-kind="branch-tail"][data-guide-tail-end="true"] { border-color: rgba(22,29,39,.24); background: transparent; }
+@media (hover: hover) { .material-files:hover .material-files__tree-guide { background: rgba(22,29,39,.24); } }
+@media (hover: hover) { .material-files:hover .material-files__tree-guide[data-guide-kind="branch-tail"][data-guide-tail-end="true"] { border-color: rgba(22,29,39,.24); background: transparent; } }
 .material-file__open { position: relative; z-index: 1; }
 
 /* Coarse pointers have no hover. Selection exposes the same secondary action
@@ -182,17 +182,21 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__archive-actions { display: grid; gap: 5px; }
 .material-files__archive-actions button,
 .material-files__archive-confirm button { min-height: 34px; padding: 0 10px; border: 1px solid rgba(22,29,39,.1); border-radius: 8px; background: rgba(255,255,255,.34); color: var(--index-ink); font: 9px/1 var(--mono); text-align: left; cursor: pointer; transition: background 120ms ease, border-color 120ms ease; }
-.material-files__archive-actions button:hover:not(:disabled),
-.material-files__archive-confirm button:hover:not(:disabled) { border-color: rgba(22,29,39,.22); background: rgba(255,255,255,.62); }
+@media (hover: hover) {
+  .material-files__archive-actions button:hover:not(:disabled),
+  .material-files__archive-confirm button:hover:not(:disabled) { border-color: rgba(22,29,39,.22); background: rgba(255,255,255,.62); }
+}
 .material-files__archive-actions button:disabled,
 .material-files__archive-confirm button:disabled { cursor: default; opacity: .45; }
 .material-files__archive-retry { width: 100%; min-height: 34px; margin-top: 7px; border: 1px solid var(--index-line); border-radius: 8px; background: transparent; color: var(--active); font: 9px/1 var(--mono); cursor: pointer; }
-.material-files__archive-retry:hover:not(:disabled),
+@media (hover: hover) { .material-files__archive-retry:hover:not(:disabled) { border-color: currentcolor; background: rgba(22,29,39,.04); } }
 .material-files__archive-retry:focus-visible { border-color: currentcolor; background: rgba(22,29,39,.04); }
 .material-files__archive-retry:disabled { cursor: default; opacity: .45; }
 .material-files__archive-status,
 .material-files__archive-error { margin: 12px 0 0; font-size: 9px; line-height: 1.5; }
 .material-files__archive-error { color: var(--active); }
+.material-files__archive-status:empty,
+.material-files__archive-error:empty { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); }
 .material-files__archive-confirm { margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--index-line); }
 .material-files__archive-confirm p { margin: 0 0 9px; color: var(--index-ink); line-height: 1.55; }
 .material-files__archive-confirm > div { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
@@ -204,7 +208,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__copy-status { overflow: hidden; padding-left: 7px; font: 9px/1 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
 .material-files__copy { display: flex; height: 30px; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 8px; background: rgba(22,29,39,.07); color: var(--index-ink); font: 9px/1 var(--mono); cursor: pointer; transition: background 120ms ease; }
 .material-files__copy svg { width: 13px; height: 13px; }
-.material-files__copy:hover:not(:disabled) { background: rgba(22,29,39,.12); }
+@media (hover: hover) { .material-files__copy:hover:not(:disabled) { background: rgba(22,29,39,.12); } }
 .material-files__copy:disabled { cursor: default; opacity: .34; }
 
 /* The index ends with a local identity, not an account or status surface. */
@@ -221,7 +225,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__profile-meta { display: flex; min-width: 0; align-items: center; gap: 6px; overflow: hidden; color: var(--index-faint); font: 9px/1 var(--mono); letter-spacing: .05em; white-space: nowrap; }
 .material-files__profile-action { display: grid; width: 36px; height: 36px; padding: 0; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--active); cursor: pointer; transition: color 130ms ease, background 130ms ease; }
 .material-files__profile-action svg { width: 14px; height: 14px; }
-.material-files__profile-action:hover,
+@media (hover: hover) { .material-files__profile-action:hover { background: rgba(22,29,39,.07); color: var(--index-ink); } }
 .material-files__profile-action:focus-visible { background: rgba(22,29,39,.07); color: var(--index-ink); }
 .material-files__profile[data-state="error"] .material-files__profile-meta,
 .material-files__profile[data-state="error"] .material-files__profile-action { color: var(--active); }
@@ -229,7 +233,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 /* The durability line stays text: tapping it only opens Archive. */
 .material-files__durability { display: inline-flex; min-width: 0; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; cursor: pointer; }
 .material-files__durability > span:first-child { overflow: hidden; text-overflow: ellipsis; }
-.material-files__durability:hover:not(:disabled) > span:first-child,
+@media (hover: hover) { .material-files__durability:hover:not(:disabled) > span:first-child { text-decoration: underline; text-underline-offset: 2px; } }
 .material-files__durability:focus-visible > span:first-child { text-decoration: underline; text-underline-offset: 2px; }
 .material-files__durability:disabled { cursor: default; }
 .material-files__profile-meta[data-tone="notice"] { color: var(--index-muted); }
@@ -281,11 +285,16 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-guidance__next { isolation: isolate; position: relative; z-index: 1; display: inline-block; margin: 0; white-space: nowrap; animation: matter-guidance-in 1s ease forwards; }
 .matter-guidance[data-guidance-kind="readout"] { pointer-events: none; }
 .matter-guidance__next--readout { inline-size: 4.5ch; font-variant-numeric: lining-nums tabular-nums; font-feature-settings: "lnum" 1, "tnum" 1; line-height: inherit; text-align: end; vertical-align: top; direction: ltr; unicode-bidi: isolate; animation: none; transition: none; }
+/* A line with a release may wrap: at 375px the German parked line alone is
+   wider than the corner, and the release must stay reachable, not clipped. */
+.matter-guidance[data-guidance-action] .matter-guidance__next { white-space: normal; }
+.matter-guidance__action { position: relative; z-index: 1; margin: 0 0 0 .75em; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; white-space: nowrap; text-decoration: underline; text-underline-offset: .2em; cursor: pointer; }
+.matter-guidance__action:focus-visible { outline: 1px solid currentColor; outline-offset: 2px; }
 .matter-guidance__next::before { position: absolute; z-index: -1; inset: 0 -4px; background: transparent; content: ""; transition: background-color 150ms ease; }
-.matter-guidance:hover,
+@media (hover: hover) { .matter-guidance:hover { color: var(--chrome-hover-text, #f5f5f2); } }
 .matter-guidance:focus-visible,
 .matter-guidance:active { color: var(--chrome-hover-text, #f5f5f2); }
-.matter-guidance:hover .matter-guidance__next::before,
+@media (hover: hover) { .matter-guidance:hover .matter-guidance__next::before { background: var(--chrome-hover-bg, #161d27); } }
 .matter-guidance:focus-visible .matter-guidance__next::before,
 .matter-guidance:active .matter-guidance__next::before { background: var(--chrome-hover-bg, #161d27); }
 .matter-guidance[data-guidance-kind="progress"] { color: var(--muted); }
@@ -346,7 +355,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 /* A held root is still inert material, but it remains the one locally
    addressable recovery target. Descendants inherit exclusion without an exception. */
 .spatial-thought[data-context-restore-target="true"] .spatial-thought__text { pointer-events: auto; }
-.spatial-thought[data-context-restore-target="true"] .spatial-thought__text:is(:hover, :focus) { opacity: .72; }
+@media (hover: hover) { .spatial-thought[data-context-restore-target="true"] .spatial-thought__text:hover { opacity: .72; } }
+.spatial-thought[data-context-restore-target="true"] .spatial-thought__text:focus { opacity: .72; }
 .language-split-projection { --split-depth: 0px; --split-pocket-top: 0px; --split-pocket-depth: 0px; position: absolute; z-index: 7; inset: 0 auto auto 0; width: 100%; height: 0; color: var(--ink); font: inherit; font-size: clamp(22px, 2.2vw, 34px); font-family: var(--matter-face); font-weight: 400; line-height: 1.62; letter-spacing: 0; opacity: 0; pointer-events: none; user-select: none; }
 .language-split-projection::before { position: absolute; z-index: -1; top: var(--split-pocket-top); left: 0; width: 100%; height: var(--split-pocket-depth); background: transparent; content: ""; opacity: 0; }
 .spatial-thought[data-parent-id] .language-split-projection { color: var(--muted); font-size: 17px; line-height: 1.72; letter-spacing: 0; }
@@ -404,13 +414,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .point-talk__composer input { min-width: 0; flex: 1 1 auto; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-family: var(--mono); font-size: calc(11px * var(--point-talk-scale)); font-weight: 400; line-height: calc(16px * var(--point-talk-scale)); user-select: text; }
 .point-talk__composer input::placeholder { color: color-mix(in srgb, var(--ink) 46%, transparent); }
 .point-talk button { min-width: calc(30px * var(--point-talk-scale)); min-height: calc(30px * var(--point-talk-scale)); padding: 0 calc(5px * var(--point-talk-scale)); border: 0; border-radius: calc(6px * var(--point-talk-scale)); background: transparent; color: var(--muted); font-family: var(--mono); font-size: calc(10px * var(--point-talk-scale)); font-weight: 400; line-height: calc(15px * var(--point-talk-scale)); cursor: pointer; }
-.point-talk button:hover,
+@media (hover: hover) { .point-talk button:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); } }
 .point-talk button:focus-visible { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
 .point-talk button:disabled { opacity: .28; cursor: default; }
 .point-talk__voice { display: grid; width: calc(30px * var(--point-talk-scale)); padding: 0 !important; place-items: center; }
 .point-talk__voice svg { width: calc(12px * var(--point-talk-scale)); height: calc(12px * var(--point-talk-scale)); stroke-width: 1.55; }
 .point-talk__submit { background: var(--ink) !important; color: var(--paper-solid) !important; font-weight: 500 !important; }
-.point-talk__submit:hover,
+@media (hover: hover) { .point-talk__submit:hover { background: color-mix(in srgb, var(--ink) 88%, transparent) !important; color: var(--paper-solid) !important; } }
 .point-talk__submit:focus-visible { background: color-mix(in srgb, var(--ink) 88%, transparent) !important; color: var(--paper-solid) !important; }
 .point-talk__feedback { justify-content: flex-end; padding-left: calc(7px * var(--point-talk-scale)); }
 .point-talk__feedback > span { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: calc(10px * var(--point-talk-scale)); font-weight: 400; line-height: calc(15px * var(--point-talk-scale)); text-overflow: ellipsis; white-space: nowrap; }
@@ -424,8 +434,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
    it nears the first line, which is how it gives way to the text rather than cutting across it. Keyboard focus keeps a complete fill and a hard
    ring — that state must be unambiguous, and it is the one place a crisp edge is worth the noise. */
 .node-action-lens__button::before { position: absolute; z-index: -1; inset: var(--lens-core-inset); border-radius: var(--lens-core-radius); background: var(--ink); box-shadow: 0 0 3px 1px var(--ink), 0 0 11px 4px color-mix(in srgb, var(--ink) 62%, transparent), 0 0 20px 8px color-mix(in srgb, var(--ink) 22%, transparent); content: ""; opacity: 0; transition: opacity 120ms ease; }
-.node-action-lens__button:hover:not(:disabled) { color: var(--paper); }
-.node-action-lens__button:hover:not(:disabled)::before { opacity: 1; }
+@media (hover: hover) { .node-action-lens__button:hover:not(:disabled) { color: var(--paper); } }
+@media (hover: hover) { .node-action-lens__button:hover:not(:disabled)::before { opacity: 1; } }
 .node-action-lens__button:focus-visible { background: var(--ink); color: var(--paper); outline: 0; box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
 .node-action-lens__button:focus-visible::before { opacity: 0; }
 /* Pressing compresses the control in place and releasing lets it spring back. It must not
@@ -450,25 +460,25 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .tool-rail__button[data-tool-id="lasso"] svg,
 .tool-rail__button[data-tool-id="branch"] svg,
 .tool-rail__button[data-tool-id="move"] svg { width: 18px; height: 18px; }
-.tool-rail__button:hover:not(:disabled),
+@media (hover: hover) { .tool-rail__button:hover:not([aria-disabled="true"]) { color: var(--rail-hover-ink); outline: 0; } }
 .tool-rail__button:focus-visible { color: var(--rail-hover-ink); outline: 0; }
-.tool-rail__button:hover:not(:disabled) { --tool-icon-rest-scale: .92; }
-.tool-rail__button:hover:not(:disabled)::before,
+@media (hover: hover) { .tool-rail__button:hover:not([aria-disabled="true"]) { --tool-icon-rest-scale: .92; } }
+@media (hover: hover) { .tool-rail__button:hover:not([aria-disabled="true"])::before { background: var(--rail-hover); } }
 .tool-rail__button:focus-visible::before { background: var(--rail-hover); }
 .tool-rail__button:focus-visible { --tool-icon-rest-scale: 1; }
 .tool-rail__button:focus-visible::after { outline: 2px solid var(--rail-active); }
-.tool-rail__button:active:not(:disabled)::before { transform: scale(.82); transition-duration: 90ms; transition-timing-function: ease-out; }
-.tool-rail__button:active:not(:disabled) svg { transform: scale(.8); transition-duration: 90ms; transition-timing-function: ease-out; }
+.tool-rail__button:active:not([aria-disabled="true"])::before { transform: scale(.82); transition-duration: 90ms; transition-timing-function: ease-out; }
+.tool-rail__button:active:not([aria-disabled="true"]) svg { transform: scale(.8); transition-duration: 90ms; transition-timing-function: ease-out; }
 .tool-rail__button[data-click-motion="a"] svg { animation: tool-rail-icon-release-a 480ms; }
 .tool-rail__button[data-click-motion="b"] svg { animation: tool-rail-icon-release-b 480ms; }
 .tool-rail__button[data-tool-emphasis="primary"] { color: var(--rail-active-ink); }
 .tool-rail__button[data-tool-emphasis="primary"]::before { inset: 0 14px; border-radius: 13px; background: var(--rail-active); }
-.tool-rail__button[data-tool-emphasis="primary"]:hover:not(:disabled),
+@media (hover: hover) { .tool-rail__button[data-tool-emphasis="primary"]:hover:not([aria-disabled="true"]) { color: var(--rail-active-ink); } }
 .tool-rail__button[data-tool-emphasis="primary"]:focus-visible { color: var(--rail-active-ink); }
-.tool-rail__button[data-tool-emphasis="primary"]:hover:not(:disabled)::before,
+@media (hover: hover) { .tool-rail__button[data-tool-emphasis="primary"]:hover:not([aria-disabled="true"])::before { background: var(--rail-active); } }
 .tool-rail__button[data-tool-emphasis="primary"]:focus-visible::before { background: var(--rail-active); }
-.tool-rail__button:disabled { cursor: default; color: rgba(22,29,39,.38); }
-.tool-rail__button[data-tool-emphasis="primary"]:disabled { color: var(--rail-active-ink); }
+.tool-rail__button[aria-disabled="true"] { cursor: default; color: rgba(22,29,39,.38); }
+.tool-rail__button[data-tool-emphasis="primary"][aria-disabled="true"] { color: var(--rail-active-ink); }
 .tool-rail__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .tool-rail__separator { width: 22px; height: 1px; margin: 2px 0; background: rgba(22,29,39,.22); }
 /* The plate returns monotonically. Only the icon crosses its rest size after a
@@ -509,7 +519,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .stretch-handle { display: block; margin: 0; padding: 0; cursor: ns-resize; pointer-events: auto; touch-action: none; }
 .stretch-handle--top { --stretch-arrival-y: 4px; --stretch-cue-offset-x: var(--elastic-top-cue-offset, 0px); --stretch-grip-y: 100%; left: var(--elastic-top-center, 0px); top: var(--elastic-anchor-top, 0px); transform: translate(-50%, calc(-100% - 5px)); }
 .stretch-handle--bottom { --stretch-arrival-y: -4px; --stretch-cue-offset-x: var(--elastic-bottom-cue-offset, 0px); --stretch-grip-y: 0%; left: var(--elastic-bottom-center, 0px); top: var(--elastic-handle-top, 0px); transform: translateX(-50%); }
-.stretch-handle:hover::after,
+@media (hover: hover) { .stretch-handle:hover::after { left: calc(11px + var(--stretch-cue-offset-x, 0px)); width: 30px; opacity: 1; } }
 .stretch-handle:active::after,
 .stretch-handle[data-active="true"]::after { left: calc(11px + var(--stretch-cue-offset-x, 0px)); width: 30px; opacity: 1; }
 .stretch-handle:focus-visible { outline: 1px solid var(--selection-control-ink); outline-offset: -5px; border-radius: 12px; }
@@ -545,7 +555,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted])::selection,
 .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted]) ::selection { background: transparent; }
 .matter-shell[data-canvas-theme="dark"] .stretch-handle::after { background: color-mix(in srgb, currentColor 68%, transparent); box-shadow: 0 0 0 4px #202831; opacity: 1; animation-name: stretch-grip-arrive-dark; }
-.matter-shell[data-canvas-theme="dark"] .stretch-handle:hover::after,
+@media (hover: hover) { .matter-shell[data-canvas-theme="dark"] .stretch-handle:hover::after { background: currentColor; } }
 .matter-shell[data-canvas-theme="dark"] .stretch-handle:active::after,
 .matter-shell[data-canvas-theme="dark"] .stretch-handle[data-active="true"]::after { background: currentColor; }
 .visually-hidden { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0 0 0 0) !important; white-space: nowrap !important; border: 0 !important; }
@@ -689,6 +699,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 }
 
 @media (forced-colors: active) {
+  /* Focus and selection drawn with box-shadow or a background plate vanish
+     when the system forces colors; name them with system-color outlines. */
+  .node-action-lens__button:focus-visible { outline: 2px solid Highlight; outline-offset: 2px; }
+  .tool-rail__button:focus-visible::after { outline-color: Highlight; }
+  .tool-rail__button[data-tool-emphasis="primary"]::before { outline: 2px solid Highlight; outline-offset: -2px; }
+  .tool-rail__button[aria-disabled="true"] { color: GrayText; }
+  .stretch-handle::after { forced-color-adjust: none; background: ButtonText; box-shadow: none; }
+  .stretch-handle:focus-visible { outline-color: Highlight; }
   .point-talk__composer,
   .point-talk__feedback { border: 1px solid CanvasText; background: Canvas; box-shadow: none; }
   .material-files__search:has(input:focus-visible) { outline: 2px solid Highlight; outline-offset: 2px; box-shadow: none; }
@@ -699,8 +717,8 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .node-action-lens__button::before { background: none; box-shadow: none; }
   .node-action-lens::before { border: 1px solid CanvasText; background: Canvas; box-shadow: none; filter: none; -webkit-mask-image: none; mask-image: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
   .material-files__tree-guide { background: CanvasText; }
-  .material-files__tree-guide[data-guide-kind="branch-tail"][data-guide-tail-end="true"],
-  .material-files:hover .material-files__tree-guide[data-guide-kind="branch-tail"][data-guide-tail-end="true"] { border-color: CanvasText; background: transparent; }
+  @media (hover: hover) { .material-files:hover .material-files__tree-guide[data-guide-kind="branch-tail"][data-guide-tail-end="true"] { border-color: CanvasText; background: transparent; } }
+  .material-files__tree-guide[data-guide-kind="branch-tail"][data-guide-tail-end="true"] { border-color: CanvasText; background: transparent; }
   .material-file__check-mark { border-color: ButtonText; }
   .material-file__check input:checked + .material-file__check-mark,
   .material-file__check input:checked + .material-file__check-mark::after { border-color: Highlight; }
@@ -718,8 +736,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .matter-shell:has(.material-address-layer[data-address-variant="native"][data-material-address-painted]) ::selection { background: Highlight; color: HighlightText; }
   .stretch-handle { color: ButtonText; }
   .spatial-thought[data-transform-phase] .spatial-thought__text::after { background: CanvasText; }
+  @media (hover: hover) { .spatial-thought[data-context-restore-target="true"] .spatial-thought__text:hover { opacity: 1; } }
   .spatial-thought[data-context-restore-target="true"] .spatial-thought__text,
-  .spatial-thought[data-context-restore-target="true"] .spatial-thought__text:is(:hover, :focus) { opacity: 1; }
+  .spatial-thought[data-context-restore-target="true"] .spatial-thought__text:focus { opacity: 1; }
   .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; }
   .language-split-projection { color: CanvasText; }
   .language-split-projection::before { outline: none; background: transparent; }

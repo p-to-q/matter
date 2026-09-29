@@ -11,8 +11,14 @@ import {
   type TranscriptionRequest,
 } from "../protocol/transcription-contract";
 import { isMatterLocale } from "../config/locales";
+import { rejectOnAbort } from "./abort-boundary";
 import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
-import { transcribeRecording } from "./transcriber";
+import {
+  assertTranscriptionPurposeAvailable,
+  resolveTranscriptionAdapter,
+  transcribeRecording,
+  type TranscriptionAdapter,
+} from "./transcriber";
 import { hasMultipartFormDataBoundary } from "./content-type";
 import { createPublicRequestAdmission } from "./public-request-admission";
 import { isWellFormedUnicodeText } from "../tree/unicode-text";
@@ -50,8 +56,12 @@ async function handleBoundedTranscriptionRequest(
   request: Request,
   signal: AbortSignal,
 ): Promise<Response> {
+  let adapter: TranscriptionAdapter;
   let declaredLength: number | null;
   try {
+    // Deployment capability is known before any recording byte is read. An
+    // unavailable deployment must not buffer and parse audio it would discard.
+    adapter = resolveTranscriptionAdapter();
     declaredLength = parseOptionalContentLength(request.headers.get("content-length"));
   } catch (error) {
     cancelBody(request.body);
@@ -146,8 +156,9 @@ async function handleBoundedTranscriptionRequest(
     durationMs,
     audio: audioValue,
   };
+  assertTranscriptionPurposeAvailable(parsed.purpose);
   throwIfRequestInterrupted(signal);
-  return Response.json(await transcribeRecording(parsed, signal), {
+  return Response.json(await transcribeRecording(parsed, signal, adapter), {
     headers: { "Cache-Control": "no-store" },
   });
 }
@@ -165,7 +176,7 @@ async function readBoundedBody(
     cancelReader(reader);
     throw requestInterruptionError(signal);
   }
-  const interruption = rejectOnAbort(signal);
+  const interruption = rejectOnAbort(signal, () => requestInterruptionError(signal));
   const bytes = new BoundedByteAccumulator(MAX_AUDIO_REQUEST_BYTES);
   let completed = false;
   try {
@@ -212,23 +223,6 @@ function createRequestBoundary(requestSignal: AbortSignal): {
       clearTimeout(timeout);
       requestSignal.removeEventListener("abort", cancel);
     },
-  };
-}
-
-function rejectOnAbort(signal: AbortSignal): {
-  promise: Promise<never>;
-  dispose: () => void;
-} {
-  let rejectPromise!: (error: TranscriptionServerError) => void;
-  const promise = new Promise<never>((_resolve, reject) => {
-    rejectPromise = reject;
-  });
-  const reject = () => rejectPromise(requestInterruptionError(signal));
-  if (signal.aborted) reject();
-  else signal.addEventListener("abort", reject, { once: true });
-  return {
-    promise,
-    dispose: () => signal.removeEventListener("abort", reject),
   };
 }
 

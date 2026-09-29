@@ -4,7 +4,7 @@ import {
   type ExpandInPlaceLength,
   type ExpandInPlacePolicyCode,
 } from "../protocol/expand-in-place-policy";
-import type { MatterScenario } from "./harness";
+import { rejectionVocabulary, type MatterScenario } from "./harness";
 import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { KEEP_UNFINISHED, composePrompt, fence, fenceJson } from "./prompt-spine";
 
@@ -25,7 +25,11 @@ export type TransformScenarioInput = Readonly<{
 
 export type TransformRejection = ExpandInPlacePolicyCode;
 
-export const TRANSFORM_SCENARIO: MatterScenario<TransformScenarioInput, string> = Object.freeze({
+export const TRANSFORM_SCENARIO: MatterScenario<
+  TransformScenarioInput,
+  string,
+  TransformRejection
+> = Object.freeze({
   id: "matter-transform",
   promptVersion: TRANSFORM_PROMPT_VERSION,
   rejectedCandidate: "continue-if-budget",
@@ -37,6 +41,17 @@ export const TRANSFORM_SCENARIO: MatterScenario<TransformScenarioInput, string> 
     disableThinking: true,
   }),
   adjudicate: (answer, input) => adjudicateTransform(answer, input),
+  rejectionCodes: rejectionVocabulary<TransformRejection>({
+    EMPTY: true,
+    NO_CHANGE: true,
+    NOT_GROWING: true,
+    LENGTH_OUT_OF_RANGE: true,
+    BOUND_EXCEEDED: true,
+    INVALID_FORMAT: true,
+    SOURCE_MATERIAL_CHANGED: true,
+    PROTECTED_MEANING_CHANGED: true,
+    SCRIPT_DRIFT: true,
+  }),
 });
 
 /** The shared browser/server policy, not the prompt, is the commit guarantee. */

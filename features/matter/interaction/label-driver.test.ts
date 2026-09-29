@@ -208,6 +208,7 @@ function driver(
   request: typeof requestLabel,
   overrides: Partial<{
     now: () => number;
+    schedule: (delayMs: number, callback: () => void) => () => void;
     limits: typeof DEFAULT_LABEL_DRIVER_LIMITS;
     repository: LabelRepository;
   }> = {},
@@ -302,7 +303,7 @@ describe("LabelDriver", () => {
     expect(recorded.calls).toHaveLength(1);
   });
 
-  it("aborts bounded derived-label work while hidden and rearms without eager work", () => {
+  it("aborts bounded derived-label work while hidden and replans the last rows on return", () => {
     const recorded = recorder();
     const instance = driver(recorded.request, {
       limits: {
@@ -322,13 +323,14 @@ describe("LabelDriver", () => {
     expect(instance.getState().entries.get("child")?.pendingOperationId).toBeNull();
     expect(recorded.calls).toHaveLength(1);
 
+    // Returning to the tab needs no scroll or edit to finish the visible rows.
     instance.resume();
     instance.resume();
-    expect(recorded.calls).toHaveLength(1);
+    expect(recorded.calls).toHaveLength(2);
+    expect(recorded.calls[1]?.signal.aborted).toBe(false);
 
     instance.observe(ROOT, ["root", "child"]);
     expect(recorded.calls).toHaveLength(2);
-    expect(recorded.calls[1]?.signal.aborted).toBe(false);
   });
 
   it("ignores an answer whose node has since been edited", async () => {
@@ -1011,3 +1013,132 @@ describe("LabelDriver", () => {
     expect(second).toBeGreaterThan(0);
   });
 });
+
+describe("LabelDriver keeps submitted label work perceivable", () => {
+  it("keeps a typed name that is still being written when the language changes", async () => {
+    const recorded = recorder();
+    const store = repository([], false, true);
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["root", "child"]);
+    await settle();
+
+    const rename = instance.rename("root", "过去的另一种生活");
+    instance.observe({ ...ROOT, locale: "en-US" }, ["root", "child"]);
+    store.resolvePut();
+
+    await expect(rename).resolves.toEqual({ ok: true });
+    expect(labelFor(instance.getState(), "root")).toBe("过去的另一种生活");
+    expect(instance.getState().entries.get("root")?.origin).toBe("user");
+    expect(store.stored.get("root")).toMatchObject({ label: "过去的另一种生活", origin: "user" });
+  });
+
+  it("releases model work asked in the old language and asks once in the new one", async () => {
+    const recorded = recorder();
+    const store = repository();
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["child"]);
+    await settle();
+    expect(recorded.calls.map((call) => call.locale)).toEqual(["zh-CN"]);
+
+    instance.observe({ ...ROOT, locale: "en-US" }, ["child"]);
+    expect(recorded.calls[0]?.signal.aborted).toBe(true);
+    await settle();
+    expect(recorded.calls.slice(1).map((call) => call.locale)).toEqual(["en-US"]);
+  });
+
+  it("restores a label already paid for in the new language instead of asking again", async () => {
+    const recorded = recorder();
+    const store = repository([{
+      nodeId: "child",
+      label: "cost question",
+      origin: "model",
+      basis: storedBasisIn("child", "en-US"),
+      updatedAt: "t",
+    }]);
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["child"]);
+    await settle();
+    const zhCalls = recorded.calls.length;
+
+    instance.observe({ ...ROOT, locale: "en-US" }, ["child"]);
+    await settle();
+    expect(labelFor(instance.getState(), "child")).toBe("cost question");
+    expect(recorded.calls).toHaveLength(zhCalls);
+  });
+
+  it("closes storage only after a queued name reaches disk", async () => {
+    const recorded = recorder();
+    const backing = repository([], false, true);
+    let closes = 0;
+    const store: LabelRepository = { ...backing, close: () => { closes += 1; } };
+    const instance = driver(recorded.request, { repository: store });
+    instance.observe(ROOT, ["root"]);
+    await settle();
+
+    const rename = instance.rename("root", "过去的另一种生活");
+    instance.dispose();
+    await settle();
+    expect(closes).toBe(0);
+
+    backing.resolvePut();
+    await expect(rename).resolves.toEqual({ ok: true });
+    await settle();
+    expect(backing.stored.get("root")).toMatchObject({ label: "过去的另一种生活" });
+    expect(closes).toBe(1);
+  });
+
+  it("asks deferred rows again when the endpoint cooldown ends", async () => {
+    let clock = 1_000;
+    const scheduled: Array<{ delayMs: number; run: () => void; cancelled: boolean }> = [];
+    const recorded = recorder();
+    const instance = driver(recorded.request, {
+      now: () => clock,
+      schedule: (delayMs, run) => {
+        const entry = { delayMs, run, cancelled: false };
+        scheduled.push(entry);
+        return () => { entry.cancelled = true; };
+      },
+      limits: { ...DEFAULT_LABEL_DRIVER_LIMITS, failuresBeforeCooldown: 1, cooldownMs: 30_000 },
+    });
+    instance.observe(ROOT, ["root"]);
+    recorded.pending[0]?.reject(new Error("offline"));
+    await settle();
+    instance.observe(ROOT, ["child"]);
+    expect(recorded.calls).toHaveLength(1);
+    expect(scheduled).toMatchObject([{ delayMs: 30_000, cancelled: false }]);
+
+    clock += 30_000;
+    scheduled[0]!.run();
+    expect(recorded.calls).toHaveLength(2);
+    expect(recorded.calls[1]?.basis.nodeId).toBe("child");
+  });
+
+  it("cancels a pending cooldown replan on dispose", async () => {
+    const cancelled: boolean[] = [];
+    const recorded = recorder();
+    const instance = driver(recorded.request, {
+      schedule: () => {
+        const index = cancelled.push(false) - 1;
+        return () => { cancelled[index] = true; };
+      },
+      limits: { ...DEFAULT_LABEL_DRIVER_LIMITS, failuresBeforeCooldown: 1 },
+    });
+    instance.observe(ROOT, ["root"]);
+    recorded.pending[0]?.reject(new Error("offline"));
+    await settle();
+    instance.dispose();
+    expect(cancelled).toEqual([true]);
+  });
+});
+
+function storedBasisIn(nodeId: string, locale: string): string {
+  const probe = new LabelDriver(ROOT, {
+    request: () => new Promise(() => undefined),
+    createOperationId: () => "probe",
+    locale,
+  });
+  probe.observe(ROOT, [nodeId]);
+  const basis = probe.getState().entries.get(nodeId)?.basis ?? "";
+  probe.dispose();
+  return basis;
+}

@@ -110,18 +110,28 @@
   transition: background-color 150ms ease;
 }
 
-.textControl:hover,
-.chromeControl:hover,
-.askButton:hover,
+@media (hover: hover) {
+  .textControl:hover,
+  .chromeControl:hover,
+  .askButton:hover {
+    color: var(--chrome-hover-text) !important;
+  }
+}
+
 .textControl:focus-visible,
 .chromeControl:focus-visible,
 .askButton:focus-visible {
   color: var(--chrome-hover-text) !important;
 }
 
-.textControl:hover::before,
-.chromeControl:hover::before,
-.askButton:hover::before,
+@media (hover: hover) {
+  .textControl:hover::before,
+  .chromeControl:hover::before,
+  .askButton:hover::before {
+    background: var(--chrome-hover-bg);
+  }
+}
+
 .textControl:focus-visible::before,
 .chromeControl:focus-visible::before,
 .askButton:focus-visible::before {
@@ -152,12 +162,22 @@
   transition: background-color 150ms ease;
 }
 
-.gearButton:hover,
+@media (hover: hover) {
+  .gearButton:hover {
+    color: var(--chrome-hover-text) !important;
+  }
+}
+
 .gearButton:focus-visible {
   color: var(--chrome-hover-text) !important;
 }
 
-.gearButton:hover::before,
+@media (hover: hover) {
+  .gearButton:hover::before {
+    background: var(--chrome-hover-bg);
+  }
+}
+
 .gearButton:focus-visible::before {
   background: var(--chrome-hover-bg);
 }
@@ -326,8 +346,15 @@
   cursor: pointer;
 }
 
-.settingsMenu button:hover,
-.languageMenu button:hover,
+@media (hover: hover) {
+  .settingsMenu button:hover,
+  .languageMenu button:hover {
+    outline: 0;
+    background: var(--chrome-primary);
+    color: var(--chrome-primary-fg);
+  }
+}
+
 .settingsMenu button:focus-visible,
 .languageMenu button:focus-visible {
   outline: 0;
@@ -484,8 +511,10 @@
   cursor: pointer;
 }
 
-.mobileRow:hover {
-  color: var(--chrome-text) !important;
+@media (hover: hover) {
+  .mobileRow:hover {
+    color: var(--chrome-text) !important;
+  }
 }
 
 .rowLeading,
@@ -665,7 +694,7 @@
   line-height: 1.4;
 }
 
-.apiState p[role="alert"] {
+.apiState p[data-notice-kind="error"] {
   color: var(--chrome-text);
 }
 
@@ -684,6 +713,16 @@
   justify-content: space-between;
   gap: 12px;
   margin-top: -3px;
+}
+
+/* A silent live region stays in the accessibility tree but out of the grid. */
+.apiStateRow[data-silent] {
+  position: absolute;
+  width: 1px;
+  min-height: 0;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
 }
 
 .apiState {
@@ -710,8 +749,10 @@
   gap: 10px;
 }
 
-.apiRemove:hover:not(:disabled) {
-  color: var(--chrome-text) !important;
+@media (hover: hover) {
+  .apiRemove:hover:not(:disabled) {
+    color: var(--chrome-text) !important;
+  }
 }
 
 .apiFooter {
@@ -742,7 +783,13 @@
   color: var(--chrome-muted) !important;
 }
 
-.apiTest:hover:not(:disabled),
+@media (hover: hover) {
+  .apiTest:hover:not(:disabled) {
+    border-color: var(--chrome-text);
+    color: var(--chrome-text) !important;
+  }
+}
+
 .apiTest:focus-visible {
   border-color: var(--chrome-text);
   color: var(--chrome-text) !important;
@@ -757,10 +804,12 @@
   color: var(--chrome-text) !important;
 }
 
-.apiSave:hover:not(:disabled) {
-  border-color: var(--chrome-primary) !important;
-  background: var(--chrome-primary) !important;
-  color: var(--chrome-primary-fg) !important;
+@media (hover: hover) {
+  .apiSave:hover:not(:disabled) {
+    border-color: var(--chrome-primary) !important;
+    background: var(--chrome-primary) !important;
+    color: var(--chrome-primary-fg) !important;
+  }
 }
 
 @media (pointer: coarse), (max-width: 767px) {
@@ -920,6 +969,16 @@
   letter-spacing: 0;
 }
 
+/* The live region stays mounted so its next notice is announced; while it has
+   nothing to say it leaves the flex flow instead of adding an empty gap. */
+.inquiryStatus:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
 .inquiry[data-inquiry-phase="listening"] .inquiryStatus::before {
   display: inline-block;
   width: 4px;
@@ -971,8 +1030,14 @@
   white-space: nowrap;
 }
 
-.inquiryDictate:hover,
-.inquiryAsk:hover:not(:disabled),
+@media (hover: hover) {
+  .inquiryDictate:hover,
+  .inquiryAsk:hover:not(:disabled) {
+    background: var(--chrome-primary);
+    color: var(--chrome-primary-fg);
+  }
+}
+
 .inquiryDictate:focus-visible,
 .inquiryAsk:focus-visible,
 .inquiryDictate[aria-pressed="true"] {
@@ -1147,6 +1212,14 @@
   .apiForm input:focus-visible {
     outline: 2px solid Highlight;
     outline-offset: 2px;
+  }
+
+  /* Menu focus and the pressed segment are otherwise only a background. */
+  .settingsMenu button:focus-visible,
+  .languageMenu button:focus-visible,
+  .segmentedControl button[aria-pressed="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
 
   .topRight::before,

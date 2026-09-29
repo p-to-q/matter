@@ -5,9 +5,11 @@ import {
   validateSemanticLabel,
   type NormalizedLabelInput,
 } from "../material/semantic-label";
-import type { MatterScenario } from "./harness";
+import { rejectionVocabulary, type MatterScenario } from "./harness";
 import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { composePrompt, fence, fenceJson } from "./prompt-spine";
+
+type LabelScenarioRejection = "not-text" | "invalid-label" | "not-better-than-provisional";
 
 /**
  * Naming one thought so its author recognises it at a glance.
@@ -17,7 +19,11 @@ import { composePrompt, fence, fenceJson } from "./prompt-spine";
  * to be slow, to be shed, and to be wrong, because a person is looking at a
  * working name the whole time it runs.
  */
-export const LABEL_SCENARIO: MatterScenario<NormalizedLabelInput, string> = Object.freeze({
+export const LABEL_SCENARIO: MatterScenario<
+  NormalizedLabelInput,
+  string,
+  LabelScenarioRejection
+> = Object.freeze({
   id: "matter-thought-label",
   promptVersion: SEMANTIC_LABEL_PROMPT_VERSION,
   rejectedCandidate: "settle-floor",
@@ -46,6 +52,11 @@ export const LABEL_SCENARIO: MatterScenario<NormalizedLabelInput, string> = Obje
       ? Object.freeze({ ok: true, value: validation.label })
       : reject("not-better-than-provisional");
   },
+  rejectionCodes: rejectionVocabulary<LabelScenarioRejection>({
+    "not-text": true,
+    "invalid-label": true,
+    "not-better-than-provisional": true,
+  }),
 });
 
 /**
@@ -114,6 +125,6 @@ export function buildLabelPrompt(input: NormalizedLabelInput): string {
   });
 }
 
-function reject(reason: string) {
+function reject(reason: LabelScenarioRejection) {
   return Object.freeze({ ok: false as const, reason });
 }

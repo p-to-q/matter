@@ -226,7 +226,8 @@ function classifyLocalAiError(surface, status, payload, request) {
   if (!hasFallback) {
     const validBoundaryFailure = surface === "inquiry"
       ? error.code === "INQUIRY_FAILED" && (status === 429 || status === 503 || status === 504)
-      : error.code === "TURN_FAILED" && status === 504;
+      : (error.code === "TURN_FAILED" && status === 504) ||
+        (error.code === "RATE_LIMITED" && (status === 429 || status === 503));
     if (!validBoundaryFailure) {
       return Object.freeze({ ok: false, outcome: "refused", reason: "INVALID_ENVELOPE" });
     }
@@ -243,9 +244,7 @@ function classifyLocalAiError(surface, status, payload, request) {
     ? error.code === "INQUIRY_FAILED" && status === 503
     : error.fallbackReason === "MODEL_REJECTED"
       ? error.code === "TURN_REJECTED" && status === 422
-      : error.code === "TURN_UNAVAILABLE" && (
-        status === 503 || (status === 429 && error.fallbackReason === "MODEL_BUSY")
-      );
+      : error.code === "TURN_UNAVAILABLE" && status === 503;
   if (!providerFailureMatches) {
     return Object.freeze({ ok: false, outcome: "refused", reason: "INVALID_ENVELOPE" });
   }

@@ -55,6 +55,19 @@ describe("text swap client", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it.each([429, 503])("keeps a %i admission refusal a retryable request failure", async (status) => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      error: { code: "RATE_LIMITED", message: "Matter is busy. Please try again shortly.", retryable: true },
+    }, { status })));
+
+    await expect(requestTextSwap(fixtureEnvelope(), new AbortController().signal))
+      .rejects.toMatchObject({
+        retryable: true,
+        kind: "request-failed",
+        message: "Matter is busy. Please try again shortly.",
+      });
+  });
+
   it("refuses declared or streamed oversized and malformed responses", async () => {
     const envelope = fixtureEnvelope();
     const stalled = new ReadableStream<Uint8Array>({

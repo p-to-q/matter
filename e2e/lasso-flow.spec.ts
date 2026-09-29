@@ -557,7 +557,7 @@ test("keyboard addresses exact segments and Escape or the narrow index returns L
   await expect(page.locator(".stretch-handle")).toHaveCount(0);
 
   await lasso.click();
-  const paper = page.getByRole("region", { name: "Thought material" });
+  const paper = page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material });
   const paperBox = await paper.boundingBox();
   if (paperBox === null) throw new Error("paper missing");
   await page.mouse.move(paperBox.x + 40, paperBox.y + 80);
@@ -620,7 +620,7 @@ test("lasso keeps its outside-paper particle echo visual-only", async ({ page })
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
-  const paper = await page.getByRole("region", { name: "Thought material" }).boundingBox();
+  const paper = await page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material }).boundingBox();
   if (paper === null) throw new Error("paper is not visible");
   await page.mouse.move(paper.x + 40, paper.y + 120);
   await page.mouse.down();
@@ -660,7 +660,7 @@ test("lasso keeps its echo through the paper's rounded corner", async ({ page })
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
-  const paper = await page.getByRole("region", { name: "Thought material" }).boundingBox();
+  const paper = await page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material }).boundingBox();
   if (paper === null) throw new Error("paper is not visible");
 
   // A stroke through the corner cutout sits outside the rounded paper while
@@ -731,7 +731,7 @@ test("a loop across two passages enters selection mode without Elastic grips", a
   await expect(page.locator(".material-file[data-lasso-selected=true]")).toHaveCount(0);
 
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
-  const paper = await page.getByRole("region", { name: "Thought material" }).boundingBox();
+  const paper = await page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material }).boundingBox();
   if (paper === null) throw new Error("paper disappeared");
   await page.mouse.click(paper.x + paper.width - 80, paper.y + paper.height - 90);
   await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-lasso-mode", "true");
@@ -786,7 +786,7 @@ test("orientation change releases a mouse-owned lasso stroke without leaving Las
   await settleLassoGeometry(page);
 
   const shell = page.locator("main.matter-shell");
-  const paper = await page.getByRole("region", { name: "Thought material" }).boundingBox();
+  const paper = await page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material }).boundingBox();
   if (paper === null) throw new Error("paper is not visible");
   await page.mouse.move(paper.x + 48, paper.y + 96);
   await page.mouse.down();

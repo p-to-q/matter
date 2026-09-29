@@ -77,7 +77,8 @@ type CommandResult =
   inverse's revision token. Mutation mementos still verify exact current
   material. A successful undo moves the engine-produced inverse to the redo
   stack; keyboard redo applies that inverse through the engine again. A new
-  command clears the alternate redo future. An empty stack preserves both tree
+  human command clears the alternate redo future; a delivered result keeps the
+  part of it that still replays (see below). An empty stack preserves both tree
   and stacks. A top inverse the engine refuses (`HISTORY_UNAVAILABLE`) leaves
   the tree unchanged and releases that whole stack, because every older step on
   it could only be reached through the refused one. The paper rail exposes only
@@ -107,9 +108,12 @@ maxRetainedInverseBytes: 32 MiB }` across both stacks.
   bytes slightly (each move re-inverts the command and extends its id), so they
   also evict the oldest undo entries; an overage that remains once undo is empty
   is tolerated until the next commit.
-- Byte accounting is constant-cost per operation: each inverse is serialized
-  once when it enters a stack, and the redo total is summed only when a commit
-  discards redo, which each entry reaches at most once.
+- Each inverse is serialized once when it enters a stack. For human commits,
+  Undo, and Redo the byte total is amortized constant-cost: the redo total is
+  summed only when a commit discards redo, which each entry reaches at most
+  once. A delivered commit keeps a redo prefix instead, so it recomputes both
+  totals from the kept entries: linear in the bounded 1,000 entries, not in
+  their bytes.
 - Reaching the bound is ordinary editing and is not announced. Only an abnormal
   release is: a stored step that could not be read, a step that no longer
   applies, or durable steps shed under storage pressure.
@@ -123,6 +127,51 @@ deeper step is validated when first used, by the same engine preconditions that
 make any memento exact. Replaying the whole journal on hydrate cost about 9 ms
 per step at 2,000 nodes; the per-step storage layout and its measurements live
 in [`virtual-file-system.md`](virtual-file-system.md#undo-journal-schema-v6).
+
+### Late results and the redo future
+
+Elastic, Text Swap, and admission repair are submitted at one moment and
+delivered later, when a visible pointer-idle window opens and the exact
+read/write set still validates. Between the two the person may press Undo. If
+the delivery then cleared redo as a human command does, the undone step would
+be destroyed by latency rather than by anything the person did: start Elastic
+on X, undo sibling Y's admission, and the arriving expansion would make Y
+impossible to redo.
+
+`commitDeliveredTreeCommand` therefore commits like `commitTreeCommand` but
+keeps the redo future that still replays. The entry and byte limits then count
+both stacks. At capacity, the oldest undo steps are released first, never the
+delivered step itself, and only then the farthest redo steps. The kept redo
+prefix is the person's most recently undone intent and is fresher than the
+oldest undo step. Totals are recomputed from the entries, so the policy does
+not assume that a commit clears redo. A delivery is one exact
+text replacement of one node, and the engine reads node content only through
+the node mementos a mutation carries. Every redo step nearer than the first one
+carrying that node's memento replays unchanged; that first carrier holds the
+replaced content and can never replay, so it is released with every later
+step, which was recorded on top of it. The rule finds the exact replayable
+prefix without replaying the tree: replay costs one full validation per step,
+measured at 7.7 s for 1,000 redo steps over about 1,940 nodes. Tests check the
+rule against full engine replay. Any other delivered mutation ends the redo
+future as a human command does. The kept stack is
+thus always one contiguous future that journal recovery, seed relocalization,
+and the keyboard shortcut can replay without a special case; nothing is ever
+applied against material its memento does not match. Human commands (admission,
+branch, move, removal, rename) still end the redo future, as every editor does.
+The rule does not ask whether the Undo came before or after submission: that
+would need a second history clock, and a kept step can only ever restore
+exactly what the person undid.
+
+Rejected alternative: record the redo head in the turn's basis and fail the
+delivery as stale when it moved. That keeps the textbook rule but discards a
+paid, requested result because of an unrelated keyboard gesture, and the
+person cannot tell why their change never arrived. Also rejected: delaying the
+delivery until redo is empty, which can block forever. Reopen this choice if
+collaboration or a second history owner makes "nearest replayable prefix"
+ambiguous, if a delivered command can ever be something other than one exact
+replace-text, or if the engine gains a precondition that reads node content
+outside a carried memento (the replay oracle in `history.delivery.test.ts`
+then fails).
 
 The public action vocabulary in [`../protocol.md`](../protocol.md) is smaller
 than `TreeMutation` on purpose: the agent can propose only a range replacement.

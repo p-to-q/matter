@@ -4,8 +4,9 @@ import {
   repairDeadlineMs,
   repairMaxOutputTokens,
   type NormalizedRepairInput,
+  type RepairRejection,
 } from "../material/transcript-repair";
-import type { MatterScenario } from "./harness";
+import { rejectionVocabulary, type MatterScenario } from "./harness";
 import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { composePrompt, fence } from "./prompt-spine";
 
@@ -17,7 +18,7 @@ import { composePrompt, fence } from "./prompt-spine";
  * the remaining contextual boundary, correction, and misrecognition cases. It
  * restores; it does not turn admission into a general writing surface.
  */
-export const REPAIR_SCENARIO: MatterScenario<NormalizedRepairInput, string> = Object.freeze({
+export const REPAIR_SCENARIO: MatterScenario<NormalizedRepairInput, string, RepairRejection> = Object.freeze({
   id: "matter-transcript-repair",
   promptVersion: TRANSCRIPT_REPAIR_PROMPT_VERSION,
   rejectedCandidate: "settle-floor",
@@ -34,6 +35,12 @@ export const REPAIR_SCENARIO: MatterScenario<NormalizedRepairInput, string> = Ob
       ? Object.freeze({ ok: true, value: verdict.text })
       : Object.freeze({ ok: false, reason: verdict.reason });
   },
+  rejectionCodes: rejectionVocabulary<RepairRejection>({
+    EMPTY: true,
+    TOO_LONG: true,
+    NOT_ONE_UTTERANCE: true,
+    MEANING_CHANGED: true,
+  }),
 });
 
 /**

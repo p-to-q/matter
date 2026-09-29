@@ -132,7 +132,7 @@ export function PerformanceMatterApp({
       onMoveNode={() => undefined}
       onRenameDocument={() => undefined}
       onClearSelection={() => setNavigation((current) => clearSelection(current))}
-      onTransformCommit={() => null}
+      onTransformCommit={() => Object.freeze({ status: "rejected" })}
       onTextSwapCommit={() => Object.freeze({ status: "rejected" })}
       onSelectNode={select}
       onToggleFold={toggle}

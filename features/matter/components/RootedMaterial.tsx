@@ -93,7 +93,10 @@ import type { MaterialArchiveActions } from "./MaterialFiles";
 import { AmbientWorkbench } from "./AmbientWorkbench";
 import {
   localizeCanvasGuidance,
+  localizeExpansionOutcome,
+  localizeParkedRelease,
   projectCanvasGuidance,
+  type CanvasExpansionGuidanceState,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
 } from "./canvas-guidance";
@@ -158,7 +161,13 @@ import type { TransformEnvelope, TransformPlan } from "../protocol/transform-con
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import { MAX_REPLACEMENT_TEXT_CODE_UNITS } from "../tree/invariants";
 import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
+import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import { useFixedExpandTurn } from "./use-fixed-expand-turn";
+import {
+  samePaperMaterialTurnPhases,
+  SETTLED_PAPER_MATERIAL_TURNS,
+  type PaperMaterialTurnPhases,
+} from "./material-turn-activity";
 import {
   isTransformPresentationCurrent,
   useTransformPresentation,
@@ -178,6 +187,14 @@ import {
 import { lassoAccessibilityCopy } from "./lasso-accessibility-copy";
 import { voiceToolCopy } from "./voice-tool-copy";
 import type { TypographyHeightAuthority } from "./typography-height-authority";
+import { isCancelEscape, isImeKeydown } from "./composition-safe-keys";
+import { canvasRegionCopy } from "./canvas-region-copy";
+import {
+  createCanvasPointerArbiter,
+  type ArbitratedPointer,
+} from "../runtime/canvas-pointer-arbitration";
+import { deferUntilTouchCommits } from "./touch-commitment";
+import { useEscapeLayer } from "./escape-layers";
 
 const PointTalkTurn = dynamic(
   () => import("./PointTalkTurn").then((module) => module.PointTalkTurn),
@@ -196,6 +213,23 @@ const MaterialFilesWithLabels = dynamic(
 // the turn still owns the authoritative validation before it exposes input.
 const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
 const EMPTY_NODE_IDS: ReadonlySet<string> = new Set<string>();
+const MODIFIER_ONLY_KEYS: ReadonlySet<string> = new Set([
+  "Alt",
+  "AltGraph",
+  "CapsLock",
+  "Control",
+  "Fn",
+  "FnLock",
+  "Hyper",
+  "Meta",
+  "NumLock",
+  "OS",
+  "ScrollLock",
+  "Shift",
+  "Super",
+  "Symbol",
+  "SymbolLock",
+]);
 const ACTIVE_LAYOUT_NODE_SELECTOR = "[data-layout-node-id][data-thought-id]";
 
 export type RootedMaterialProps = {
@@ -221,7 +255,9 @@ export type RootedMaterialProps = {
     envelope: TransformEnvelope,
     plan: TransformPlan,
     expectedDocumentEpoch: number,
-  ) => TransformCommittedChange | null;
+  ) => MaterialTurnCommitResult<TransformCommittedChange>;
+  /** Reports the paper's Elastic and Point-and-Talk phases to the product root. */
+  onMaterialTurnPhasesChange?: (phases: PaperMaterialTurnPhases) => void;
   onTextSwapCommit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
@@ -406,6 +442,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => setPagePresentationAvailable(true),
   ), []);
   const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
+  const [releaseParkedPointTalk, setReleaseParkedPointTalk] = useState<(() => void) | null>(null);
+  const reportPointTalkParked = useCallback((release: (() => void) | null) => {
+    setReleaseParkedPointTalk(() => release);
+  }, []);
   const [pointTalkVoiceCommand, setPointTalkVoiceCommand] = useState<Readonly<{
     id: number;
     type: "start" | "stop";
@@ -605,6 +645,23 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const pointerOriginNodeRef = useRef<string | null>(null);
   const lassoClickOriginNodeRef = useRef<string | null>(null);
   const nodeDragRef = useRef<NodeDragGesture | null>(null);
+  // One gesture owner and pen-active palm rejection; see the module contract.
+  const [pointerArbiter] = useState(createCanvasPointerArbiter);
+  // Work-dismissing effects of a touch that may still be a palm; see
+  // `touchCommitment`. Mouse and pen founders act at once.
+  const pendingTouchEffectsRef = useRef<Readonly<{
+    pointerId: number;
+    effects: (() => void)[];
+    discard: () => void;
+  }> | null>(null);
+  const settleTouchFounderEffects = useCallback((run: boolean) => {
+    const pending = pendingTouchEffectsRef.current;
+    if (pending === null) return;
+    pendingTouchEffectsRef.current = null;
+    pending.discard();
+    if (run) for (const effect of pending.effects) effect();
+  }, []);
+  useEffect(() => () => settleTouchFounderEffects(false), [settleTouchFounderEffects]);
   const clearNodeDrag = useCallback(() => {
     const gesture = nodeDragRef.current;
     if (gesture?.targetElement) delete gesture.targetElement.dataset.dragOver;
@@ -934,28 +991,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     setCanvasMode("material");
   }, [clearLassoSelection, deactivateLasso, setCanvasMode]);
-  useEffect(() => {
-    const exitLassoFromKeyboard = (event: KeyboardEvent) => {
-      if (
-        event.key !== "Escape" || event.defaultPrevented || event.isComposing ||
-        !lasso.active || isEditableEventTarget(event.target)
-      ) return;
-      event.preventDefault();
-      exitLasso();
-    };
-    window.addEventListener("keydown", exitLassoFromKeyboard);
-    return () => window.removeEventListener("keydown", exitLassoFromKeyboard);
-  }, [exitLasso, lasso.active]);
-  useEffect(() => {
-    const cancelMoveFromKeyboard = (event: KeyboardEvent) => {
-      const gesture = nodeDragRef.current;
-      if (event.key !== "Escape" || gesture === null) return;
-      event.preventDefault();
-      cancelNodeDragOwnership();
-    };
-    window.addEventListener("keydown", cancelMoveFromKeyboard);
-    return () => window.removeEventListener("keydown", cancelMoveFromKeyboard);
-  }, [cancelNodeDragOwnership]);
+  // Lasso is a mode: every surface opened above it closes first.
+  useEscapeLayer(lasso.active, "mode", () => {
+    // A field with no Escape of its own is still the person's current text.
+    if (isEditableEventTarget(document.activeElement)) return false;
+    exitLasso();
+    return true;
+  });
+  // Node drag is armed from pointer-down, before any React state changes, so
+  // this gesture layer stays registered and reads the live gesture owner.
+  useEscapeLayer(true, "gesture", () => {
+    if (nodeDragRef.current === null) return false;
+    cancelNodeDragOwnership();
+    return true;
+  });
   useEffect(
     () => () => cancelNodeDragOwnership(),
     [cancelNodeDragOwnership, props.documentEpoch, navigation.mode, tree.revision],
@@ -1324,9 +1373,45 @@ export function RootedMaterial(props: RootedMaterialProps) {
     onUnavailable: () => stretchRecoveryRef.current(),
   });
   const {
+    acknowledgeNotice: acknowledgeTransformNotice,
+    cancel: cancelTransform,
     start: startTransform,
     state: transformState,
   } = transform;
+  const reportMaterialTurnPhases = props.onMaterialTurnPhasesChange;
+  const reportedMaterialTurnPhasesRef = useRef(SETTLED_PAPER_MATERIAL_TURNS);
+  useLayoutEffect(() => {
+    const phases = Object.freeze({ elastic: transformState.phase, textSwap: pointTalkPhase });
+    if (samePaperMaterialTurnPhases(reportedMaterialTurnPhasesRef.current, phases)) return;
+    reportedMaterialTurnPhasesRef.current = phases;
+    reportMaterialTurnPhases?.(phases);
+  }, [pointTalkPhase, reportMaterialTurnPhases, transformState.phase]);
+  useLayoutEffect(() => () => {
+    // Unmounting the paper releases its turns, so the root must not keep
+    // waiting on phases nobody will report again.
+    reportedMaterialTurnPhasesRef.current = SETTLED_PAPER_MATERIAL_TURNS;
+    reportMaterialTurnPhases?.(SETTLED_PAPER_MATERIAL_TURNS);
+  }, [reportMaterialTurnPhases]);
+  const transformNotice = transformState.notice;
+  useEffect(() => {
+    if (transformNotice === null) return;
+    // An outcome notice stays until the person acts again, so a slow reader
+    // never loses it to a timer. A held key's auto-repeat or a lone modifier
+    // is not a new action.
+    const acknowledge = () => acknowledgeTransformNotice();
+    const acknowledgeKey = (event: KeyboardEvent) => {
+      if (event.repeat || MODIFIER_ONLY_KEYS.has(event.key)) return;
+      acknowledgeTransformNotice();
+    };
+    // Keydown only observes, so it listens in the bubble phase like every
+    // other window key owner; the Escape stack forbids capture-phase keydown.
+    window.addEventListener("pointerdown", acknowledge, true);
+    window.addEventListener("keydown", acknowledgeKey);
+    return () => {
+      window.removeEventListener("pointerdown", acknowledge, true);
+      window.removeEventListener("keydown", acknowledgeKey);
+    };
+  }, [acknowledgeTransformNotice, transformNotice]);
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
     canvasChromeRef.current?.closeInquiry();
     startTransform(basis);
@@ -1399,6 +1484,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
     closePointTalk();
     abortElasticExpansion();
   }, [abortElasticExpansion, closePointTalk]);
+  const stretchReopen = stretch.reopen;
+  const discardParkedExpansion = useCallback(() => {
+    // An explicit release of a result whose passage is not shown. Only a
+    // degree still committed to it reopens; other material stays untouched.
+    cancelTransform();
+    stretchReopen();
+  }, [cancelTransform, stretchReopen]);
   const selectionPreviewMode: SelectionPreviewMode = elasticSelection !== null && elasticLanguageActive
     ? "expand"
     : "neutral";
@@ -1448,14 +1540,22 @@ export function RootedMaterial(props: RootedMaterialProps) {
     visibleAddressMode === "expand" && paintableElasticPreviewSource !== null
       ? "expand"
       : "neutral";
-  useLayoutEffect(() => {
-    if (transformState.phase !== "requesting") return;
-    const clearCommittedDegree = (event: KeyboardEvent) => {
-      if (event.key === "Escape") stretchKeyDown("Escape");
-    };
-    window.addEventListener("keydown", clearCommittedDegree);
-    return () => window.removeEventListener("keydown", clearCommittedDegree);
-  }, [stretchKeyDown, transformState.phase]);
+  // An unfinished grip drag rolls back to its prior degree.
+  useEscapeLayer(true, "gesture", () => stretch.cancelActiveDrag() !== null);
+  // Escape after an Elastic submit only removes the committed degree from the
+  // paper. The submitted request keeps its immutable basis and may still
+  // deliver; dismissing a presentation is never cancellation after submit.
+  // It is a transient surface, and only while nothing covers the paper: a
+  // menu, dialog, Ask Matter, or the overlay index above it closes first.
+  useEscapeLayer(
+    transformState.phase === "requesting" && canvasOverlay === null && !indexOverlayOpen,
+    "transient",
+    () => {
+      if (stretch.mode !== "committed") return false;
+      stretchKeyDown("Escape");
+      return true;
+    },
+  );
   const currentTransformChange = isTransformPresentationCurrent(
     transformPresentation.change,
     { treeId: tree.id, documentEpoch: props.documentEpoch },
@@ -1787,7 +1887,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const removeSelected = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
-        event.isComposing ||
+        isImeKeydown(event) ||
         (event.key !== "Delete" && event.key !== "Backspace") ||
         interactionPending ||
         lasso.active ||
@@ -1809,7 +1909,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const undoFromKeyboard = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
-        event.isComposing ||
+        isImeKeydown(event) ||
         event.altKey ||
         event.shiftKey ||
         (!event.metaKey && !event.ctrlKey) ||
@@ -1829,7 +1929,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useEffect(() => {
     const redoFromKeyboard = (event: KeyboardEvent) => {
       if (
-        event.defaultPrevented || event.isComposing || event.altKey ||
+        event.defaultPrevented || isImeKeydown(event) || event.altKey ||
         (!event.metaKey && !event.ctrlKey) || !canRedo || interactionPending ||
         isEditableEventTarget(event.target) || hasNativeTextSelection()
       ) return;
@@ -2202,17 +2302,33 @@ export function RootedMaterial(props: RootedMaterialProps) {
   } else {
     languageGuidance = { kind: "none" };
   }
+  // Parking is shown only against a settled layout: a relayout briefly
+  // empties the laid-out set without the passage having left the paper.
+  const expansionGuidance: CanvasExpansionGuidanceState = transformState.phase === "requesting"
+    ? transformState.parked && activeLayout !== null ? { kind: "parked" } : { kind: "none" }
+    : transformState.notice === null
+      ? { kind: "none" }
+      : { kind: "unchanged", reason: transformState.notice.kind };
   const guidance = localizeCanvasGuidance(
     projectCanvasGuidance({
       admission: props.admission.state,
       camera: !lasso.active && canvasMode === "pan"
         ? { kind: "pan", zoom: viewport.zoom }
         : { kind: "none" },
+      expansion: expansionGuidance,
+      rewrite: releaseParkedPointTalk !== null && activeLayout !== null
+        ? { kind: "parked" }
+        : { kind: "none" },
       language: languageGuidance,
       material: materialGuidance,
     }),
     canvasPreferences.preferences.language,
   );
+  const parkedRelease = guidance.id === "expansion-parked"
+    ? discardParkedExpansion
+    : guidance.id === "text-swap-parked"
+      ? releaseParkedPointTalk
+      : null;
   const lassoSelectedNodeIds = useMemo(
     () => new Set(lasso.selections.map((selection) => selection.nodeId)),
     [lasso.selections],
@@ -2813,6 +2929,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [interruptIndexCameraMotion, setViewport]);
 
   const cancelCanvasPointerOwnership = useCallback(() => {
+    pointerArbiter.reset();
+    settleTouchFounderEffects(false);
     const touchPointerIds = Array.from(canvasTouchContactsRef.current.keys());
     canvasTouchContactsRef.current.clear();
     multiTouchNavigationRef.current = false;
@@ -2829,7 +2947,48 @@ export function RootedMaterial(props: RootedMaterialProps) {
     pointerOriginNodeRef.current = null;
     cancelNodeDragOwnership();
     updateViewport({ type: "gesture-cancel" });
-  }, [cancelNodeDragOwnership, lasso, updateViewport]);
+  }, [cancelNodeDragOwnership, lasso, pointerArbiter, settleTouchFounderEffects, updateViewport]);
+
+  // A pen that lands anywhere just after a palm revokes it: the palm's lasso
+  // stroke restores its prior selection, its pan returns the camera to where it
+  // began, and its node drag and tap never settle.
+  const revokeTouchesForPen = useCallback((pointerIds: readonly number[]) => {
+    // The palm never committed, so nothing it would have dismissed is lost.
+    settleTouchFounderEffects(false);
+    const shell = shellRef.current;
+    for (const pointerId of pointerIds) {
+      canvasTouchContactsRef.current.delete(pointerId);
+      if (lasso.pointerCancel(pointerId)) lassoClickOriginNodeRef.current = null;
+      if (nodeDragRef.current?.pointerId === pointerId) cancelNodeDragOwnership();
+      updateViewport({ type: "pointer-revert", pointerId });
+      if (shell?.hasPointerCapture(pointerId)) shell.releasePointerCapture(pointerId);
+    }
+    multiTouchNavigationRef.current = false;
+    pointerOriginNodeRef.current = null;
+  }, [cancelNodeDragOwnership, lasso, settleTouchFounderEffects, updateViewport]);
+
+  useEffect(() => {
+    // Capture phase: a control that stops propagation must not strand a pen
+    // "in contact" or a canvas owner. The arbiter keeps an ended pointer's
+    // disposition until the next contact, so the canvas handlers that run
+    // after this still recognise it.
+    const noteDown = (event: PointerEvent) => {
+      const revoked = pointerArbiter.notePointerDown(arbitratedPointer(event));
+      if (revoked.length > 0) revokeTouchesForPen(revoked);
+    };
+    const noteMove = (event: PointerEvent) => pointerArbiter.notePointerMove(arbitratedPointer(event));
+    const noteEnd = (event: PointerEvent) => pointerArbiter.notePointerEnd(arbitratedPointer(event));
+    window.addEventListener("pointerdown", noteDown, true);
+    window.addEventListener("pointermove", noteMove, true);
+    window.addEventListener("pointerup", noteEnd, true);
+    window.addEventListener("pointercancel", noteEnd, true);
+    return () => {
+      window.removeEventListener("pointerdown", noteDown, true);
+      window.removeEventListener("pointermove", noteMove, true);
+      window.removeEventListener("pointerup", noteEnd, true);
+      window.removeEventListener("pointercancel", noteEnd, true);
+    };
+  }, [pointerArbiter, revokeTouchesForPen]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -2912,6 +3071,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
     return () => shell.removeEventListener("wheel", handleWheel);
   }, [cancelKeyboardFocusReveal, canvasMode, interruptIndexCameraMotion, lasso.active, setViewport, setWheelMotionActive]);
 
+  // One stable status object per pending turn keeps memoized rows from
+  // re-rendering on every paper render while a request is outstanding.
+  const transformStatusNodeId = transformState.phase === "idle"
+    ? null
+    : transformState.basis?.selection.nodeId ?? null;
+  const transformStatusPhase = transformState.phase;
+  const transformStatus = useMemo(
+    () => transformStatusNodeId === null || transformStatusPhase === "idle"
+      ? null
+      : Object.freeze({
+          nodeId: transformStatusNodeId,
+          phase: transformStatusPhase,
+          text: stretchStatusText(props.locale),
+          announce: !lassoHasSelectionGeometry,
+        }),
+    [lassoHasSelectionGeometry, props.locale, transformStatusNodeId, transformStatusPhase],
+  );
+
   return (
     <main
       className="matter-shell"
@@ -2935,6 +3112,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-viewport-zoom={viewport.zoom}
       ref={shellRef}
       onClickCapture={(event) => {
+        const clickPointerId = (event.nativeEvent as Partial<PointerEvent>).pointerId;
+        if (
+          clickPointerId !== undefined &&
+          pointerArbiter.consumeRejectedClick(clickPointerId, event.timeStamp)
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         if (!suppressClickRef.current) return;
         suppressClickRef.current = false;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive]")) return;
@@ -2942,6 +3128,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         event.stopPropagation();
       }}
       onLostPointerCapture={(event) => {
+        if (pointerArbiter.isRejected(event.pointerId)) return;
         const trackedTouch = canvasTouchContactsRef.current.has(event.pointerId);
         if (trackedTouch) canvasTouchContactsRef.current.delete(event.pointerId);
         if (trackedTouch && multiTouchNavigationRef.current) {
@@ -2960,6 +3147,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
         updateViewport({ type: "lost-pointer-capture", pointerId: event.pointerId });
       }}
       onPointerCancel={(event) => {
+        // A palm's cancel beside a pen would otherwise clear the pen's origin.
+        if (pointerArbiter.ignoresCancel(arbitratedPointer(event))) return;
         const trackedTouch = canvasTouchContactsRef.current.has(event.pointerId);
         if (trackedTouch) canvasTouchContactsRef.current.delete(event.pointerId);
         if (trackedTouch && multiTouchNavigationRef.current) {
@@ -2981,8 +3170,37 @@ export function RootedMaterial(props: RootedMaterialProps) {
         cancelKeyboardFocusReveal();
         if (interactionPending) return;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive], a")) return;
+        // Only a primary-button contact can start a canvas gesture, so no other
+        // button may become the gesture owner or be refused by it.
+        const claim = event.pointerType === "touch" || event.button === 0
+          ? pointerArbiter.claim(arbitratedPointer(event))
+          : null;
+        if (claim?.kind === "reject") {
+          // Before the contact registry, capture, Lasso, drag, or camera.
+          event.preventDefault();
+          return;
+        }
+        // Interrupting camera motion loses nothing and stays immediate.
         const pointerViewport = interruptIndexCameraMotion();
-        abortFixedExpansion();
+        if (event.pointerType === "touch" && claim?.kind === "accept" && claim.founder) {
+          // A resting palm must not close Point and Talk or drop a committed
+          // degree before the pen that follows it can take over.
+          settleTouchFounderEffects(false);
+          const effects: (() => void)[] = [abortFixedExpansion];
+          const pointerId = event.pointerId;
+          pendingTouchEffectsRef.current = {
+            pointerId,
+            effects,
+            discard: deferUntilTouchCommits(
+              { pointerId, clientX: event.clientX, clientY: event.clientY },
+              () => {
+                if (pendingTouchEffectsRef.current?.pointerId === pointerId) settleTouchFounderEffects(true);
+              },
+            ),
+          };
+        } else {
+          abortFixedExpansion();
+        }
         if (event.pointerType === "touch") {
           const contact = projectCanvasTouchContact(
             event.pointerId,
@@ -2992,6 +3210,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
           );
           if (contact !== null) canvasTouchContactsRef.current.set(event.pointerId, contact);
           if (canvasTouchContactsRef.current.size >= 2) {
+            // A second finger makes it a pinch: a real gesture, not a palm.
+            settleTouchFounderEffects(true);
             for (const pointerId of canvasTouchContactsRef.current.keys()) {
               if (lasso.pointerCancel(pointerId)) lassoClickOriginNodeRef.current = null;
             }
@@ -3020,7 +3240,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
           lassoClickOriginNodeRef.current = originNodeId !== null && workingContext.activeNodeIds.has(originNodeId)
             ? originNodeId
             : null;
-          props.admission.clearRepairPresentations();
+          const pendingTouchEffects = pendingTouchEffectsRef.current;
+          if (pendingTouchEffects?.pointerId === event.pointerId) {
+            pendingTouchEffects.effects.push(props.admission.clearRepairPresentations);
+          } else {
+            props.admission.clearRepairPresentations();
+          }
           event.preventDefault();
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -3031,7 +3256,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
           }
           return;
         }
-        if (!event.isPrimary || (event.pointerType !== "touch" && event.button !== 0)) return;
+        // One gesture owner replaces the per-type `isPrimary` test: a touch
+        // that joined an existing touch owner belongs to its pinch, never to a
+        // second drag or pan.
+        if (claim === null || (claim.kind === "accept" && !claim.founder)) return;
         const pointerCandidateId =
           (event.target as HTMLElement).closest<HTMLElement>("[data-thought-id]")?.dataset
             .thoughtId ?? null;
@@ -3106,6 +3334,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }
       }}
       onPointerMove={(event) => {
+        if (pointerArbiter.isRejected(event.pointerId)) return;
         let touchContact: CanvasTouchContact | null = null;
         if (canvasTouchContactsRef.current.has(event.pointerId)) {
           touchContact = projectCanvasTouchContact(
@@ -3206,6 +3435,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         });
       }}
       onPointerUp={(event) => {
+        if (pointerArbiter.isRejected(event.pointerId)) return;
         const trackedTouch = canvasTouchContactsRef.current.get(event.pointerId) ?? null;
         const finalTrackedTouch = trackedTouch === null
           ? null
@@ -3325,6 +3555,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
           {materialTextSuccessAnnouncement(currentTransformChange.motionHint, props.locale)}
         </span>
       )}
+      {/* Mounted empty first, so assistive technology observes each insertion. */}
+      <span aria-atomic="true" className="visually-hidden" role="status">
+        {transformNotice !== null ? (
+          <span key={`expansion_${transformNotice.id}`}>
+            {localizeExpansionOutcome(transformNotice.kind, props.locale)}
+          </span>
+        ) : guidance.id === "expansion-parked" || guidance.id === "text-swap-parked" ? (
+          <span key={guidance.id}>{guidance.text}</span>
+        ) : null}
+      </span>
       <PaperTexture />
       <header className="matter-header" data-canvas-interactive>
         <a className="matter-brand" href="https://www.ptoq.io/" aria-label="p to q — Matter">
@@ -3472,7 +3712,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         })}
       />
       <section
-        aria-label="Thought material"
+        aria-label={canvasRegionCopy(props.locale).material}
         className="matter-document"
         data-canvas-theme={canvasPreferences.resolvedAppearance}
         data-canvas-theme-preference={canvasPreferences.preferences.appearance}
@@ -3504,7 +3744,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         />
         {projection.length === 0 ? (
           navigation.mode === "focus" ? (
-            <p className="matter-document__empty">This focus is no longer available.</p>
+            <p className="matter-document__empty">{canvasRegionCopy(props.locale).focusUnavailable}</p>
           ) : null
         ) : (
           <div
@@ -3550,14 +3790,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               repairPresentations={props.admission.repairPresentations}
               splitProjectionRef={splitProjectionRef}
               transformChange={currentTransformChange}
-              transformStatus={transformState.phase !== "idle" && transformState.basis !== null
-                ? {
-                    nodeId: transformState.basis.selection.nodeId,
-                    phase: transformState.phase,
-                    text: stretchStatusText(props.locale),
-                    announce: !lassoHasSelectionGeometry,
-                  }
-                : null}
+              transformStatus={transformStatus}
               tree={tree}
             />
             )}
@@ -3609,9 +3842,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
           />
         ) : null}
         <footer
-          aria-label="Matter guidance"
+          aria-label={canvasRegionCopy(props.locale).guidance}
           className="matter-guidance"
           data-canvas-interactive
+          data-guidance-action={parkedRelease === null ? undefined : true}
           data-guidance-kind={guidance.kind}
           data-guidance-state={guidance.id}
           data-optical-clearance="guidance"
@@ -3625,6 +3859,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
           >
             {guidance.text}
           </p>
+          {parkedRelease === null ? null : (
+            <button
+              className="matter-guidance__action"
+              onClick={parkedRelease}
+              type="button"
+            >
+              {localizeParkedRelease(canvasPreferences.preferences.language)}
+            </button>
+          )}
         </footer>
         </div>
         <CanvasChrome
@@ -3673,8 +3916,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
             nodeId={pointTalkHostNodeId}
             onClose={closePointTalk}
             onCommitted={publishPointTalkChange}
+            onDeliveryParkedChange={reportPointTalkParked}
             onPhaseChange={setPointTalkPhase}
             onReleased={releasePointTalkJob}
+            penActive={pointerArbiter.penActive}
             presented={pointTalkPresented}
             positioningRef={materialPlaneRef}
             surfaceAvailable={outcomePresentationAvailable}
@@ -3705,6 +3950,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           onFocusRestored={finishStretchFocusRestore}
           onPreciseGesture={props.admission.clearRepairPresentations}
           onRequestFocusRestore={requestStretchFocusRestore}
+          penActive={pointerArbiter.penActive}
           restoreFocusHandle={stretchFocusRestoreHandle}
           status={transformState.phase}
           stretchVisible={materialPresentationAvailable && elasticSelection !== null}
@@ -3883,8 +4129,8 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
                   node.id,
                   event.key === "ArrowRight" ? "next" : "previous",
                 )) return;
+                // preventDefault is the claim; no keydown stops propagation.
                 event.preventDefault();
-                event.stopPropagation();
               }}
               tabIndex={isHeldAside && !isHeldAsideRoot ? -1 : undefined}
               type="button"
@@ -4089,6 +4335,7 @@ function LassoOverlay({
   onFocusRestored,
   onPreciseGesture,
   onRequestFocusRestore,
+  penActive,
   restoreFocusHandle,
   status,
   stretchVisible,
@@ -4113,6 +4360,7 @@ function LassoOverlay({
   onFocusRestored: (handle: StretchHandle) => void;
   onPreciseGesture: () => void;
   onRequestFocusRestore: (handle: StretchHandle) => void;
+  penActive: (timeStamp: number) => boolean;
   restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
   stretchVisible: boolean;
@@ -4231,6 +4479,7 @@ function LassoOverlay({
               onFocusRestored={onFocusRestored}
               onPreciseGesture={onPreciseGesture}
               onRequestFocusRestore={onRequestFocusRestore}
+              penActive={penActive}
               restoreFocusHandle={restoreFocusHandle}
               status={status}
               stretch={stretch}
@@ -4243,6 +4492,7 @@ function LassoOverlay({
               onFocusRestored={onFocusRestored}
               onPreciseGesture={onPreciseGesture}
               onRequestFocusRestore={onRequestFocusRestore}
+              penActive={penActive}
               restoreFocusHandle={restoreFocusHandle}
               status={status}
               stretch={stretch}
@@ -4334,6 +4584,7 @@ function StretchHandleButton({
   onFocusRestored,
   onPreciseGesture,
   onRequestFocusRestore,
+  penActive,
   restoreFocusHandle,
   status,
   stretch,
@@ -4345,6 +4596,7 @@ function StretchHandleButton({
   onFocusRestored: (handle: StretchHandle) => void;
   onPreciseGesture: () => void;
   onRequestFocusRestore: (handle: StretchHandle) => void;
+  penActive: (timeStamp: number) => boolean;
   restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
   stretch: ReturnType<typeof useStretch>;
@@ -4388,6 +4640,9 @@ function StretchHandleButton({
       onPointerDown={(event) => {
         event.stopPropagation();
         if (status === "requesting") return;
+        // The grips sit outside the canvas owner, so they apply the same palm
+        // rule themselves: a touch while a pen writes is not a stretch.
+        if (event.pointerType === "touch" && penActive(event.timeStamp)) return;
         onFocusRestored(handle);
         if (stretch.pointerDown(handle, event)) {
           onBeginAdjustment();
@@ -4414,16 +4669,18 @@ function StretchHandleButton({
           onFocusRestored(handle);
           return;
         }
-        if (!isStretchInteractionKey(event.key)) return;
+        if (!isStretchInteractionKey(event.key) || isImeKeydown(event.nativeEvent)) return;
+        const cancel = isCancelEscape(event.nativeEvent);
+        // The focused grip owns this key; the document Escape stack honours it.
         event.preventDefault();
-        if (status === "requesting" && event.key !== "Escape") return;
+        if (status === "requesting" && !cancel) return;
         onBeginAdjustment();
-        if (event.key !== "Escape" && event.key !== "Enter" && event.key !== " ") {
-          onRequestFocusRestore(handle);
-        } else if (event.key === "Escape") {
+        if (cancel) {
           onFocusRestored(handle);
+        } else if (event.key !== "Enter" && event.key !== " ") {
+          onRequestFocusRestore(handle);
         }
-        if (status !== "idle" && event.key !== "Escape") stretch.reopen();
+        if (status !== "idle" && !cancel) stretch.reopen();
         stretch.keyDown(event.key, handle);
         onPreciseGesture();
       }}
@@ -4432,6 +4689,10 @@ function StretchHandleButton({
       type="button"
     />
   );
+}
+
+function arbitratedPointer(event: Pick<PointerEvent, "pointerId" | "pointerType" | "timeStamp">): ArbitratedPointer {
+  return { pointerId: event.pointerId, pointerType: event.pointerType, timeStamp: event.timeStamp };
 }
 
 function isEditableEventTarget(target: EventTarget | null): boolean {

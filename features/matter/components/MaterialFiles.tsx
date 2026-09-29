@@ -32,7 +32,8 @@ import {
   projectMaterialFileWindow,
   scrollTopForMaterialFileIndex,
 } from "./material-file-window";
-import { isCancelEscape, isCommitEnter } from "./composition-safe-keys";
+import { isCancelEscape, isCommitEnter, isImeKeydown } from "./composition-safe-keys";
+import { useEscapeLayer } from "./escape-layers";
 import { materialFilesCopy, type MaterialFilesCopy } from "./material-files-copy";
 import {
   isReplaceableUnsaved,
@@ -192,6 +193,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const renameCommitRef = useRef<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
   const pendingRowFocusRef = useRef<string | null>(null);
@@ -539,20 +541,23 @@ export function MaterialFiles(props: MaterialFilesProps) {
     const mutation = trimmed.length === 0
       ? props.onResetNodeName?.(nodeId)
       : props.onRenameNode?.(nodeId, trimmed);
+    // A name that did not reach disk is not a name they have. Returning the row
+    // to its editor, with what they typed still in it and a described reason,
+    // says what an empty field after a reload used to say silently, while
+    // there is still something to do about it. The epoch is read live: the
+    // document may have been replaced while the write was settling.
+    const reopenWithDraft = () => {
+      if (liveDocumentEpochRef.current !== epochAtCommit) return;
+      // Never replace a name the person has since started typing elsewhere.
+      setRenaming((current) => current === null
+        ? { epoch: epochAtCommit, nodeId, draft: trimmed }
+        : current);
+    };
     void Promise.resolve(mutation).then(
       (receipt) => {
-        // A name that did not reach disk is not a name they have. Returning the
-        // row to its editor, with what they typed still in it, is the whole
-        // signal: it says the same thing an empty field after a reload used to
-        // say silently, while there is still something to do about it.
-        if (
-          receipt !== undefined && receipt !== null && receipt.ok === false &&
-          props.documentEpoch === epochAtCommit
-        ) {
-          setRenaming({ epoch: epochAtCommit, nodeId, draft: trimmed });
-        }
+        if (receipt !== undefined && receipt !== null && receipt.ok === false) reopenWithDraft();
       },
-      () => undefined,
+      reopenWithDraft,
     ).finally(() => {
       if (renameCommitRef.current === mutationKey) renameCommitRef.current = null;
     });
@@ -669,12 +674,6 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setMode("browse");
   };
 
-  const closeOverlay = () => {
-    if (docked || archiveBusy) return;
-    setOpen(false);
-    requestAnimationFrame(() => toggleRef.current?.focus());
-  };
-
   const focusRowAt = (index: number) => {
     const file = files[index];
     const body = bodyRef.current;
@@ -702,7 +701,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     heldAside: boolean,
   ) => {
     if (
-      event.target !== event.currentTarget || event.nativeEvent.isComposing ||
+      event.target !== event.currentTarget || isImeKeydown(event.nativeEvent) ||
       surface.rowInteractionDisabled
     ) return;
     if (event.key === "F2" && mode === "browse") {
@@ -769,6 +768,21 @@ export function MaterialFiles(props: MaterialFilesProps) {
   // A document boundary must not race a live voice/lasso operation. The panel
   // stays visible, but replacement waits until the current interaction settles.
   const archiveBusy = archivePhase !== "idle" || props.interactionPending;
+
+  const closeOverlay = () => {
+    if (docked || archiveBusy) return false;
+    // Keyboard authority returns to the external handle only when the drawer
+    // held it; Escape from the paper must not pull focus into the corner.
+    const active = document.activeElement;
+    const drawerHeldFocus = active === null || active === document.body ||
+      asideRef.current?.contains(active) === true;
+    setOpen(false);
+    if (drawerHeldFocus) requestAnimationFrame(() => toggleRef.current?.focus());
+    return true;
+  };
+  // The overlay drawer is a panel above the paper; the docked index is not.
+  useEscapeLayer(!docked && open, "panel", closeOverlay);
+
   const closeArchive = () => {
     if (archiveBusy) return;
     setArchiveError(null);
@@ -919,15 +933,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
         data-query-projection-stale={surface.queryProjectionStale || undefined}
         id="material-files"
         inert={!open || surface.projectionStale}
-        onKeyDown={(event) => {
-          if (
-            event.defaultPrevented ||
-            !isCancelEscape({ key: event.key, isComposing: event.nativeEvent.isComposing })
-          ) return;
-          event.preventDefault();
-          closeOverlay();
-        }}
         onPointerDown={stopPointerPropagation}
+        ref={asideRef}
         onWheel={stopWheelPropagation}
       >
         <header className="material-files__context" data-node-id={rootId ?? undefined}>
@@ -945,12 +952,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
               onKeyDown={(event) => {
                 // The canvas title is durable material: blurring here commits
                 // it, so an IME composition must never reach either branch.
-                const composing = event.nativeEvent.isComposing;
-                if (isCancelEscape({ key: event.key, isComposing: composing })) {
+                if (isCancelEscape(event.nativeEvent)) {
                   event.preventDefault();
                   setDocumentTitleDraft(documentTitle);
                   setRenamingDocument(false);
-                } else if (isCommitEnter({ key: event.key, isComposing: composing })) {
+                } else if (isCommitEnter(event.nativeEvent)) {
+                  event.preventDefault();
                   event.currentTarget.blur();
                 }
               }}
@@ -993,11 +1000,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
                 autoFocus
                 onChange={(event) => setQuery(event.currentTarget.value)}
                 onKeyDown={(event) => {
-                  const composing = event.nativeEvent.isComposing;
-                  if (isCancelEscape({ key: event.key, isComposing: composing })) {
+                  if (isCancelEscape(event.nativeEvent)) {
                     event.preventDefault();
                     closeSearch();
-                  } else if (!composing && event.key === "ArrowDown" && files.length > 0) {
+                  } else if (
+                    !isImeKeydown(event.nativeEvent) && event.key === "ArrowDown" && files.length > 0
+                  ) {
                     event.preventDefault();
                     focusRowAt(0);
                   }
@@ -1281,37 +1289,45 @@ export function MaterialFiles(props: MaterialFilesProps) {
                         <span className="material-file__title" dir="auto">{title}</span>
                       </label>
                     ) : activeRename === file.nodeId ? (
-                      <input
-                        aria-label={copy.nameFor(title)}
-                        autoFocus
-                        className="material-file__rename"
-                        defaultValue={activeRenameDraft ?? title}
-                        dir="auto"
-                        maxLength={MAX_ROW_NAME_CODE_UNITS}
-                        onBlur={(event) => {
-                          // The pointer sequence that opened this editor can
-                          // still be delivering events; a blur before the field
-                          // has ever held focus is that, not a person leaving.
-                          if (!renameFocusedRef.current) return;
-                          commitRename(file.nodeId, event.currentTarget.value);
-                        }}
-                        onFocus={() => {
-                          renameFocusedRef.current = true;
-                        }}
-                        onKeyDown={(event) => {
-                          const composing = event.nativeEvent.isComposing;
-                          if (isCommitEnter({ key: event.key, isComposing: composing })) {
-                            event.preventDefault();
-                            commitRename(file.nodeId, event.currentTarget.value, true);
-                          } else if (isCancelEscape({ key: event.key, isComposing: composing })) {
-                            event.preventDefault();
-                            setRenaming(null);
-                            returnFocusToRow(file.nodeId);
-                          }
-                        }}
-                        spellCheck={false}
-                        type="text"
-                      />
+                      <>
+                        <input
+                          aria-describedby={activeRenameDraft === undefined ? undefined : `${file.nodeId}-name-not-saved`}
+                          aria-invalid={activeRenameDraft === undefined ? undefined : true}
+                          aria-label={copy.nameFor(title)}
+                          autoFocus
+                          className="material-file__rename"
+                          defaultValue={activeRenameDraft ?? title}
+                          dir="auto"
+                          maxLength={MAX_ROW_NAME_CODE_UNITS}
+                          onBlur={(event) => {
+                            // The pointer sequence that opened this editor can
+                            // still be delivering events; a blur before the field
+                            // has ever held focus is that, not a person leaving.
+                            if (!renameFocusedRef.current) return;
+                            commitRename(file.nodeId, event.currentTarget.value);
+                          }}
+                          onFocus={() => {
+                            renameFocusedRef.current = true;
+                          }}
+                          onKeyDown={(event) => {
+                            if (isCommitEnter(event.nativeEvent)) {
+                              event.preventDefault();
+                              commitRename(file.nodeId, event.currentTarget.value, true);
+                            } else if (isCancelEscape(event.nativeEvent)) {
+                              event.preventDefault();
+                              setRenaming(null);
+                              returnFocusToRow(file.nodeId);
+                            }
+                          }}
+                          spellCheck={false}
+                          type="text"
+                        />
+                        {activeRenameDraft === undefined ? null : (
+                          <span className="visually-hidden" id={`${file.nodeId}-name-not-saved`}>
+                            {copy.nameNotSaved}
+                          </span>
+                        )}
+                      </>
                     ) : (
                       <button
                         aria-current={active ? "page" : undefined}
@@ -1330,7 +1346,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                         }}
                         onDoubleClick={() => beginRename(file.nodeId)}
                         onKeyDown={(event) => {
-                          if (event.key !== "F2" || event.nativeEvent.isComposing) return;
+                          if (event.key !== "F2" || isImeKeydown(event.nativeEvent)) return;
                           event.preventDefault();
                           beginRename(file.nodeId);
                         }}
@@ -1667,12 +1683,9 @@ function ArchivePanel({
         ref={inputRef}
         type="file"
       />
-      {phaseLabel !== null ? (
-        <p aria-live="polite" className="material-files__archive-status">{phaseLabel}</p>
-      ) : null}
-      {error !== null ? (
-        <p aria-live="polite" className="material-files__archive-error">{error}</p>
-      ) : null}
+      {/* Live regions mount before they speak, or their first line may be silent. */}
+      <p aria-live="polite" className="material-files__archive-status">{phaseLabel}</p>
+      <p aria-live="polite" className="material-files__archive-error">{error}</p>
       {preparedImport !== null ? (
         <div className="material-files__archive-confirm">
           <p>

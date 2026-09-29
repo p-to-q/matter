@@ -70,6 +70,7 @@ describe("MaterialIngress admission preparation", () => {
       lexicalSourceRevision: 0,
       canonicalized: false,
       editCount: 0,
+      canonicalizationWithheld: false,
     });
   });
 
@@ -163,7 +164,7 @@ describe("MaterialIngress admission preparation", () => {
     })).toMatchObject({ ok: false, error: { code: "BOUND_EXCEEDED" } });
   });
 
-  it("matches the normalized admission and revalidates canonical expansion", () => {
+  it("matches the normalized admission and keeps spoken words when expansion breaks a bound", () => {
     const tree = createEmptyTree("tree_ingress");
     const navigation = createNavigationState();
     const anchored = createAdmissionAnchor(tree, navigation);
@@ -179,6 +180,8 @@ describe("MaterialIngress admission preparation", () => {
     });
     expect(prepared).toMatchObject({ ok: true, admittedText: "Codex." });
 
+    const raw = admissionToTreeCommand(tree, navigation, anchored.anchor, admissionValues("a ".repeat(16)));
+    if (!raw.ok) throw new Error(raw.error.code);
     expect(prepareAdmissionIngress({
       tree,
       navigation,
@@ -191,7 +194,19 @@ describe("MaterialIngress admission preparation", () => {
         "x".repeat(128),
         12,
       ),
-    })).toMatchObject({ ok: false, error: { code: "BOUND_EXCEEDED" } });
+    })).toEqual({
+      ok: true,
+      command: raw.command,
+      admittedText: `${"a ".repeat(15)}a.`,
+      receipt: {
+        stage: "admission",
+        lexicalGeneration: 12,
+        lexicalSourceRevision: 1,
+        canonicalized: false,
+        editCount: 0,
+        canonicalizationWithheld: true,
+      },
+    });
   });
 });
 
@@ -230,6 +245,58 @@ describe("MaterialIngress repair preparation", () => {
   });
 });
 
+describe("MaterialIngress repair fallback", () => {
+  it("rejects a repair that only restores a spelling the Wiki replaced", () => {
+    const tree = textSwapTree();
+    expect(prepareRepairIngress({
+      tree,
+      locale: "en-US",
+      lexicalSession: confirmedSession("spoken", "windo", "window", 16),
+      values: {
+        interactionId: "voice_repair_no_op",
+        commandId: "repair_no_op",
+        treeId: tree.id,
+        nodeId: "thought",
+        expectedText: TEXT,
+        expectedUpdatedAt: TIME,
+        text: TEXT.replace("window", "windo"),
+        createdAt: "2026-09-24T00:00:02.000Z",
+        admittedAtMs: 100,
+        settledAtMs: 200,
+      },
+    })).toMatchObject({ ok: false, error: { code: "INVALID_REPAIR" } });
+  });
+
+  it("keeps the proven repair when canonicalization would break its bound", () => {
+    const tree = textSwapTree();
+    const values = {
+      interactionId: "voice_repair_withheld",
+      commandId: "repair_withheld",
+      treeId: tree.id,
+      nodeId: "thought",
+      expectedText: TEXT,
+      expectedUpdatedAt: TIME,
+      text: "a ".repeat(16).trim(),
+      createdAt: "2026-09-24T00:00:02.000Z",
+      admittedAtMs: 100,
+      settledAtMs: 200,
+    };
+    const prepared = prepareRepairIngress({
+      tree,
+      locale: "en-US",
+      lexicalSession: confirmedSession("spoken", "a", "x".repeat(128), 14),
+      values,
+    });
+
+    expect(prepared).toMatchObject({
+      ok: true,
+      values: { text: values.text },
+      command: { mutation: { text: values.text } },
+      receipt: { stage: "repair", canonicalized: false, canonicalizationWithheld: true },
+    });
+  });
+});
+
 describe("MaterialIngress transform preparation", () => {
   it("canonicalizes only generated gaps in the transform locale", () => {
     const tree = textSwapTree();
@@ -254,6 +321,36 @@ describe("MaterialIngress transform preparation", () => {
         lexicalGeneration: 13,
         canonicalized: true,
         editCount: 1,
+      },
+    });
+  });
+});
+
+describe("MaterialIngress transform fallback", () => {
+  it("keeps the raw valid expansion when a canonical gap breaks its length band", () => {
+    const tree = textSwapTree();
+    const envelope = transformEnvelope();
+    const rawPlan = buildTransformPlan(envelope, `${PASSAGE} code x`);
+
+    const prepared = prepareTransformIngress({
+      tree,
+      envelope,
+      rawPlan,
+      lexicalSession: confirmedSession("written", "code x", "X".repeat(128), 15),
+      source: "fixture",
+      nowMs: NOW_MS,
+    });
+
+    expect(prepared).toMatchObject({
+      ok: true,
+      plan: { action: { text: `${PASSAGE} code x` } },
+      command: { mutation: { text: `${PASSAGE} code x. Next` } },
+      receipt: {
+        stage: "transform",
+        lexicalGeneration: 15,
+        canonicalized: false,
+        editCount: 0,
+        canonicalizationWithheld: true,
       },
     });
   });
@@ -288,6 +385,7 @@ describe("MaterialIngress text-swap preparation", () => {
       lexicalSourceRevision: 0,
       canonicalized: false,
       editCount: 0,
+      canonicalizationWithheld: false,
     });
   });
 
@@ -339,15 +437,42 @@ describe("MaterialIngress text-swap preparation", () => {
     })).toEqual({ ok: false, reason: "INVALID_PLAN" });
   });
 
-  it("rejects a canonicalized plan that no longer satisfies the contract", () => {
+  it("keeps the raw valid answer when a canonical form pushes it past its length band", () => {
     const tree = textSwapTree();
     const envelope = textSwapEnvelope();
-    const rawPlan = buildTextSwapPlan(envelope, "Rain tapped the window");
+    const rawPlan = buildTextSwapPlan(envelope, "Drops tapped against glass");
+    const direct = planToTextSwapCommand(tree, envelope, rawPlan, { now: () => NOW_MS });
+    if (!direct.ok) throw new Error(direct.reason);
 
     expect(prepareTextSwapIngress({
       tree,
       envelope,
       rawPlan,
+      lexicalSession: confirmedSession("written", "glass", "the very old leaded window glass", 3),
+      nowMs: NOW_MS,
+    })).toEqual({
+      ok: true,
+      command: direct.command,
+      plan: rawPlan,
+      receipt: {
+        stage: "text-swap",
+        lexicalGeneration: 3,
+        lexicalSourceRevision: 1,
+        canonicalized: false,
+        editCount: 0,
+        canonicalizationWithheld: true,
+      },
+    });
+  });
+
+  it("rejects an answer that differs only by a spelling the Wiki forbids", () => {
+    // Canonicalized, "Rain tapped the window" is the passage itself. Keeping
+    // the raw answer would write exactly the form the person's rule replaces.
+    const envelope = textSwapEnvelope();
+    expect(prepareTextSwapIngress({
+      tree: textSwapTree(),
+      envelope,
+      rawPlan: buildTextSwapPlan(envelope, "Rain tapped the window"),
       lexicalSession: confirmedSession("written", "tapped", "touched", 3),
       nowMs: NOW_MS,
     })).toEqual({ ok: false, reason: "INVALID_PLAN" });

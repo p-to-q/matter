@@ -10,10 +10,13 @@ import {
 import {
   CANVAS_CHROME_INFO,
   CanvasChrome,
+  INQUIRY_CANCEL_ARM_MS,
   canvasOverlayOwnsSurface,
+  inquiryCancelAccepted,
   isCanvasChromeInfoOverlay,
   nextDialogTabFocusIndex,
   nextMenuFocusIndex,
+  overlayOutlivesBreakpoint,
   projectInquiryDictationControl,
   type CanvasChromeProps,
 } from "./CanvasChrome";
@@ -29,6 +32,79 @@ describe("CanvasChrome", () => {
     for (const overlay of [null, "settings", "language", "inquiry"] as const) {
       expect(canvasOverlayOwnsSurface(overlay)).toBe(false);
     }
+  });
+
+  it("makes shell chrome outside the paper inert behind a modal dialog", () => {
+    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
+    const inert = source.slice(
+      source.indexOf("const MODAL_INERT_SHELL_CHROME"),
+      source.indexOf('].join(", ");', source.indexOf("const MODAL_INERT_SHELL_CHROME")),
+    );
+    for (const selector of [".tool-rail", ".material-files", ".material-files-toggle", ".matter-header"]) {
+      expect(inert).toContain(`"${selector}"`);
+    }
+    // A handle mounted after the dialog opened (a breakpoint crossing) is caught too.
+    expect(source).toContain("if (shell !== null) observer.observe(shell, { childList: true });");
+  });
+
+  it("names the compact menu in every locale", () => {
+    for (const [language, label] of [
+      ["en-US", "Matter menu"],
+      ["zh-CN", "Matter 菜单"],
+      ["zh-TW", "Matter 選單"],
+      ["ja-JP", "Matter メニュー"],
+      ["de-DE", "Matter-Menü"],
+    ] as const) {
+      const markup = renderChrome({
+        overlay: "mobile",
+        preferences: { ...DEFAULT_CANVAS_PREFERENCES, language },
+      });
+      expect(markup).toContain(`<nav aria-label="${label}"`);
+    }
+    for (const language of ["ja-JP", "de-DE"] as const) {
+      const about = CANVAS_CHROME_INFO[language].about.body.at(-1);
+      expect(JSON.stringify(about)).not.toContain(" project");
+    }
+  });
+
+  it("closes only the overlay a breakpoint crossing removes", () => {
+    // Desktop menus do not exist on a phone; the compact sheet does not exist
+    // on a desk. Ask Matter's turns and an open dialog's editor survive both.
+    expect(overlayOutlivesBreakpoint("settings", true)).toBe(false);
+    expect(overlayOutlivesBreakpoint("language", true)).toBe(false);
+    expect(overlayOutlivesBreakpoint("settings", false)).toBe(true);
+    expect(overlayOutlivesBreakpoint("mobile", false)).toBe(false);
+    expect(overlayOutlivesBreakpoint("mobile", true)).toBe(true);
+    for (const overlay of [null, "inquiry", "about", "pricing", "privacy", "terms", "api", "wiki"] as const) {
+      expect(overlayOutlivesBreakpoint(overlay, true)).toBe(true);
+      expect(overlayOutlivesBreakpoint(overlay, false)).toBe(true);
+    }
+  });
+
+  it("offers explicit cancellation only in place of Ask while a question waits", () => {
+    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
+    const start = source.indexOf("const cancelPendingAsk = useCallback");
+    const cancel = source.slice(start, source.indexOf("}, []);", start));
+    expect(cancel).toContain("if (!inquiryCancelAccepted(event.detail)) return;");
+    expect(cancel).toContain("request.abort(");
+    expect(cancel).toContain('type: "withdraw"');
+    expect(cancel).toContain("reason: null");
+    expect(source).toContain('data-inquiry-control="cancel"');
+    // Ask and Cancel are distinct elements; Cancel arms only after a beat and
+    // Ask hands focus back to the field, so a double-click cannot revoke.
+    expect(source).toMatch(/data-inquiry-control="cancel"\s*disabled=\{!cancelArmed\}\s*key="cancel"/u);
+    expect(source).toMatch(/data-inquiry-control="ask"\s*disabled=\{!canAsk\}\s*key="ask"/u);
+    expect(source).toMatch(/ask\(\);\s*focusWithoutScroll\(fieldRef\.current \?\? undefined\);/u);
+    expect(INQUIRY_CANCEL_ARM_MS).toBeGreaterThanOrEqual(300);
+    expect(inquiryCancelAccepted(0)).toBe(true);
+    expect(inquiryCancelAccepted(1)).toBe(true);
+    expect(inquiryCancelAccepted(2)).toBe(false);
+  });
+
+  it("announces a notice that arrived while the bubble was closed when it reopens", () => {
+    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
+    expect(source).toContain("requestAnimationFrame(() => setStatusLive(true))");
+    expect(source).toContain("{!statusLive ? null : record?.phase");
   });
 
   it("renders the desktop corner system and one mobile menu trigger", () => {
@@ -120,6 +196,10 @@ describe("CanvasChrome", () => {
       language: "en-US",
       presented: true,
     }));
+    // The notice region exists before its first notice, and no alert nests
+    // inside a polite region.
+    expect(markup).toMatch(/data-silent="true"[^>]*><div aria-atomic="true"[^>]*role="status"><\/div>/u);
+    expect(markup).not.toContain('role="alert"');
     expect(markup).toContain(`minLength="${MIN_USER_PROVIDER_API_KEY_CODE_UNITS}"`);
     expect(markup).toContain('maxLength="512"');
     expect(markup).toMatch(/<input[^>]*required=""[^>]*type="password"|<input[^>]*type="password"[^>]*required=""/u);

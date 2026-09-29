@@ -150,6 +150,18 @@ describe("text-swap/2 contract", () => {
     })).toBeNull();
   });
 
+  it("accepts an admission refusal only as a retryable code without a model reason", () => {
+    expect(parseTextSwapError({
+      error: { code: "RATE_LIMITED", message: "wait", retryable: true },
+    })).toEqual({ code: "RATE_LIMITED", message: "wait", retryable: true });
+    expect(parseTextSwapError({
+      error: { code: "RATE_LIMITED", message: "wait", retryable: false },
+    })).toBeNull();
+    expect(parseTextSwapError({
+      error: { code: "RATE_LIMITED", message: "wait", retryable: true, fallbackReason: "MODEL_BUSY" },
+    })).toBeNull();
+  });
+
   it("builds and accepts only a server-owned paraphrase plan with settle presentation", () => {
     const parsed = parseTextSwapEnvelope(envelope());
     if (!parsed.ok) throw new Error("fixture must parse");

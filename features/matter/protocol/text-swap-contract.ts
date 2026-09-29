@@ -65,7 +65,17 @@ export type TextSwapPlan = Readonly<{
   presentation: Readonly<{ motionHint: "settle" }>;
 }>;
 
-export type TextSwapErrorCode = "INVALID_REQUEST" | "TURN_UNAVAILABLE" | "TURN_REJECTED" | "TURN_FAILED";
+/**
+ * `RATE_LIMITED` is the shared public admission perimeter refusing before any
+ * model work: 429 for a source's request window, 503 for instance concurrency.
+ * It never carries a `fallbackReason`, which names only a scenario outcome.
+ */
+export type TextSwapErrorCode =
+  | "INVALID_REQUEST"
+  | "RATE_LIMITED"
+  | "TURN_UNAVAILABLE"
+  | "TURN_REJECTED"
+  | "TURN_FAILED";
 export type TextSwapFallbackReason = "MODEL_UNAVAILABLE" | "MODEL_TIMEOUT" | "MODEL_REJECTED" | "MODEL_BUSY";
 export type TextSwapErrorEnvelope = Readonly<{
   error: Readonly<{
@@ -155,6 +165,7 @@ export function parseTextSwapError(value: unknown): TextSwapErrorReceipt | null 
     (!error.retryable || (error.code !== "TURN_UNAVAILABLE" && error.code !== "TURN_REJECTED"))
   ) return null;
   if (error.code === "INVALID_REQUEST" && error.retryable) return null;
+  if (error.code === "RATE_LIMITED" && !error.retryable) return null;
   return Object.freeze({
     code: error.code,
     message: error.message,
@@ -402,7 +413,7 @@ function isSettlePresentation(value: unknown): boolean {
   return isRecord(value) && hasExactKeys(value, ["motionHint"]) && value.motionHint === "settle";
 }
 function isTextSwapErrorCode(value: unknown): value is TextSwapErrorCode {
-  return value === "INVALID_REQUEST" || value === "TURN_UNAVAILABLE" ||
+  return value === "INVALID_REQUEST" || value === "RATE_LIMITED" || value === "TURN_UNAVAILABLE" ||
     value === "TURN_REJECTED" || value === "TURN_FAILED";
 }
 function parseFallbackReason(value: unknown): TextSwapFallbackReason | undefined {
