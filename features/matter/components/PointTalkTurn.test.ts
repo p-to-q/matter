@@ -27,8 +27,12 @@ describe("Point Talk host ownership", () => {
     // A visible field shows its own failure, but staleness always closes it.
     expect(pointTalkReleasedOutcome(true, "pending", "error")).toBeNull();
     expect(pointTalkReleasedOutcome(true, "pending", "stale")).toBe("stale");
-    // A draft that went stale was never submitted.
-    expect(pointTalkReleasedOutcome(true, "ready", "stale")).toBeNull();
+    // A visible draft whose passage changed leaves and says why.
+    expect(pointTalkReleasedOutcome(true, "ready", "stale")).toBe("stale");
+    expect(pointTalkReleasedOutcome(true, "eligible", "stale")).toBe("stale");
+    // A closed draft was never submitted and is nobody's outcome.
+    expect(pointTalkReleasedOutcome(false, "ready", "stale")).toBeNull();
+    expect(pointTalkReleasedOutcome(true, "stale", "stale")).toBeNull();
     // A failure already seen and then dismissed is not reported again.
     expect(pointTalkReleasedOutcome(false, "error", "error")).toBeNull();
     expect(pointTalkReleasedOutcome(false, "ready", "idle")).toBeNull();

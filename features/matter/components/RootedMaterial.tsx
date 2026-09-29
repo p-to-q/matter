@@ -204,7 +204,9 @@ import {
   type PresenceLive,
 } from "./presence";
 import type { PointTalkSurfaceView } from "./PointTalkComposer";
+import type { PointTalkOrigin } from "./point-talk-placement";
 import type { PointTalkReleasedOutcome } from "./PointTalkTurn";
+import { pointTalkPresenceClose, type PointTalkCloseReason } from "./point-talk-close";
 import { usePresence, useSettledStatus } from "./use-presence";
 import { lassoAccessibilityCopy } from "./lasso-accessibility-copy";
 import { voiceToolCopy } from "./voice-tool-copy";
@@ -469,6 +471,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const [pointTalkOwner, setPointTalkOwner] = useState<PointTalkOwner | null>(null);
   const [pointTalkPresented, setPointTalkPresented] = useState(false);
   const [pointTalkOpeningId, setPointTalkOpeningId] = useState(0);
+  // Where the person summoned the current opening; its entrance grows there.
+  const [pointTalkOrigin, setPointTalkOrigin] = useState<PointTalkOrigin | null>(null);
   useEffect(() => subscribePageSuspension(
     () => setPagePresentationAvailable(false),
     () => setPagePresentationAvailable(true),
@@ -1343,14 +1347,38 @@ export function RootedMaterial(props: RootedMaterialProps) {
   );
   const activePointTalkNodeId = pointTalkPresented ? pointTalkHostNodeId : null;
   const pointTalkSelectionCurrent = pointTalkHostNodeId !== null;
+  // One opening of the field, owned by the turn's target so it outlives that
+  // target: a vanished passage still names the field that must leave.
+  const pointTalkPresenceIdentity = pointTalkOwner === null
+    ? null
+    : `${pointTalkOwner.documentEpoch}:${pointTalkOwner.nodeId}:${pointTalkOpeningId}`;
+  /**
+   * The one way the Point and Talk field leaves. Every close names one of the
+   * reasons in `point-talk-close.ts`, and that reason alone decides how the
+   * field is painted as it goes. Submitted work continues through any close.
+   */
+  const closePointTalk = useCallback((reason: PointTalkCloseReason) => {
+    const close = pointTalkPresenceClose(reason);
+    if (close === "preempted") pointTalkExitHandoff.preempt();
+    else if (pointTalkPresented && pointTalkPresenceIdentity !== null) {
+      pointTalkExitHandoff.intend(pointTalkPresenceIdentity, close);
+    }
+    setPointTalkPresented(false);
+    setPointTalkVoiceCommand(null);
+  }, [pointTalkExitHandoff, pointTalkPresenceIdentity, pointTalkPresented]);
   if (pointTalkOwner !== null && pointTalkHostNodeId === null) {
     // Reconcile before a removed, replaced, or held target can later return
     // under an obsolete local-turn owner. The derived target already keeps
-    // this render fail-closed.
+    // this render fail-closed. A passage that vanished from this document is
+    // said once; a document switch belongs to the new document and cuts.
+    const sameDocument = pointTalkOwner.documentEpoch === props.documentEpoch &&
+      pointTalkOwner.treeId === tree.id;
+    if (sameDocument && (
+      pointTalkPresented || pointTalkPhase === "pending" || pointTalkPhase === "transcribing"
+    )) reportOutcome({ owner: "rewrite", reason: "stale" });
+    closePointTalk(sameDocument ? "target-changed" : "cut");
     setPointTalkOwner(null);
-    setPointTalkPresented(false);
     if (pointTalkPhase !== "idle") setPointTalkPhase("idle");
-    if (pointTalkVoiceCommand !== null) setPointTalkVoiceCommand(null);
   }
   const stretchSelection = eligibleStretchSelection({
     candidate: lasso.selections.length === 1 && lasso.selection?.type === "segment-range"
@@ -1400,8 +1428,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [cancelPointTalkFocusRestore]);
   const publishPointTalkChange = useCallback((change: TextSwapCommittedChange) => {
     publishMaterialTextChange(change);
+    // The rewritten passage is the ending: the field fades over it.
+    closePointTalk("result");
     setPointTalkOwner(null);
-    setPointTalkPresented(false);
     setPointTalkPhase("idle");
     setPointTalkVoiceCommand(null);
     cancelPointTalkFocusRestore();
@@ -1435,6 +1464,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     pointTalkFocusFrameRef.current = Object.freeze({ basis, frameId });
   }, [
     cancelPointTalkFocusRestore,
+    closePointTalk,
     props.documentEpoch,
     publishMaterialTextChange,
     tree,
@@ -1551,13 +1581,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
       setAdmissionPresentationAvailable(true);
     }
   }, [materialPresentationAvailable, setAdmissionPresentationAvailable]);
-  const closePointTalk = useCallback(() => {
-    setPointTalkPresented(false);
-    setPointTalkVoiceCommand(null);
-  }, []);
   const releasePointTalkJob = useCallback(() => {
+    // The field already left through `closePointTalk`; this only frees the
+    // turn's owner, so it never closes anything by itself.
     setPointTalkOwner(null);
-    setPointTalkPresented(false);
     setPointTalkPhase("idle");
     setPointTalkVoiceCommand(null);
   }, []);
@@ -1579,32 +1606,19 @@ export function RootedMaterial(props: RootedMaterialProps) {
     // its exact material basis. Conflict/page-exit handling lives in the turn.
     stretchKeyDown("Escape");
   }, [stretchKeyDown]);
-  const pointTalkPresenceIdentity = pointTalkHostNodeId === null
-    ? null
-    : `${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`;
   // Dismissing a presentation and yielding the paper's one presentation slot
   // are different closes. Submitted work continues through either; only the
   // way a leaving Point Talk field is painted differs.
   /** The person acted elsewhere: presentations leave as the person's close. */
   const dismissPaperPresentations = useCallback(() => {
-    if (pointTalkPresented && pointTalkPresenceIdentity !== null) {
-      pointTalkExitHandoff.intend(pointTalkPresenceIdentity, "person");
-    }
-    closePointTalk();
+    closePointTalk("person");
     abortElasticExpansion();
-  }, [
-    abortElasticExpansion,
-    closePointTalk,
-    pointTalkExitHandoff,
-    pointTalkPresenceIdentity,
-    pointTalkPresented,
-  ]);
-  /** Another owner takes the slot: a leaving Point Talk copy is cut, not faded. */
-  const preemptPaperPresentations = useCallback(() => {
-    pointTalkExitHandoff.preempt();
-    closePointTalk();
+  }, [abortElasticExpansion, closePointTalk]);
+  /** Another owner takes the paper's slot: a Point Talk field fades quickly. */
+  const yieldPaperPresentations = useCallback(() => {
+    closePointTalk("slot");
     abortElasticExpansion();
-  }, [abortElasticExpansion, closePointTalk, pointTalkExitHandoff]);
+  }, [abortElasticExpansion, closePointTalk]);
   // A document switch owns the paper outright, so nothing of the old one fades.
   useLayoutEffect(() => () => pointTalkExitHandoff.preempt(), [
     pointTalkExitHandoff,
@@ -1614,9 +1628,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
     // A grip adjustment takes the slot from Inquiry and any Point Talk field;
     // the adjustment itself is what now owns Elastic presentation.
     canvasChromeRef.current?.closeInquiry();
-    pointTalkExitHandoff.preempt();
-    closePointTalk();
-  }, [closePointTalk, pointTalkExitHandoff]);
+    closePointTalk("slot");
+  }, [closePointTalk]);
   const stretchReopen = stretch.reopen;
   const discardParkedExpansion = useCallback(() => {
     // An explicit release of a result whose passage is not shown. Only a
@@ -1979,11 +1992,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
       (dismissing?.pointerId === pointerId && dismissing.occurrenceId === occurrenceId) ||
       !wikiOccurrences.openTakeover(occurrenceId)
     ) return false;
-    preemptPaperPresentations();
+    yieldPaperPresentations();
     return true;
   };
   const focusIndexNode = useCallback((nodeId: string) => {
-    preemptPaperPresentations();
+    yieldPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -1993,9 +2006,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     focusWorkingNode(nodeId);
-  }, [documentEpoch, focusWorkingNode, interruptIndexCameraMotion, preemptPaperPresentations]);
+  }, [documentEpoch, focusWorkingNode, interruptIndexCameraMotion, yieldPaperPresentations]);
   const restoreIndexNode = useCallback((nodeId: string) => {
-    preemptPaperPresentations();
+    yieldPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -2005,9 +2018,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     restoreWorkingNode(nodeId);
-  }, [documentEpoch, interruptIndexCameraMotion, preemptPaperPresentations, restoreWorkingNode]);
+  }, [documentEpoch, interruptIndexCameraMotion, yieldPaperPresentations, restoreWorkingNode]);
   const selectIndexNode = useCallback((nodeId: string) => {
-    preemptPaperPresentations();
+    yieldPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -2017,7 +2030,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     onSelectNode(nodeId);
-  }, [documentEpoch, interruptIndexCameraMotion, onSelectNode, preemptPaperPresentations]);
+  }, [documentEpoch, interruptIndexCameraMotion, onSelectNode, yieldPaperPresentations]);
   const indexArchive = useMemo<MaterialArchiveActions | undefined>(() => {
     if (props.archive === undefined) return undefined;
     return Object.freeze({
@@ -3870,6 +3883,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             props.admission.clearRepairPresentations();
             setPointTalkPhase("idle");
             setPointTalkOpeningId((current) => current + 1);
+            setPointTalkOrigin(null);
             setPointTalkOwner(createPointTalkOwner(
               props.documentEpoch,
               tree.id,
@@ -4024,7 +4038,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             key={`${props.documentEpoch}:${tree.revision}:${workingContextState.epoch}:${navigation.mode}`}
             locale={props.locale}
             navigation={navigation}
-            onOpenPointTalk={(nodeId) => {
+            onOpenPointTalk={(nodeId, origin) => {
               if (pointTalkHostNodeId !== null) return;
               canvasChromeRef.current?.closeInquiry();
               abortElasticExpansion();
@@ -4032,11 +4046,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
               setPointTalkPhase("idle");
               setPointTalkVoiceCommand(null);
               setPointTalkOpeningId((current) => current + 1);
+              setPointTalkOrigin(origin);
               setPointTalkOwner(createPointTalkOwner(props.documentEpoch, tree.id, nodeId));
               setPointTalkPresented(true);
             }}
             onOpenWikiReview={wikiOccurrences === undefined ? undefined : (occurrenceId) => {
-              if (wikiOccurrences.openTakeover(occurrenceId)) preemptPaperPresentations();
+              if (wikiOccurrences.openTakeover(occurrenceId)) yieldPaperPresentations();
             }}
             onToggleHeldAside={(nodeId) => {
               dismissPaperPresentations();
@@ -4082,7 +4097,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           inquiryContext={projectInquiryPayload}
           inquiryOwner={inquiryOwner}
           inquiryRecord={inquiryRecord}
-          onInquiryOpen={preemptPaperPresentations}
+          onInquiryOpen={yieldPaperPresentations}
           onInquiryHoldChange={setInquiryHeld}
           onOverlayChange={changeCanvasOverlay}
           overlay={canvasOverlay}
@@ -4129,6 +4144,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             onPhaseChange={setPointTalkPhase}
             onReleased={releasePointTalkJob}
             onReleasedOutcome={reportPointTalkOutcome}
+            origin={pointTalkOrigin}
             penActive={pointerArbiter.penActive}
             presenceIdentity={pointTalkPresenceIdentity}
             presented={pointTalkPresented}

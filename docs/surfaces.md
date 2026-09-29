@@ -107,7 +107,7 @@ Focus and fold remain navigation capabilities but have no first-release fixed-ra
 presenter. One frosted local action field prefers the passage's upper-left edge
 and exposes the Point-and-Talk AI mark plus the same `−` / `+` working-context
 transition as the material index for the precise hovered, keyboard-focused, or
-coarse-selected passage.
+selected passage.
 Its field and actions arrive in the same reveal. The disclosure control in the
 left material outline remains a separate file-tree affordance. The field is
 transient rendering state and never mounts one control set per node.

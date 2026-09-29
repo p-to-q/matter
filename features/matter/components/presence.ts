@@ -2,16 +2,18 @@
  * Owns when a transient surface, and a status label inside it, may appear,
  * stay, and leave. Time enters only as values, so every rule here is a pure
  * function; the timed store below is the one place that reads a clock and owns
- * a timer or frame. Motion itself is CSS: this module only decides stages.
+ * a timer or frame. Motion itself is CSS: this module only decides stages and
+ * the durations CSS reads.
  *
  * A surface is `present` while its live value exists. When the live value
- * goes away, the last content stays frozen: `holding` keeps a surface that
- * closed because work finished for at least `minVisibleMs` after its first
- * paint, then `exiting` gives CSS `exitMs` to leave before unmount. A person's
- * own close skips the hold; a preemption cuts at once, and so does any close
- * before the surface was ever painted, because nobody saw it to need a hold.
- * A live value returning under the same identity reverses to `present`; a new
- * identity replaces the old surface immediately, so two never coexist.
+ * goes away, the last content stays frozen. Each way of leaving has its own
+ * hold, measured from the surface's first paint, and its own exit: `holding`
+ * keeps the frozen surface until its hold ends, then `exiting` gives CSS that
+ * way's exit duration before unmount. A preemption cuts at once, and so does
+ * any close before the surface was ever painted, because nobody saw it to need
+ * a hold. A live value returning under the same identity reverses to
+ * `present`; a new identity replaces the old surface immediately, so two never
+ * coexist.
  */
 
 export const PRESENCE_TIMING = Object.freeze({
@@ -23,12 +25,38 @@ export const PRESENCE_TIMING = Object.freeze({
   exitMs: 140,
 });
 
-export type PresenceClose =
+/**
+ * Point and Talk's field. It enters from the control that summoned it, stays
+ * at least `minDwellMs` unless the person closes it, keeps a submitted request
+ * visibly pending for at least `pendingMinMs`, and leaves by one of the ways
+ * in `point-talk-close.ts`, each with its own fade. Reduced motion keeps every
+ * duration and drops only scale and travel.
+ */
+export const POINT_TALK_TIMING = Object.freeze({
+  enterMs: 200,
+  /** Entrance and person-close scale; the field grows to and shrinks from 1. */
+  restScale: .98,
+  /** Entrance travel toward the addressed passage. */
+  enterTravelPx: 4,
+  minDwellMs: 800,
+  pendingMinMs: 600,
+  exitMs: Object.freeze({ person: 200, finished: 240, yielded: 120, invalidated: 200 }),
+});
+
+/** The ways a surface may leave visibly; `preempted` is the one cut. */
+export type PresenceLeave =
   /** The person closed it: Cancel, Dismiss, Escape, or an outside press. */
   | "person"
   /** The work it reported on finished. */
   | "finished"
-  /** Another owner, modal, document, or hidden page took the surface. */
+  /** Another owner took the paper's one presentation slot. */
+  | "yielded"
+  /** What the surface addressed vanished or changed. */
+  | "invalidated";
+
+export type PresenceClose =
+  | PresenceLeave
+  /** A modal, a hidden page, or a document switch took the paper: 0 ms. */
   | "preempted";
 
 export type PresenceStage = "present" | "holding" | "exiting";
@@ -43,13 +71,48 @@ export type PresenceState<T> = Readonly<{
    * then. A browser paints the committed surface right after that frame.
    */
   paintedAtMs: number | null;
-  close: Exclude<PresenceClose, "preempted"> | null;
+  close: PresenceLeave | null;
   deadlineMs: number | null;
 }> | null;
 
 export type PresenceLive<T> = Readonly<{ identity: string; view: T }> | null;
 
-export type PresencePolicy = Readonly<{ minVisibleMs: number; exitMs: number }>;
+export type PresencePolicy = Readonly<{
+  /** How long after first paint each way of leaving holds before its exit. */
+  holdMs: Readonly<Record<PresenceLeave, number>>;
+  /** Each way of leaving's CSS exit; zero unmounts at once. */
+  exitMs: Readonly<Record<PresenceLeave, number>>;
+}>;
+
+/**
+ * The shared rule for the recording box and the Wiki takeover: finished work
+ * holds `minVisibleMs`, every visible close fades `exitMs`, and reduced motion
+ * removes the fade but never the hold.
+ */
+export function surfacePresencePolicy(reducedMotion: boolean): PresencePolicy {
+  const exitMs = reducedMotion ? 0 : PRESENCE_TIMING.exitMs;
+  const hold = PRESENCE_TIMING.minVisibleMs;
+  return Object.freeze({
+    holdMs: Object.freeze({ person: 0, finished: hold, yielded: 0, invalidated: hold }),
+    exitMs: Object.freeze({ person: exitMs, finished: exitMs, yielded: exitMs, invalidated: exitMs }),
+  });
+}
+
+/**
+ * Point and Talk's rule. A system close (finished, invalidated) never ends the
+ * field before `minDwellMs` after its first paint; the person's close and
+ * another owner taking the slot are the person's own actions and leave at
+ * once. Reduced motion keeps the opacity fade, so the durations do not change.
+ */
+export const POINT_TALK_PRESENCE_POLICY: PresencePolicy = Object.freeze({
+  holdMs: Object.freeze({
+    person: 0,
+    finished: POINT_TALK_TIMING.minDwellMs,
+    yielded: 0,
+    invalidated: POINT_TALK_TIMING.minDwellMs,
+  }),
+  exitMs: POINT_TALK_TIMING.exitMs,
+});
 
 export function syncPresence<T>(
   state: PresenceState<T>,
@@ -78,11 +141,10 @@ export function syncPresence<T>(
   // Work that finished before its surface reached a frame, such as a held
   // commit released the moment modal chrome closes, has nothing to leave.
   if (state.paintedAtMs === null) return null;
-  if (close === "person") return beginExit(state, "person", nowMs, policy);
-  const holdUntilMs = state.paintedAtMs + policy.minVisibleMs;
+  const holdUntilMs = state.paintedAtMs + policy.holdMs[close];
   return nowMs < holdUntilMs
-    ? Object.freeze({ ...state, stage: "holding", close: "finished", deadlineMs: holdUntilMs })
-    : beginExit(state, "finished", nowMs, policy);
+    ? Object.freeze({ ...state, stage: "holding", close, deadlineMs: holdUntilMs })
+    : beginExit(state, close, nowMs, policy);
 }
 
 /** Records the first frame after a surface became present. */
@@ -112,7 +174,7 @@ export type PresenceFrame<T> = Readonly<{
   identity: string;
   stage: PresenceStage;
   view: T;
-  close: Exclude<PresenceClose, "preempted"> | null;
+  close: PresenceLeave | null;
 }> | null;
 
 /**
@@ -150,12 +212,13 @@ export function presenceReservesSpace(frame: PresenceFrame<unknown>): boolean {
 
 function beginExit<T>(
   state: NonNullable<PresenceState<T>>,
-  close: Exclude<PresenceClose, "preempted">,
+  close: PresenceLeave,
   nowMs: number,
   policy: PresencePolicy,
 ): PresenceState<T> {
-  if (policy.exitMs <= 0) return null;
-  return Object.freeze({ ...state, stage: "exiting", close, deadlineMs: nowMs + policy.exitMs });
+  const exitMs = policy.exitMs[close];
+  if (exitMs <= 0) return null;
+  return Object.freeze({ ...state, stage: "exiting", close, deadlineMs: nowMs + exitMs });
 }
 
 export type SettledStatus<K> = Readonly<{
@@ -296,11 +359,16 @@ export type PresenceHandoff<T> = Readonly<{
   enter: (identity: string) => void;
   show: (identity: string, view: T) => void;
   /** Declares how the next release of `identity` leaves. */
-  intend: (identity: string, close: Exclude<PresenceClose, "preempted">) => void;
-  release: (identity: string, finalView: T | null) => void;
+  intend: (identity: string, close: PresenceLeave) => void;
   /**
-   * Another owner took the slot: cut any exit and ignore the pending release.
-   * Dismissing a presentation is not a preemption; the person's close fades.
+   * The owner stopped showing `identity`. An undeclared release leaves as
+   * `fallback`, which the owner derives from what it last showed.
+   */
+  release: (identity: string, finalView: T | null, fallback?: PresenceClose) => void;
+  /**
+   * A modal, hidden page, or document switch took the paper: cut any exit and
+   * ignore the pending release. Every other close declares its way with
+   * `intend` and fades.
    */
   preempt: () => void;
 }>;
@@ -338,12 +406,12 @@ export function createPresenceHandoff<T>(): PresenceHandoff<T> {
       if (record === null || (record.view === view && record.close === "preempted")) return;
       publish(Object.freeze({ identity, view, lastView: view, close: "preempted" }));
     },
-    intend: (identity: string, close: Exclude<PresenceClose, "preempted">) => {
+    intend: (identity: string, close: PresenceLeave) => {
       intent = Object.freeze({ identity, close });
     },
-    release: (identity: string, finalView: T | null) => {
+    release: (identity: string, finalView: T | null, fallback: PresenceClose = "preempted") => {
       if (record === null || record.identity !== identity) return;
-      const close = intent?.identity === identity ? intent.close : "preempted";
+      const close = intent?.identity === identity ? intent.close : fallback;
       intent = null;
       publish(Object.freeze({
         identity,

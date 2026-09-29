@@ -44,6 +44,12 @@ export type UseTextSwapInput<TCommitted> = Readonly<{
   deliveryVisibleNodeIds?: ReadonlySet<string>;
   /** False pauses capture and durable delivery without aborting submitted work. */
   deliveryWindowAvailable?: boolean;
+  /**
+   * A resolved result reaches the material only once its request has been
+   * pending this long, so the surface that says it is pending is seen. Capture
+   * is untouched; zero (the default) delivers as soon as the window opens.
+   */
+  minimumPendingMs?: number;
   commit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
@@ -87,6 +93,9 @@ export function useTextSwap<TCommitted>(
     monotonicNow,
   }));
   const deliveryAvailableRef = useRef(input.deliveryWindowAvailable !== false);
+  const minimumPendingRef = useRef(input.minimumPendingMs ?? 0);
+  // When the current request began pending, on the monotonic clock.
+  const pendingSinceRef = useRef<Readonly<{ requestId: string; atMs: number }> | null>(null);
 
   const subscribe = useCallback(
     (listener: () => void) => driver.subscribe(listener),
@@ -107,10 +116,17 @@ export function useTextSwap<TCommitted>(
   }, [driver, input, state]);
 
   const refreshDeliveryWindow = useDeliveryWindow({
-    isAvailable: () => deliveryAvailableRef.current,
+    isAvailable: () => deliveryAvailableRef.current &&
+      pendingDwellRemainingMs(pendingSinceRef.current, minimumPendingRef.current, monotonicNow()) === 0,
     onChange: (open) => driver.setDeliveryWindowOpen(open),
     onSuspend: () => driver.suspendCapture(),
-    onExit: () => driver.cancel(),
+    // A back-forward-cache hide only suspends: the page may be shown again
+    // with its memory intact, so submitted work keeps its immutable basis and
+    // delivers through the visible, pointer-idle window on return. Only a real
+    // unload ends it. Raw capture already stopped with the suspension.
+    onExit: (exit) => {
+      if (!exit.persisted) driver.cancel();
+    },
   }, driver);
 
   useLayoutEffect(() => {
@@ -123,6 +139,23 @@ export function useTextSwap<TCommitted>(
     }
     refreshDeliveryWindow();
   }, [driver, input.deliveryWindowAvailable, refreshDeliveryWindow]);
+
+  const pendingRequestId = state.phase === "pending" ? state.requestId : null;
+  const minimumPendingMs = input.minimumPendingMs ?? 0;
+  useLayoutEffect(() => {
+    minimumPendingRef.current = minimumPendingMs;
+    if (pendingRequestId === null) {
+      pendingSinceRef.current = null;
+    } else if (pendingSinceRef.current?.requestId !== pendingRequestId) {
+      pendingSinceRef.current = Object.freeze({ requestId: pendingRequestId, atMs: monotonicNow() });
+    }
+    // Close the window for the rest of the dwell, then re-evaluate once.
+    refreshDeliveryWindow();
+    const remainingMs = pendingDwellRemainingMs(pendingSinceRef.current, minimumPendingMs, monotonicNow());
+    if (remainingMs === 0) return;
+    const timer = window.setTimeout(refreshDeliveryWindow, remainingMs);
+    return () => window.clearTimeout(timer);
+  }, [minimumPendingMs, pendingRequestId, refreshDeliveryWindow]);
 
   useLayoutEffect(() => {
     // Retain in the commit phase. React's development replay performs the
@@ -251,6 +284,16 @@ export function createTextSwapEnvelope(input: Readonly<{
     },
   });
   return parsed.ok ? parsed.envelope : null;
+}
+
+/** How much longer a pending request must stay pending before it may deliver. */
+export function pendingDwellRemainingMs(
+  pendingSince: Readonly<{ atMs: number }> | null,
+  minimumPendingMs: number,
+  nowMs: number,
+): number {
+  if (pendingSince === null || !(minimumPendingMs > 0)) return 0;
+  return Math.max(0, pendingSince.atMs + minimumPendingMs - nowMs);
 }
 
 function toScope<TCommitted>(

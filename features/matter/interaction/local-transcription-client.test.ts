@@ -162,6 +162,46 @@ describe("local transcription audio projection", () => {
     expect(workers[0]?.terminate).not.toHaveBeenCalled();
   });
 
+  it("keeps a running transcription's worker across a back-forward-cache hide", async () => {
+    const workers: FakeWorker[] = [];
+    const pageWindow = Object.assign(new EventTarget(), {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    const pageDocument = new EventTarget() as EventTarget & {
+      visibilityState: DocumentVisibilityState;
+    };
+    pageDocument.visibilityState = "visible";
+    vi.stubGlobal("window", pageWindow);
+    vi.stubGlobal("document", pageDocument);
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+
+    const transcript = transcribeLocally(request(new AbortController().signal, "bfcache"));
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+    workers[0]?.emit({ id: "bfcache:1:1", status: "started" });
+
+    // The page enters the back-forward cache with its memory intact; the
+    // words already being transcribed must survive until it is shown again.
+    pageDocument.visibilityState = "hidden";
+    pageWindow.dispatchEvent(Object.assign(new Event("pagehide"), { persisted: true }));
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+    pageDocument.visibilityState = "visible";
+    pageWindow.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+    workers[0]?.emit({ id: "bfcache:1:1", status: "complete", text: "缓存返回后的转写。" });
+
+    await expect(transcript).resolves.toBe("缓存返回后的转写。");
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+    // A real unload still retires it.
+    pageWindow.dispatchEvent(new Event("pagehide"));
+    expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
+  });
+
   it("bounds a worker code graph that never becomes ready", async () => {
     vi.useFakeTimers();
     const workers: FakeWorker[] = [];

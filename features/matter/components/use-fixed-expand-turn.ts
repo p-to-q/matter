@@ -235,7 +235,11 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
       const request = requestRef.current;
       if (request !== null) deliver(request);
     },
-    onExit: cancel,
+    // A back-forward-cache hide keeps a submitted expansion for the page's
+    // return, where delivery revalidates as usual; only a real unload ends it.
+    onExit: (exit) => {
+      if (!exit.persisted) cancel();
+    },
   }, deliver);
 
   useEffect(() => {

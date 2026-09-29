@@ -193,6 +193,13 @@ export function useStructuralMaterialSelection(
       flushSync(() => setMeasurement(null));
       schedule();
     };
+    // Only a scroll of the document, or of an element that holds this
+    // material, can move it. A field typing past its width, or a panel
+    // scrolling its own list, must not throw away a valid measurement.
+    const invalidateOnScroll = (event: Event) => {
+      if (!scrollCanMove(event.target, input.scopeRef.current)) return;
+      invalidateAndSchedule();
+    };
     const invalidateOnly = () => {
       cancelScheduledMeasurement();
       flushSync(() => setMeasurement(null));
@@ -227,7 +234,7 @@ export function useStructuralMaterialSelection(
     };
     if (receiptRef.current === null) schedule();
     window.addEventListener("resize", invalidateAndSchedule);
-    window.addEventListener("scroll", invalidateAndSchedule, true);
+    window.addEventListener("scroll", invalidateOnScroll, true);
     window.visualViewport?.addEventListener("resize", invalidateAndSchedule);
     window.visualViewport?.addEventListener("scroll", invalidateAndSchedule);
     fonts?.addEventListener?.("loading", beginFontLoading);
@@ -239,7 +246,7 @@ export function useStructuralMaterialSelection(
     return () => {
       disposed = true;
       window.removeEventListener("resize", invalidateAndSchedule);
-      window.removeEventListener("scroll", invalidateAndSchedule, true);
+      window.removeEventListener("scroll", invalidateOnScroll, true);
       window.visualViewport?.removeEventListener("resize", invalidateAndSchedule);
       window.visualViewport?.removeEventListener("scroll", invalidateAndSchedule);
       fonts?.removeEventListener?.("loading", beginFontLoading);
@@ -265,6 +272,13 @@ export function useStructuralMaterialSelection(
   ]);
 
   return receipt;
+}
+
+/** Whether a scroll at `target` can move material inside `scope`. */
+function scrollCanMove(target: EventTarget | null, scope: Node | null): boolean {
+  if (scope === null || !(target instanceof Node)) return true;
+  if (target.nodeType === Node.DOCUMENT_NODE) return true;
+  return target.contains(scope);
 }
 
 function wholeNodeAddressKey(

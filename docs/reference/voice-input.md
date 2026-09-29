@@ -159,13 +159,48 @@ fades at once and keeps the lane until the box is gone. Modal chrome, a hidden
 page, or a document switch cuts it at 0 ms; while such work is still in
 flight, its lane keeps the last measured height.
 Focus returns to the Voice tool with the live phase, before the box becomes
-inert. Reduced motion removes the fades and keeps the holds. The Point Talk
-field follows the same rules through an exit host that paints only a frozen
-copy after its owner has unmounted with every listener it held. A press on the
-paper, keyboard Undo, or a rail tool is the person's close and fades it; only
-another owner taking the paper's slot (Ask Matter, a grip adjustment, index
-navigation, a Wiki takeover) cuts it, as modal chrome and a document switch do.
-The CSS fade reads its duration from the same timer that unmounts it.
+inert. Reduced motion removes the fades and keeps the holds. The CSS fade reads
+its duration from the same timer that unmounts it.
+
+### Point and Talk field
+
+The field is painted through an exit host that shows only a frozen copy after
+its owner has unmounted with every listener it held. It leaves only for one of
+five reasons, a closed list in `components/point-talk-close.ts` that every close
+call site names and a source scan holds:
+
+```text
+person          Escape, a press elsewhere, a rail tool,   fade + .98 shrink, 200 ms
+                keyboard Undo
+result          its rewrite was delivered                  fade 240 ms over the
+                                                           rewritten passage
+slot            Ask Matter, a grip adjustment, index       fade 120 ms
+                navigation, a Wiki takeover
+target-changed  its passage vanished or changed            fade 200 ms + one outcome
+                                                           line (“段落已变化，未改写。”)
+cut             modal chrome, a hidden page, a document    0 ms, the only cut
+                switch
+```
+
+Relayout, re-render, re-measured selection, a scroll (including the direction
+input scrolling as the person types), a software keyboard animating in, a font
+loading, and temporarily lost or unusable placement never close it: the field
+holds its last place and re-places at the next measurement, keeping its focus
+and typed words. Ask Matter's own control is not a press elsewhere; opening it
+takes the slot.
+
+The field enters from the AI mark that summoned it (from its passage-facing edge
+when Voice summoned it): opacity 0→1, scale .98→1 about that point, and 4 px of
+travel toward its passage, in 200 ms on the shared `cubic-bezier(.2,.8,.2,1)`;
+later re-placements never replay it. Once painted it stays at least 800 ms
+unless the person closes it or another surface takes the slot, so a stray
+release or event cannot knock it out. A submitted direction keeps the field in
+place, reading “正在换一种说法…” beside a condensed echo of the direction, for at
+least 600 ms: a faster result waits for that dwell before it may change the
+passage, and the field then fades over the change. Reduced motion keeps every
+duration, hold, and fade and drops only scale and travel. All of these numbers
+live in `POINT_TALK_TIMING` (`components/presence.ts`), which also sets the CSS
+durations.
 
 The first-release recording policy prefers WebM/Opus and falls back to MP4/AAC
 where supported. Capture stops at 60 seconds; the route allows 65 seconds of

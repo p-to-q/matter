@@ -588,6 +588,45 @@ describe("useFixedExpandTurn", () => {
     },
   );
 
+  it("suspends a submitted expansion across a back-forward-cache hide and delivers it on return", async () => {
+    let pending: {
+      envelope: TransformEnvelope;
+      signal: AbortSignal;
+      resolve: (plan: TransformPlan) => void;
+    } | undefined;
+    hookSpies.requestTransform.mockImplementation((envelope, signal) =>
+      new Promise<TransformPlan>((resolve) => {
+        pending = { envelope, signal, resolve };
+      }));
+    const commit = vi.fn(() => COMMITTED);
+    const turn = useFixedExpandTurn({
+      tree: tree(),
+      documentEpoch: BASIS.documentEpoch,
+      selection: SELECTION,
+      locale: "en-US",
+      enabled: true,
+      commit,
+      onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
+    });
+
+    expect(turn.start(BASIS)).toBe(true);
+    const pageDocument = document as Document & { visibilityState: DocumentVisibilityState };
+    pageDocument.visibilityState = "hidden";
+    window.dispatchEvent(Object.assign(new Event("pagehide"), { persisted: true }));
+    // The page may come back with its memory intact: nothing is aborted.
+    expect(pending?.signal.aborted).toBe(false);
+    if (pending === undefined) throw new Error("Transform request did not start.");
+    pending.resolve(buildTransformPlan(pending.envelope, "source more"));
+    await Promise.resolve();
+    expect(commit).not.toHaveBeenCalled();
+
+    pageDocument.visibilityState = "visible";
+    window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+    await vi.waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+    expect(hookSpies.onOutcome).not.toHaveBeenCalled();
+  });
+
   it("accepts a whole multi-clause node as one contiguous transform range", () => {
     const whole = { ...SELECTION, end: TEXT.length, selectedText: TEXT };
     expect(createFixedExpandEnvelope({

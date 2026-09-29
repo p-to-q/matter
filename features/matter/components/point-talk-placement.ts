@@ -16,6 +16,46 @@ export type PointTalkPlacement = Readonly<{
   top: number;
 }>;
 
+/** A client-pixel point: where the person summoned the field. */
+export type PointTalkOrigin = Readonly<{ x: number; y: number }>;
+
+/**
+ * How the field enters: it grows from the point the person pressed, clamped
+ * into its own box, and travels `travelPx` toward its passage. The origin is
+ * local to the field's box; with no press to grow from, the field grows from
+ * the edge that faces its passage.
+ */
+export type PointTalkEntrance = Readonly<{
+  originX: number;
+  originY: number;
+  travelY: number;
+}>;
+
+export function projectPointTalkEntrance(input: Readonly<{
+  origin: PointTalkOrigin | null;
+  placement: Readonly<{ left: number; top: number }>;
+  bubble: PointTalkSize;
+  target: PointTalkBounds;
+  travelPx: number;
+}>): PointTalkEntrance {
+  const { bubble, placement, target } = input;
+  const width = Number.isFinite(bubble.width) && bubble.width > 0 ? bubble.width : 0;
+  const height = Number.isFinite(bubble.height) && bubble.height > 0 ? bubble.height : 0;
+  const fieldCenter = placement.top + height / 2;
+  const passageCenter = (target.top + target.bottom) / 2;
+  // The field starts away from its passage and settles toward it.
+  const towardPassage = passageCenter >= fieldCenter ? 1 : -1;
+  const travel = Number.isFinite(input.travelPx) ? Math.abs(input.travelPx) : 0;
+  const facingEdge = towardPassage > 0 ? height : 0;
+  const origin = input.origin;
+  const usable = origin !== null && Number.isFinite(origin.x) && Number.isFinite(origin.y);
+  return Object.freeze({
+    originX: usable ? clamp(origin.x - placement.left, 0, width) : 0,
+    originY: usable ? clamp(origin.y - placement.top, 0, height) : facingEdge,
+    travelY: -towardPassage * travel,
+  });
+}
+
 export type PointTalkPlacementProjection =
   | Readonly<{ kind: "placed"; placement: PointTalkPlacement }>
   | Readonly<{ kind: "temporarily-unavailable" }>

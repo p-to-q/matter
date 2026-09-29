@@ -236,9 +236,12 @@ label that changes by itself appears only if its phase lasts 150 ms and then
 stays at least 400 ms. A surface closing because its work finished stays 400 ms
 after its first paint, then fades in 140 ms; one that finished before it was
 ever painted simply unmounts. The person's own close (Cancel, Dismiss, Discard,
-`Escape`, a press elsewhere) fades at once. Another owner taking the paper's
-slot, modal chrome, a hidden page, or a document switch cuts it at 0 ms. Exact
-rules are in [`reference/voice-input.md`](reference/voice-input.md#feedback-presence).
+`Escape`, a press elsewhere) fades at once. Modal chrome, a hidden page, or a
+document switch cuts it at 0 ms. The Point and Talk field leaves only for a
+reason the person can see: their own close, its delivered result, another AI
+surface taking the slot (a quick fade), or its passage changing underneath (a
+fade and one outcome line); it never leaves for relayout or lost placement.
+Exact rules are in [`reference/voice-input.md`](reference/voice-input.md#feedback-presence).
 
 Provider, pool, timeout, and transport failures are operational events, not
 material. They leave the exact source intact and return the current Elastic,

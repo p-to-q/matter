@@ -7,12 +7,15 @@ import {
   markPresencePainted,
   presenceAwaitsPaint,
   emptySettledStatus,
+  POINT_TALK_PRESENCE_POLICY,
+  POINT_TALK_TIMING,
   PRESENCE_TIMING,
   presenceReservesSpace,
   projectPresence,
   projectSettledStatus,
   settledStatusDeadline,
   syncPresence,
+  surfacePresencePolicy,
   syncSettledStatus,
   type PresenceClose,
   type PresenceLive,
@@ -21,8 +24,8 @@ import {
   type SettledStatus,
 } from "./presence";
 
-const MOTION: PresencePolicy = { minVisibleMs: 400, exitMs: 140 };
-const REDUCED: PresencePolicy = { minVisibleMs: 400, exitMs: 0 };
+const MOTION: PresencePolicy = surfacePresencePolicy(false);
+const REDUCED: PresencePolicy = surfacePresencePolicy(true);
 
 function live(view: string, identity = "voice_1"): PresenceLive<string> {
   return { identity, view };
@@ -142,6 +145,45 @@ describe("surface presence", () => {
     expect(projectPresence(exiting, null, "person")).toMatchObject({ stage: "exiting", close: "person" });
     // A modal or hidden page cuts even a surface that is already leaving.
     expect(projectPresence(exiting, null, "preempted")).toBeNull();
+  });
+});
+
+describe("Point and Talk presence", () => {
+  const policy = POINT_TALK_PRESENCE_POLICY;
+  const exit = POINT_TALK_TIMING.exitMs;
+
+  it("gives each visible way of leaving its own fade", () => {
+    expect(exit).toEqual({ person: 200, finished: 240, yielded: 120, invalidated: 200 });
+    for (const close of ["person", "yielded"] as const) {
+      expect(syncPresence(shownAt(1_000), null, close, 1_010, policy))
+        .toMatchObject({ stage: "exiting", close, deadlineMs: 1_010 + exit[close] });
+    }
+  });
+
+  it("never ends a system close before the minimum dwell after first paint", () => {
+    for (const close of ["finished", "invalidated"] as const) {
+      const holding = syncPresence(shownAt(1_000), null, close, 1_050, policy);
+      expect(holding).toMatchObject({
+        stage: "holding",
+        close,
+        deadlineMs: 1_000 + POINT_TALK_TIMING.minDwellMs,
+      });
+      const exiting = advancePresence(holding, 1_000 + POINT_TALK_TIMING.minDwellMs, policy);
+      expect(exiting).toMatchObject({
+        stage: "exiting",
+        close,
+        deadlineMs: 1_000 + POINT_TALK_TIMING.minDwellMs + exit[close],
+      });
+      // Past the dwell, the result is the ending: the fade starts at once.
+      expect(syncPresence(shownAt(1_000), null, close, 5_000, policy))
+        .toMatchObject({ stage: "exiting", deadlineMs: 5_000 + exit[close] });
+    }
+  });
+
+  it("keeps a modal or hidden page as the only cut", () => {
+    expect(syncPresence(shownAt(1_000), null, "preempted", 1_010, policy)).toBeNull();
+    const holding = syncPresence(shownAt(1_000), null, "invalidated", 1_010, policy);
+    expect(syncPresence(holding, null, "preempted", 1_020, policy)).toBeNull();
   });
 });
 

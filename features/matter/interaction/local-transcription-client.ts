@@ -290,7 +290,11 @@ function localTranscriptionWorker(): Worker {
   worker.addEventListener("error", () => {
     retireWorker(target, new LocalTranscriptionError("failed"));
   });
-  const exitCleanup = subscribePageExit(() => {
+  const exitCleanup = subscribePageExit((exit) => {
+    // A back-forward-cache hide freezes the page with its worker; retiring it
+    // would fail a transcription already running and lose the person's words.
+    // The kept worker finishes it when the page is shown again.
+    if (exit.persisted) return;
     if (worker === target) {
       retireWorker(target, new LocalTranscriptionError("failed"));
     }
