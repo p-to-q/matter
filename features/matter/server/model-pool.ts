@@ -5,10 +5,10 @@ import {
   PoolDrainingError,
   ScenarioPolicyError,
   UnusableCompletionError,
-  classifyCompletionTerminators,
   type CompletionDisposition,
   type UnusableCompletionCode,
 } from "./completion-outcome";
+import { parseOpenAiChatCompletion } from "./openai-chat-completion";
 import {
   withAdapterOwnedHealth,
   type MatterScenarioId,
@@ -478,7 +478,10 @@ async function completeOnce(
     );
     responseBodyConsumed = true;
     const payload = JSON.parse(body) as unknown;
-    const completion = transport?.parseCompletion(payload) ?? parseManagedCompletion(payload);
+    // A managed relay's stop report goes through the shared fail-closed
+    // vocabulary; a genuinely absent field stays a counted compatibility path
+    // for relays that predate that boundary.
+    const completion = transport?.parseCompletion(payload) ?? parseOpenAiChatCompletion(payload);
     const disposition = completion.disposition;
     if (disposition === "unknown-terminator") noteCandidate(input, "unknown-terminator");
     if (completion.unusable !== undefined) throw new UnusableCompletionError(completion.unusable);
@@ -587,69 +590,6 @@ class ProviderHttpResponseError extends Error {
     super(`The model provider returned HTTP ${status}.`);
     this.name = "ProviderHttpResponseError";
   }
-}
-
-/**
- * A managed relay's stop report goes through the shared fail-closed
- * vocabulary. A genuinely absent field remains a counted compatibility path
- * for relays that predate this boundary.
- */
-function parseManagedCompletion(payload: unknown): PoolParsedCompletion {
-  const completion = extractCompletion(payload);
-  return Object.freeze({
-    content: completion.content,
-    disposition: completion.disposition,
-    ...(completion.unusable === undefined ? {} : { unusable: completion.unusable }),
-  });
-}
-
-function extractCompletion(payload: unknown): Readonly<{
-  content: unknown;
-  disposition: PoolCompletionDisposition;
-  unusable?: UnusableCompletionCode;
-}> {
-  if (typeof payload !== "object" || payload === null) {
-    throw new Error("The model provider response was not an object.");
-  }
-  const choices = (payload as { choices?: unknown }).choices;
-  if (!Array.isArray(choices) || choices.length === 0) {
-    throw new Error("The model provider response had no choice.");
-  }
-  const choice = choices[0];
-  if (typeof choice !== "object" || choice === null) {
-    throw new Error("The model provider response had no choice object.");
-  }
-  const record = choice as Record<string, unknown>;
-  const message = record.message;
-  const messageRecord = typeof message === "object" && message !== null
-    ? message as Record<string, unknown>
-    : null;
-  const unusable = hasRefusal(messageRecord?.refusal)
-    ? "blocked-or-refused" as const
-    : hasToolCalls(messageRecord?.tool_calls) || hasToolCalls(record.tool_calls)
-      ? "tool-or-continuation" as const
-      : hasFunctionCall(messageRecord?.function_call) || hasFunctionCall(record.function_call)
-        ? "tool-or-continuation" as const
-        : undefined;
-  return Object.freeze({
-    content: messageRecord?.content,
-    disposition: classifyCompletionTerminators(record),
-    ...(unusable === undefined ? {} : { unusable }),
-  });
-}
-
-function hasRefusal(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  return typeof value !== "string" || value.trim().length > 0;
-}
-
-function hasToolCalls(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  return !Array.isArray(value) || value.length > 0;
-}
-
-function hasFunctionCall(value: unknown): boolean {
-  return value !== undefined && value !== null;
 }
 
 async function readBounded(
