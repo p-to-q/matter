@@ -184,7 +184,7 @@ test("a name a person types survives a reload and outranks the model", async ({ 
   await expect(reloaded.locator(".material-file__title")).not.toHaveText("过去的另一种生活");
 });
 
-test("a manual name survives locale-owned label-driver replacement", async ({ page }) => {
+test("a manual name still being written survives a language change and a reload", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
@@ -197,13 +197,19 @@ test("a manual name survives locale-owned label-driver replacement", async ({ pa
   await expect(editor).toBeFocused();
   await editor.fill("跨语言保留的名字");
   await editor.press("Enter");
-  await expect(row.locator(".material-file__title")).toHaveText("跨语言保留的名字");
 
+  // Change language without waiting: the name may still be crossing into
+  // storage, and the label owner must not be replaced underneath it.
   await page.locator('[data-chrome-control="language"]').click();
   await page.getByRole("menuitemradio", { name: "English", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("lang", "en-US");
   await expect(row.locator(".material-file__title")).toHaveText("跨语言保留的名字");
   await expect(row).toHaveAttribute("data-label-origin", "user");
+
+  await page.reload();
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  await expect(page.locator(".material-file").first().locator(".material-file__title"))
+    .toHaveText("跨语言保留的名字");
 });
 
 test("a label is generated once, not once per reload", async ({ page }) => {

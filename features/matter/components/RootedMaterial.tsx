@@ -93,7 +93,10 @@ import type { MaterialArchiveActions } from "./MaterialFiles";
 import { AmbientWorkbench } from "./AmbientWorkbench";
 import {
   localizeCanvasGuidance,
+  localizeExpansionOutcome,
+  localizeParkedRelease,
   projectCanvasGuidance,
+  type CanvasExpansionGuidanceState,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
 } from "./canvas-guidance";
@@ -158,7 +161,13 @@ import type { TransformEnvelope, TransformPlan } from "../protocol/transform-con
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import { MAX_REPLACEMENT_TEXT_CODE_UNITS } from "../tree/invariants";
 import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
+import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import { useFixedExpandTurn } from "./use-fixed-expand-turn";
+import {
+  samePaperMaterialTurnPhases,
+  SETTLED_PAPER_MATERIAL_TURNS,
+  type PaperMaterialTurnPhases,
+} from "./material-turn-activity";
 import {
   isTransformPresentationCurrent,
   useTransformPresentation,
@@ -196,6 +205,23 @@ const MaterialFilesWithLabels = dynamic(
 // the turn still owns the authoritative validation before it exposes input.
 const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
 const EMPTY_NODE_IDS: ReadonlySet<string> = new Set<string>();
+const MODIFIER_ONLY_KEYS: ReadonlySet<string> = new Set([
+  "Alt",
+  "AltGraph",
+  "CapsLock",
+  "Control",
+  "Fn",
+  "FnLock",
+  "Hyper",
+  "Meta",
+  "NumLock",
+  "OS",
+  "ScrollLock",
+  "Shift",
+  "Super",
+  "Symbol",
+  "SymbolLock",
+]);
 const ACTIVE_LAYOUT_NODE_SELECTOR = "[data-layout-node-id][data-thought-id]";
 
 export type RootedMaterialProps = {
@@ -221,7 +247,9 @@ export type RootedMaterialProps = {
     envelope: TransformEnvelope,
     plan: TransformPlan,
     expectedDocumentEpoch: number,
-  ) => TransformCommittedChange | null;
+  ) => MaterialTurnCommitResult<TransformCommittedChange>;
+  /** Reports the paper's Elastic and Point-and-Talk phases to the product root. */
+  onMaterialTurnPhasesChange?: (phases: PaperMaterialTurnPhases) => void;
   onTextSwapCommit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
@@ -404,6 +432,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => setPagePresentationAvailable(true),
   ), []);
   const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
+  const [releaseParkedPointTalk, setReleaseParkedPointTalk] = useState<(() => void) | null>(null);
+  const reportPointTalkParked = useCallback((release: (() => void) | null) => {
+    setReleaseParkedPointTalk(() => release);
+  }, []);
   const [pointTalkVoiceCommand, setPointTalkVoiceCommand] = useState<Readonly<{
     id: number;
     type: "start" | "stop";
@@ -1322,9 +1354,43 @@ export function RootedMaterial(props: RootedMaterialProps) {
     onUnavailable: () => stretchRecoveryRef.current(),
   });
   const {
+    acknowledgeNotice: acknowledgeTransformNotice,
+    cancel: cancelTransform,
     start: startTransform,
     state: transformState,
   } = transform;
+  const reportMaterialTurnPhases = props.onMaterialTurnPhasesChange;
+  const reportedMaterialTurnPhasesRef = useRef(SETTLED_PAPER_MATERIAL_TURNS);
+  useLayoutEffect(() => {
+    const phases = Object.freeze({ elastic: transformState.phase, textSwap: pointTalkPhase });
+    if (samePaperMaterialTurnPhases(reportedMaterialTurnPhasesRef.current, phases)) return;
+    reportedMaterialTurnPhasesRef.current = phases;
+    reportMaterialTurnPhases?.(phases);
+  }, [pointTalkPhase, reportMaterialTurnPhases, transformState.phase]);
+  useLayoutEffect(() => () => {
+    // Unmounting the paper releases its turns, so the root must not keep
+    // waiting on phases nobody will report again.
+    reportedMaterialTurnPhasesRef.current = SETTLED_PAPER_MATERIAL_TURNS;
+    reportMaterialTurnPhases?.(SETTLED_PAPER_MATERIAL_TURNS);
+  }, [reportMaterialTurnPhases]);
+  const transformNotice = transformState.notice;
+  useEffect(() => {
+    if (transformNotice === null) return;
+    // An outcome notice stays until the person acts again, so a slow reader
+    // never loses it to a timer. A held key's auto-repeat or a lone modifier
+    // is not a new action.
+    const acknowledge = () => acknowledgeTransformNotice();
+    const acknowledgeKey = (event: KeyboardEvent) => {
+      if (event.repeat || MODIFIER_ONLY_KEYS.has(event.key)) return;
+      acknowledgeTransformNotice();
+    };
+    window.addEventListener("pointerdown", acknowledge, true);
+    window.addEventListener("keydown", acknowledgeKey, true);
+    return () => {
+      window.removeEventListener("pointerdown", acknowledge, true);
+      window.removeEventListener("keydown", acknowledgeKey, true);
+    };
+  }, [acknowledgeTransformNotice, transformNotice]);
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
     canvasChromeRef.current?.closeInquiry();
     startTransform(basis);
@@ -1397,6 +1463,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
     closePointTalk();
     abortElasticExpansion();
   }, [abortElasticExpansion, closePointTalk]);
+  const stretchReopen = stretch.reopen;
+  const discardParkedExpansion = useCallback(() => {
+    // An explicit release of a result whose passage is not shown. Only a
+    // degree still committed to it reopens; other material stays untouched.
+    cancelTransform();
+    stretchReopen();
+  }, [cancelTransform, stretchReopen]);
   const selectionPreviewMode: SelectionPreviewMode = elasticSelection !== null && elasticLanguageActive
     ? "expand"
     : "neutral";
@@ -2200,17 +2273,33 @@ export function RootedMaterial(props: RootedMaterialProps) {
   } else {
     languageGuidance = { kind: "none" };
   }
+  // Parking is shown only against a settled layout: a relayout briefly
+  // empties the laid-out set without the passage having left the paper.
+  const expansionGuidance: CanvasExpansionGuidanceState = transformState.phase === "requesting"
+    ? transformState.parked && activeLayout !== null ? { kind: "parked" } : { kind: "none" }
+    : transformState.notice === null
+      ? { kind: "none" }
+      : { kind: "unchanged", reason: transformState.notice.kind };
   const guidance = localizeCanvasGuidance(
     projectCanvasGuidance({
       admission: props.admission.state,
       camera: !lasso.active && canvasMode === "pan"
         ? { kind: "pan", zoom: viewport.zoom }
         : { kind: "none" },
+      expansion: expansionGuidance,
+      rewrite: releaseParkedPointTalk !== null && activeLayout !== null
+        ? { kind: "parked" }
+        : { kind: "none" },
       language: languageGuidance,
       material: materialGuidance,
     }),
     canvasPreferences.preferences.language,
   );
+  const parkedRelease = guidance.id === "expansion-parked"
+    ? discardParkedExpansion
+    : guidance.id === "text-swap-parked"
+      ? releaseParkedPointTalk
+      : null;
   const lassoSelectedNodeIds = useMemo(
     () => new Set(lasso.selections.map((selection) => selection.nodeId)),
     [lasso.selections],
@@ -2910,6 +2999,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
     return () => shell.removeEventListener("wheel", handleWheel);
   }, [cancelKeyboardFocusReveal, canvasMode, interruptIndexCameraMotion, lasso.active, setViewport, setWheelMotionActive]);
 
+  // One stable status object per pending turn keeps memoized rows from
+  // re-rendering on every paper render while a request is outstanding.
+  const transformStatusNodeId = transformState.phase === "idle"
+    ? null
+    : transformState.basis?.selection.nodeId ?? null;
+  const transformStatusPhase = transformState.phase;
+  const transformStatus = useMemo(
+    () => transformStatusNodeId === null || transformStatusPhase === "idle"
+      ? null
+      : Object.freeze({
+          nodeId: transformStatusNodeId,
+          phase: transformStatusPhase,
+          text: stretchStatusText(props.locale),
+          announce: !lassoHasSelectionGeometry,
+        }),
+    [lassoHasSelectionGeometry, props.locale, transformStatusNodeId, transformStatusPhase],
+  );
+
   return (
     <main
       className="matter-shell"
@@ -3323,6 +3430,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
           {materialTextSuccessAnnouncement(currentTransformChange.motionHint, props.locale)}
         </span>
       )}
+      {/* Mounted empty first, so assistive technology observes each insertion. */}
+      <span aria-atomic="true" className="visually-hidden" role="status">
+        {transformNotice !== null ? (
+          <span key={`expansion_${transformNotice.id}`}>
+            {localizeExpansionOutcome(transformNotice.kind, props.locale)}
+          </span>
+        ) : guidance.id === "expansion-parked" || guidance.id === "text-swap-parked" ? (
+          <span key={guidance.id}>{guidance.text}</span>
+        ) : null}
+      </span>
       <PaperTexture />
       <header className="matter-header" data-canvas-interactive>
         <a className="matter-brand" href="https://www.ptoq.io/" aria-label="p to q — Matter">
@@ -3548,14 +3665,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               repairPresentations={props.admission.repairPresentations}
               splitProjectionRef={splitProjectionRef}
               transformChange={currentTransformChange}
-              transformStatus={transformState.phase !== "idle" && transformState.basis !== null
-                ? {
-                    nodeId: transformState.basis.selection.nodeId,
-                    phase: transformState.phase,
-                    text: stretchStatusText(props.locale),
-                    announce: !lassoHasSelectionGeometry,
-                  }
-                : null}
+              transformStatus={transformStatus}
               tree={tree}
             />
             )}
@@ -3610,6 +3720,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           aria-label="Matter guidance"
           className="matter-guidance"
           data-canvas-interactive
+          data-guidance-action={parkedRelease === null ? undefined : true}
           data-guidance-kind={guidance.kind}
           data-guidance-state={guidance.id}
           data-optical-clearance="guidance"
@@ -3623,6 +3734,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
           >
             {guidance.text}
           </p>
+          {parkedRelease === null ? null : (
+            <button
+              className="matter-guidance__action"
+              onClick={parkedRelease}
+              type="button"
+            >
+              {localizeParkedRelease(canvasPreferences.preferences.language)}
+            </button>
+          )}
         </footer>
         </div>
         <CanvasChrome
@@ -3671,6 +3791,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             nodeId={pointTalkHostNodeId}
             onClose={closePointTalk}
             onCommitted={publishPointTalkChange}
+            onDeliveryParkedChange={reportPointTalkParked}
             onPhaseChange={setPointTalkPhase}
             onReleased={releasePointTalkJob}
             presented={pointTalkPresented}

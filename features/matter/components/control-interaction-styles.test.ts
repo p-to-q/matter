@@ -56,6 +56,13 @@ describe("canvas control interaction styles", () => {
     );
   });
 
+  it("lets a guidance line with a release wrap instead of clipping it", () => {
+    expect(css).toMatch(
+      /\.matter-guidance\[data-guidance-action\] \.matter-guidance__next\s*\{[^}]*white-space:\s*normal;/s,
+    );
+    expect(css).toMatch(/\.matter-guidance__action\s*\{[^}]*white-space:\s*nowrap;/s);
+  });
+
   it("collapses the spring transitions for reduced motion", () => {
     const reducedMotion = css.slice(css.indexOf("@media (prefers-reduced-motion: reduce)"));
 
