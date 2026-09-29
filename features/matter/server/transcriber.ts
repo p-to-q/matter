@@ -129,9 +129,20 @@ export function resolveTranscriptionAdapter(): TranscriptionAdapter {
   throw transcriptionNotConfigured();
 }
 
-/** Each voice purpose belongs to its own product surface and gate. */
+/**
+ * Each voice purpose belongs to its own product surface and gate. A closed
+ * purpose is deployment configuration: sending the same request again cannot
+ * succeed, so the refusal is not retryable.
+ */
 export function assertTranscriptionPurposeAvailable(purpose: TranscriptionRequest["purpose"]): void {
-  if (!transcriptionPurposeEnabled(purpose)) throw transcriptionNotConfigured();
+  if (!transcriptionPurposeEnabled(purpose)) {
+    throw new TranscriptionServerError(
+      "TRANSCRIPTION_UNAVAILABLE",
+      "This voice surface is not available.",
+      false,
+      503,
+    );
+  }
 }
 
 function transcriptionPurposeEnabled(purpose: TranscriptionRequest["purpose"]): boolean {

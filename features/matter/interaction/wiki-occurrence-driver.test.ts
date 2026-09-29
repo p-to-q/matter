@@ -238,6 +238,21 @@ describe("Wiki occurrence driver", () => {
     expect(harness.settled).toEqual([["occ_a", "accepted-implicit"]]);
   });
 
+  it("keeps the attribution alive when the takeover opens and when it hands off to Wiki", () => {
+    const harness = createHarness();
+    harness.driver.admit(publication([["occ_a", FIRST], ["occ_b", SECOND]]));
+    harness.driver.markDisclosed("occ_a");
+    expect(harness.renewed).toEqual([]);
+    expect(harness.driver.openTakeover("occ_a")).toBe(true);
+    expect(harness.renewed).toEqual(["occ_a"]);
+    harness.driver.leaveTakeover("occ_a", "consult");
+    expect(harness.renewed).toEqual(["occ_a", "occ_a"]);
+    // Leaving unread renews nothing: silence resumes on the ordinary clock.
+    harness.driver.openTakeover("occ_b");
+    harness.driver.leaveTakeover("occ_b", "unread");
+    expect(harness.renewed).toEqual(["occ_a", "occ_a", "occ_b"]);
+  });
+
   it("lets a consult that never covered the paper lapse after a short visible wait", () => {
     const harness = createHarness();
     harness.driver.admit(publication([["occ_a", FIRST]]));
@@ -428,6 +443,7 @@ function createHarness() {
     restoreResult: true,
     material: { tree: tree(TEXT, T0), documentEpoch: 0 } as MaterialView,
     settled: [] as [string, WikiOccurrenceSettleOutcome][],
+    renewed: [] as string[],
     restorations: [] as WikiOccurrenceRestorationRequest[],
     selectionCovers: (() => false) as (address: { start: number }) => boolean,
     hitTest: (() => null) as (targets: readonly WikiOccurrenceTarget[]) => string | null,
@@ -471,6 +487,9 @@ function createHarness() {
       state.settled.push([occurrenceId, outcome]);
       if (state.settleStatus === "throw") throw new Error("unavailable");
       return state.settleStatus === null ? undefined : Promise.resolve(state.settleStatus);
+    },
+    renew: (occurrenceId) => {
+      state.renewed.push(occurrenceId);
     },
     restore: (request) => {
       state.restorations.push(request);

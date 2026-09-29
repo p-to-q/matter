@@ -173,6 +173,12 @@ export type WikiOccurrenceDriverInput = Readonly<{
   readMaterial: () => MaterialView;
   settle: WikiOccurrenceSettle;
   restore: (request: WikiOccurrenceRestorationRequest) => boolean;
+  /**
+   * Keeps an occurrence's attribution alive while the person decides about
+   * it: the takeover and the Wiki surface it hands off to suspend silence and
+   * so may outlast the attribution's ordinary wait.
+   */
+  renew?: (occurrenceId: string) => void;
 }>;
 
 export function createWikiOccurrenceDriver(input: WikiOccurrenceDriverInput & Readonly<{
@@ -355,6 +361,14 @@ export function createWikiOccurrenceDriver(input: WikiOccurrenceDriverInput & Re
       environment.untrack(nodeId);
     }
     return entry;
+  };
+
+  const renewAttribution = (occurrenceId: string) => {
+    try {
+      input.renew?.(occurrenceId);
+    } catch {
+      // Attribution is best effort; the takeover itself never depends on it.
+    }
   };
 
   const settle = (occurrenceId: string, outcome: WikiOccurrenceSettleOutcome) => {
@@ -587,6 +601,7 @@ export function createWikiOccurrenceDriver(input: WikiOccurrenceDriverInput & Re
         settle(takeoverId, "inspected-kept");
       }
       takeoverId = occurrenceId;
+      renewAttribution(occurrenceId);
       // Opening the takeover is itself disclosure.
       update(occurrenceId, {
         ...record.occurrence,
@@ -605,7 +620,10 @@ export function createWikiOccurrenceDriver(input: WikiOccurrenceDriverInput & Re
     leaveTakeover(occurrenceId, reason) {
       if (takeoverId !== occurrenceId) return;
       takeoverId = null;
-      if (reason === "consult") consulting = { id: occurrenceId, covered: false, openMs: 0 };
+      if (reason === "consult") {
+        consulting = { id: occurrenceId, covered: false, openMs: 0 };
+        renewAttribution(occurrenceId);
+      }
       publish();
     },
     revert(occurrenceId) {

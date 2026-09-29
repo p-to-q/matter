@@ -18,7 +18,7 @@ import type { RecoveredHistory } from "./history-recovery";
 import { treeToBundle, type SnapshotBundle } from "./snapshot-codec";
 import { validateThoughtTree } from "../tree/invariants";
 import type { ThoughtTree } from "../tree/model";
-import { createTreeHistory, type TreeHistory } from "../tree/history";
+import { createTreeHistory, retainedInverseBytes, type TreeHistory } from "../tree/history";
 import { LOADING_PERSISTENCE_STATUS } from "./persistence-status";
 
 /**
@@ -28,11 +28,19 @@ import { LOADING_PERSISTENCE_STATUS } from "./persistence-status";
  */
 export type HistoryNotice = "released" | "unavailable";
 
+/**
+ * A storage answer, or `PERSISTENCE_ENGINE_UNAVAILABLE`: the code that saves
+ * material could not be fetched (typically a dropped connection), so no
+ * storage was ever opened. Only the deferred facade reports it; it says
+ * nothing about whether this browser can save.
+ */
+export type PersistenceErrorCode = RepositoryErrorCode | "PERSISTENCE_ENGINE_UNAVAILABLE";
+
 export type PersistenceStatus = Readonly<{
   phase: "loading" | "saved" | "saving" | "error";
   persistedRevision: number | null;
   dirtyRevision: number | null;
-  errorCode: RepositoryErrorCode | null;
+  errorCode: PersistenceErrorCode | null;
   historyNotice: HistoryNotice | null;
   /**
    * This tab holds material the person made, or an import, that no stored row
@@ -188,6 +196,12 @@ export type PersistenceController = Readonly<{
 export type PersistenceControllerOptions = Readonly<{
   /** Tells other tabs about every row this tab commits. */
   announceGeneration?: (generation: DocumentGeneration) => void;
+  /**
+   * Bytes this origin may still store, or `null` when unknown. Read only while
+   * storage pressure has lowered durable history, to decide whether one save
+   * may try to keep every undo step again.
+   */
+  storageHeadroom?: () => Promise<number | null>;
 }>;
 
 type PendingDocument = Readonly<{ tree: ThoughtTree; history: TreeHistory; authored: boolean }>;
@@ -196,8 +210,14 @@ type TerminalCode = "PERSISTENCE_SUPERSEDED" | "PERSISTENCE_CLEARED";
 
 /** No row is known: the first save creates one, or meets another tab's as a conflict. */
 const UNKNOWN_BASIS: SnapshotBasis = Object.freeze({ writeGeneration: null, journal: emptyHistoryJournal(0) });
+/**
+ * A save tries full undo retention again only when the storage estimate leaves
+ * room for twice the whole in-memory history plus this margin: records carry
+ * structured-clone and key overhead the byte count does not include.
+ */
+const RETENTION_RESTORE_MARGIN_BYTES = 1_024 * 1_024;
 /** Storage refused material, not the row's basis: an archive may replace it. */
-const REPLACEABLE_ERRORS: ReadonlySet<RepositoryErrorCode | null> = new Set([
+const REPLACEABLE_ERRORS: ReadonlySet<PersistenceErrorCode | null> = new Set([
   "PERSISTENCE_STORAGE_FULL",
   "PERSISTENCE_WRITE_FAILED",
 ]);
@@ -214,9 +234,13 @@ export function createPersistenceController(
   let basis: SnapshotBasis = UNKNOWN_BASIS;
   // The history the basis row holds, so a history-only change is still saved.
   let persistedHistory: TreeHistory | null = null;
-  // Storage pressure lowers durable history for the rest of the document
-  // epoch; an explicit retry or a new document restores full retention.
+  // Storage pressure lowers durable history. A later save whose storage
+  // estimate shows room tries full retention once; an explicit retry, an
+  // adopted row, or a new document starts from full retention again.
   let retention: HistoryRetention = FULL_HISTORY_RETENTION;
+  // Storage refused full retention although its estimate showed room: this
+  // engine's estimate is not a reason to try again in this document epoch.
+  let retentionRestoreRefused = false;
   let pending: PendingDocument | null = null;
   let writingDocument: PendingDocument | null = null;
   let importAttemptSequence = 0;
@@ -245,8 +269,14 @@ export function createPersistenceController(
     activeImportAttempt !== null;
   // Storage refused the pending material and nothing is writing it: the one
   // state in which an archive may replace unsaved material.
-  const importMayReplace = (errorCode: RepositoryErrorCode | null) =>
+  const importMayReplace = (errorCode: PersistenceErrorCode | null) =>
     pending !== null && !writing && activeImportAttempt === null && REPLACEABLE_ERRORS.has(errorCode);
+
+  // A compare that fails while this tab never read or wrote a row (a first
+  // save after a failed load, a corrupt row that changed) proves only that
+  // stored material differs from the page, not that another tab exists.
+  const unattributedConflictOrigin = (): ConflictOrigin =>
+    basis.writeGeneration === null ? "load-window" : "another-tab";
 
   const update = (next: StatusFields) => {
     const errorCode = terminal ?? next.errorCode;
@@ -254,7 +284,9 @@ export function createPersistenceController(
       ...next,
       phase: terminal === null ? next.phase : "error",
       errorCode,
-      conflictOrigin: errorCode === "PERSISTENCE_CONFLICT" ? next.conflictOrigin ?? "another-tab" : null,
+      conflictOrigin: errorCode === "PERSISTENCE_CONFLICT"
+        ? next.conflictOrigin ?? unattributedConflictOrigin()
+        : null,
       unsaved: holdsUnsavedMaterial(),
       replaceableByImport: importMayReplace(errorCode),
     });
@@ -289,6 +321,27 @@ export function createPersistenceController(
     options.announceGeneration?.({ treeId, writeGeneration, storageSchemaVersion: STORAGE_SCHEMA_VERSION });
   };
 
+  function restoreFullRetention() {
+    retention = FULL_HISTORY_RETENTION;
+    retentionRestoreRefused = false;
+  }
+
+  /** Whether one save may try to keep every in-memory undo step again. */
+  const mayTryFullRetention = async (history: TreeHistory): Promise<boolean> => {
+    if (retention === FULL_HISTORY_RETENTION || retentionRestoreRefused || options.storageHeadroom === undefined) {
+      return false;
+    }
+    let headroom: number | null;
+    try {
+      headroom = await options.storageHeadroom();
+    } catch {
+      return false;
+    }
+    const historyBytes = retainedInverseBytes(history.entries) + retainedInverseBytes(history.redoEntries);
+    return typeof headroom === "number" && Number.isFinite(headroom) &&
+      headroom >= 2 * historyBytes + RETENTION_RESTORE_MARGIN_BYTES;
+  };
+
   const beginDocument = (treeId: string) => {
     activeImportAttempt = null;
     corruptRecovery = null;
@@ -296,42 +349,60 @@ export function createPersistenceController(
     documentEpoch += 1;
     basis = UNKNOWN_BASIS;
     persistedHistory = null;
-    retention = FULL_HISTORY_RETENTION;
+    restoreFullRetention();
   };
 
   /**
-   * Material before history: when storage refuses the write, the same
+   * Material before history: when storage refuses a write, the same
    * transaction is retried once after reclaiming recomputable caches, then
    * with fewer durable undo steps. Only a snapshot that cannot fit alone is
-   * reported as storage-full.
+   * reported as storage-full. Every write of material and its journal (an
+   * ordinary save and a corrupt-row replacement) goes through this one loop.
    */
-  const saveShedding = async (
-    document: PendingDocument,
-    bundle: SnapshotBundle,
-    saveEpoch: number,
+  const writeShedding = async (
+    history: TreeHistory,
+    write: (attempt: HistoryRetention) => Promise<RepositoryResult<SnapshotBasis>>,
+    stillCurrent: () => boolean,
   ): Promise<Readonly<{ saved: RepositoryResult<SnapshotBasis>; retention: HistoryRetention }>> => {
-    let attempt = retention;
+    const lowered = retention;
+    // At most one attempt per document epoch that the estimate misjudged; a
+    // refusal falls straight back to the retention storage last accepted.
+    let restoring = await mayTryFullRetention(history) && stillCurrent();
+    let attempt = restoring ? FULL_HISTORY_RETENTION : lowered;
     let reclaimed = false;
     for (;;) {
-      const saved = await repository.save({
+      const saved = await write(attempt);
+      if (saved.ok || saved.error.code !== "PERSISTENCE_STORAGE_FULL") return { saved, retention: attempt };
+      if (!stillCurrent()) return { saved, retention: attempt };
+      if (restoring) {
+        restoring = false;
+        retentionRestoreRefused = true;
+        attempt = lowered;
+        continue;
+      }
+      if (!reclaimed) {
+        reclaimed = true;
+        if (await repository.reclaimDerivedStorage()) continue;
+      }
+      const next = shedHistoryRetention(history, attempt);
+      if (next === null) return { saved, retention: attempt };
+      attempt = next;
+    }
+  };
+
+  const saveShedding = (document: PendingDocument, bundle: SnapshotBundle, saveEpoch: number) =>
+    writeShedding(
+      document.history,
+      (attempt) => repository.save({
         treeId: document.tree.id,
         treeRevision: document.tree.revision,
         bundle,
         basis,
         history: document.history,
         retention: attempt,
-      });
-      if (saved.ok || saved.error.code !== "PERSISTENCE_STORAGE_FULL") return { saved, retention: attempt };
-      if (!active || saveEpoch !== documentEpoch) return { saved, retention: attempt };
-      if (!reclaimed) {
-        reclaimed = true;
-        if (await repository.reclaimDerivedStorage()) continue;
-      }
-      const next = shedHistoryRetention(document.history, attempt);
-      if (next === null) return { saved, retention: attempt };
-      attempt = next;
-    }
-  };
+      }),
+      () => active && saveEpoch === documentEpoch,
+    );
 
   const drain = async () => {
     if (!active || writing || !ready || pending === null || activeImportAttempt !== null || terminal !== null) return;
@@ -366,7 +437,7 @@ export function createPersistenceController(
       }
       basis = saved.value;
       persistedHistory = pendingDocument.history;
-      const shed = savedRetention !== retention;
+      const shed = retentionLowered(retention, savedRetention);
       retention = savedRetention;
       announce(tree.id, saved.value.writeGeneration);
       const queuedAfterWrite = currentPending();
@@ -718,18 +789,34 @@ export function createPersistenceController(
       } catch {
         return Object.freeze({ ok: false, errorCode: "PERSISTENCE_WRITE_FAILED" });
       }
-      const replaced = await repository.replaceCorrupt({
-        treeId: replacement.tree.id,
-        treeRevision: replacement.tree.revision,
-        bundle,
-        history: replacement.history,
-        retention,
-      }, recovery.basis);
+      const { saved: replaced, retention: replacedRetention } = await writeShedding(
+        replacement.history,
+        (attempt) => repository.replaceCorrupt({
+          treeId: replacement.tree.id,
+          treeRevision: replacement.tree.revision,
+          bundle,
+          history: replacement.history,
+          retention: attempt,
+        }, recovery.basis),
+        () => active && recovery.documentEpoch === documentEpoch && corruptRecovery === recovery,
+      );
       if (!replaced.ok) {
-        corruptRecovery = null;
-        enterTerminal(replaced.error.code);
-        update({ ...status, errorCode: replaced.error.code });
-        return Object.freeze({ ok: false, errorCode: replaced.error.code });
+        const errorCode = replaced.error.code;
+        if (enterTerminal(errorCode)) return Object.freeze({ ok: false, errorCode });
+        if (!active || recovery.documentEpoch !== documentEpoch || corruptRecovery !== recovery) {
+          return Object.freeze({ ok: false, errorCode });
+        }
+        if (errorCode === "PERSISTENCE_CONFLICT") {
+          // The stored row is no longer the one the person exported.
+          corruptRecovery = null;
+          update({ ...status, errorCode });
+        }
+        // Storage refused the replacement (full even without history, or a
+        // failed write): the damaged row is still exactly the exported one.
+        // The recovery basis and the corrupt status stay, so Replace can be
+        // tried again, while Retry and archive replacement, which would
+        // compare against a generation this tab never read, stay closed.
+        return Object.freeze({ ok: false, errorCode });
       }
       corruptRecovery = null;
       if (!active || recovery.documentEpoch !== documentEpoch || replacement.tree.id !== activeTreeId) {
@@ -737,6 +824,8 @@ export function createPersistenceController(
       }
       basis = replaced.value;
       persistedHistory = replacement.history;
+      const shed = retentionLowered(retention, replacedRetention);
+      retention = replacedRetention;
       announce(replacement.tree.id, replaced.value.writeGeneration);
       if (pending === replacement) pending = null;
       const queued = pending;
@@ -746,6 +835,7 @@ export function createPersistenceController(
         persistedRevision: replacement.tree.revision,
         dirtyRevision: queued?.tree.revision ?? null,
         errorCode: null,
+        historyNotice: nextHistoryNotice(status.historyNotice, shed, replacedRetention),
       });
       if (queued !== null) void drain();
       return Object.freeze({ ok: true });
@@ -764,7 +854,7 @@ export function createPersistenceController(
         status.errorCode === "PERSISTENCE_CONFLICT" ||
         status.errorCode === "PERSISTENCE_CORRUPT"
       ) return;
-      retention = FULL_HISTORY_RETENTION;
+      restoreFullRetention();
       update({ ...status, phase: "saving", errorCode: null });
       void drain();
     },
@@ -841,7 +931,7 @@ export function createPersistenceController(
       const hydrated = hydrate(candidate);
       if (hydrated === null) return "refused";
       if (candidate.replaces !== null) pending = null;
-      retention = FULL_HISTORY_RETENTION;
+      restoreFullRetention();
       adoptLoaded(candidate, hydrated.historyReleased);
       return "adopted";
     },
@@ -880,6 +970,11 @@ function sameDurableHistory(history: TreeHistory, persisted: TreeHistory | null)
     history.entries.length === 0 && history.redoEntries.length === 0 &&
     persisted.entries.length === 0 && persisted.redoEntries.length === 0
   );
+}
+
+/** A save kept fewer durable undo steps than the retention it started from. */
+function retentionLowered(before: HistoryRetention, after: HistoryRetention): boolean {
+  return after !== FULL_HISTORY_RETENTION && after !== before;
 }
 
 /**

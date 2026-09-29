@@ -23,8 +23,12 @@ export const WIKI_OCCURRENCE_PERCEPTION = Object.freeze({
 /** Settles before the registry forgets the attribution it would record. */
 export const WIKI_OCCURRENCE_LIFETIME_MS = WIKI_OCCURRENCE_REGISTRY_BOUNDS.claimedTtlMs - 15_000;
 
-/** Live occurrences beyond this are censored oldest first. */
-export const MAX_LIVE_WIKI_OCCURRENCES = 64;
+/**
+ * Live occurrences beyond this are censored oldest first. It is the registry's
+ * claimed bound, so every live mark keeps a claimed attribution the registry
+ * never evicts to make room for a newer candidate.
+ */
+export const MAX_LIVE_WIKI_OCCURRENCES = WIKI_OCCURRENCE_REGISTRY_BOUNDS.maxClaimed;
 
 export type WikiOccurrenceAddress = Readonly<{
   treeId: string;

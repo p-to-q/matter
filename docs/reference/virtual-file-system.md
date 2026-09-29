@@ -134,9 +134,10 @@ Runtime persistence state tracks base generation, persisted revision, queued
 revision, dirty revision, error, whether the tab holds unsaved material the
 person made (a pending or in-flight write of it, or an import), whether an
 archive may replace material storage refused, a blocked upgrade, and the
-history notice, and where a conflict came from: another tab's row, or material that
-changed while the first load was in flight (the line then says the page and
-stored material differ, never that another tab exists). Write failure does not
+history notice, and where a conflict came from: another tab's row, or a row
+this tab never read — material that changed while the first load was in
+flight, or a first save after a failed load meeting a stored row (the line then
+says the page and stored material differ, never that another tab exists). Write failure does not
 roll back material; pointer retry saves the
 latest dirty bundle for transient write failures; generation conflict instead
 requires explicit reload. Browser crash between commit and IndexedDB completion
@@ -188,10 +189,13 @@ is newer is superseded, never corrupt, so Repair cannot let an older build
 overwrite it. A deletion from another tab (`blocking` with no new version) is
 `PERSISTENCE_CLEARED`, equally terminal. Such a tab offers only an export from
 memory and a page reload. A superseded tab reloads by itself only while it is
-hidden, nothing the person made is unsaved, and the material is idle, and at most once per
-minute: the time of the last automatic reload is kept in session storage so a
-reload that serves the same older build cannot loop, and without session
-storage it never reloads by itself. A visible tab keeps the line and Archive's
+hidden, nothing the person made is unsaved, and the material is idle. The time
+and count of consecutive automatic reloads are kept in session storage, and
+each quiet window doubles from one minute to at most one hour, so a reload that
+serves the same older build (a rolled-back deployment) cannot loop, while a tab
+left hidden still reaches a fixed deployment; a reload two hours or more after
+the previous one starts the count again. Without session storage it never
+reloads by itself. A visible tab keeps the line and Archive's
 Reload. The newer tab, when an older one does not close, keeps waiting and says
 so.
 
@@ -290,14 +294,25 @@ layout; the repository executes it.
   replaced row is the one this tab's basis described; otherwise the next save
   meets the newer row as a conflict. Later saves compact every other epoch.
   Corrupt-row replacement is different: nothing can roll it back and the damaged
-  row's journal is never trusted, so it writes its whole journal into the next
-  epoch and deletes every other epoch's records in the same transaction.
+  row's journal is never trusted, so it writes the journal it retains into the
+  next epoch and deletes every other epoch's records in the same transaction.
+  It sheds under storage pressure exactly as a save does. A replacement storage
+  still refuses leaves the damaged row, its exported basis, and the corrupt
+  status in place, so Replace can be tried again; Retry and archive
+  replacement stay closed, because both would compare against a row this tab
+  never read.
 - **Material before history.** When storage refuses a save, the controller
   retries the same transaction with half the durable undo bytes, then none, then
   no redo, and records the release; only a snapshot that cannot fit alone
-  reports `PERSISTENCE_STORAGE_FULL`. The shed retention holds for the document
-  epoch; Retry or a new document restores it. The tab keeps its whole in-memory
-  history, so the notice says older steps will not survive a reload.
+  reports `PERSISTENCE_STORAGE_FULL`. The shed retention holds until a later
+  save finds, in `navigator.storage.estimate()`, room for twice the whole
+  in-memory history plus 1 MiB; that save tries full retention first and the
+  notice ends when it lands. A refusal falls back to the shed retention within
+  the same save and stops further attempts for the document epoch, because the
+  estimate evidently overstates this engine's room; Retry after a failed save,
+  an adopted row, or a new document starts from full retention again. The tab
+  keeps its whole in-memory history, so the notice says older steps will not
+  survive a reload.
 
 `npm run bench:persistence` records both sides. On 2026-09-29 (Node 22.20), a
 2,000-node tree with 1,050 commits (bounded to 1,000 steps) recovered in 9.35 ms
@@ -325,11 +340,12 @@ The material-index footer is deliberately not a recovery control, but it no
 longer claims the material is kept when it is not. Its one localized line under
 the non-account identity reads, until resolved: "Not saved on this device"
 (write failed, storage full, damaged row), "Not saving in this browser"
-(IndexedDB unavailable, as in a private window), "A newer copy is open in
+(IndexedDB unavailable, as in a private window), "Saving could not load" (the
+storage code itself could not be fetched; it is fetched again when the
+connection or the page returns), "A newer copy is open in
 another tab" (conflict), "A newer Matter is open in another tab" (superseded
 schema), "Local storage was cleared" (by another tab or by the browser), "This
-page and stored material differ" (the first load met material changed while it
-read), "Close other Matter tabs to finish updating" (blocked upgrade), or the
+page and stored material differ" (the page met a stored row it never read), "Close other Matter tabs to finish updating" (blocked upgrade), or the
 history notice; otherwise the local-device line, with a brief saving phrase
 while a write is in flight. An attention line carries a static ink dot, is
 announced once through a polite live region that sits outside the index (a
@@ -453,7 +469,7 @@ manifests, v5 migration, import epochs with rollback, and quota shedding;
 cross-tab generation refresh and conflict, two-phase adoption refused by the
 store, the material-idle gate (including a hidden tab holding a submitted AI
 turn), pointer-release recovery, returning-page check, superseded and cleared
-storage (including a missing row), the one-shot superseded reload, the unload
+storage (including a missing row), the backed-off superseded reload, the unload
 guard's authorship rule, same-revision adoption, and replacing refused material
 by import; ZIP export → import;
 traversal, Unicode/case collision, compressed/expanded size, path depth, and

@@ -5,8 +5,9 @@ import {
   isMatterWikiPhoneticFittingEnabled,
 } from "./wiki-capability-preferences-reader";
 import {
-  claimMatterWikiOccurrences,
+  claimMatterWikiPublication,
   mintMatterWikiOccurrence,
+  renewMatterWikiOccurrence,
   takeMatterWikiOccurrence,
 } from "./wiki-occurrence-owner";
 import { matterWikiBasisPublication } from "./wiki-runtime-publication";
@@ -18,10 +19,11 @@ export const readMatterWikiBasis = matterWikiBasisPublication.read;
 export const readMatterWikiInterpreter = matterWikiBasisPublication.readInterpreter;
 
 export {
-  claimMatterWikiOccurrences,
+  claimMatterWikiPublication,
   isMatterWikiAutomaticCollectionEnabled,
   isMatterWikiPhoneticFittingEnabled,
   mintMatterWikiOccurrence,
+  renewMatterWikiOccurrence,
 };
 
 /** A successful human turn may wake the local runtime, but never waits for it. */

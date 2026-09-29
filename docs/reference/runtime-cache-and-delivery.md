@@ -157,9 +157,13 @@ when the main chunk evaluates, earlier than the effect that asks for the first
 stored row. Until it arrives the facade reports the controller's own loading
 status, replays earlier calls in order, and lets `start` wait; the paper keeps
 durable gestures inert while loading, as it already does while IndexedDB
-reads. An engine that cannot load reports `PERSISTENCE_UNAVAILABLE`, Retry
-fetches it again, and material made meanwhile meets any stored row through the
-load-window rule. `e2e/persistence-engine.spec.ts` holds a cold repeat visit
+reads. A failed fetch is a network fault, not a browser that cannot save: the
+facade stays loading while it fetches again after 0.5, 1, and 2 s, then
+reports `PERSISTENCE_ENGINE_UNAVAILABLE` with its own line ("Saving could not
+load", never the private-window "Not saving in this browser"). It fetches once
+more, quietly, when the browser comes back online or the page becomes visible,
+and Retry starts the loading grace again. Material made meanwhile meets any
+stored row through the load-window rule. `e2e/persistence-engine.spec.ts` holds a cold repeat visit
 (stored material appears one round trip later and is never written over) and
 the failure path.
 

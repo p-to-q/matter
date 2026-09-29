@@ -32,8 +32,23 @@ if (typeof window !== "undefined") void loadPersistenceEngine().catch(() => unde
 const ENGINE_UNAVAILABLE: PersistenceStatus = Object.freeze({
   ...LOADING_PERSISTENCE_STATUS,
   phase: "error",
-  errorCode: "PERSISTENCE_UNAVAILABLE",
+  errorCode: "PERSISTENCE_ENGINE_UNAVAILABLE",
 });
+
+/**
+ * Waits between fetches of an engine that failed to load. A fetch that fails
+ * this many times in a row (about 3.5 s) ends the loading grace; later fetches
+ * wait for a moment that could change the answer.
+ */
+export const ENGINE_RETRY_DELAYS_MS: readonly number[] = Object.freeze([500, 1_000, 2_000]);
+
+/** The timers and page signals the facade's retries use; injectable for tests. */
+export type EngineRetryEnvironment = Readonly<{
+  setTimeout(callback: () => void, delayMs: number): unknown;
+  clearTimeout(handle: unknown): void;
+  /** Calls back when a failed fetch may now succeed: back online, or visible again. */
+  listenForRecovery(listener: () => void): () => void;
+}>;
 
 /**
  * Stands in for the persistence controller while its storage engine loads, and
@@ -46,9 +61,12 @@ const ENGINE_UNAVAILABLE: PersistenceStatus = Object.freeze({
  *   nothing until a stored row is read, and its exit guards answer by
  *   authorship until then, so material made meanwhile is guarded and later
  *   meets any stored row through the ordinary load-window rule;
- * - an engine that cannot load reports PERSISTENCE_UNAVAILABLE, the answer
- *   storage that cannot open already gives, and Retry fetches it again. Any
- *   other asynchronous call resolves to its unavailable answer, never hangs.
+ * - a failed fetch is a network fault, not a browser that cannot save. The
+ *   facade stays loading while it fetches again on a short bounded backoff,
+ *   then reports PERSISTENCE_ENGINE_UNAVAILABLE and fetches once more, quietly,
+ *   whenever the browser comes back online or the page becomes visible; Retry
+ *   starts the loading grace again. Any other asynchronous call resolves to
+ *   its unavailable answer once the grace ends, and never hangs.
  *
  * No pointer gesture awaits this: while the status is loading the paper keeps
  * durable gestures inert, as it already does while IndexedDB reads.
@@ -56,11 +74,16 @@ const ENGINE_UNAVAILABLE: PersistenceStatus = Object.freeze({
 export function createDeferredPersistenceController(
   options: PersistenceControllerOptions = {},
   loadEngine: PersistenceEngineLoader = loadPersistenceEngine,
+  environment: EngineRetryEnvironment = BROWSER_ENGINE_RETRY_ENVIRONMENT,
 ): PersistenceController {
   let controller: PersistenceController | null = null;
   let disposed = false;
   let loading: Promise<PersistenceController | null> | null = null;
   let status: PersistenceStatus = LOADING_PERSISTENCE_STATUS;
+  // Recovery listeners exist only between a failed fetch and the engine's
+  // arrival or disposal; the backoff timer only while a grace fetch waits.
+  let stopRecovery: (() => void) | null = null;
+  let backoff: Readonly<{ handle: unknown; wake: () => void }> | null = null;
   const replay: Array<(attached: PersistenceController) => void> = [];
   const listeners = new Set<() => void>();
   const notify = () => {
@@ -71,26 +94,71 @@ export function createDeferredPersistenceController(
     status = next;
     notify();
   };
+  const releaseRetryResources = () => {
+    stopRecovery?.();
+    stopRecovery = null;
+    backoff?.wake();
+  };
 
-  const attach = (): Promise<PersistenceController | null> => {
-    if (controller !== null) return Promise.resolve(controller);
-    if (disposed) return Promise.resolve(null);
-    if (loading !== null) return loading;
-    report(LOADING_PERSISTENCE_STATUS);
-    const attempt = loadEngine().then((engine) => {
+  const waitBeforeRetry = (delayMs: number) => new Promise<void>((resolve) => {
+    const wake = () => {
+      if (backoff?.wake === wake) {
+        environment.clearTimeout(backoff.handle);
+        backoff = null;
+      }
+      resolve();
+    };
+    backoff = Object.freeze({ handle: environment.setTimeout(wake, delayMs), wake });
+  });
+
+  // Back online or visible again: a grace fetch waiting out its backoff goes
+  // now, and after the grace one quiet fetch is made.
+  const recover = () => {
+    if (disposed || controller !== null) return;
+    if (backoff !== null) backoff.wake();
+    else if (loading === null) void attach(false);
+  };
+
+  const fetchEngine = async (delays: readonly number[]): Promise<PersistenceController | null> => {
+    for (let failures = 0; ; failures += 1) {
+      let engine: Awaited<ReturnType<PersistenceEngineLoader>>;
+      try {
+        engine = await loadEngine();
+      } catch {
+        if (disposed) return null;
+        stopRecovery ??= environment.listenForRecovery(recover);
+        const delay = delays[failures];
+        if (delay === undefined) {
+          loading = null;
+          report(ENGINE_UNAVAILABLE);
+          return null;
+        }
+        await waitBeforeRetry(delay);
+        if (disposed) return null;
+        continue;
+      }
       loading = null;
       if (disposed) return null;
+      releaseRetryResources();
       const attached = engine.createIndexedDbPersistenceController(options);
       controller = attached;
       attached.subscribe(notify);
       for (const call of replay.splice(0)) call(attached);
       notify();
       return attached;
-    }, () => {
-      loading = null;
-      if (!disposed) report(ENGINE_UNAVAILABLE);
-      return null;
-    });
+    }
+  };
+
+  /**
+   * `graced`: the status reads loading while the fetch retries on its backoff.
+   * A quiet fetch after the grace keeps the unavailable line until it lands.
+   */
+  const attach = (graced = true): Promise<PersistenceController | null> => {
+    if (controller !== null) return Promise.resolve(controller);
+    if (disposed) return Promise.resolve(null);
+    if (loading !== null) return loading;
+    if (graced) report(LOADING_PERSISTENCE_STATUS);
+    const attempt = fetchEngine(graced ? ENGINE_RETRY_DELAYS_MS : []);
     loading = attempt;
     return attempt;
   };
@@ -101,7 +169,10 @@ export function createDeferredPersistenceController(
     else if (!disposed) replay.push(call);
   };
 
-  /** An asynchronous call that waits for one engine attempt at most. */
+  /**
+   * An asynchronous call that waits for one engine attempt at most: the grace
+   * in progress, or else one quiet fetch that leaves the status as it is.
+   */
   const whenAttached = <T>(
     call: (attached: PersistenceController) => Promise<T>,
     unavailable: T,
@@ -115,7 +186,7 @@ export function createDeferredPersistenceController(
         settled = true;
         call(attached).then(resolve, reject);
       });
-      void attach().then((attached) => {
+      void attach(false).then((attached) => {
         if (attached !== null || settled) return;
         settled = true;
         resolve(unavailable);
@@ -189,6 +260,7 @@ export function createDeferredPersistenceController(
     },
     dispose() {
       disposed = true;
+      releaseRetryResources();
       replay.length = 0;
       listeners.clear();
       controller?.dispose();
@@ -202,3 +274,20 @@ export function createDeferredPersistenceController(
     },
   });
 }
+
+const BROWSER_ENGINE_RETRY_ENVIRONMENT: EngineRetryEnvironment = Object.freeze({
+  setTimeout: (callback: () => void, delayMs: number) => globalThis.setTimeout(callback, delayMs),
+  clearTimeout: (handle: unknown) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+  listenForRecovery(listener: () => void) {
+    if (typeof window === "undefined" || typeof document === "undefined") return () => undefined;
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") listener();
+    };
+    window.addEventListener("online", listener);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("online", listener);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  },
+});
