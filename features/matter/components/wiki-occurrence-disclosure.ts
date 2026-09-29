@@ -226,7 +226,7 @@ export type WikiDisclosureController = Readonly<{
   dispose(): void;
 }>;
 
-type RunningDisclosure = Readonly<{ nodeId: string; stop: () => void }>;
+type RunningDisclosure = Readonly<{ stop: () => void }>;
 
 /**
  * Owns the short-lived resources of disclosure: one scheduling timer while a
@@ -369,7 +369,7 @@ export function createWikiDisclosureController(
         })
       : null;
     if (stop !== null) {
-      running.set(view.id, Object.freeze({ nodeId: view.nodeId, stop }));
+      running.set(view.id, Object.freeze({ stop }));
       return;
     }
     startSweep(view, element, host, range, fragments);
@@ -383,11 +383,8 @@ export function createWikiDisclosureController(
     fragments: readonly ClientTextRect[],
   ) => {
     const stop = playSweep(element, host, range, fragments, (disclosed) => finish(view.id, disclosed));
-    if (stop === null) {
-      onDisclosed(view.id);
-      return;
-    }
-    running.set(view.id, Object.freeze({ nodeId: view.nodeId, stop }));
+    // Nothing could be drawn, so nothing was disclosed; a later check retries.
+    if (stop !== null) running.set(view.id, Object.freeze({ stop }));
   };
 
   const check = () => {
@@ -490,6 +487,7 @@ const COPIED_TEXT_PROPERTIES = Object.freeze([
   "font-synthesis",
   "letter-spacing",
   "word-spacing",
+  "text-transform",
   "text-rendering",
   "-webkit-font-smoothing",
   "color",
