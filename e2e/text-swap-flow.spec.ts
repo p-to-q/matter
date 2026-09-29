@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { PRESENCE_TIMING } from "../features/matter/components/presence";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const ROOT_ID = "thought_fixture_root";
@@ -843,6 +844,8 @@ test.describe("passage-local Point and Talk", () => {
     const gone = stages[exiting + 1];
     expect(gone?.entry).toBe("absent");
     expect(gone!.at - stages[exiting]!.at).toBeGreaterThanOrEqual(100);
+    // The CSS fade lasts exactly as long as the presence timer's exit.
+    expect(stages[exiting]!.fade).toBe(`${PRESENCE_TIMING.exitMs / 1_000}s`);
   });
 
   test.describe("coarse pointer", () => {
@@ -892,16 +895,17 @@ test.describe("passage-local Point and Talk", () => {
 
 /**
  * Records every Point Talk field as `presence:close:typed words`, one entry per
- * change with the time it was observed, and returns a reader that drains it.
+ * change with the time it was observed and the CSS fade it was given, and
+ * returns a reader that drains the record.
  */
 async function recordPointTalkStages(
   page: Page,
-): Promise<() => Promise<Readonly<{ entry: string; at: number }>[]>> {
+): Promise<() => Promise<Readonly<{ entry: string; at: number; fade: string }>[]>> {
   await page.evaluate(() => {
     const runtime = window as Window & {
-      __matterPointTalkStages?: { entry: string; at: number }[];
+      __matterPointTalkStages?: { entry: string; at: number; fade: string }[];
     };
-    const stages: { entry: string; at: number }[] = [];
+    const stages: { entry: string; at: number; fade: string }[] = [];
     runtime.__matterPointTalkStages = stages;
     const record = () => {
       const fields = Array.from(document.querySelectorAll<HTMLElement>(".point-talk"));
@@ -911,7 +915,8 @@ async function recordPointTalkStages(
             const typed = field.querySelector<HTMLInputElement>("input")?.value ?? "";
             return `${field.dataset.presence ?? ""}:${field.dataset.presenceClose ?? ""}:${typed}`;
           }).join("+");
-      if (stages[stages.length - 1]?.entry !== entry) stages.push({ entry, at: performance.now() });
+      const fade = fields.length === 1 ? getComputedStyle(fields[0]!).transitionDuration : "";
+      if (stages[stages.length - 1]?.entry !== entry) stages.push({ entry, at: performance.now(), fade });
     };
     new MutationObserver(record).observe(document.body, {
       attributeFilter: ["data-presence", "data-presence-close", "data-placed"],
@@ -922,7 +927,7 @@ async function recordPointTalkStages(
   });
   return () => page.evaluate(() => {
     const runtime = window as Window & {
-      __matterPointTalkStages?: { entry: string; at: number }[];
+      __matterPointTalkStages?: { entry: string; at: number; fade: string }[];
     };
     const stages = [...(runtime.__matterPointTalkStages ?? [])];
     runtime.__matterPointTalkStages?.splice(0);

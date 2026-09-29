@@ -2,9 +2,15 @@ import type { AdmissionInteractionState } from "../runtime/admission-interaction
 import type { TextSwapInteractionState } from "../runtime/text-swap-interaction";
 import type { FixedExpandTurnState } from "./use-fixed-expand-turn";
 
-/** Phases of the material turns owned by the paper, reported to the product root. */
-export type PaperMaterialTurnPhases = Readonly<{
+/**
+ * What the paper holds that the product root must know before replacing the
+ * document instance: the phases of its two material turns, and two holds that
+ * are not turns at all.
+ */
+export type PaperActivity = Readonly<{
+  /** The Elastic material turn. */
   elastic: FixedExpandTurnState["phase"];
+  /** The Point-and-Talk material turn. */
   textSwap: TextSwapInteractionState["phase"];
   /** Ask Matter holds a typed or dictated question, or one awaiting its answer. */
   inquiryHeld: boolean;
@@ -12,12 +18,18 @@ export type PaperMaterialTurnPhases = Readonly<{
   editingHeld: boolean;
 }>;
 
-export const SETTLED_PAPER_MATERIAL_TURNS: PaperMaterialTurnPhases = Object.freeze({
+export const IDLE_PAPER_ACTIVITY: PaperActivity = Object.freeze({
   elastic: "idle",
   textSwap: "idle",
   inquiryHeld: false,
   editingHeld: false,
 });
+
+// Derived from the idle value, which the type forces to name every field, so
+// a new field is compared without another list to keep in step.
+const PAPER_ACTIVITY_FIELDS = Object.freeze(
+  Object.keys(IDLE_PAPER_ACTIVITY) as (keyof PaperActivity)[],
+);
 
 /**
  * Seed relocalization rewrites untouched preview passages and their history
@@ -32,7 +44,7 @@ export const SETTLED_PAPER_MATERIAL_TURNS: PaperMaterialTurnPhases = Object.free
  */
 export function materialTurnsHoldBasis(input: Readonly<{
   admission: AdmissionInteractionState["phase"];
-  paper: PaperMaterialTurnPhases;
+  paper: PaperActivity;
 }>): boolean {
   return input.admission !== "idle" ||
     input.paper.elastic !== "idle" ||
@@ -48,19 +60,13 @@ export function materialTurnsHoldBasis(input: Readonly<{
  */
 export function materialIsIdle(input: Readonly<{
   admission: AdmissionInteractionState["phase"];
-  paper: PaperMaterialTurnPhases;
+  paper: PaperActivity;
 }>): boolean {
   return !materialTurnsHoldBasis(input) && !input.paper.inquiryHeld && !input.paper.editingHeld;
 }
 
-export function samePaperMaterialTurnPhases(
-  left: PaperMaterialTurnPhases,
-  right: PaperMaterialTurnPhases,
-): boolean {
-  return left.elastic === right.elastic &&
-    left.textSwap === right.textSwap &&
-    left.inquiryHeld === right.inquiryHeld &&
-    left.editingHeld === right.editingHeld;
+export function samePaperActivity(left: PaperActivity, right: PaperActivity): boolean {
+  return PAPER_ACTIVITY_FIELDS.every((field) => left[field] === right[field]);
 }
 
 function textSwapHoldsBasis(phase: TextSwapInteractionState["phase"]): boolean {

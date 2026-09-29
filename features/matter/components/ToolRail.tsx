@@ -4,7 +4,7 @@ import type {
   WheelEvent as ReactWheelEvent,
 } from "react";
 import { useId, useState } from "react";
-import type { ProjectedTool, ToolIntent } from "../tools/model";
+import type { ProjectedTool, ToolDisabledReason, ToolIntent } from "../tools/model";
 import type { ProjectedToolSurface } from "../tools/project-tool-surface";
 import type { CanvasLanguage } from "./canvas-preferences";
 import {
@@ -14,7 +14,7 @@ import {
   UndoIcon,
   VoiceIcon,
 } from "./icons";
-import { toolRailCopy } from "./tool-rail-copy";
+import { toolRailCopy, type ToolRailCopy } from "./tool-rail-copy";
 
 export type ToolRailProps = {
   interactionPending: boolean;
@@ -132,15 +132,21 @@ export function ToolRail({
   );
 }
 
+/** Each projected refusal names its own words; a new reason fails the type check. */
+const DISABLED_REASON_COPY = Object.freeze({
+  "history-empty": "unavailableWithoutHistory",
+  "operation-pending": "unavailableWhilePending",
+} satisfies Readonly<Record<ToolDisabledReason, keyof ToolRailCopy>>);
+
 /** The projected capability says why a slot is unavailable; absence is its own reason. */
 function projectedToolReason(
   tool: ProjectedTool | null,
   whenAbsent: string,
-  copy: ReturnType<typeof toolRailCopy>,
+  copy: ToolRailCopy,
 ): string | undefined {
   if (tool === null) return whenAbsent;
   if (tool.availability === "available") return undefined;
-  return tool.reason === "history-empty" ? copy.unavailableWithoutHistory : copy.unavailableWhilePending;
+  return copy[DISABLED_REASON_COPY[tool.reason]];
 }
 
 type ToolButtonProps = {

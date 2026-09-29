@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
 import type { MatterLocale } from "../config/locales";
-import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
+import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import {
   useTextSwap,
   type TextSwapController,
@@ -62,7 +62,7 @@ export function PointTalkTurn({
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
     expectedDocumentEpoch: number,
-  ) => TextSwapCommitResult<TextSwapCommittedChange>;
+  ) => MaterialTurnCommitResult<TextSwapCommittedChange>;
   documentEpoch: number;
   deliveryVisibleNodeIds?: ReadonlySet<string>;
   enabled: boolean;

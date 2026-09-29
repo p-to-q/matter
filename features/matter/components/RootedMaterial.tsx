@@ -164,13 +164,12 @@ import { useInquiryRecord } from "../interaction/use-inquiry-record";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import { MAX_REPLACEMENT_TEXT_CODE_UNITS } from "../tree/invariants";
-import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
 import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import { useFixedExpandTurn } from "./use-fixed-expand-turn";
 import {
-  samePaperMaterialTurnPhases,
-  SETTLED_PAPER_MATERIAL_TURNS,
-  type PaperMaterialTurnPhases,
+  IDLE_PAPER_ACTIVITY,
+  samePaperActivity,
+  type PaperActivity,
 } from "./material-turn-activity";
 import {
   isTransformPresentationCurrent,
@@ -189,9 +188,11 @@ import {
   admissionFeedbackMessage,
   admissionPhaseMessage,
   admissionPlacementLabel,
+  admissionWithdrawLabel,
 } from "./admission-feedback-copy";
 import {
   createPresenceHandoff,
+  PRESENCE_TIMING,
   presenceReservesSpace,
   type PresenceClose,
   type PresenceFrame,
@@ -247,6 +248,10 @@ const WikiOccurrenceLayer = dynamic(
 const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
 const EMPTY_NODE_IDS: ReadonlySet<string> = new Set<string>();
 const ACTIVE_LAYOUT_NODE_SELECTOR = "[data-layout-node-id][data-thought-id]";
+// The CSS fade of every leaving surface lasts exactly as long as its unmount.
+const PRESENCE_EXIT_STYLE = Object.freeze({
+  "--presence-exit-duration": `${PRESENCE_TIMING.exitMs}ms`,
+}) as CSSProperties;
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -272,13 +277,13 @@ export type RootedMaterialProps = {
     plan: TransformPlan,
     expectedDocumentEpoch: number,
   ) => MaterialTurnCommitResult<TransformCommittedChange>;
-  /** Reports the paper's Elastic and Point-and-Talk phases to the product root. */
-  onMaterialTurnPhasesChange?: (phases: PaperMaterialTurnPhases) => void;
+  /** Reports what the paper holds (its turns, Ask Matter, a name editor) to the product root. */
+  onPaperActivityChange?: (activity: PaperActivity) => void;
   onTextSwapCommit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
     expectedDocumentEpoch: number,
-  ) => TextSwapCommitResult<TextSwapCommittedChange>;
+  ) => MaterialTurnCommitResult<TextSwapCommittedChange>;
   onUndo: () => void;
   onRedo: () => void;
   tree: ThoughtTree;
@@ -1452,29 +1457,29 @@ export function RootedMaterial(props: RootedMaterialProps) {
     start: startTransform,
     state: transformState,
   } = transform;
-  const reportMaterialTurnPhases = props.onMaterialTurnPhasesChange;
-  const reportedMaterialTurnPhasesRef = useRef(SETTLED_PAPER_MATERIAL_TURNS);
+  const reportPaperActivity = props.onPaperActivityChange;
+  const reportedPaperActivityRef = useRef(IDLE_PAPER_ACTIVITY);
   // Ask Matter and the index's name editors report what they hold so the root
   // never replaces the document instance underneath them.
   const [inquiryHeld, setInquiryHeld] = useState(false);
   const [editingHeld, setEditingHeld] = useState(false);
   useLayoutEffect(() => {
-    const phases = Object.freeze({
+    const activity: PaperActivity = Object.freeze({
       elastic: transformState.phase,
       textSwap: pointTalkPhase,
       inquiryHeld,
       editingHeld,
     });
-    if (samePaperMaterialTurnPhases(reportedMaterialTurnPhasesRef.current, phases)) return;
-    reportedMaterialTurnPhasesRef.current = phases;
-    reportMaterialTurnPhases?.(phases);
-  }, [editingHeld, inquiryHeld, pointTalkPhase, reportMaterialTurnPhases, transformState.phase]);
+    if (samePaperActivity(reportedPaperActivityRef.current, activity)) return;
+    reportedPaperActivityRef.current = activity;
+    reportPaperActivity?.(activity);
+  }, [editingHeld, inquiryHeld, pointTalkPhase, reportPaperActivity, transformState.phase]);
   useLayoutEffect(() => () => {
-    // Unmounting the paper releases its turns, so the root must not keep
-    // waiting on phases nobody will report again.
-    reportedMaterialTurnPhasesRef.current = SETTLED_PAPER_MATERIAL_TURNS;
-    reportMaterialTurnPhases?.(SETTLED_PAPER_MATERIAL_TURNS);
-  }, [reportMaterialTurnPhases]);
+    // Unmounting the paper releases what it held, so the root must not keep
+    // waiting on activity nobody will report again.
+    reportedPaperActivityRef.current = IDLE_PAPER_ACTIVITY;
+    reportPaperActivity?.(IDLE_PAPER_ACTIVITY);
+  }, [reportPaperActivity]);
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
     canvasChromeRef.current?.closeInquiry();
     startTransform(basis);
@@ -3273,6 +3278,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-viewport-y={viewport.y}
       data-viewport-zoom={viewport.zoom}
       ref={shellRef}
+      style={PRESENCE_EXIT_STYLE}
       onClickCapture={(event) => {
         const clickPointerId = (event.nativeEvent as Partial<PointerEvent>).pointerId;
         if (
@@ -5298,7 +5304,7 @@ function AdmissionFeedback({
         </>
       ) : (
         <button onClick={present ? controller.cancel : undefined} type="button">
-          {view.phase === "transcribing" ? actions.cancelTranscription : actions.cancel}
+          {admissionWithdrawLabel(locale, view.phase)}
         </button>
       )}
     </div>

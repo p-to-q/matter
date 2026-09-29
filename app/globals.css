@@ -399,11 +399,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; text-decoration-color: transparent; }
 .admission-feedback { position: absolute; z-index: 6; display: flex; width: min(var(--matter-column-width), calc(100vw - 44px)); max-width: calc(100vw - 44px); min-height: 40px; box-sizing: border-box; align-items: center; gap: 9px; color: var(--muted); font: 10px/1.4 var(--mono); flex-wrap: wrap; pointer-events: auto; opacity: 1; translate: 0 0; transition: opacity 180ms cubic-bezier(.2,.8,.2,1), translate 180ms cubic-bezier(.2,.8,.2,1); }
 /* Placement owns the inline transform, so presence moves only `translate`.
-   Transitions, not keyframes, let a returning surface reverse mid-exit. */
+   Transitions, not keyframes, let a returning surface reverse mid-exit. The
+   shell sets `--presence-exit-duration` from the presence timer that unmounts
+   a leaving surface, so the fade and the unmount cannot drift apart. */
 @starting-style { .admission-feedback { opacity: 0; translate: 0 3px; } }
 .admission-feedback[data-presence="holding"],
 .admission-feedback[data-presence="exiting"] { pointer-events: none; }
-.admission-feedback[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: 140ms; }
+.admission-feedback[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: var(--presence-exit-duration); }
 /* Finished work already released its lane; only opacity may change. */
 .admission-feedback[data-presence="exiting"][data-presence-close="finished"] { translate: 0 0; }
 .admission-feedback__signal { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--ink); opacity: .72; }
@@ -434,7 +436,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .point-talk:not([data-placed]) { opacity: 0; translate: 0 3px; }
 .point-talk[data-presence="holding"],
 .point-talk[data-presence="exiting"] { pointer-events: none; }
-.point-talk[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: 140ms; }
+.point-talk[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: var(--presence-exit-duration); }
 .point-talk[data-presence="exiting"][data-presence-close="finished"] { translate: 0 0; }
 /* A frozen copy mounts already leaving; it starts from the live field's rest. */
 @starting-style { .point-talk[data-presence="exiting"] { opacity: 1; translate: 0 0; } }
@@ -460,7 +462,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 @starting-style { .wiki-takeover[data-presence="present"] { opacity: 0; translate: 0 2px; } }
 .wiki-takeover[data-presence="holding"],
 .wiki-takeover[data-presence="exiting"] { pointer-events: none; }
-.wiki-takeover[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: 140ms; }
+.wiki-takeover[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: var(--presence-exit-duration); }
 .wiki-takeover[data-presence="exiting"][data-presence-close="finished"] { translate: 0 0; }
 .matter-shell[data-canvas-theme="dark"] .wiki-takeover { --paper-solid: #2b343d; --ink: #f3f4f1; --muted: #c0c5ca; }
 .wiki-takeover button { min-width: 40px; min-height: 30px; flex: 0 1 auto; overflow: hidden; padding: 0 9px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-family: var(--mono); font-size: 11px; font-weight: 400; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }

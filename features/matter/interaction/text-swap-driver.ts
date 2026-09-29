@@ -37,8 +37,6 @@ export type TextSwapScope = Readonly<{
   deliveryTargetVisible?: boolean;
 }>;
 
-export type TextSwapCommitResult<TCommitted> = MaterialTurnCommitResult<TCommitted>;
-
 type Transcribe = typeof requestTranscription;
 
 export type TextSwapDriverDependencies<TCommitted> = Readonly<{
@@ -54,7 +52,7 @@ export type TextSwapDriverDependencies<TCommitted> = Readonly<{
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
     basis: TextSwapBasis,
-  ) => TextSwapCommitResult<TCommitted>;
+  ) => MaterialTurnCommitResult<TCommitted>;
   onCommitted: (change: TCommitted) => void;
   createInteractionId: () => string;
   createRequestId: () => string;
@@ -557,7 +555,7 @@ export class TextSwapDriver<TCommitted> {
       });
       return;
     }
-    let result: TextSwapCommitResult<TCommitted>;
+    let result: MaterialTurnCommitResult<TCommitted>;
     try {
       result = this.dependencies.commit(resources.envelope, plan, resources.basis);
     } catch {
