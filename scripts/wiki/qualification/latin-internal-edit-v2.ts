@@ -30,6 +30,7 @@ import {
 import { wikiLatinLedgerLocale } from
   "../../../features/matter/wiki/wiki-script-routing";
 import { selectBestCompleteWikiPerformanceTrial } from "./performance-trials";
+import { recordWikiProducerVotes, type WikiProducerCaseVotes } from "./producer-votes";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const PRODUCER_FILES = Object.freeze([
@@ -66,9 +67,9 @@ const QUALIFIED_PERFORMANCE_RECEIPT = Object.freeze({
   attemptedEntryCount: CAPACITY,
   compiledEntryCount: CAPACITY,
   overflowCount: 0,
-  compileMicros: 87_432,
+  compileMicros: 2_038,
   lookupSampleCount: LOOKUPS,
-  lookupP95Micros: 253,
+  lookupP95Micros: 20,
 });
 
 /**
@@ -250,13 +251,15 @@ export async function runLatinInternalEditQualification(
       ...PERFORMANCE_BUDGET,
     }),
   });
+  const votes = Object.freeze(LATIN_INTERNAL_EDIT_CASES.map((item) =>
+    runCase(item, candidateRelease)));
   const receipt: WikiProducerCorpusRun = Object.freeze({
     qualificationVersion: WIKI_PRODUCER_QUALIFICATION_VERSION,
     identity,
     corpus,
-    outputs: Object.freeze(LATIN_INTERNAL_EDIT_CASES.map((item) => Object.freeze({
+    outputs: Object.freeze(votes.map((item) => Object.freeze({
       caseId: item.caseId,
-      appliedActionId: runCase(item, candidateRelease),
+      appliedActionId: item.appliedActionId,
     }))),
     performance: measureLivePerformance
       ? await measurePerformance(candidateRelease)
@@ -265,13 +268,13 @@ export async function runLatinInternalEditQualification(
   const qualification = await qualifyWikiProducerReleases([
     Object.freeze({ manifest, receipt, artifacts }),
   ]);
-  return Object.freeze({ manifest, receipt, artifacts, qualification });
+  return Object.freeze({ manifest, receipt, artifacts, qualification, votes });
 }
 
 function runCase(
   item: WikiProducerExpectedCase,
   candidateRelease: WikiQualifiedProducerRelease,
-): string | null {
+): WikiProducerCaseVotes {
   const ledger = wikiLatinLedgerLocale(item.input.locale);
   const candidateLocales = item.category === "locale-isolation"
     ? MATTER_LOCALES.filter((locale) => locale !== ledger)
@@ -293,10 +296,13 @@ function runCase(
       ? { eligibleRanges: [{ start: item.input.observedForm.length + 1, end: text.length }] }
       : {}),
   }, new Set(["latin-internal-edit-v2"]));
-  const event = events.length === 1 ? events[0] : undefined;
-  return event?.source === "machine-inference"
-    ? `relation:${event.locale}:${event.form}>${event.canonical}`
-    : null;
+  return recordWikiProducerVotes(item.caseId, events.map((event) =>
+    event.source === "machine-inference"
+      ? Object.freeze({
+          actionId: `relation:${event.locale}:${event.form}>${event.canonical}`,
+          competesFor: `${event.locale}:${event.form}`,
+        })
+      : Object.freeze({ actionId: `term:${event.locale}:${event.canonical}` })));
 }
 
 async function measurePerformance(

@@ -784,7 +784,13 @@ closed. The generic verifier does not execute a producer and therefore cannot
 prove that a self-reported receipt came from supplied bytes. Controlled local
 harnesses close that gap for every catalogued producer: they execute exact hashed
 producer artifacts, hash manifest-owned corpora and pinned resources, and
-measure the complete 512-target derived-index bound plus 1,000 lookups. The
+measure the complete 512-target derived-index bound plus 1,000 lookups. Each
+harness records every vote a producer casts for a case, sorted, before it
+derives the one application the verifier scores: votes that name different
+targets for one source compete and apply nothing, every other vote applies,
+and a case with more than one application reports them all, so an abstention
+can never hide two votes. The qualification test pins that only ambiguity
+cases carry competing votes and that every other non-positive case casts none. The
 live wall-clock receipt runs three serial trials and records the best complete
 trial as the uncontended host estimate; a sustained regression must exceed the
 fixed gate in every trial. The
