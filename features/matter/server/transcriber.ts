@@ -1,6 +1,7 @@
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { normalizeTextSwapDirection } from "../protocol/text-swap-policy";
 import type {
+  TranscriptionPurpose,
   TranscriptionRequest,
   TranscriptionSuccess,
 } from "../protocol/transcription-contract";
@@ -95,11 +96,13 @@ export const fixtureTranscriptionAdapter: TranscriptionAdapter = async (request)
   transcript: fixtureTranscript(request.purpose),
 });
 
-const TRANSCRIPTION_PURPOSES: readonly TranscriptionRequest["purpose"][] = Object.freeze([
-  "admission",
-  "direction",
-  "swap-direction",
-]);
+// Exhaustive by construction: a new purpose that is not listed here is a
+// compile error, not a deployment that silently refuses it before parsing.
+const TRANSCRIPTION_PURPOSES = Object.freeze(Object.keys({
+  admission: true,
+  direction: true,
+  "swap-direction": true,
+} satisfies Readonly<Record<TranscriptionPurpose, true>>) as TranscriptionPurpose[]);
 
 /**
  * Resolves this deployment's server transcription capability from
