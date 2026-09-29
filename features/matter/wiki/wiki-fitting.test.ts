@@ -294,7 +294,7 @@ describe("Wiki fitting", () => {
     ]);
   });
 
-  it("marks an oversized fitting admission censored instead of aging aliases", () => {
+  it("scores the words a partial fitting scan reached and stops before the bound", () => {
     const canonicals = Array.from({ length: 33 }, (_, index) =>
       `Engelbart${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`);
     const observed = canonicals.map((canonical) =>
@@ -304,7 +304,24 @@ describe("Wiki fitting", () => {
       { locale: "en-US", channel: "spoken", text: observed.join(" ") },
       new Set(["latin-internal-edit-v2"]),
     );
-    expect(result).toEqual({ status: "censored", events: [] });
+    expect(result.status).toBe("partial");
+    expect(result.events).toHaveLength(32);
+    expect(result.events.map((event) =>
+      event.source === "machine-inference" ? event.form : "")).toEqual(observed.slice(0, 32));
+    expect(result.scannedScripts).toEqual(["latin"]);
+  });
+
+  it("offers every scanned eligible script, not only fitted words", () => {
+    expect(fitCommittedWikiTextResult(
+      runtimeSnapshot(withLexemes("Engelbart")),
+      { locale: "en-US", channel: "spoken", text: "Englebart 材料" },
+      new Set(["latin-internal-edit-v2"]),
+    )).toMatchObject({ status: "ok", scannedScripts: ["latin", "han"] });
+    expect(fitCommittedWikiTextResult(
+      runtimeSnapshot(withLexemes("Engelbart")),
+      { locale: "en-US", channel: "written", text: "Englebart" },
+      new Set(["latin-internal-edit-v2"]),
+    )).toEqual({ status: "censored", events: [], scannedScripts: [] });
   });
 });
 

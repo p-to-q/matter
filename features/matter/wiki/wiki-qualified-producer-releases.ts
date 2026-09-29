@@ -11,7 +11,7 @@ export const MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES = Object.freeze([
   release(
     "en-metaphone-v1",
     "1.0.0",
-    "sha256:13d6fa41ed6e25b34b7bacc3bb26cc3eecbb6de065ecb431ad7ba9aacdf120c0",
+    "sha256:1510e2f4d4cf3cac37d35cbac319e70f78ccc2a267ad4ec5c2d67499e2629b65",
     "double-metaphone",
     "2.0.1",
     "sha256:0dfe1529b4c74bff8a38d6b09f1dc8331bc7bbe4636e43ef4a0855ef9cba68d8",
@@ -22,7 +22,7 @@ export const MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES = Object.freeze([
   release(
     "zh-exact-homophone-v1",
     "1.0.0",
-    "sha256:13d6fa41ed6e25b34b7bacc3bb26cc3eecbb6de065ecb431ad7ba9aacdf120c0",
+    "sha256:1510e2f4d4cf3cac37d35cbac319e70f78ccc2a267ad4ec5c2d67499e2629b65",
     "pinyin-pro",
     "3.29.4",
     "sha256:96770aa9c9a004de28199725b41e9f17cd64fc221b5189fbb0b7c85f6620543b",
@@ -32,7 +32,7 @@ export const MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES = Object.freeze([
   release(
     "zh-final-pair-v1",
     "1.0.0",
-    "sha256:13d6fa41ed6e25b34b7bacc3bb26cc3eecbb6de065ecb431ad7ba9aacdf120c0",
+    "sha256:1510e2f4d4cf3cac37d35cbac319e70f78ccc2a267ad4ec5c2d67499e2629b65",
     "pinyin-pro",
     "3.29.4",
     "sha256:96770aa9c9a004de28199725b41e9f17cd64fc221b5189fbb0b7c85f6620543b",

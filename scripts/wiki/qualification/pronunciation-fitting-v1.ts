@@ -13,7 +13,7 @@ import type { WikiAliasEvidenceProducer } from
   "../../../features/matter/wiki/wiki-learning-policy";
 import {
   MAX_WIKI_FITTING_TARGETS,
-  MAX_WIKI_OBSERVATIONS_PER_BATCH,
+  MAX_WIKI_OBSERVATIONS_PER_LEDGER,
   type WikiLexeme,
   type WikiObserveEvidenceEvent,
   type WikiState,
@@ -188,7 +188,7 @@ export function fitQualificationPronunciationTextResult(
         producer,
       });
       events.set(JSON.stringify([request.locale, form, candidate.canonical]), event);
-      if (events.size > MAX_WIKI_OBSERVATIONS_PER_BATCH) {
+      if (events.size > MAX_WIKI_OBSERVATIONS_PER_LEDGER) {
         return Object.freeze({ status: "censored", events: Object.freeze([]) });
       }
     }

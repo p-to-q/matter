@@ -109,6 +109,7 @@ describe("qualified Wiki producer releases", () => {
       "wiki-invariants.ts",
       "wiki-model.ts",
       "wiki-learning-policy.ts",
+      "wiki-script.ts",
       "config/locales.ts",
       "tree/unicode-text.ts",
     ]) expect(termText).toContain(file);
@@ -125,6 +126,7 @@ describe("qualified Wiki producer releases", () => {
       "wiki-text-safety.ts",
       "wiki-learning-policy.ts",
       "wiki-model.ts",
+      "wiki-script.ts",
     ]) expect(latinText).toContain(file);
 
     const changed = fitting.slice();

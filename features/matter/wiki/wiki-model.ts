@@ -8,12 +8,16 @@ import type {
   WikiAliasEvidenceProducer,
   WikiAutomaticAliasPhase,
   WikiAutomaticTermPhase,
+  WikiOccurrenceOrigin,
+  WikiOccurrenceOutcome,
   WikiStoredTermEvidenceProducer,
   WikiTermEvidenceProducer,
 } from "./wiki-learning-policy";
+import type { WikiScriptClass } from "./wiki-script";
 
-export const WIKI_SCHEMA_VERSION = 6 as const;
-export const WIKI_SCORING_VERSION = 3 as const;
+export const WIKI_SCHEMA_VERSION = 7 as const;
+/** Scoring V4 stores quarter-observation units; V6 stored whole observations. */
+export const WIKI_SCORING_VERSION = 4 as const;
 export const WIKI_FITTING_VERSION = 1 as const;
 
 export const MAX_WIKI_FORM_CODE_POINTS = 64;
@@ -37,19 +41,36 @@ export const MAX_WIKI_TOMBSTONES = 5_000;
 export const MAX_WIKI_LEXEMES = MAX_WIKI_EVIDENCE_RECORDS +
   MAX_WIKI_AUTHORITY_RULES + MAX_WIKI_TOMBSTONES;
 export const MAX_WIKI_LEXEME_TOMBSTONES = 5_000;
+/** Whole-observation bound of V2-V6 records; V7 stores quarter-units. */
 export const MAX_WIKI_EVIDENCE_COUNT = 255;
-// Candidate-local quiet cadence. This is not an interaction or user-intent window.
+// Legacy V2-V4 quiet window; V7 cadence lives in the learning policy.
 export const WIKI_RECENT_OBSERVATION_WINDOW = 32;
-export const MAX_WIKI_OBSERVATIONS_PER_BATCH = 32;
+/** Each producer scans at most this many distinct observations per turn. */
+export const MAX_WIKI_OBSERVATIONS_PER_LEDGER = 32;
+/** One batch carries at most one full term ledger and one full alias ledger. */
+export const MAX_WIKI_OBSERVATIONS_PER_BATCH = 2 * MAX_WIKI_OBSERVATIONS_PER_LEDGER;
+/** Revert strikes belong to automatic aliases, bounded by their reservoir. */
+export const MAX_WIKI_REVERT_STRIKES = MAX_WIKI_AUTOMATIC_EVIDENCE_RECORDS;
+/** Recent occurrence identities that already produced an effect. Duplicate
+ * delivery inside this window is ignored; the owner settles each occurrence
+ * once, so the window only has to outlive retries and repeated signals. */
+export const MAX_WIKI_SETTLED_OCCURRENCES = 128;
+export const MAX_WIKI_OCCURRENCE_ID_LENGTH = 64;
 // The lexeme schema may transiently represent every relation from a valid 4 MiB
 // V2 state as both a stable lexeme and an id-based alias. V4 adds one bounded
 // scope field to every V3 lexeme; 9 MiB keeps every formerly valid V2-V4 row
 // saveable. V6 adds one fixed producer field to at most 5,000 V5 term rows;
 // 256 KiB is a proved migration allowance, not an unbounded growth reserve.
+// V7 adds two fixed kept fields to at most 5,000 alias rows, one quarter-unit
+// digit to at most 10,000 evidence rows, and two empty collections (strikes
+// and settled occurrences); 160 KiB is the proved V6-to-V7 allowance.
 export const MAX_LEGACY_WIKI_STATE_BYTES = 9 * 1_024 * 1_024;
 export const MAX_WIKI_MIGRATION_HEADROOM_BYTES = 256 * 1_024;
-export const MAX_WIKI_STATE_BYTES = MAX_LEGACY_WIKI_STATE_BYTES +
+export const MAX_WIKI_V6_STATE_BYTES = MAX_LEGACY_WIKI_STATE_BYTES +
   MAX_WIKI_MIGRATION_HEADROOM_BYTES;
+export const MAX_WIKI_V7_MIGRATION_HEADROOM_BYTES = 160 * 1_024;
+export const MAX_WIKI_STATE_BYTES = MAX_WIKI_V6_STATE_BYTES +
+  MAX_WIKI_V7_MIGRATION_HEADROOM_BYTES;
 export const MAX_WIKI_APPLICABLE_RULES = 5_000;
 export const MAX_WIKI_APPLICABLE_CODE_POINTS = 256_000;
 
@@ -115,11 +136,15 @@ export type WikiTermEvidenceAggregate = Readonly<{
   quietTurns: number;
 }>;
 
+/** Support is producer evidence; kept is informed acceptance of applied
+ * occurrences. Both are quarter-units; only support can activate. */
 export type WikiAliasEvidenceAggregate = WikiAliasDescriptor & Readonly<{
   producer: WikiAliasEvidenceProducer;
   phase: WikiAutomaticAliasPhase;
   support: number;
   quietTurns: number;
+  kept: number;
+  keptQuietTurns: number;
 }>;
 
 export type WikiAuthorityRule = WikiAliasDescriptor & Readonly<{
@@ -136,6 +161,17 @@ export type WikiLexemeTombstone = Readonly<{
   rejectedAtRevision: number;
 }>;
 
+/** One reverted automatic alias, remembered for a bounded number of
+ * comparable turns. A second revert inside that memory becomes a tombstone
+ * only for an occurrence applied from a basis that already held this strike. */
+export type WikiRevertStrike = Readonly<{
+  lexemeId: number;
+  channel: WikiChannel;
+  form: string;
+  quietTurns: number;
+  struckAtRevision: number;
+}>;
+
 export type WikiState = Readonly<{
   schemaVersion: typeof WIKI_SCHEMA_VERSION;
   scoringVersion: typeof WIKI_SCORING_VERSION;
@@ -149,6 +185,9 @@ export type WikiState = Readonly<{
   authorities: readonly WikiAuthorityRule[];
   aliasTombstones: readonly WikiTombstone[];
   lexemeTombstones: readonly WikiLexemeTombstone[];
+  revertStrikes: readonly WikiRevertStrike[];
+  /** Opaque, content-free occurrence identities, oldest first. */
+  settledOccurrences: readonly string[];
 }>;
 
 export type WikiMatchRule = WikiRuleDescriptor & Readonly<{
@@ -176,16 +215,62 @@ export type WikiObserveEvidenceEvent =
   | WikiObserveTermEvidenceEvent
   | WikiObserveAliasEvidenceEvent;
 
-export type WikiEvidenceTickDisposition =
-  | "observed"
-  | "quiet"
-  | "paused"
-  | "censored";
-
-export type WikiObservationDispositions = Readonly<{
-  term: WikiEvidenceTickDisposition;
-  alias: WikiEvidenceTickDisposition;
+/**
+ * What one successful human admission offered a ledger. Only a complete scan
+ * of eligible content (`observed` or `quiet`) is an opportunity to age an
+ * absent candidate, and only for candidates it could have contained: the same
+ * locale and channel, and every script the candidate needs. A `partial` scan
+ * scores what it saw and ages nothing. `paused` and `censored` do neither.
+ */
+export type WikiEvidenceOpportunity = Readonly<{
+  locale: MatterLocale;
+  channel: WikiChannel;
+  scripts: readonly WikiScriptClass[];
 }>;
+
+export type WikiLedgerTick =
+  | Readonly<{
+      disposition: "observed" | "quiet";
+      opportunity: WikiEvidenceOpportunity;
+    }>
+  | Readonly<{ disposition: "partial" | "paused" | "censored" }>;
+
+export type WikiEvidenceTickDisposition = WikiLedgerTick["disposition"];
+
+export type WikiObservationTick = Readonly<{
+  term: WikiLedgerTick;
+  alias: WikiLedgerTick;
+}>;
+
+/**
+ * Exact rule identity captured when one occurrence was applied, with the Wiki
+ * state revision of the basis that applied it (the lexical session's
+ * `sourceRevision`). Authority is not carried: the current state decides
+ * whether the rule is human-confirmed when the occurrence settles.
+ */
+export type WikiAppliedRule = WikiRuleDescriptor & Readonly<{
+  appliedAtRevision: number;
+}>;
+
+/**
+ * The one settlement of one applied occurrence. `occurrenceId` is an opaque
+ * random identity minted by the occurrence owner (letters, digits, `_`, `-`),
+ * never derived from text or an address; it carries no surrounding material.
+ */
+export type WikiOccurrenceSettlement =
+  | Readonly<{
+      occurrenceId: string;
+      outcome: Exclude<WikiOccurrenceOutcome, "explicit-replace">;
+      rule: WikiAppliedRule;
+      origin: WikiOccurrenceOrigin;
+    }>
+  | Readonly<{
+      occurrenceId: string;
+      outcome: "explicit-replace";
+      rule: WikiAppliedRule;
+      origin: WikiOccurrenceOrigin;
+      replacement: WikiRuleDescriptor;
+    }>;
 
 export type WikiConfirmRuleEvent = WikiRuleDescriptor & Readonly<{
   type: "confirm-rule";

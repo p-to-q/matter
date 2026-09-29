@@ -114,14 +114,36 @@ describe("Wiki automatic term collection", () => {
     ]);
   });
 
-  it("marks an oversized admission censored instead of aging the ledger", () => {
-    const text = Array.from({ length: 33 }, (_, index) =>
-      `material${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`)
-      .join(" ");
+  it("scores a partial scan in text order and reports only the scripts it scanned", () => {
+    const words = Array.from({ length: 33 }, (_, index) =>
+      `material${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`);
+    const result = collectCommittedWikiTermsResult({
+      locale: "en-US",
+      channel: "spoken",
+      text: [...words, "材料"].join(" "),
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.events.map((event) => event.canonical)).toEqual(words.slice(0, 32));
+    expect(result.scannedScripts).toEqual(["latin"]);
+  });
+
+  it("reports eligible unprotected scripts as the comparable opportunity", () => {
     expect(collectCommittedWikiTermsResult({
       locale: "en-US",
       channel: "spoken",
-      text,
-    })).toEqual({ status: "censored", events: [] });
+      text: "Morphogenesis 材料 `カタカナ`",
+    })).toMatchObject({ status: "ok", scannedScripts: ["latin", "han"] });
+    expect(collectCommittedWikiTermsResult({
+      locale: "en-US",
+      channel: "spoken",
+      text: "Morphogenesis 材料",
+      eligibleRanges: [{ start: 14, end: 16 }],
+    })).toMatchObject({ status: "ok", events: [], scannedScripts: ["han"] });
+    expect(collectCommittedWikiTermsResult({
+      locale: "en-US",
+      channel: "spoken",
+      text: "",
+    })).toEqual({ status: "censored", events: [], scannedScripts: [] });
   });
 });

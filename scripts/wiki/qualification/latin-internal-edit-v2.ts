@@ -33,6 +33,7 @@ const PRODUCER_FILES = Object.freeze([
   "features/matter/wiki/wiki-text-safety.ts",
   "features/matter/wiki/wiki-learning-policy.ts",
   "features/matter/wiki/wiki-model.ts",
+  "features/matter/wiki/wiki-script.ts",
 ]);
 const RESOURCE_BYTES = new TextEncoder().encode(
   "ascii-latin:a-z;case-fold:en-US;segmentation:ecmascript-2026",
@@ -226,6 +227,8 @@ function stateWithCanonicals(
     authorities: Object.freeze([]),
     aliasTombstones: Object.freeze([]),
     lexemeTombstones: Object.freeze([]),
+    revertStrikes: Object.freeze([]),
+    settledOccurrences: Object.freeze([]),
   });
 }
 

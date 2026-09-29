@@ -5,7 +5,10 @@ import {
   normalizeWikiEligibleRanges,
   wikiRangeOverlapsProtected,
 } from "./canonicalize-wiki-text";
-import type { WikiAdmissionObservation } from "./wiki-admission";
+import type {
+  WikiAdmissionObservation,
+  WikiAdmissionProducerResult,
+} from "./wiki-admission";
 import {
   isQualifiedCollectedWikiTermEvidence,
   isWikiAliasEvidenceProducer,
@@ -14,7 +17,7 @@ import {
   type WikiTermEvidenceProducer,
 } from "./wiki-learning-policy";
 import {
-  MAX_WIKI_OBSERVATIONS_PER_BATCH,
+  MAX_WIKI_OBSERVATIONS_PER_LEDGER,
   MAX_WIKI_FITTING_TARGETS,
   isWikiStarterLexemeIdentity,
   type WikiLexeme,
@@ -22,6 +25,7 @@ import {
   type WikiState,
 } from "./wiki-model";
 import type { WikiQualifiedProducerRelease } from "./wiki-producer-qualification";
+import { wikiScriptClassesFromMask, wikiScriptMask } from "./wiki-script";
 
 const MIN_EDIT_GRAPHEMES = 7;
 const MAX_FIT_GRAPHEMES = 48;
@@ -273,26 +277,32 @@ export function fitCommittedWikiText(
   return fitCommittedWikiTextResult(snapshot, request, enabledProducers).events;
 }
 
-export type WikiFittingResult = Readonly<{
-  status: "ok" | "censored";
-  events: readonly WikiObserveEvidenceEvent[];
-}>;
+export type WikiFittingResult = WikiAdmissionProducerResult;
 
+const CENSORED_FITTING: WikiFittingResult = Object.freeze({
+  status: "censored",
+  events: Object.freeze([]),
+  scannedScripts: Object.freeze([]),
+});
+
+/**
+ * Scans eligible words in text order. A word whose relations would exceed the
+ * per-ledger bound is not scanned; the result is `partial`, so its relations
+ * already found still count and nothing unscanned is treated as absent.
+ */
 export function fitCommittedWikiTextResult(
   snapshot: WikiFitSnapshot,
   request: WikiFittingRequest,
   enabledProducers?: ReadonlySet<WikiAliasEvidenceProducer>,
 ): WikiFittingResult {
   if (request.channel !== "spoken" || request.text.length === 0) {
-    return Object.freeze({ status: "censored", events: Object.freeze([]) });
+    return CENSORED_FITTING;
   }
   const eligibleRanges = normalizeWikiEligibleRanges(
     request.eligibleRanges,
     request.text.length,
   );
-  if (eligibleRanges === null) {
-    return Object.freeze({ status: "censored", events: Object.freeze([]) });
-  }
+  if (eligibleRanges === null) return CENSORED_FITTING;
   const protectedSpans = findProtectedWikiSpans(request.text);
   const segmenter = wordSegmenter(request.locale);
   const events = new Map<string, WikiObserveEvidenceEvent>();
@@ -305,40 +315,52 @@ export function fitCommittedWikiTextResult(
     return [Object.freeze({ start, end })];
   });
 
+  let scannedScripts = 0;
+  let partial = false;
   for (const word of words) {
     const form = request.text.slice(word.start, word.end).normalize("NFC");
-    if (LATIN_WORD.test(form)) {
-      collectLatinEditEvents(snapshot, request.locale, form, events, enabledProducers);
+    const additions = (LATIN_WORD.test(form)
+      ? latinEditEvents(snapshot, request.locale, form, enabledProducers)
+      : []).filter((event) => !events.has(fittingEventKey(event)));
+    if (events.size + additions.length > MAX_WIKI_OBSERVATIONS_PER_LEDGER) {
+      partial = true;
+      break;
     }
-    if (events.size > MAX_WIKI_OBSERVATIONS_PER_BATCH) {
-      return Object.freeze({ status: "censored", events: Object.freeze([]) });
-    }
+    for (const event of additions) events.set(fittingEventKey(event), event);
+    scannedScripts |= wikiScriptMask(form);
   }
   return Object.freeze({
-    status: "ok",
+    status: partial ? "partial" : "ok",
     events: Object.freeze([...events.values()].sort(compareEvent)),
+    scannedScripts: wikiScriptClassesFromMask(scannedScripts),
   });
 }
 
-function collectLatinEditEvents(
+function fittingEventKey(event: WikiObserveEvidenceEvent): string {
+  return event.source === "machine-inference"
+    ? JSON.stringify([event.locale, event.form, event.canonical])
+    : JSON.stringify([event.locale, event.canonical]);
+}
+
+function latinEditEvents(
   snapshot: WikiFitSnapshot,
   locale: MatterLocale,
   form: string,
-  events: Map<string, WikiObserveEvidenceEvent>,
   enabled: ReadonlySet<WikiAliasEvidenceProducer> | undefined,
-): void {
+): readonly WikiObserveEvidenceEvent[] {
   if (locale !== "en-US" ||
       !snapshotHasAliasProducer(snapshot, "latin-internal-edit-v2") ||
-      !producerEnabled("latin-internal-edit-v2", enabled)) return;
+      !producerEnabled("latin-internal-edit-v2", enabled)) return [];
   const folded = fold(form, locale);
   const graphemes = splitGraphemes(folded);
   if (graphemes.length < MIN_EDIT_GRAPHEMES || graphemes.length > MAX_FIT_GRAPHEMES) {
-    return;
+    return [];
   }
   const candidates = collectEditCandidates(snapshot, locale, graphemes);
   // A form already owned by the canonical lexicon is a hard no-op, not a
   // low-scoring alternative that repeated machine evidence may outvote.
-  if (candidates.some((candidate) => candidate.folded === folded)) return;
+  if (candidates.some((candidate) => candidate.folded === folded)) return [];
+  const events: WikiObserveEvidenceEvent[] = [];
   for (const candidate of candidates) {
     if (candidate.folded === folded ||
         !isOneConservativeEdit(graphemes, candidate.graphemes)) continue;
@@ -352,8 +374,9 @@ function collectLatinEditEvents(
       source: "machine-inference",
       producer: "latin-internal-edit-v2",
     });
-    events.set(JSON.stringify([locale, form, candidate.canonical]), event);
+    events.push(event);
   }
+  return events;
 }
 
 function snapshotHasAliasProducer(
