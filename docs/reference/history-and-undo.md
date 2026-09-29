@@ -101,11 +101,17 @@ on X, undo sibling Y's admission, and the arriving expansion would make Y
 impossible to redo.
 
 `commitDeliveredTreeCommand` therefore publishes the same undo stack as
-`commitTreeCommand` but keeps the redo future that still replays. It replays
-the redo stack nearest-first against the new tree, inside the same entry and
-byte limits counted across both stacks, and keeps the longest prefix that
-applies exactly. The first entry that no longer applies is released with every
-later step, because those steps were recorded on top of it. The kept stack is
+`commitTreeCommand` but keeps the redo future that still replays, inside the
+same entry and byte limits counted across both stacks. A delivery is one exact
+text replacement of one node, and the engine reads node content only through
+the node mementos a mutation carries. Every redo step nearer than the first one
+carrying that node's memento replays unchanged; that first carrier holds the
+replaced content and can never replay, so it is released with every later
+step, which was recorded on top of it. The rule finds the exact replayable
+prefix without replaying the tree: replay costs one full validation per step,
+measured at 7.7 s for 1,000 redo steps over about 1,940 nodes. Tests check the
+rule against full engine replay. Any other delivered mutation ends the redo
+future as a human command does. The kept stack is
 thus always one contiguous future that journal recovery, seed relocalization,
 and the keyboard shortcut can replay without a special case; nothing is ever
 applied against material its memento does not match. Human commands (admission,
@@ -120,8 +126,10 @@ paid, requested result because of an unrelated keyboard gesture, and the
 person cannot tell why their change never arrived. Also rejected: delaying the
 delivery until redo is empty, which can block forever. Reopen this choice if
 collaboration or a second history owner makes "nearest replayable prefix"
-ambiguous, or if a delivered command can ever be something other than one
-exact replace-text.
+ambiguous, if a delivered command can ever be something other than one exact
+replace-text, or if the engine gains a precondition that reads node content
+outside a carried memento (the replay oracle in `history.delivery.test.ts`
+then fails).
 
 The public action vocabulary in [`../protocol.md`](../protocol.md) is smaller
 than `TreeMutation` on purpose: the agent can propose only a range replacement.

@@ -10,6 +10,7 @@ import {
   type TreeHistory,
   type TreeHistoryLimits,
 } from "./history";
+import { applyTreeCommand } from "./engine";
 import { createEmptyTree } from "./invariants";
 import type { ThoughtNode, ThoughtTree, TreeCommand } from "./model";
 
@@ -109,6 +110,48 @@ describe("delivered commits and the redo future", () => {
     expect(redo(landed).tree.nodes.y?.text).toBe("Y");
   });
 
+  it("releases an undone move of the delivered passage, whose memento holds its old text", () => {
+    const withGroup = commit(rootWithX(), insertNode("g", "Group", -1, [], 1));
+    const x = withGroup.tree.nodes.x!;
+    const moved = commit(withGroup, humanCommand("move_x", -1, {
+      type: "move-node",
+      nodeId: "x",
+      expectedNode: { ...x, children: [...x.children] },
+      fromParentId: "root",
+      fromIndex: 0,
+      fromParentChildrenBefore: ["x", "g"],
+      toParentId: "g",
+      toIndex: 0,
+      toParentChildrenBefore: [],
+    }));
+    const undone = undo(moved);
+    expect(undone.tree.nodes.x?.parentId).toBe("root");
+
+    const landed = deliver(undone, replaceX("A", T0, "A grown", T1));
+    expect(landed.history.redoEntries).toEqual([]);
+  });
+
+  it("keeps an undone title change, which never reads passage content", () => {
+    const titled = commit(rootWithX(), humanCommand("title", -1, {
+      type: "replace-title",
+      expectedTitle: "Delivery",
+      title: "Renamed",
+    }));
+    const undone = undo(titled);
+    const landed = deliver(undone, replaceX("A", T0, "A grown", T1));
+    expect(landed.history.redoEntries).toHaveLength(1);
+    expect(redo(landed).tree.title).toBe("Renamed");
+  });
+
+  it("ends the redo future for a delivered mutation other than one text replacement", () => {
+    const undone = undo(admitSibling(rootWithX()));
+    const landed = deliver(undone, {
+      ...insertNode("z", "Z", -1, [], 1),
+      source: "agent",
+    });
+    expect(landed.history.redoEntries).toEqual([]);
+  });
+
   it("changes neither input when the delivered command is rejected", () => {
     const undone = undo(admitSibling(rootWithX()));
     const result = commitDeliveredTreeCommand(
@@ -125,7 +168,7 @@ describe("delivered commits and the redo future", () => {
 
 function rootWithX(): Session {
   const initialized = commitTreeCommand(
-    createEmptyTree("tree_delivery"),
+    { ...createEmptyTree("tree_delivery"), title: "Delivery" },
     createTreeHistory(),
     humanCommand("init", 0, { type: "initialize-root", root: node("root", "Root", null) }),
     LIMITS,
@@ -202,7 +245,31 @@ function deliver(session: Session, next: TreeCommand, limits = LIMITS): Session 
     limits,
   );
   if (!result.ok) throw new Error(result.error.code);
+  if (limits === LIMITS && next.mutation.type === "replace-text") {
+    // The memento rule must agree with full engine replay in every story.
+    expect(result.history.redoEntries)
+      .toEqual(replayablePrefix(result.tree, session.history.redoEntries ?? []));
+  }
   return { tree: result.tree, history: result.history };
+}
+
+/** Oracle: the nearest-first redo prefix that full engine replay accepts. */
+function replayablePrefix(
+  tree: ThoughtTree,
+  redoEntries: TreeHistory["redoEntries"] & object,
+): TreeHistory["redoEntries"] & object {
+  let cursor = tree;
+  let first = redoEntries.length;
+  for (let index = redoEntries.length - 1; index >= 0; index -= 1) {
+    const applied = applyTreeCommand(cursor, {
+      ...redoEntries[index]!.inverse,
+      expectedRevision: cursor.revision,
+    });
+    if (!applied.ok) break;
+    cursor = applied.tree;
+    first = index;
+  }
+  return redoEntries.slice(first);
 }
 
 function undo(session: Session): Session {

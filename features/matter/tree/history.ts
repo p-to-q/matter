@@ -167,7 +167,9 @@ export function commitTreeCommand(
  * Retained redo entries must still replay exactly, in stack order, against
  * the new tree and within the same limits across both stacks. The first entry
  * that does not is released together with everything after it, so the redo
- * stack stays one contiguous future that recovery and Redo can trust.
+ * stack stays one contiguous future that recovery and Redo can trust. Only an
+ * exact text replacement is known to commute with that future; any other
+ * delivered mutation ends it as a human command does.
  */
 export function commitDeliveredTreeCommand(
   tree: ThoughtTree,
@@ -178,8 +180,17 @@ export function commitDeliveredTreeCommand(
 ): CommitTreeCommandResult {
   const committed = commitTreeCommand(tree, history, command, limits, estimateBytes);
   const redoEntries = history.redoEntries ?? [];
-  if (!committed.ok || redoEntries.length === 0) return committed;
-  const retained = replayableRedoFuture(committed.tree, committed.history, redoEntries, limits);
+  if (
+    !committed.ok ||
+    redoEntries.length === 0 ||
+    command.mutation.type !== "replace-text"
+  ) return committed;
+  const retained = redoFutureIndependentOf(
+    command.mutation.nodeId,
+    committed.history,
+    redoEntries,
+    limits,
+  );
   if (retained.length === 0) return committed;
   return {
     ...committed,
@@ -319,14 +330,24 @@ function retainedBytes(entries: readonly TreeHistoryEntry[]): number {
   return entries.reduce((total, entry) => total + entry.retainedInverseBytes, 0);
 }
 
-/** Returns the longest nearest-first redo prefix that replays within limits. */
-function replayableRedoFuture(
-  tree: ThoughtTree,
+/**
+ * Returns the longest nearest-first redo prefix that still replays after one
+ * delivered replacement of `nodeId`'s text, within limits across both stacks.
+ *
+ * The redo stack replayed before the delivery. The delivery changes only that
+ * node's text and timestamp, and the engine reads node content solely through
+ * the node mementos a mutation carries. Every step nearer than the first one
+ * carrying a memento of that node therefore replays unchanged, while that
+ * first carrier holds the replaced content and can never replay again. This
+ * finds the exact replayable prefix without replaying the tree, which would
+ * cost one full validation per retained step on every delivery.
+ */
+function redoFutureIndependentOf(
+  nodeId: string,
   undoHistory: TreeHistory,
   redoEntries: readonly TreeHistoryEntry[],
   limits: TreeHistoryLimits,
 ): TreeHistoryEntry[] {
-  let cursor = tree;
   let entryCount = undoHistory.entries.length;
   let bytes = undoHistory.retainedInverseBytes;
   let firstRetained = redoEntries.length;
@@ -334,20 +355,35 @@ function replayableRedoFuture(
     const entry = redoEntries[index];
     if (
       entry === undefined ||
+      carriesNodeMemento(entry.inverse.mutation, nodeId) ||
       entryCount + 1 > limits.maxEntries ||
       bytes + entry.retainedInverseBytes > limits.maxRetainedInverseBytes
     ) break;
-    const replayed = applyTreeCommand(cursor, {
-      ...entry.inverse,
-      expectedRevision: cursor.revision,
-    });
-    if (!replayed.ok) break;
-    cursor = replayed.tree;
     entryCount += 1;
     bytes += entry.retainedInverseBytes;
     firstRetained = index;
   }
   return redoEntries.slice(firstRetained);
+}
+
+/** Whether the engine will compare this node's current content to a memento. */
+function carriesNodeMemento(mutation: TreeMutation, nodeId: string): boolean {
+  switch (mutation.type) {
+    case "initialize-root":
+      return mutation.root.id === nodeId;
+    case "clear-root":
+      return mutation.expectedRoot.id === nodeId;
+    case "insert-node":
+      return mutation.node.id === nodeId;
+    case "remove-subtree":
+    case "restore-subtree":
+      return Object.hasOwn(mutation.detached.nodes, nodeId);
+    case "replace-text":
+    case "move-node":
+      return mutation.nodeId === nodeId;
+    case "replace-title":
+      return false;
+  }
 }
 
 function assertHistoryLimits(limits: TreeHistoryLimits): void {
