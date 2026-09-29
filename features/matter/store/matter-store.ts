@@ -159,6 +159,8 @@ export type SeedLocalizationReceipt = Readonly<{
   status: "localized" | "unchanged" | "rejected";
   revision: number;
   errorCode?: "SEED_LOCALIZATION_INVALID_TREE" | "SEED_LOCALIZATION_INVALID_HISTORY";
+  /** A stack whose next step no longer matched the localized seed was released. */
+  historyReleased?: boolean;
 }>;
 
 export type AdmissionCommitReceipt = Extract<RuntimeReceipt, { status: "committed" }> &
@@ -453,6 +455,7 @@ export function createMatterStore(
           operation: "localize-seed",
           status: "localized",
           revision: localized.tree.revision,
+          historyReleased: localized.historyReleased,
         });
         return freezeState({
           ...current,

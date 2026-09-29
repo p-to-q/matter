@@ -128,6 +128,15 @@ make any memento exact. Replaying the whole journal on hydrate cost about 9 ms
 per step at 2,000 nodes; the per-step storage layout and its measurements live
 in [`virtual-file-system.md`](virtual-file-system.md#undo-journal-schema-v6).
 
+A restored step carries `bytesUnverified`: its stored byte count is compared
+with its memento when it is first applied, so a damaged record fails closed.
+Seed relocalization follows the same rule. It answers "unchanged" without
+reading history unless an untouched seed passage or title differs for the new
+language, re-measures only the mementos it rewrites, and dry-runs only the two
+stack tops; it runs for language and document changes, not for save phases. A
+deeper stale step never stops translation. With about 1,000 nodes and 1,000
+steps, the whole-journal replay it replaced cost 4.4 s of main thread.
+
 ### Late results and the redo future
 
 Elastic, Text Swap, and admission repair are submitted at one moment and

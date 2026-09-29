@@ -4,12 +4,15 @@ import { createIndexedDbDocumentRepository, type LoadedSnapshot, type SnapshotBa
 import { createSeededDocument } from "../material/seeded-document";
 import { treeToBundle } from "./snapshot-codec";
 import {
+  commitDeliveredTreeCommand,
   commitTreeCommand,
   createTreeHistory,
   MATTER_HISTORY_LIMITS,
+  redoTreeHistory,
   undoTreeHistory,
   type TreeHistory,
 } from "../tree/history";
+import { attachRecoveredHistory } from "./history-recovery";
 import type { ThoughtTree, TreeCommand } from "../tree/model";
 import { MAX_NODES_PER_TREE } from "../tree/invariants";
 import {
@@ -53,9 +56,9 @@ describe("IndexedDB document repository", () => {
 
     const loaded = await loadValue(repository, session.tree.id);
     expect(loaded.tree).toEqual(session.tree);
-    expect(loaded.history).toEqual({ history: session.history, released: false });
+    expect(loaded.history).toEqual({ history: restored(session.history), released: false });
     expect(loaded.basis.writeGeneration).toBe(1);
-    expect(loaded.basis.journal.undo.entries).toEqual(session.history.entries);
+    expect(loaded.basis.journal.undo.entries).toEqual(restored(session.history).entries);
   });
 
   it("writes only the new step on the next save and compacts released positions", async () => {
@@ -238,7 +241,7 @@ describe("IndexedDB document repository", () => {
     });
 
     const loaded = await loadValue(repository, session.tree.id);
-    expect(loaded.history).toEqual({ history: session.history, released: false });
+    expect(loaded.history).toEqual({ history: restored(session.history), released: false });
     expect(loaded.basis).toMatchObject({ writeGeneration: 3, journal: emptyHistoryJournal(0) });
 
     const next = commitStep({ tree: loaded.tree, history: loaded.history.history }, "after_migration");
@@ -248,7 +251,7 @@ describe("IndexedDB document repository", () => {
     expect(row).not.toHaveProperty("history");
     expect(row).toMatchObject({ historyJournal: { formatVersion: 1, epoch: 0, count: next.history.entries.length } });
     const reloaded = await loadValue(repository, session.tree.id);
-    expect(reloaded.history).toEqual({ history: next.history, released: false });
+    expect(reloaded.history).toEqual({ history: restored(next.history), released: false });
   });
 
   it("treats a manifest left behind by another writer as stale and reclaims its records", async () => {
@@ -292,10 +295,10 @@ describe("IndexedDB document repository", () => {
       ok: true,
       value: { status: "rolled-back", writeGeneration: 3 },
     });
-    const restored = await loadValue(repository, session.tree.id);
-    expect(restored.tree).toEqual(session.tree);
-    expect(restored.history).toEqual({ history: session.history, released: false });
-    expect(restored.basis.writeGeneration).toBe(3);
+    const rolledBack = await loadValue(repository, session.tree.id);
+    expect(rolledBack.tree).toEqual(session.tree);
+    expect(rolledBack.history).toEqual({ history: restored(session.history), released: false });
+    expect(rolledBack.basis.writeGeneration).toBe(3);
   });
 
   it("compacts the replaced epoch on the first save after an activated import", async () => {
@@ -359,7 +362,7 @@ describe("IndexedDB document repository", () => {
     expect(replaced).toMatchObject({ ok: true, value: { writeGeneration: 2, journal: { epoch: 1 } } });
     expect(new Set(memory.records().map(({ epoch }) => epoch))).toEqual(new Set([1]));
     expect((await loadValue(repository, session.tree.id)).history).toEqual({
-      history: replacement.history,
+      history: restored(replacement.history),
       released: false,
     });
   });
@@ -584,7 +587,7 @@ describe("IndexedDB document repository", () => {
 
     const next = commitStep(same, "after_adoption");
     await expect(save(tabB, next, fromB.value)).resolves.toMatchObject({ ok: true, value: { writeGeneration: 3 } });
-    expect((await loadValue(tabA, base.tree.id)).history).toEqual({ history: next.history, released: false });
+    expect((await loadValue(tabA, base.tree.id)).history).toEqual({ history: restored(next.history), released: false });
   });
 
   it("reads only the stored generation and schema for a returning page", async () => {
@@ -628,6 +631,186 @@ describe("IndexedDB document repository", () => {
     })).resolves.toMatchObject({ ok: false, error: { code: "PERSISTENCE_WRITE_FAILED" } });
   });
 
+  it("persists a release found at load, so the next reload restores quietly", async () => {
+    const session = steps(seeded(), 3);
+    const seededSave = await save(createIndexedDbDocumentRepository(), session, UNKNOWN);
+    if (!seededSave.ok) throw new Error(seededSave.error.code);
+    memory.mutateRecord(session.tree.id, "undo", 2, staleText);
+
+    const first = await reloadAsTab(session.tree);
+    expect(first.released).toBe(true);
+    await vi.waitFor(() => expect(memory.row(session.tree.id)).toMatchObject({ writeGeneration: 2 }));
+    expect(memory.records()).toEqual([]);
+    first.controller.dispose();
+
+    const second = await reloadAsTab(session.tree);
+    expect(second.released).toBe(false);
+    expect(second.controller.getStatus().historyNotice).toBeNull();
+    second.controller.dispose();
+  });
+
+  it("persists a stack released at use, so its stale step is not offered again", async () => {
+    const session = steps(seeded(), 3);
+    const seededSave = await save(createIndexedDbDocumentRepository(), session, UNKNOWN);
+    if (!seededSave.ok) throw new Error(seededSave.error.code);
+    memory.mutateRecord(session.tree.id, "undo", 1, staleText);
+
+    const tab = await reloadAsTab(session.tree);
+    expect(tab.released).toBe(false);
+    const firstUndo = undoTreeHistory(tab.tree, tab.history, MATTER_HISTORY_LIMITS);
+    if (!firstUndo.ok) throw new Error(firstUndo.error.code);
+    tab.controller.publish(firstUndo.tree, firstUndo.history);
+    await vi.waitFor(() => expect(tab.controller.getStatus().persistedRevision).toBe(firstUndo.tree.revision));
+    const failed = undoTreeHistory(firstUndo.tree, firstUndo.history, MATTER_HISTORY_LIMITS);
+    expect(failed).toMatchObject({ ok: false, error: { code: "HISTORY_UNAVAILABLE" } });
+    tab.controller.publish(failed.tree, failed.history);
+    await vi.waitFor(() => expect(memory.records().filter(({ stack }) => stack === "undo")).toEqual([]));
+    tab.controller.dispose();
+
+    const reloaded = await reloadAsTab(firstUndo.tree);
+    expect(reloaded.released).toBe(false);
+    expect(reloaded.history.entries).toEqual([]);
+    reloaded.controller.dispose();
+  });
+
+  it("keeps storage exactly equal to the manifest through random commits, undos, redos, sheds, and saves", async () => {
+    let seed = 12_345;
+    const random = () => {
+      seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648;
+      return seed / 2_147_483_648;
+    };
+    for (let run = 0; run < 4; run += 1) {
+      memory = new MemoryDatabase();
+      vi.mocked(openDB).mockImplementation(async () => memory as never);
+      const repository = createIndexedDbDocumentRepository();
+      let session: Session = { tree: seeded(), history: createTreeHistory() };
+      let basis: SnapshotBasis = UNKNOWN;
+      let retention: HistoryRetention = FULL_HISTORY_RETENTION;
+      // The first run crosses the 1,000-step bound; the others mix operations.
+      const iterations = run === 0 ? 1_050 : 300;
+      for (let operation = 0; operation < iterations; operation += 1) {
+        const roll = random();
+        if (run === 0 || roll < 0.55) {
+          session = commitStep(session, `c${run}_${operation}`);
+        } else if (roll < 0.75) {
+          const undone = undoTreeHistory(session.tree, session.history, MATTER_HISTORY_LIMITS);
+          if (undone.ok) session = undone;
+        } else if (roll < 0.9) {
+          const redone = redoTreeHistory(session.tree, session.history, MATTER_HISTORY_LIMITS);
+          if (redone.ok) session = redone;
+        } else if (roll < 0.93) {
+          retention = shedHistoryRetention(session.history, retention) ?? retention;
+        }
+        if (random() >= 0.3 && operation !== iterations - 1) continue;
+        const saved = await save(repository, session, basis, retention);
+        if (!saved.ok) throw new Error(saved.error.code);
+        basis = saved.value;
+        expect(recordKeys(memory)).toEqual(manifestKeys(memory, session.tree.id));
+        const loaded = await loadValue(repository, session.tree.id);
+        expect(loaded.history.released).toBe(false);
+        expect(loaded.history.history.entries.map(({ commandId }) => commandId))
+          .toEqual(basis.journal.undo.entries.map(({ commandId }) => commandId));
+        expect(loaded.history.history.redoEntries.map(({ inverse }) => inverse))
+          .toEqual(basis.journal.redo.entries.map(({ inverse }) => inverse));
+        expect(attachRecoveredHistory(loaded.tree, loaded.history, MATTER_HISTORY_LIMITS).released).toBe(false);
+      }
+      expect(session.history.entries.length + session.history.redoEntries.length).toBeLessThanOrEqual(1_000);
+    }
+  }, 120_000);
+
+  it("writes a delivered commit's kept redo future with one record and restores it exactly", async () => {
+    const tree = seeded();
+    const [first, second, third] = Object.keys(tree.nodes)
+      .filter((id) => id !== tree.rootId && tree.nodes[id]!.text.length > 0);
+    let session: Session = { tree, history: createTreeHistory() };
+    for (const [nodeId, id] of [[first!, "human_a"], [second!, "human_b"]] as const) {
+      const result = commitTreeCommand(session.tree, session.history, replaceNode(session, nodeId, id), MATTER_HISTORY_LIMITS);
+      if (!result.ok) throw new Error(result.error.code);
+      session = result;
+    }
+    session = undo(undo(session));
+    const repository = createIndexedDbDocumentRepository();
+    const saved = await save(repository, session, UNKNOWN);
+    if (!saved.ok) throw new Error(saved.error.code);
+    const puts = memory.recordPuts;
+
+    const delivered = commitDeliveredTreeCommand(
+      session.tree,
+      session.history,
+      replaceNode(session, third!, "turn", "agent"),
+      MATTER_HISTORY_LIMITS,
+    );
+    if (!delivered.ok) throw new Error(delivered.error.code);
+    expect(delivered.history.redoEntries).toHaveLength(2);
+    const next = await save(repository, delivered, saved.value);
+    expect(next.ok).toBe(true);
+    expect(memory.recordPuts - puts).toBe(1);
+
+    const loaded = await loadValue(repository, tree.id);
+    const attached = attachRecoveredHistory(loaded.tree, loaded.history, MATTER_HISTORY_LIMITS);
+    expect(attached.released).toBe(false);
+    const redoneOnce = redoTreeHistory(loaded.tree, attached.history, MATTER_HISTORY_LIMITS);
+    if (!redoneOnce.ok) throw new Error(redoneOnce.error.code);
+    const redoneTwice = redoTreeHistory(redoneOnce.tree, redoneOnce.history, MATTER_HISTORY_LIMITS);
+    if (!redoneTwice.ok) throw new Error(redoneTwice.error.code);
+    expect(redoneTwice.tree.nodes[first!]!.text).toBe("human_a text");
+    expect(redoneTwice.tree.nodes[second!]!.text).toBe("human_b text");
+    expect(redoneTwice.tree.nodes[third!]!.text).toBe("turn text");
+  });
+
+  it("bounds a very long v5 inline journal and migrates it in one save", async () => {
+    const repository = createIndexedDbDocumentRepository();
+    const unbounded = { maxEntries: Number.MAX_SAFE_INTEGER, maxRetainedInverseBytes: Number.MAX_SAFE_INTEGER };
+    let session: Session = { tree: seeded(), history: createTreeHistory() };
+    for (let step = 0; step < 1_500; step += 1) {
+      const result = commitTreeCommand(session.tree, session.history, replaceNode(session, session.tree.rootId!, `legacy_${step}`), unbounded);
+      if (!result.ok) throw new Error(result.error.code);
+      session = result;
+    }
+    memory.putRow({
+      storageSchemaVersion: 1,
+      treeId: session.tree.id,
+      treeRevision: session.tree.revision,
+      writeGeneration: 7,
+      bundle: treeToBundle(session.tree),
+      history: structuredClone(session.history),
+    });
+
+    const loaded = await loadValue(repository, session.tree.id);
+    const attached = attachRecoveredHistory(loaded.tree, loaded.history, MATTER_HISTORY_LIMITS);
+    expect(attached.released).toBe(false);
+    expect(attached.history.entries).toHaveLength(1_000);
+    expect(attached.history.entries[0]!.commandId).toBe("legacy_500");
+    const saved = await save(repository, { tree: loaded.tree, history: attached.history }, loaded.basis);
+    expect(saved.ok).toBe(true);
+    expect(memory.records()).toHaveLength(1_000);
+    expect(memory.row(session.tree.id)).not.toHaveProperty("history");
+  }, 60_000);
+
+  it("fails closed at use when a stored step's byte count does not match its memento", async () => {
+    const repository = createIndexedDbDocumentRepository();
+    const session = steps(seeded(), 2);
+    const saved = await save(repository, session, UNKNOWN);
+    if (!saved.ok) throw new Error(saved.error.code);
+    const claimed = session.history.entries[0]!.retainedInverseBytes;
+    memory.mutateRecord(session.tree.id, "undo", 0, (record) => ({ ...record, retainedInverseBytes: 0 }));
+    memory.mutateRow(session.tree.id, (row) => {
+      const journal = row.historyJournal as { bytes: number };
+      return { ...row, historyJournal: { ...journal, bytes: journal.bytes - claimed } };
+    });
+
+    const loaded = await loadValue(repository, session.tree.id);
+    const attached = attachRecoveredHistory(loaded.tree, loaded.history, MATTER_HISTORY_LIMITS);
+    expect(attached.released).toBe(false);
+    const first = undoTreeHistory(loaded.tree, attached.history, MATTER_HISTORY_LIMITS);
+    if (!first.ok) throw new Error(first.error.code);
+    expect(undoTreeHistory(first.tree, first.history, MATTER_HISTORY_LIMITS)).toMatchObject({
+      ok: false,
+      error: { code: "HISTORY_UNAVAILABLE" },
+      tree: first.tree,
+    });
+  });
+
   it("reclaims only model labels, keeping every name a person chose", async () => {
     const repository = createIndexedDbDocumentRepository();
     for (let index = 0; index < MAX_NODES_PER_TREE + 3; index += 1) {
@@ -649,10 +832,75 @@ type Repository = ReturnType<typeof createIndexedDbDocumentRepository>;
 
 const UNKNOWN: SnapshotBasis = Object.freeze({ writeGeneration: null, journal: emptyHistoryJournal(0) });
 
+/** Starts a controller as a tab would and attaches what it loads, as the store does. */
+async function reloadAsTab(tree: ThoughtTree) {
+  const controller = createPersistenceController(createIndexedDbDocumentRepository());
+  const stored = await controller.start(tree, createTreeHistory());
+  if (stored.storedTree === null) throw new Error("stored material expected");
+  const attached = attachRecoveredHistory(stored.storedTree, stored.storedHistory, MATTER_HISTORY_LIMITS);
+  if (attached.released) controller.reportHistoryUnavailable();
+  controller.publish(stored.storedTree, attached.history);
+  return { controller, tree: stored.storedTree, history: attached.history, released: attached.released };
+}
+
+function staleText(record: Record<string, unknown>) {
+  const inverse = record.inverse as TreeCommand;
+  if (inverse.mutation.type !== "replace-text") throw new Error("replace-text expected");
+  return { ...record, inverse: { ...inverse, mutation: { ...inverse.mutation, expectedText: "not the text" } } };
+}
+
+function replaceNode(session: Session, nodeId: string, id: string, source: TreeCommand["source"] = "human"): TreeCommand {
+  const node = session.tree.nodes[nodeId]!;
+  return {
+    id,
+    source,
+    expectedTreeId: session.tree.id,
+    expectedRevision: session.tree.revision,
+    createdAt: TIME,
+    mutation: {
+      type: "replace-text",
+      nodeId,
+      expectedText: node.text,
+      expectedUpdatedAt: node.updatedAt,
+      text: `${id} text`,
+      updatedAt: TIME,
+    },
+  };
+}
+
+function recordKeys(memory: MemoryDatabase): string[] {
+  return memory.records().map((record) => `${record.epoch}/${record.stack}/${record.position}`);
+}
+
+function manifestKeys(memory: MemoryDatabase, treeId: string): string[] {
+  const manifest = memory.row(treeId)!.historyJournal as {
+    epoch: number;
+    undo: [number, number];
+    redo: [number, number];
+  };
+  const keys: string[] = [];
+  for (const stack of ["redo", "undo"] as const) {
+    for (let position = manifest[stack][0]; position < manifest[stack][1]; position += 1) {
+      keys.push(`${manifest.epoch}/${stack}/${position}`);
+    }
+  }
+  return keys;
+}
+
 function lifecycleOf(call: number) {
   return (vi.mocked(openDB).mock.calls[call]?.[2] ?? {}) as {
     blocked?: () => void;
     blocking?: (currentVersion: number, blockedVersion: number | null) => void;
+  };
+}
+
+/** A history as storage hands it back: every step's byte count is still unmeasured. */
+function restored(history: TreeHistory): TreeHistory {
+  const mark = (entry: TreeHistory["entries"][number]) => ({ ...entry, bytesUnverified: true as const });
+  return {
+    entries: history.entries.map(mark),
+    redoEntries: history.redoEntries.map(mark),
+    retainedInverseBytes: history.retainedInverseBytes,
   };
 }
 

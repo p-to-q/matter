@@ -212,21 +212,32 @@ layout; the repository executes it.
   refuses any memento that no longer matches, so exactness holds.
 - **Truncate and say so.** A stack keeps the steps above its newest missing or
   unreadable record, since exactly those remain reachable; a failed top or a
-  step that fails at use releases its whole stack. The next save persists the
-  release, and the footer carries one quiet notice. A manifest in another format
+  step that fails at use releases its whole stack. A restored step's stored byte
+  count is compared with its memento when it is first applied, so a damaged
+  count fails closed instead of escaping the byte bound. The next save persists
+  the release even when the material revision is unchanged (the controller skips
+  a publication only with the history last saved or loaded), so the notice does
+  not return on the next reload; the footer carries it once. A "released" notice
+  ends when a save keeps the whole history again, and a shed never hides an
+  unread "unavailable" one. A manifest in another format
   or one that no longer repeats its row's generation and revision is unusable:
   material loads, history is released with the same notice, and the next save
   reclaims the orphaned records.
 - **Migration.** The v6 upgrade only creates the store. A row that still has the
   v5 inline `history` is parsed on load (newest steps above any unreadable one,
   then the bound); its first save writes records plus manifest and drops the
-  inline field.
-- **Epochs.** Import and corrupt-row replacement write the next epoch in their
-  own transaction and never delete the replaced row's records, so a rolled-back
-  import restores the previous manifest and its records intact. A rollback
-  adopts the restored generation only when the replaced row is the one this
-  tab's basis described; otherwise the next save meets the newer row as a
-  conflict. Later saves compact every other epoch.
+  inline field. Release risk: once any tab has opened v6, a deployment rolled
+  back to a pre-v6 build cannot open the database (`VersionError`). Local
+  material is then unavailable in that build (superseded), not destroyed;
+  redeploying v6 or later makes it readable again. A rollback plan must say so.
+- **Epochs.** An import writes the next epoch and never deletes the replaced
+  row's records, so a rolled-back import restores the previous manifest and its
+  records intact. A rollback adopts the restored generation only when the
+  replaced row is the one this tab's basis described; otherwise the next save
+  meets the newer row as a conflict. Later saves compact every other epoch.
+  Corrupt-row replacement is different: nothing can roll it back and the damaged
+  row's journal is never trusted, so it writes its whole journal into the next
+  epoch and deletes every other epoch's records in the same transaction.
 - **Material before history.** When storage refuses a save, the controller
   retries the same transaction with half the durable undo bytes, then none, then
   no redo, and records the release; only a snapshot that cannot fit alone
@@ -241,6 +252,18 @@ took 0.05 ms and wrote no record. Headless Chromium 153 with a 31.2 MB,
 1,000-step journal beside a realistic row measured a per-step save at 2.9 ms
 median (row, one record, six range deletes), recovery at 40.4 ms median, and the
 v5 layout's inline 31 MB rewrite at 24.5 ms per save.
+
+The Vitest suites run the repository over an in-memory IndexedDB double for
+fault injection. `npm run proof:persistence` (also the last step of
+`bench:persistence`) bundles the same repository, journal, and controller into
+headless Chromium and checks them against the real engine: a randomized
+commit/undo/redo/shed/save session whose stored records always equal the
+manifest, two connections racing from one generation (exactly one wins, the
+other conflicts, storage matches the winner), a put that throws while issued
+(nothing commits), the v5 upgrade (other stores intact, lazy migration), an
+older build's `VersionError`, and quota: at 1.5 MB material saves with 199 of
+400 undo steps and a "released" notice, at 20 kB the snapshot alone does not fit
+and the save reports storage-full with nothing written.
 
 The material-index footer is deliberately not a recovery control, but it no
 longer claims the material is kept when it is not. Its one localized line under

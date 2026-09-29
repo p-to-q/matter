@@ -149,6 +149,8 @@ export function createPersistenceController(
   let activeTreeId: string | null = null;
   let documentEpoch = 0;
   let basis: SnapshotBasis = UNKNOWN_BASIS;
+  // The history the basis row holds, so a history-only change is still saved.
+  let persistedHistory: TreeHistory | null = null;
   // Storage pressure lowers durable history for the rest of the document
   // epoch; an explicit retry or a new document restores full retention.
   let retention: HistoryRetention = FULL_HISTORY_RETENTION;
@@ -221,6 +223,7 @@ export function createPersistenceController(
     activeTreeId = treeId;
     documentEpoch += 1;
     basis = UNKNOWN_BASIS;
+    persistedHistory = null;
     retention = FULL_HISTORY_RETENTION;
   };
 
@@ -290,6 +293,7 @@ export function createPersistenceController(
         break;
       }
       basis = saved.value;
+      persistedHistory = pendingDocument.history;
       const shed = savedRetention !== retention;
       retention = savedRetention;
       announce(tree.id, saved.value.writeGeneration);
@@ -300,7 +304,7 @@ export function createPersistenceController(
         persistedRevision: tree.revision,
         dirtyRevision: queuedAfterWrite?.tree.revision ?? null,
         errorCode: null,
-        historyNotice: shed ? "released" : status.historyNotice,
+        historyNotice: nextHistoryNotice(status.historyNotice, shed, savedRetention),
       });
     }
     writingDocument = null;
@@ -313,6 +317,7 @@ export function createPersistenceController(
     loaded: Readonly<{ tree: ThoughtTree; history: RecoveredHistory; basis: SnapshotBasis }>,
   ): StoredDocument => {
     basis = loaded.basis;
+    persistedHistory = loaded.history.history;
     update({
       ...status,
       phase: "saved",
@@ -388,7 +393,15 @@ export function createPersistenceController(
         syncUnsaved();
         return;
       }
-      if (pending === null && status.phase === "saved" && status.persistedRevision === tree.revision) return;
+      // An unchanged revision is skipped only with the history last saved or
+      // loaded: a step released at load or at use changes history alone, and
+      // storage must stop offering it (and its notice) on the next reload.
+      if (
+        pending === null &&
+        status.phase === "saved" &&
+        status.persistedRevision === tree.revision &&
+        sameDurableHistory(history, persistedHistory)
+      ) return;
       pending = Object.freeze({ tree, history });
       if (ready && status.phase !== "error") void drain();
       else if (ready) update({ ...status, dirtyRevision: tree.revision });
@@ -486,6 +499,7 @@ export function createPersistenceController(
       beginDocument(prepared.tree.id);
       ready = true;
       basis = prepared.reservation.basis;
+      persistedHistory = createTreeHistory();
       pending = null;
       update({
         ...status,
@@ -607,6 +621,7 @@ export function createPersistenceController(
         return Object.freeze({ ok: false, errorCode: "PERSISTENCE_CONFLICT" });
       }
       basis = replaced.value;
+      persistedHistory = replacement.history;
       announce(replacement.tree.id, replaced.value.writeGeneration);
       if (pending === replacement) pending = null;
       const queued = pending;
@@ -729,6 +744,27 @@ export function createPersistenceController(
       return () => listeners.delete(listener);
     },
   });
+}
+
+function sameDurableHistory(history: TreeHistory, persisted: TreeHistory | null): boolean {
+  if (persisted === null) return false;
+  return history === persisted || (
+    history.entries.length === 0 && history.redoEntries.length === 0 &&
+    persisted.entries.length === 0 && persisted.redoEntries.length === 0
+  );
+}
+
+/**
+ * A shed never hides an unread "unavailable" notice, and "released" ends once
+ * a save keeps the whole history again.
+ */
+function nextHistoryNotice(
+  current: HistoryNotice | null,
+  shed: boolean,
+  savedRetention: HistoryRetention,
+): HistoryNotice | null {
+  if (shed) return current === "unavailable" ? current : "released";
+  return current === "released" && savedRetention === FULL_HISTORY_RETENTION ? null : current;
 }
 
 function importRepositoryError(code: RepositoryErrorCode): ImportedDocumentRejection["errorCode"] {

@@ -188,31 +188,36 @@ export function MatterApp() {
     admission: admission.state.phase,
     paper: paperTurnPhases,
   });
+  const reportHistoryUnavailable = persistence.reportHistoryUnavailable;
+  // Reconciliation completes once, after the first load; save phases are not
+  // a reason to look at the seed again.
+  const materialReconciled = persistence.initialReconciliationComplete &&
+    persistence.status.phase !== "loading";
   useLayoutEffect(() => {
     // Relocalization waits for every material turn that read current passages
     // and reruns when the last one settles, so a locale change never revokes a
-    // submitted Point-and-Talk or Elastic request on seed copy.
+    // submitted Point-and-Talk or Elastic request on seed copy. It runs for a
+    // language or document change only; its cost never follows the journal.
     if (
       seededSessionRelocalizer === null ||
-      !persistence.initialReconciliationComplete ||
-      persistence.status.phase === "loading" ||
+      !materialReconciled ||
       turnsHoldSeedBasis
     ) return;
-    localizeSeededMaterial(
+    const receipt = localizeSeededMaterial(
       canvasPreferences.preferences.language,
       seededSessionRelocalizer,
     );
+    if (receipt.historyReleased === true) reportHistoryUnavailable();
   }, [
     canvasPreferences.preferences.language,
     documentEpoch,
     localizeSeededMaterial,
-    persistence.initialReconciliationComplete,
-    persistence.status.phase,
+    materialReconciled,
+    reportHistoryUnavailable,
     seededSessionRelocalizer,
     turnsHoldSeedBasis,
   ]);
   const clearRepairPresentations = admission.clearRepairPresentations;
-  const reportHistoryUnavailable = persistence.reportHistoryUnavailable;
   // A step that no longer applies releases its stack in the store; the
   // durability surface carries the one quiet notice about it.
   const undoWithPresentationReset = useCallback(() => {

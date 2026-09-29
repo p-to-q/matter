@@ -89,6 +89,7 @@ export function parseHistoryEntry(
     source: source as TreeCommand["source"],
     inverse: inverse as unknown as TreeCommand,
     retainedInverseBytes,
+    bytesUnverified: true,
   };
 }
 

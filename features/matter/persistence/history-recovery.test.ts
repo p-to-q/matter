@@ -89,7 +89,7 @@ describe("persisted undo history", () => {
     const { history } = twoSteps();
     const entry = history.entries[0]!;
 
-    expect(parseHistoryEntry(structuredClone(entry), "tree", LIMITS)).toEqual(entry);
+    expect(parseHistoryEntry(structuredClone(entry), "tree", LIMITS)).toEqual({ ...entry, bytesUnverified: true });
     expect(parseHistoryEntry({ ...entry, source: "model" }, "tree", LIMITS)).toBeNull();
     expect(parseHistoryEntry(entry, "another-tree", LIMITS)).toBeNull();
     expect(parseHistoryEntry({
@@ -108,20 +108,20 @@ describe("persisted undo history", () => {
     const [oldest, newest] = history.entries;
 
     expect(parseLegacyHistory(structuredClone(history), "tree", LIMITS)).toEqual({
-      history,
+      history: restored(history),
       released: false,
     });
     // Journals written before redo existed carry no redo stack.
     expect(parseLegacyHistory({
       entries: structuredClone(history.entries),
       retainedInverseBytes: history.retainedInverseBytes,
-    }, "tree", LIMITS)).toEqual({ history, released: false });
+    }, "tree", LIMITS)).toEqual({ history: restored(history), released: false });
     expect(parseLegacyHistory({
       entries: [{ bad: true }, newest],
       retainedInverseBytes: history.retainedInverseBytes,
     }, "tree", LIMITS)).toEqual({
       history: {
-        entries: [newest],
+        entries: [{ ...newest!, bytesUnverified: true }],
         redoEntries: [],
         retainedInverseBytes: newest!.retainedInverseBytes,
       },
@@ -150,11 +150,21 @@ describe("persisted undo history", () => {
     const long = { entries: [{ corrupt: "far below the bound" }, ...Array.from({ length: 3 }, () => newest)] };
 
     expect(parseLegacyHistory(long, "tree", { ...LIMITS, maxEntries: 3 })).toMatchObject({
-      history: { entries: [newest, newest, newest] },
+      history: { entries: Array.from({ length: 3 }, () => ({ ...newest, bytesUnverified: true })) },
       released: false,
     });
   });
 });
+
+/** A history as storage hands it back: every step's byte count is still unmeasured. */
+function restored(history: TreeHistory): TreeHistory {
+  const mark = (entry: TreeHistory["entries"][number]) => ({ ...entry, bytesUnverified: true as const });
+  return {
+    entries: history.entries.map(mark),
+    redoEntries: history.redoEntries.map(mark),
+    retainedInverseBytes: history.retainedInverseBytes,
+  };
+}
 
 function twoSteps() {
   const initialized = commitTreeCommand(

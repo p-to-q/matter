@@ -607,6 +607,66 @@ describe("persistence controller", () => {
     expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
   });
 
+  it("saves a history-only change at an unchanged revision and skips the history it already holds", async () => {
+    const tree = createSeededDocument().tree;
+    const loadedHistory = historyOfBytes([10, 20]);
+    const repository = controlledRepository({
+      ...stored(tree, 2),
+      history: { history: loadedHistory, released: false },
+    });
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree);
+
+    controller.publish(tree, loadedHistory);
+    await Promise.resolve();
+    expect(repository.pending).toHaveLength(0);
+    const released: TreeHistory = { entries: [], redoEntries: [], retainedInverseBytes: 0 };
+    controller.publish(tree, released);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.history).toBe(released);
+    repository.settleNext({ ok: true, value: 3 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    controller.publish(tree, released);
+    await Promise.resolve();
+    expect(repository.pending).toHaveLength(0);
+  });
+
+  it("ends a released notice after a full save, and never lets a shed hide an unread unavailable one", async () => {
+    const tree = createSeededDocument().tree;
+    const history = historyOfBytes([40, 30, 20, 10]);
+    const repository = controlledRepository();
+    const controller = createPersistenceController(repository.port);
+    await controller.start(tree, history);
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => controller.getStatus().historyNotice === "released");
+
+    // Retry restores full retention; the next save keeps every step again.
+    controller.publish({ ...tree, revision: tree.revision + 1 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => controller.getStatus().phase === "error");
+    controller.retry();
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
+    repository.settleNext({ ok: true, value: 2 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus().historyNotice).toBeNull();
+
+    controller.reportHistoryUnavailable();
+    controller.publish({ ...tree, revision: tree.revision + 2 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext({ ok: true, value: 3 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus().historyNotice).toBe("unavailable");
+  });
+
   it("carries one history notice until it is acknowledged or a new document begins", async () => {
     const tree = createSeededDocument().tree;
     const repository = fakeRepository(stored(tree, 2));

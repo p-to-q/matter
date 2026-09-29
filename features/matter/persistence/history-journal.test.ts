@@ -162,8 +162,12 @@ describe("history journal layout", () => {
       records.filter(({ stack }) => stack === "redo"),
       LIMITS,
     );
-    expect(assembled.recovered).toEqual({ history: session.history, released: false });
-    expect(assembled.journal).toEqual(written.journal);
+    expect(assembled.recovered).toEqual({ history: restored(session.history), released: false });
+    expect(assembled.journal).toMatchObject({
+      epoch: written.journal.epoch,
+      undo: { first: written.journal.undo.first, entries: restored(session.history).entries },
+      redo: { first: written.journal.redo.first, entries: restored(session.history).redoEntries },
+    });
     // The layout refers to the recovered objects, so the next save reuses them.
     expect(assembled.journal.undo.entries[0]).toBe(assembled.recovered.history.entries[0]);
   });
@@ -244,6 +248,16 @@ describe("history journal layout", () => {
 });
 
 type Session = Readonly<{ tree: ThoughtTree; history: TreeHistory }>;
+
+/** A history as storage hands it back: every step's byte count is still unmeasured. */
+function restored(history: TreeHistory): TreeHistory {
+  const mark = (entry: TreeHistory["entries"][number]) => ({ ...entry, bytesUnverified: true as const });
+  return {
+    entries: history.entries.map(mark),
+    redoEntries: history.redoEntries.map(mark),
+    retainedInverseBytes: history.retainedInverseBytes,
+  };
+}
 
 function steps(count: number, limits = LIMITS): Session {
   const initialized = commitTreeCommand(createEmptyTree("tree"), createTreeHistory(), {

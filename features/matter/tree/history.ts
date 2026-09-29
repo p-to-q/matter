@@ -13,6 +13,12 @@ export type TreeHistoryEntry = {
   source: TreeCommand["source"];
   inverse: TreeCommand;
   retainedInverseBytes: number;
+  /**
+   * Restored from storage: the byte count was read, not measured. It is
+   * compared with the memento when the step is first applied, so a damaged
+   * record fails closed instead of escaping the byte bound.
+   */
+  bytesUnverified?: true;
 };
 
 export type TreeHistory = {
@@ -220,11 +226,11 @@ export function undoTreeHistory(
     };
   }
 
-  const result = applyTreeCommand(tree, {
+  const result = measuredAsStored(entry) ? applyTreeCommand(tree, {
     ...entry.inverse,
     expectedRevision: tree.revision,
-  });
-  if (!result.ok) {
+  }) : null;
+  if (result === null || !result.ok) {
     return { ok: false, tree, history: releaseUndoStack(history), error: unavailableEntry() };
   }
 
@@ -265,11 +271,11 @@ export function redoTreeHistory(
     };
   }
 
-  const result = applyTreeCommand(tree, {
+  const result = measuredAsStored(entry) ? applyTreeCommand(tree, {
     ...entry.inverse,
     expectedRevision: tree.revision,
-  });
-  if (!result.ok) {
+  }) : null;
+  if (result === null || !result.ok) {
     return { ok: false, tree, history: releaseRedoStack(history), error: unavailableEntry() };
   }
 
@@ -349,7 +355,14 @@ export function verifyHistoryTops(
 }
 
 function appliesTo(tree: ThoughtTree, entry: TreeHistoryEntry): boolean {
-  return applyTreeCommand(tree, { ...entry.inverse, expectedRevision: tree.revision }).ok;
+  return measuredAsStored(entry) &&
+    applyTreeCommand(tree, { ...entry.inverse, expectedRevision: tree.revision }).ok;
+}
+
+/** A restored step's claimed bytes must match its memento before it is used. */
+function measuredAsStored(entry: TreeHistoryEntry): boolean {
+  return entry.bytesUnverified !== true ||
+    estimateSerializedInverseBytes(entry.inverse) === entry.retainedInverseBytes;
 }
 
 /**
