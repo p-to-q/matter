@@ -70,10 +70,13 @@ const FITTING_PRODUCER_FILES = Object.freeze([
   "features/matter/wiki/wiki-model.ts",
 ]);
 // Term producers 1.1 classify a Latin word of a Chinese or Japanese turn in
-// the en-US ledger. The classifier and what a stored vote means are unchanged,
-// so the families stay v1; corpus 2 binds the ledger locale into every action.
-const TERM_PRODUCER_VERSION = "1.1.0";
-const TERM_CORPUS_GENERATION = 2;
+// the en-US ledger; corpus 2 binds the ledger locale into every action.
+// Producers 1.2 decide width by script: a full-width Latin spelling is never
+// collected, nor counted as an absence, in any locale; corpus 3 adds English
+// and German full-width turns. The classifier and what a stored vote means
+// are unchanged, so the families stay v1.
+const TERM_PRODUCER_VERSION = "1.2.0";
+const TERM_CORPUS_GENERATION = 3;
 
 type LocalProducer = Exclude<WikiQualifiableProducerId,
   "latin-internal-edit-v2" | "en-exact-homophone-v1">;
@@ -107,6 +110,8 @@ const CASES: Readonly<Record<LocalProducer, readonly WikiProducerExpectedCase[]>
       termCase("shape-routed-full-width", "adversarial", "zh-CN", "ＯｐｅｎＡＩ的模型", null),
       termCase("shape-full-width-code", "adversarial", "en-US", "｀OpenAI｀", null),
       termCase("shape-full-width-code-de", "adversarial", "de-DE", "｀GitHub｀", null),
+      termCase("shape-full-width-en", "adversarial", "en-US", "ＯｐｅｎＡＩ", null),
+      termCase("shape-full-width-de", "adversarial", "de-DE", "ＫＦＣ", null),
       termCase("shape-ambiguity", "ambiguity", "en-US", "2026", null),
       termCase("shape-locale", "locale-isolation", "en-US", "カタカナ", null),
       termCase("shape-protected", "protected", "en-US", "OpenAI", null),
@@ -131,6 +136,8 @@ const CASES: Readonly<Record<LocalProducer, readonly WikiProducerExpectedCase[]>
       termCase("segment-full-width-code", "adversarial", "en-US", "｀morphogenesis｀", null),
       termCase("segment-full-width-path", "adversarial", "de-DE", "src／Morphogenese／a．ts",
         null),
+      termCase("segment-full-width-en", "adversarial", "en-US", "ｍｏｒｐｈｏｇｅｎｅｓｉｓ", null),
+      termCase("segment-full-width-de", "adversarial", "de-DE", "Ｍｏｒｐｈｏｇｅｎｅｓｅ", null),
       termCase("segment-ambiguity", "ambiguity", "en-US", "2026", null),
       termCase("segment-locale", "locale-isolation", "en-US", "普通名词", null),
       termCase("segment-protected", "protected", "en-US", "morphogenesis", null),

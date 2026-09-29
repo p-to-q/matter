@@ -302,8 +302,10 @@ const CENSORED_FITTING: WikiFittingResult = Object.freeze({
  * already found still count and nothing unscanned is treated as absent.
  *
  * Each word is fitted in the ledger its script routes to: a Latin word inside
- * a Chinese or Japanese turn reaches the `en-US` internal-edit producer with
- * its width-folded form, while CJK words never reach a Latin producer. The
+ * a Chinese or Japanese turn reaches the `en-US` internal-edit producer, while
+ * CJK words never reach a Latin producer. A Latin word votes by its
+ * width-folded spelling in every turn, routed or not, so a full-width spelling
+ * votes like its half-width one instead of counting as its absence. The
  * turn's own opportunity still names every script it scanned, so a candidate
  * stored under the turn locale for a script that now routes away ages out at
  * the ordinary cadence instead of becoming immortal.
@@ -342,9 +344,12 @@ export function fitCommittedWikiTextResult(
         wikiRangeOverlapsProtected(start, end, routedProtectedSpans, 0)) return [];
     // A relation is evidence only where its word rule could apply: `@name`,
     // `#tag`, and joined forms are never rewritten, so like protected
-    // literals they neither vote nor offer an opportunity.
-    if (isWikiLatinWord(route.form) &&
-        !hasWikiWordBoundaryAround(request.text, start, end, request.locale, route.routed)) {
+    // literals they neither vote nor offer an opportunity. Nor does a Latin
+    // word the producer cannot read in any width, such as one holding a
+    // digit, an apostrophe, or a non-ASCII letter: it could never be a
+    // relation's form, so its presence says nothing about one's absence.
+    if (isWikiLatinWord(route.form) && (!LATIN_WORD.test(route.form) ||
+        !hasWikiWordBoundaryAround(request.text, start, end, request.locale, route.routed))) {
       return [];
     }
     return [route];

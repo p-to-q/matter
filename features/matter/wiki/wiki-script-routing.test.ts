@@ -46,12 +46,17 @@ describe("Wiki script routing", () => {
       locale: "zh-TW", form: "材料", routed: false, widthFolded: false,
     });
     expect(routeWikiWord("ja-JP", "カタカナ")).toMatchObject({ locale: "ja-JP", routed: false });
-    // English and German turns keep every word in their own ledger, and a
-    // full-width surface there is not folded.
+    // English and German turns keep every word in their own ledger. Width is
+    // decided by script, so a full-width Latin word folds there too.
     expect(routeWikiWord("en-US", "Ｅｎｇｌｅｂａｒｔ")).toEqual({
-      locale: "en-US", form: "Ｅｎｇｌｅｂａｒｔ", routed: false, widthFolded: false,
+      locale: "en-US", form: "Englebart", routed: false, widthFolded: true,
     });
-    expect(routeWikiWord("de-DE", "Englebart")).toMatchObject({ locale: "de-DE", routed: false });
+    expect(routeWikiWord("de-DE", "Ｍｏｒｐｈｏｇｅｎｅｓｅ")).toEqual({
+      locale: "de-DE", form: "Morphogenese", routed: false, widthFolded: true,
+    });
+    expect(routeWikiWord("de-DE", "Englebart")).toEqual({
+      locale: "de-DE", form: "Englebart", routed: false, widthFolded: false,
+    });
   });
 
   it("folds full-width ASCII for matching without moving any index", () => {

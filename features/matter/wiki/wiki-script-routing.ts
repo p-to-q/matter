@@ -83,24 +83,30 @@ export function hasWikiLatinLetter(text: string): boolean {
 export type WikiRoutedWord = Readonly<{
   /** Ledger locale that owns this word's evidence. */
   locale: MatterLocale;
-  /** Matching form: the surface, width-folded only when the word is routed. */
+  /** Matching form: a Latin word width-folded in any turn; any other word as written. */
   form: string;
+  /** The word left the turn's own ledger for the Latin ledger. */
   routed: boolean;
-  /** The routed surface used full-width forms; the form is not what was written. */
+  /** The Latin word used full-width forms; the form is not what was written. */
   widthFolded: boolean;
 }>;
 
-/** Routes one NFC word-like segment of a turn to the ledger that owns it. */
+/**
+ * Routes one NFC word-like segment of a turn to the ledger that owns it.
+ * Width is decided by script, not by ledger: a Latin word is read by its
+ * width-folded spelling whether it routed out of a CJK turn or stayed in an
+ * English or German one, so a full-width spelling is the same word everywhere.
+ */
 export function routeWikiWord(turnLocale: MatterLocale, surface: string): WikiRoutedWord {
-  const routedLocale = wikiLatinRouteLocale(turnLocale);
-  if (routedLocale === null || !isWikiLatinWord(surface)) {
+  if (!isWikiLatinWord(surface)) {
     return Object.freeze({ locale: turnLocale, form: surface, routed: false, widthFolded: false });
   }
+  const routedLocale = wikiLatinRouteLocale(turnLocale);
   const form = foldWikiFullWidthAscii(surface);
   return Object.freeze({
-    locale: routedLocale,
+    locale: routedLocale ?? turnLocale,
     form,
-    routed: true,
+    routed: routedLocale !== null,
     widthFolded: form !== surface,
   });
 }

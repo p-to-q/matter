@@ -252,12 +252,20 @@ A segment is routed when it has a letter and every letter is Latin. A segment
 mixing scripts, such as Latin joined to Bopomofo, stays in the turn locale,
 where no Latin producer reads it, so a host segmenter that failed to break
 would lose routing, not precision. Full-width ASCII, meaning letters, digits,
-and symbols such as `＠／．－｀`, folds to ASCII for matching and protection
-only, index for index, as does the ideographic space. The CJK sentence marks
-`，！？；` stay unfolded so a URL or path tail still ends at the sentence.
-Committed text is never width-normalized: only a rule that replaces a whole
-span changes it, and term collection never collects a full-width spelling,
-because a collected canonical becomes rewrite output.
+and symbols such as `＠／．－｀`, folds to ASCII for reading only, index for
+index, as does the ideographic space. The CJK sentence marks `，！？；` stay
+unfolded so a URL or path tail still ends at the sentence. Committed text is
+never width-normalized: only a rule that replaces a whole span changes it.
+
+Width is decided by a word's script, not by its ledger. A Latin word is read
+by its folded spelling in every turn, routed or not: fitting votes for a
+full-width `Ｅｎｇｌｅｂａｒｔ` in an English turn exactly as it does routed out
+of a Chinese one. Term collection never collects a full-width Latin spelling in
+any locale, because a collected canonical becomes rewrite output, and it does
+not count one as an opportunity either, since that would age the very term it
+spells. An English or German turn's own matcher still reads a rule's form as
+written, so a relation learned from a full-width spelling rewrites its
+half-width spelling there and both spellings in a routed turn.
 
 Routing keeps every existing contract of the routed ledger:
 
@@ -277,8 +285,12 @@ Routing keeps every existing contract of the routed ledger:
   identifier stays protected;
 - an occurrence is relation evidence only where a word rule for its form
   could apply, so `@name`, `#tag`, and a hyphen- or underscore-joined word,
-  in full width or not, neither vote nor offer an opportunity. This holds for
-  English turns as well. Term collection still reads such a word as a word.
+  in full width or not, neither vote nor offer an opportunity. Nor does a
+  Latin word the internal-edit producer cannot read in any width, such as one
+  holding a digit, an apostrophe, or a non-ASCII letter: no relation could
+  name it, so its presence says nothing about a relation's absence. This
+  holds for English turns as well. Term collection still reads such a word as
+  a word.
 
 Application is additive, and the turn's own locale keeps authority. In a CJK
 turn the turn's own rules match first, unchanged. The `en-US` view of the same
@@ -352,7 +364,9 @@ boundaries also read full-width ASCII folded, index for index, so `＠name`,
 `＃tag`, a full-width code span, URL, email address, path, or flag, and a
 full-width joiner such as `－` or `＇` protect exactly as their half-width forms
 do. Half-width text folds to itself, so its outcome is unchanged; the same
-test decides what fitting and term collection may count. A Chinese or Japanese
+test decides what fitting and term collection may count. The trie itself
+reads a rule's form as written, so a full-width spelling of an `en-US` or
+`de-DE` rule's form is not rewritten in its own turn. A Chinese or Japanese
 turn's own matching keeps the written-text protection, and Latin spans its
 own rules left untouched are also matched against the `en-US` view they route
 to; see [Script routing](#script-routing).
@@ -562,8 +576,8 @@ shortcut. A Latin word of a Chinese or Japanese turn is classified in the
 `en-US` ledger under English stop words and shape rules, so `OpenAI` said in
 Chinese is the same term as `OpenAI` said in English and English glue such as
 `with` is never collected. Stop words, numeric-only tokens, protected literals,
-full-width routed spellings, generated ranges, and malformed ranges produce no
-evidence. A producer scans eligible
+full-width Latin spellings in any locale, generated ranges, and malformed
+ranges produce no evidence. A producer scans eligible
 words in text order and stops before the 33rd distinct candidate: that turn is
 a partial scan, which scores what it saw and ages nothing, because a candidate
 absent from the scanned prefix may sit in the unscanned remainder. Host
@@ -740,6 +754,17 @@ so the case was replaced by those isolation cases, not relabelled. Every Latin
 action names the ledger locale, the stored form, and the canonical, so the
 full-width positive proves the folded ASCII form is what is kept. The term
 corpora likewise bind the ledger locale into every action.
+
+Deciding width by script rather than by ledger moved the same releases again,
+to `latin-internal-edit-v2` 2.2.0 on resource `ascii-latin` 1.2.0 and both term
+producers 1.2.0, each requalified on a version-3 corpus; the families stay
+unchanged for the same reason. Version 1.2.0 of the resource names the fold
+for every Latin word and the rule that only a readable word is an opportunity.
+The Latin corpus adds full-width English positives, a word and a sentence,
+that store the folded form; a full-width digit-joined word; and full-width
+German turns that reach no `en-US` target, in the German ledger or in
+isolation. The term corpora add full-width English and German spellings, both
+distinctive and ordinary, that are never collected.
 
 These values are versioned calibration candidates, not evidence that a language
 producer is ready. The bounded replay harness admits observations only from the
