@@ -831,6 +831,70 @@ describe("persistence controller", () => {
     expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
   });
 
+  it("keeps every undo step again once storage has room, trying at most once when the estimate misjudges", async () => {
+    const tree = createSeededDocument().tree;
+    const history = historyOfBytes([40, 30, 20, 10]);
+    const repository = controlledRepository();
+    let headroom: number | null = 0;
+    const storageHeadroom = vi.fn(async () => headroom);
+    const controller = createPersistenceController(repository.port, { storageHeadroom });
+    await startAccepted(controller, tree, history);
+    await waitFor(() => repository.pending.length === 1);
+    // Full retention is the norm: nothing asks the storage estimate.
+    expect(storageHeadroom).not.toHaveBeenCalled();
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext({ ok: true, value: 1 });
+    await waitFor(() => controller.getStatus().historyNotice === "released");
+    const shed = { maxUndoBytes: 50, keepRedo: true };
+
+    // Still no room: the save keeps the retention storage last accepted.
+    controller.publish({ ...tree, revision: tree.revision + 1 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(storageHeadroom).toHaveBeenCalledOnce();
+    expect(repository.pending[0]?.retention).toEqual(shed);
+    repository.settleNext({ ok: true, value: 2 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+
+    // Room came back: one save keeps every step and the notice ends.
+    headroom = 64 * 1_024 * 1_024;
+    controller.publish({ ...tree, revision: tree.revision + 2 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
+    repository.settleNext({ ok: true, value: 3 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus().historyNotice).toBeNull();
+    controller.publish({ ...tree, revision: tree.revision + 3 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
+    repository.settleNext({ ok: true, value: 4 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+
+    // Pressure again, and this engine's estimate overstates the room.
+    controller.publish({ ...tree, revision: tree.revision + 4 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext(storageFull());
+    await waitFor(() => repository.pending.length === 1);
+    repository.settleNext({ ok: true, value: 5 });
+    await waitFor(() => controller.getStatus().historyNotice === "released");
+    controller.publish({ ...tree, revision: tree.revision + 5 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toBe(FULL_HISTORY_RETENTION);
+    repository.settleNext(storageFull());
+    // The refusal falls straight back to the accepted retention in the same save.
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toEqual(shed);
+    repository.settleNext({ ok: true, value: 6 });
+    await waitFor(() => controller.getStatus().phase === "saved");
+    expect(controller.getStatus()).toMatchObject({ errorCode: null, historyNotice: "released" });
+    // No second attempt for this document, however roomy the estimate.
+    const asked = storageHeadroom.mock.calls.length;
+    controller.publish({ ...tree, revision: tree.revision + 6 }, history);
+    await waitFor(() => repository.pending.length === 1);
+    expect(repository.pending[0]?.retention).toEqual(shed);
+    expect(storageHeadroom).toHaveBeenCalledTimes(asked);
+  });
+
   it("saves a history-only change at an unchanged revision and skips the history it already holds", async () => {
     const tree = createSeededDocument().tree;
     const loadedHistory = historyOfBytes([10, 20]);

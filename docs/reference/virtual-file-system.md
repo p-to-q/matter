@@ -299,9 +299,15 @@ layout; the repository executes it.
 - **Material before history.** When storage refuses a save, the controller
   retries the same transaction with half the durable undo bytes, then none, then
   no redo, and records the release; only a snapshot that cannot fit alone
-  reports `PERSISTENCE_STORAGE_FULL`. The shed retention holds for the document
-  epoch; Retry or a new document restores it. The tab keeps its whole in-memory
-  history, so the notice says older steps will not survive a reload.
+  reports `PERSISTENCE_STORAGE_FULL`. The shed retention holds until a later
+  save finds, in `navigator.storage.estimate()`, room for twice the whole
+  in-memory history plus 1 MiB; that save tries full retention first and the
+  notice ends when it lands. A refusal falls back to the shed retention within
+  the same save and stops further attempts for the document epoch, because the
+  estimate evidently overstates this engine's room; Retry after a failed save,
+  an adopted row, or a new document starts from full retention again. The tab
+  keeps its whole in-memory history, so the notice says older steps will not
+  survive a reload.
 
 `npm run bench:persistence` records both sides. On 2026-09-29 (Node 22.20), a
 2,000-node tree with 1,050 commits (bounded to 1,000 steps) recovered in 9.35 ms
