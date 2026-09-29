@@ -364,7 +364,9 @@ export function applyWikiObservationBatch(
       unique.set(key, event);
     }
   }
-  let working = advanceUnobservedEvidence(state, [...unique.values()], tick);
+  const aged = advanceUnobservedEvidence(state, [...unique.values()], tick);
+  if (!aged.ok) return aged;
+  let working = aged.state;
   // Rows observed in this turn are never evicted to make room for its newcomers.
   const observedThisTurn: ReadonlySet<string> = new Set(unique.keys());
   for (const event of [...unique.values()].sort(compareObservation)) {
@@ -884,11 +886,11 @@ function observeEvidence(
     else termEvidence[index] = aggregate;
     if (aggregate.phase === "candidate") {
       // A producer release change can return a collected term to candidate; its
-      // automatic lexeme leaves with it unless another relation depends on it.
+      // automatic lexeme leaves with it exactly as aging would remove it.
       const lexemes = existingLexeme !== undefined &&
           existingLexeme.provenance === "aggregate-evidence" &&
           !isWikiStarterLexemeIdentity(existingLexeme) &&
-          !dependentLexemeIds(working).has(existingLexeme.id)
+          !lexemesRetainedByDependents(working).has(existingLexeme.id)
         ? working.lexemes.filter((entry) => entry.id !== existingLexeme.id)
         : working.lexemes;
       return commitAtRevision(working, revision, { termEvidence, lexemes });
@@ -967,12 +969,34 @@ function observeEvidence(
 
 const EMPTY_IDENTITIES: ReadonlySet<string> = new Set();
 
-/** Lexeme ids that a relation, human decision, or strike still depends on. */
-function dependentLexemeIds(state: WikiState): ReadonlySet<number> {
+/*
+ * Two dependency questions, kept apart on purpose.
+ *
+ * Retention: an automatic lexeme stays listed while its term is collected or
+ * a relation, a human decision, or a tombstone depends on it. A revert strike
+ * is soft memory; it never keeps an automatic lexeme alive and leaves with the
+ * identity it describes. Demotion and aging both answer this question.
+ *
+ * Eviction protection: a full reservoir never makes room by evicting an
+ * identity anything retains, nor one a strike describes, because capacity
+ * pressure alone must not erase a person's negative evidence.
+ */
+
+/** Lexeme ids a relation, human decision, or tombstone keeps listed. */
+function lexemesRetainedByDependents(
+  state: Pick<WikiState, "aliasEvidence" | "authorities" | "aliasTombstones">,
+): ReadonlySet<number> {
   return new Set([
     ...state.aliasEvidence.map((entry) => entry.lexemeId),
     ...state.authorities.map((entry) => entry.lexemeId),
     ...state.aliasTombstones.map((entry) => entry.lexemeId),
+  ]);
+}
+
+/** Lexeme ids an eviction must not remove: every retained id and every struck one. */
+function lexemesProtectedFromEviction(state: WikiState): ReadonlySet<number> {
+  return new Set([
+    ...lexemesRetainedByDependents(state),
     ...state.revertStrikes.map((entry) => entry.lexemeId),
   ]);
 }
@@ -986,7 +1010,7 @@ function evictWeakestTermEvidence(
   state: WikiState,
   observedThisTurn: ReadonlySet<string>,
 ): WikiState | null {
-  const dependents = dependentLexemeIds(state);
+  const dependents = lexemesProtectedFromEviction(state);
   const lexemesByKey = new Map(state.lexemes.map((lexeme) => [lexemeKey(lexeme), lexeme]));
   let victim: WikiState["termEvidence"][number] | undefined;
   let victimOrder: WikiEvictionCandidate | undefined;
@@ -1077,14 +1101,16 @@ function advanceUnobservedEvidence(
   state: WikiState,
   events: readonly WikiObserveEvidenceEvent[],
   tick: WikiObservationTick,
-): WikiState {
+): WikiTransitionResult {
   const initialTermKeys = new Set(state.termEvidence.map(lexemeKey));
   const hasOwnerlessAutomaticLexeme = state.lexemes.some((lexeme) =>
     lexeme.provenance === "aggregate-evidence" &&
     !isWikiStarterLexemeIdentity(lexeme) &&
     !initialTermKeys.has(lexemeKey(lexeme)));
   if (state.termEvidence.length === 0 && state.aliasEvidence.length === 0 &&
-      state.revertStrikes.length === 0 && !hasOwnerlessAutomaticLexeme) return state;
+      state.revertStrikes.length === 0 && !hasOwnerlessAutomaticLexeme) {
+    return success(state, false);
+  }
   const termAging = agingScopes(tick.term);
   const aliasAging = agingScopes(tick.alias);
   const scriptMasks = new Map<string, WikiScriptMask>();
@@ -1150,13 +1176,13 @@ function advanceUnobservedEvidence(
     const quietTurns = advanceWikiRevertStrikeTurn(entry.quietTurns);
     return quietTurns === null ? [] : [Object.freeze({ ...entry, quietTurns })];
   });
-  const dependentLexemeIds = new Set([
-    ...aliasEvidence.map((entry) => entry.lexemeId),
-    ...state.authorities.map((entry) => entry.lexemeId),
-    ...state.aliasTombstones.map((entry) => entry.lexemeId),
-  ]);
+  const retainedByDependents = lexemesRetainedByDependents({
+    aliasEvidence,
+    authorities: state.authorities,
+    aliasTombstones: state.aliasTombstones,
+  });
   const dependentTermKeys = new Set(state.lexemes
-    .filter((lexeme) => dependentLexemeIds.has(lexeme.id))
+    .filter((lexeme) => retainedByDependents.has(lexeme.id))
     .map(lexemeKey));
   // A zero-support term row is the cleanup owner while another relation still
   // depends on its aggregate lexeme. Drop both only after the last dependency
@@ -1174,7 +1200,7 @@ function advanceUnobservedEvidence(
     if (lexeme.provenance !== "aggregate-evidence" ||
         isWikiStarterLexemeIdentity(lexeme)) return true;
     return collectedTermKeys.has(lexemeKey(lexeme)) ||
-      dependentLexemeIds.has(lexeme.id);
+      retainedByDependents.has(lexeme.id);
   });
   // A strike is soft memory. It never keeps an automatic lexeme alive and
   // leaves with the identity it describes.
@@ -1187,16 +1213,18 @@ function advanceUnobservedEvidence(
     termEvidence.some((entry, index) => entry !== state.termEvidence[index]) ||
     aliasEvidence.some((entry, index) => entry !== state.aliasEvidence[index]) ||
     revertStrikes.some((entry, index) => entry !== state.revertStrikes[index]);
-  if (!changed) return state;
-  const next = freezeWikiState({
-    ...state,
-    revision: state.revision + 1,
+  if (!changed) return success(state, false);
+  // Aging is part of the admission it belongs to. A turn that cannot age its
+  // evidence fails whole rather than silently committing without the aging.
+  if (state.revision === Number.MAX_SAFE_INTEGER) {
+    return failure("BOUND_EXCEEDED", "The Wiki revision bound is exceeded.");
+  }
+  return commitAtRevision(state, state.revision + 1, {
     lexemes,
     termEvidence,
     aliasEvidence,
     revertStrikes,
   });
-  return validateWikiState(next).ok ? next : state;
 }
 
 type WikiAgingScope = Readonly<{

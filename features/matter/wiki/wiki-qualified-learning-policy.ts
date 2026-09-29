@@ -92,7 +92,7 @@ export const MATTER_WIKI_QUALIFIED_LEARNING_POLICY = Object.freeze({
       foregroundDwellMillisecondsToSettle: 60_000,
     }),
   }),
-  policySourceDigest: "sha256:30521f8a9da2f0a32dc7efec8b8b231f9dca6337e5cfb5c85e58d4b744f92935",
+  policySourceDigest: "sha256:2f6a4bb9c3809f1f9eeedc83a7a0a0733d50d968f3208be0f4b86c3c0cb7badd",
   corpus: Object.freeze({
     corpusVersion: "wiki-learning-policy-v4-corpus/2",
     corpusDigest: "sha256:a75bd008ffd31329b33fffdba3eee2904df1a9a64b606c020915cfc5a46d65c3",

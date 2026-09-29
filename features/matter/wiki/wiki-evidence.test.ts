@@ -2029,6 +2029,65 @@ describe("Wiki evidence and authority", () => {
       .toMatchObject({ phase: "active" });
   });
 
+  it("lets a strike keep an automatic lexeme neither through demotion nor through aging", () => {
+    const struck = (support: number, producer: "shape-specific-v1" | "locale-segment-v1") =>
+      Object.freeze({
+        ...createEmptyWikiState(),
+        revision: 1,
+        nextLexemeId: 2,
+        lexemes: Object.freeze([Object.freeze({
+          id: 1,
+          locale: "en-US" as const,
+          canonical: "Codex",
+          scope: "both" as const,
+          provenance: "aggregate-evidence" as const,
+          confirmedAtRevision: null,
+        })]),
+        termEvidence: Object.freeze([Object.freeze({
+          locale: "en-US" as const,
+          canonical: "Codex",
+          producer,
+          phase: "collected" as const,
+          support,
+          quietTurns: 31,
+        })]),
+        revertStrikes: Object.freeze([Object.freeze({
+          lexemeId: 1,
+          channel: "spoken" as const,
+          form: "code x",
+          quietTurns: 0,
+          struckAtRevision: 1,
+        })]),
+      }) satisfies WikiState;
+
+    // A producer change returns the collected term to candidate...
+    const demoted = applyObservationBatch(
+      struck(8, "shape-specific-v1"),
+      [observe("recent-material")],
+      tick("observed", "paused"),
+    );
+    expect(demoted.termEvidence[0]).toMatchObject({ phase: "candidate" });
+    // ...and a quiet horizon halves it below retention.
+    const aged = applyObservationBatch(struck(6, "locale-segment-v1"), [], tick("quiet", "paused"));
+    expect(aged.termEvidence[0]).toMatchObject({ phase: "candidate", support: 3 });
+
+    for (const state of [demoted, aged]) {
+      expect(state.lexemes).toEqual([]);
+      expect(state.revertStrikes).toEqual([]);
+    }
+  });
+
+  it("fails a turn whose aging cannot commit instead of skipping the aging", () => {
+    const aging = Object.freeze({
+      ...repeatEvidence(createEmptyWikiState(), "recent-material", 1),
+      revision: Number.MAX_SAFE_INTEGER,
+    });
+    expect(parseWikiState(aging)).toMatchObject({ ok: true });
+
+    expect(applyWikiObservationBatch(aging, [], tick("quiet", "paused")))
+      .toMatchObject({ ok: false, error: { code: "BOUND_EXCEEDED" } });
+  });
+
   it("stops listing an automatic lexeme once its term is no longer collected", () => {
     let state = repeatEvidence(createEmptyWikiState(), "recent-material", 2);
     expect(state.lexemes).toHaveLength(1);
