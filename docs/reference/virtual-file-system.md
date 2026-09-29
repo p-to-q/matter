@@ -113,10 +113,14 @@ remains visible.
 
 Every replacement of the loaded document by a stored row (first load, another
 tab's newer row, and the explicit reload) is two-phase. The controller reads the
-row and returns a candidate without adopting its basis; the store hydrates it
-only by compare-and-swap against the exact tree the caller expects (the seed
-for the first load, the tree last handed to the controller for a refresh, the
-held conflict tree for a reload), and the controller adopts the row's basis
+row and returns a candidate without adopting its basis; until then the first
+load stays in its loading phase. Adoption is one synchronous step: the
+controller first refuses a candidate that went stale since the read (another
+document, terminal storage, local material, or a different conflict) without
+hydrating anything; the store then hydrates it only by compare-and-swap against
+the exact tree the caller expects (the seed for the first load, the tree last
+handed to the controller for a refresh, the held conflict tree for a reload);
+and the controller adopts the row's basis, with the store's history notice,
 only after the store accepted it. A refused hydration holds a conflict with the
 live material instead, so a commit made after storage was read, including one
 the store holds but has not yet published, is never overwritten and a later

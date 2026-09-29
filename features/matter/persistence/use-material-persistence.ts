@@ -8,7 +8,11 @@ import { createDocumentGenerationChannel } from "./document-generation-channel";
 import { createDocumentImportCoordinator } from "./document-import-coordinator";
 import type { RecoveredHistory } from "./history-recovery";
 import { resolveHydrationDecision } from "./hydration-decision";
-import { createPersistenceController, type StoredCandidate } from "./persistence-controller";
+import {
+  createPersistenceController,
+  type ConflictOrigin,
+  type StoredCandidate,
+} from "./persistence-controller";
 import {
   createStoredGenerationWatch,
   type StoredGenerationWatch,
@@ -68,20 +72,27 @@ export function useMaterialPersistence(
   ), [controller, documentBasisOwner, switchDocument]);
 
   /**
-   * Hydrates a stored row only over the material this hook last saw, so a
-   * commit made after storage was read is never replaced. Stored steps that
-   * cannot be restored are released in the store; the durability owner carries
-   * the one notice. Returns whether the store accepted the row.
+   * Replaces the document by a stored row, only over the tree the store is
+   * expected to hold, so a commit made after storage was read is never
+   * replaced. The controller refuses a stale candidate before anything
+   * hydrates and adopts the row only once the store took it; a store refusal
+   * holds the live material as a conflict.
    */
-  const hydrateOver = useCallback((
-    storedTree: ThoughtTree,
-    storedHistory: RecoveredHistory | null,
+  const applyCandidate = useCallback((
+    candidate: StoredCandidate,
     expectedCurrentTree: ThoughtTree,
+    conflictOrigin: ConflictOrigin,
   ): boolean => {
-    const receipt = hydrateSnapshot(storedTree, storedHistory, expectedCurrentTree);
-    if (receipt.operation !== "hydrate" || receipt.status !== "hydrated") return false;
-    if (receipt.historyReleased) controller.reportHistoryUnavailable();
-    return true;
+    const outcome = controller.adoptStored(candidate, (stored) => {
+      const receipt = hydrateSnapshot(stored.tree, stored.history, expectedCurrentTree);
+      return receipt.operation === "hydrate" && receipt.status === "hydrated"
+        ? Object.freeze({ historyReleased: receipt.historyReleased })
+        : null;
+    });
+    if (outcome === "refused") {
+      controller.declareConflict(latestTreeRef.current, latestHistoryRef.current, conflictOrigin);
+    }
+    return outcome === "adopted";
   }, [controller, hydrateSnapshot]);
 
   useLayoutEffect(() => {
@@ -95,14 +106,12 @@ export function useMaterialPersistence(
     lifecycleRef.current += 1;
     const lifecycle = lifecycleRef.current;
     startPromiseRef.current ??= controller.start(initialTree, initialHistory);
-    void startPromiseRef.current.then(({ storedTree, storedHistory }) => {
+    void startPromiseRef.current.then((candidate) => {
       if (!active || reconciledRef.current) return;
       reconciledRef.current = true;
-      const decision = resolveHydrationDecision(initialTree, latestTreeRef.current, storedTree);
-      if (decision.action === "hydrate") {
-        if (!hydrateOver(decision.tree, storedHistory, initialTree)) {
-          controller.declareConflict(latestTreeRef.current, latestHistoryRef.current, "load-window");
-        }
+      const decision = resolveHydrationDecision(initialTree, latestTreeRef.current, candidate?.tree ?? null);
+      if (decision.action === "hydrate" && candidate !== null) {
+        applyCandidate(candidate, initialTree, "load-window");
       } else if (decision.action === "publish") {
         controller.publish(decision.tree, latestHistoryRef.current);
         publishedTreeRef.current = decision.tree;
@@ -125,22 +134,13 @@ export function useMaterialPersistence(
         }
       });
     };
-  }, [controller, hydrateOver, initialHistory, initialTree, owner]);
+  }, [applyCandidate, controller, initialHistory, initialTree, owner]);
 
   useEffect(() => {
     if (!reconciledRef.current) return;
     controller.publish(tree, history);
     publishedTreeRef.current = tree;
   }, [controller, history, tree]);
-
-  /** Adopts a candidate only after the store took it; otherwise holds a conflict. */
-  const applyCandidate = useCallback((candidate: StoredCandidate, expectedCurrentTree: ThoughtTree): boolean => {
-    if (!hydrateOver(candidate.tree, candidate.history, expectedCurrentTree)) {
-      controller.declareConflict(latestTreeRef.current, latestHistoryRef.current, "another-tab");
-      return false;
-    }
-    return controller.adoptStored(candidate);
-  }, [controller, hydrateOver]);
 
   const applyCandidateRef = useRef(applyCandidate);
   const materialIdleRef = useRef(materialIdle);
@@ -161,7 +161,7 @@ export function useMaterialPersistence(
         const candidate = await controller.prepareRefresh();
         if (candidate === null) return "none";
         if (!stillIdle()) return "deferred";
-        return applyCandidateRef.current(candidate, publishedTreeRef.current) ? "applied" : "none";
+        return applyCandidateRef.current(candidate, publishedTreeRef.current, "another-tab") ? "applied" : "none";
       },
     });
     watchRef.current = watch;
@@ -218,8 +218,11 @@ export function useMaterialPersistence(
 
   const resolveConflict = useCallback(async () => {
     const candidate = await controller.resolveConflict();
-    // The store must still hold exactly the material this reload replaces.
-    if (candidate !== null && candidate.replaces !== null) applyCandidate(candidate, candidate.replaces.tree);
+    // The store must still hold exactly the material this reload replaces. A
+    // refusal keeps the conflict where it came from.
+    if (candidate !== null && candidate.replaces !== null) {
+      applyCandidate(candidate, candidate.replaces.tree, controller.getStatus().conflictOrigin ?? "another-tab");
+    }
   }, [applyCandidate, controller]);
 
   // A plain object: the memo keeps its identity stable across renders.

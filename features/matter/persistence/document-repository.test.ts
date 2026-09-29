@@ -919,15 +919,18 @@ type Repository = ReturnType<typeof createIndexedDbDocumentRepository>;
 
 const UNKNOWN: SnapshotBasis = Object.freeze({ writeGeneration: null, journal: emptyHistoryJournal(0) });
 
-/** Starts a controller as a tab would and attaches what it loads, as the store does. */
+/**
+ * Starts a controller as a tab would: the store attaches the row it read, the
+ * controller adopts it, and the store's material is published.
+ */
 async function reloadAsTab(tree: ThoughtTree) {
   const controller = createPersistenceController(createIndexedDbDocumentRepository());
-  const stored = await controller.start(tree, createTreeHistory());
-  if (stored.storedTree === null) throw new Error("stored material expected");
-  const attached = attachRecoveredHistory(stored.storedTree, stored.storedHistory, MATTER_HISTORY_LIMITS);
-  if (attached.released) controller.reportHistoryUnavailable();
-  controller.publish(stored.storedTree, attached.history);
-  return { controller, tree: stored.storedTree, history: attached.history, released: attached.released };
+  const candidate = await controller.start(tree, createTreeHistory());
+  if (candidate === null) throw new Error("stored material expected");
+  const attached = attachRecoveredHistory(candidate.tree, candidate.history, MATTER_HISTORY_LIMITS);
+  expect(controller.adoptStored(candidate, () => ({ historyReleased: attached.released }))).toBe("adopted");
+  controller.publish(candidate.tree, attached.history);
+  return { controller, tree: candidate.tree, history: attached.history, released: attached.released };
 }
 
 function staleText(record: Record<string, unknown>) {
