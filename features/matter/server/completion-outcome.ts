@@ -24,7 +24,9 @@ export type CompletionDisposition = "complete" | "missing" | UnusableCompletionC
  * Every explicit stop reason is fail-closed. Only a known complete value may
  * authorize text; truncation, block/refusal, tool continuation, conflict,
  * malformed metadata, and unknown vocabulary all lose to the product floor.
- * Official single-vendor wires keep their own narrower vocabularies.
+ * The official OpenAI, DeepSeek, Anthropic, and Responses wires keep their own
+ * narrower vocabularies; Gemini's official transport is OpenAI-compatible by
+ * design and uses this one.
  */
 const TRUNCATED_TERMINATORS: ReadonlySet<string> = new Set([
   "length",                        // OpenAI chat completions
