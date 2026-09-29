@@ -54,9 +54,10 @@ import { subscribePageExit } from "../interaction/page-suspension";
 import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
 import { preloadableComponent } from "./preloadable-component";
 
-// The provider form renders nothing until the API dialog opens. It mounts on
-// first open and then stays mounted, so an accepted save outlives closing the
-// dialog. Its chunk loads after first paint and when a menu offering it opens.
+// The provider form renders nothing until the API dialog opens. Its chunk
+// loads after first paint, or when a menu offering it opens; the form mounts
+// when that chunk arrives, or on first open if sooner, and then stays mounted
+// so an accepted save outlives closing the dialog.
 const ApiSettingsForm = preloadableComponent(() =>
   import("./ApiSettingsForm").then((module) => module.ApiSettingsForm));
 
@@ -673,13 +674,19 @@ export const CanvasChrome = forwardRef<CanvasChromeHandle, CanvasChromeProps>(fu
   const modalOpen = canvasOverlayOwnsSurface(overlay);
   const [apiFormMounted, setApiFormMounted] = useState(false);
   if (overlay === "api" && !apiFormMounted) setApiFormMounted(true);
-  useEffect(() => preloadWhenIdle([ApiSettingsForm.preload]), []);
+  // Mounted hidden, the form's first opening is an ordinary prop change: one
+  // status read, never a mount that Strict Mode rehearses mid-read.
+  const prepareApiForm = useCallback(
+    () => ApiSettingsForm.preload().then(() => setApiFormMounted(true)),
+    [],
+  );
+  useEffect(() => preloadWhenIdle([prepareApiForm]), [prepareApiForm]);
   useEffect(() => {
     // Opening a menu is the intent signal for the dialogs it offers.
     if (overlay !== "settings" && overlay !== "mobile") return;
-    preloadNow(ApiSettingsForm.preload);
+    preloadNow(prepareApiForm);
     preloadNow(WikiSettingsSection.preload);
-  }, [overlay]);
+  }, [overlay, prepareApiForm]);
 
   const dismissInquiry = useCallback(() => {
     inquiryBubbleRef.current?.detach();
