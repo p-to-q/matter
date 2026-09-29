@@ -21,15 +21,25 @@ and let it grow once without surrendering authorship. The release should make
 that loop understandable in one sitting before it earns more memory, sync, or
 surface area.
 
-Matter may keep one thin local Wiki of lexical authority behind that loop. Its
-success is invisible: familiar names and forms arrive correctly without a
-prompt, badge, review queue, or permanent dictionary interface. A person enters
-that system only when the automatic result feels wrong. Editing one canonical
-word makes that human spelling authoritative for every hidden local alias;
-removing it prevents automatic reconstruction. Generated material may receive
-an exact correction but never teaches the Wiki or enters model context through
-it. Wiki has no authority over the material turn: it proposes bounded
-replacements, while Matter alone validates and commits the resulting text.
+Matter may keep one thin local Wiki of lexical authority behind that loop.
+Familiar names and forms arrive correctly without a prompt, review queue, or
+permanent dictionary interface. A change Wiki makes is disclosed once, not
+hidden: at its first perceivable arrival the heard form settles into the
+canonical one, and until that occurrence settles the word carries one quiet
+dotted mark. Tapping the marked word, or choosing **Review Wiki change** among a
+focused or selected passage's actions, opens one small takeover at the word:
+**Keep**, the literal heard form, or **Wiki…**. Restoring the heard form is an
+ordinary pointer-undoable human edit. Silence after a perceivable disclosure is
+approval: continued speaking, dwell, copying or exporting the word, or leaving
+the page settles that occurrence as accepted, once. Approval only keeps an
+already active rule alive; it never creates, activates, or confirms one, and
+Wiki never observes Material Undo. Two reverts of the same automatic relation
+end it. Editing one canonical word makes that human spelling authoritative for
+every hidden local alias; removing it prevents automatic reconstruction.
+Generated material may receive an exact correction but never teaches Wiki a
+word or relation, and nothing of Wiki enters model context. Wiki has no
+authority over the material turn: it proposes bounded replacements, while
+Matter alone validates and commits the resulting text.
 
 Wiki is configuration, not a destination. The quiet **Wiki** surface (menu
 label `词典 WIKI` in Chinese; the engineering boundary remains Wiki) sits in the
@@ -50,16 +60,21 @@ entries rather than UI examples; removing one leaves negative authority, so
 initialization never recreates a word the person deliberately removed. The
 starters imply no general phonetic inference or cross-locale fallback; their
 exact spoken aliases are in [`reference/wiki.md`](reference/wiki.md), the
-engineering contract.
+binding engineering contract for Wiki.
 
 The current release keeps this path honest: saving a canonical word records the
 preferred form and its scope, but the row alone invents no hidden alias and
 existing material is never rescanned. Automatic collection and one bounded
 internal-Latin-edit producer run only through the release-qualified local path.
-English homophone and Mandarin pronunciation producers remain offline
-qualification candidates rather than product rewrite authority, and the visible
-error-local confirmation path remains gated until its interaction evidence
-passes. The UI states this boundary directly instead of presenting stored
+Latin-script words inside Chinese or Japanese speech reach that producer by
+their script, so a misheard `Engelbart` or `Morphogenesis` in a Chinese
+sentence can be learned and corrected; this is routing, not a cross-locale
+fallback, and `KFC` is too short for the producer to learn. English homophone
+and Mandarin pronunciation producers remain offline qualification candidates
+rather than product rewrite authority. At the word, Keep and restoring the heard
+form are live; rejecting or replacing the responsible mapping from the word
+remains reserved, while the Wiki surface can still edit or remove the canonical
+word. The UI states this boundary directly instead of presenting stored
 configuration as a promise that every similar-sounding form will be corrected.
 
 ## Two kinds of turn
@@ -72,7 +87,12 @@ never a child insertion chosen by hidden inference. The final admission
 transcript first receives deterministic locale punctuation, using genuine audio
 pauses when available and conservative semantic seams otherwise, then enters
 the tree immediately as human material. That first pass inserts formatting but
-never deletes, replaces, or reorders the person's words.
+never deletes, replaces, or reorders the person's words. Submitted words are
+never dropped: if the passage they belong under vanished, or the commit fails
+for any other reason, they are held with a short preview and exactly two
+actions, place them at the current admission target or discard them. A retry
+never replaces held words. An unrelated edit does not revoke an admission; the
+revision it saw is a receipt, not a cancellation token.
 
 A bounded admission repair may then turn the heard utterance into a faithful
 written version for twelve seconds: it can remove recognition debris,
@@ -138,6 +158,15 @@ the pointer is idle, and that exact basis still validates. The lasso address may
 re-arm after admission returns to idle, so capture and generated delivery never
 change the material together.
 
+Confirmation is the cancellation boundary. After it, `Escape` or another surface
+taking the paper removes only the presented degree; the submitted request still
+lands once. A submitted expansion that ends unchanged says so once on the
+guidance line (“Not expanded. Text unchanged.” or “Passage changed. Not
+expanded.”) with one polite announcement, until the person's next action. A
+resolved result whose passage is not laid out waits under “Expansion waits for
+its passage.” with an explicit Discard, and still delivers only into a visible,
+pointer-idle, exactly revalidated target.
+
 A loop that resolves two or more passage ranges enters material selection
 instead. That higher-level transient state highlights the source nodes in the
 material index and may bound inquiry context, but it exposes no Elastic grips,
@@ -184,7 +213,10 @@ After submit, closing the field or moving elsewhere only detaches its
 presentation; the immutable job continues until completion. Losing its exact
 document, tree, target, or visible-lineage basis gives a late result no
 authority. An unrelated history revision does not reinterpret or revoke the
-frozen direction.
+frozen direction. A submitted rewrite that goes stale, or fails after its field
+has closed, says so once on the guidance line (“Passage changed. Not
+rewritten.” or “Not rewritten. Text unchanged.”); the field never reopens by
+itself.
 
 The paper has one transient AI-presentation slot. Point and Talk, an Elastic
 grip adjustment, and the corner Inquiry cannot remain visibly active behind one
@@ -199,12 +231,24 @@ Modal chrome cancels only raw microphone capture; a Voice action already
 submitted at Stop may finish processing, but its material change remains held
 until the paper is perceivable again.
 
+Transient surfaces leave crisply rather than vanishing in one frame. A status
+label that changes by itself appears only if its phase lasts 150 ms and then
+stays at least 400 ms. A surface closing because its work finished stays 400 ms
+after its first paint, then fades in 140 ms; one that finished before it was
+ever painted simply unmounts. The person's own close (Cancel, Dismiss, Discard,
+`Escape`, a press elsewhere) fades at once. Another owner taking the paper's
+slot, modal chrome, a hidden page, or a document switch cuts it at 0 ms. Exact
+rules are in [`reference/voice-input.md`](reference/voice-input.md#feedback-presence).
+
 Provider, pool, timeout, and transport failures are operational events, not
 material. They leave the exact source intact and return the current Elastic,
 Point-and-Talk, or inquiry control to its prior usable state without drawing a
-model-error message on the paper. Strict receipts and server-side observation
-remain available for diagnosis; only valid model output can become visible
-material.
+model-error message on the paper. Submitted work that ends without its promised
+change is said once, in the person's language and without provider detail, on
+the paper's one outcome line; outcomes that end together wait their turn there,
+and each clears at the person's next action. Strict receipts and server-side
+observation remain available for diagnosis; only valid model output can become
+visible material.
 
 ## Model API
 
@@ -245,24 +289,33 @@ Matter inquiry: a person may open it, ask a short question about either the
 lassoed passages or, when no passages are selected, the bounded active working
 projection of the material tree, and receive orientation that never edits
 material. Within that one opening, the person may continue with further short
-questions one at a time. Each request projects current material afresh; earlier
+questions one at a time, and the bubble keeps a scrollable record of that
+opening's turns. Each request projects current material afresh; earlier
 questions and answers do not become later model context. Each submitted
 question retains its own bounded snapshot, so an ordinary material edit, a
 later selection, or a temporarily hidden tab does not discard the answer when
-it arrives. The bubble is transient: each opening begins clean and no exchange
-is replayed after closing or reload. A bounded local completed-record may
-remain separately for passive look-back, but it is not a resumed inquiry
-surface and is never material, history, archive content, or later model
-context. Closing the surface or switching to another operation detaches only
-the visible bubble; the submitted answer may still settle into its bounded
-local record. Replacing the local document owner, leaving the page, or
-unmounting revokes the current request before a late answer may enter either
-the bubble or that record. Once an exchange has already been accepted, its
-record write remains owned by the addressed tree even if the person navigates
-elsewhere before local storage settles.
+it arrives. While a question waits, **Cancel** replaces **Ask** as the one
+explicit cancellation. Closing the bubble or switching to another operation is
+dismissal, not cancellation: the next opening begins clean except for a
+question still in flight or not yet seen answered, which it carries until the
+person has seen it settle. No settled exchange is replayed after closing or
+reload. A provider refusal returns the question to the field with one quiet
+localized line inside the bubble, never an error turn. Completed exchanges are
+also written to a bounded per-tree local record; no surface reads it back yet,
+and it is never material, history, archive content, or later model context.
+Replacing the local document owner, leaving the page, or unmounting revokes the
+current request before a late answer may enter either the bubble or that
+record. Once an exchange has already been accepted, its record write remains
+owned by the addressed tree even if the person navigates elsewhere before local
+storage settles.
 
-Every generative material change still has an exact pointer undo. Redo is a
-platform keyboard safety convention, not a visible canvas tool.
+Every generative material change has an exact pointer undo within one bounded
+history: the newest 1,000 steps and 32 MiB of exact inverses across Undo and
+Redo. Older steps are released without comment; an exported archive is the
+long-term recovery path. Redo is a platform keyboard safety convention, not a
+visible canvas tool. A result delivered after the person pressed Undo keeps the
+part of the Redo future that still replays, so latency never destroys an
+undone step.
 
 For a lassoed inquiry, selected passages are the working context. Without a
 lasso selection, the active working projection is projected within the protocol
@@ -303,9 +356,18 @@ layout coordinates or persists a per-node position. The measurements and
 thresholds are in [`architecture.md`](architecture.md).
 
 The index ends with a quiet local identity, not a persistence dashboard. It may
-briefly say that material is being saved, but conflict, write failure, corrupt
-storage, export, retry, and reload controls belong inside the explicit Archive
-surface.
+briefly say that material is being saved. While material is not safely kept —
+a failed or refused write, storage unavailable in this browser, a newer copy or
+a newer Matter in another tab, cleared storage, or released undo steps — one
+localized line with a static dot says so until the problem is resolved,
+announced once, and its only action opens Archive. Conflict, write failure,
+corrupt storage, export, retry, and reload controls stay inside that explicit
+Archive surface; there is no toast, banner, or modal. Another tab's newer
+material replaces this one only while the person is not mid-task: no admission,
+Elastic, or Point-and-Talk turn, nothing held in Ask Matter, and no name being
+typed. Leaving the page asks for confirmation only while material the person
+made is actually at risk. The exact copy and states are in
+[`reference/virtual-file-system.md`](reference/virtual-file-system.md#undo-journal-schema-v6).
 
 Structure punctuation is local to each current visible sibling group: a
 structural branch shows its disclosure, a leaf beside a branch shows a quiet
@@ -323,8 +385,11 @@ more fingers temporarily own only the camera: their centroid pans while their
 shared spread zooms around that same material point. Adding or removing a
 contact rebases the transient gesture without moving the camera; one remaining
 finger may continue the same camera pan. Cancellation, capture loss, page
-suspension, or orientation change ends that gesture. None of this authors a
-coordinate or enters material history.
+suspension, or orientation change ends that gesture. The canvas has one
+gesture owner: while a pen touches the paper, and for 400 ms after its last
+contact, a landing palm is rejected rather than stealing the stroke, and a pen
+that lands within 300 ms of a single finger takes the canvas over. Pen hover
+is not activity. None of this authors a coordinate or enters material history.
 
 While the Move tool owns the canvas, the lower-left guidance line becomes a
 passive readout of that same transient camera. `100%` means the canonical
