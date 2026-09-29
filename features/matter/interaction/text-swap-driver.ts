@@ -104,6 +104,7 @@ export class TextSwapDriver<TCommitted> {
   private leases = 0;
   private leaseGeneration = 0;
   private deliveryWindowOpen = true;
+  private deliveryParked = false;
 
   constructor(dependencies: TextSwapDriverDependencies<TCommitted>) {
     this.dependencies = dependencies;
@@ -117,6 +118,11 @@ export class TextSwapDriver<TCommitted> {
 
   getState(): TextSwapInteractionState {
     return this.state;
+  }
+
+  /** True while a resolved result waits only for its passage to be laid out. */
+  isDeliveryParked(): boolean {
+    return this.deliveryParked;
   }
 
   subscribe(listener: (state: TextSwapInteractionState) => void): () => void {
@@ -276,6 +282,7 @@ export class TextSwapDriver<TCommitted> {
     } finally {
       this.processing = false;
     }
+    this.syncDeliveryParked();
   }
 
   private runEffect(effect: TextSwapInteractionEffect): void {
@@ -669,12 +676,26 @@ export class TextSwapDriver<TCommitted> {
   private deliverResolvedPlanIfReady(): void {
     const resources = this.requestResources;
     if (
-      resources === null ||
-      resources.plan === undefined ||
-      !this.deliveryWindowOpen ||
-      this.scope?.deliveryTargetVisible === false
-    ) return;
-    this.commitPlan(resources, resources.plan);
+      resources !== null &&
+      resources.plan !== undefined &&
+      this.deliveryWindowOpen &&
+      this.scope?.deliveryTargetVisible !== false
+    ) this.commitPlan(resources, resources.plan);
+    this.syncDeliveryParked();
+  }
+
+  /**
+   * A resolved result held only because its passage is not laid out is
+   * parked. It is published so the host can show why the owner is still busy
+   * and offer an explicit release, never an invisible indefinite wait.
+   */
+  private syncDeliveryParked(): void {
+    const resources = this.requestResources;
+    const parked = !this.disposed && resources !== null &&
+      resources.plan !== undefined && this.scope?.deliveryTargetVisible === false;
+    if (parked === this.deliveryParked) return;
+    this.deliveryParked = parked;
+    this.notify();
   }
 
   private notify(): void {

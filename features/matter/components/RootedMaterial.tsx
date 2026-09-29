@@ -94,7 +94,7 @@ import { AmbientWorkbench } from "./AmbientWorkbench";
 import {
   localizeCanvasGuidance,
   localizeExpansionOutcome,
-  localizeExpansionRelease,
+  localizeParkedRelease,
   projectCanvasGuidance,
   type CanvasExpansionGuidanceState,
   type CanvasLanguageGuidanceState,
@@ -432,6 +432,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => setPagePresentationAvailable(true),
   ), []);
   const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
+  const [releaseParkedPointTalk, setReleaseParkedPointTalk] = useState<(() => void) | null>(null);
+  const reportPointTalkParked = useCallback((release: (() => void) | null) => {
+    setReleaseParkedPointTalk(() => release);
+  }, []);
   const [pointTalkVoiceCommand, setPointTalkVoiceCommand] = useState<Readonly<{
     id: number;
     type: "start" | "stop";
@@ -2283,11 +2287,19 @@ export function RootedMaterial(props: RootedMaterialProps) {
         ? { kind: "pan", zoom: viewport.zoom }
         : { kind: "none" },
       expansion: expansionGuidance,
+      rewrite: releaseParkedPointTalk !== null && activeLayout !== null
+        ? { kind: "parked" }
+        : { kind: "none" },
       language: languageGuidance,
       material: materialGuidance,
     }),
     canvasPreferences.preferences.language,
   );
+  const parkedRelease = guidance.id === "expansion-parked"
+    ? discardParkedExpansion
+    : guidance.id === "text-swap-parked"
+      ? releaseParkedPointTalk
+      : null;
   const lassoSelectedNodeIds = useMemo(
     () => new Set(lasso.selections.map((selection) => selection.nodeId)),
     [lasso.selections],
@@ -3424,8 +3436,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
           <span key={`expansion_${transformNotice.id}`}>
             {localizeExpansionOutcome(transformNotice.kind, props.locale)}
           </span>
-        ) : guidance.id === "expansion-parked" ? (
-          <span key="expansion_parked">{guidance.text}</span>
+        ) : guidance.id === "expansion-parked" || guidance.id === "text-swap-parked" ? (
+          <span key={guidance.id}>{guidance.text}</span>
         ) : null}
       </span>
       <PaperTexture />
@@ -3708,6 +3720,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           aria-label="Matter guidance"
           className="matter-guidance"
           data-canvas-interactive
+          data-guidance-action={parkedRelease === null ? undefined : true}
           data-guidance-kind={guidance.kind}
           data-guidance-state={guidance.id}
           data-optical-clearance="guidance"
@@ -3721,15 +3734,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
           >
             {guidance.text}
           </p>
-          {guidance.id === "expansion-parked" ? (
+          {parkedRelease === null ? null : (
             <button
               className="matter-guidance__action"
-              onClick={discardParkedExpansion}
+              onClick={parkedRelease}
               type="button"
             >
-              {localizeExpansionRelease(canvasPreferences.preferences.language)}
+              {localizeParkedRelease(canvasPreferences.preferences.language)}
             </button>
-          ) : null}
+          )}
         </footer>
         </div>
         <CanvasChrome
@@ -3778,6 +3791,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             nodeId={pointTalkHostNodeId}
             onClose={closePointTalk}
             onCommitted={publishPointTalkChange}
+            onDeliveryParkedChange={reportPointTalkParked}
             onPhaseChange={setPointTalkPhase}
             onReleased={releasePointTalkJob}
             presented={pointTalkPresented}

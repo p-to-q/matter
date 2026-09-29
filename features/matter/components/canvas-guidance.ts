@@ -39,10 +39,16 @@ export type CanvasExpansionGuidanceState =
   | Readonly<{ kind: "parked" }>
   | Readonly<{ kind: "unchanged"; reason: "unavailable" | "stale" }>;
 
+/** A submitted Point-and-Talk result waiting for its passage to be laid out. */
+export type CanvasRewriteGuidanceState =
+  | Readonly<{ kind: "none" }>
+  | Readonly<{ kind: "parked" }>;
+
 export type CanvasGuidanceInput = Readonly<{
   admission: AdmissionInteractionState;
   camera: CanvasCameraGuidanceState;
   expansion?: CanvasExpansionGuidanceState;
+  rewrite?: CanvasRewriteGuidanceState;
   language: CanvasLanguageGuidanceState;
   material: CanvasMaterialGuidanceState;
 }>;
@@ -66,6 +72,7 @@ type CanvasActionGuidanceId =
   | "apply-stretch"
   | "wait-expansion"
   | "expansion-parked"
+  | "text-swap-parked"
   | "expansion-unavailable"
   | "expansion-stale"
   | "circle-selection"
@@ -97,6 +104,7 @@ const GUIDANCE_COPY = Object.freeze({
   "apply-stretch": "Tap the selection to confirm.",
   "wait-expansion": "Confirmed. Expanding.",
   "expansion-parked": "Expansion waits for its passage.",
+  "text-swap-parked": "Rewording waits for its passage.",
   "expansion-unavailable": "Not expanded. Text unchanged.",
   "expansion-stale": "Passage changed. Not expanded.",
   "circle-selection": "Circle text between punctuation.",
@@ -124,6 +132,7 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "apply-stretch": "轻点选中框内确认展开。",
   "wait-expansion": "已确认，正在展开。",
   "expansion-parked": "展开结果正在等待原段落出现。",
+  "text-swap-parked": "改写结果正在等待原段落出现。",
   "expansion-unavailable": "未展开，原文未变。",
   "expansion-stale": "段落已变化，未展开。",
   "circle-selection": "圈住一段连续文字，边界停在标点处。",
@@ -175,6 +184,8 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
     default:
       return assertNever(expansion);
   }
+  // A parked Point-and-Talk result keeps its owner busy the same way.
+  if (input.rewrite?.kind === "parked") return guidance("text-swap-parked", "recovery");
 
   if (input.material.kind === "empty") {
     return guidance("speak-root", "action");
@@ -251,8 +262,8 @@ export function localizeExpansionOutcome(
   ).text;
 }
 
-/** The explicit release beside a parked expansion. */
-export function localizeExpansionRelease(language: CanvasLanguage): string {
+/** The explicit release beside a parked Elastic or Point-and-Talk result. */
+export function localizeParkedRelease(language: CanvasLanguage): string {
   switch (language) {
     case "zh-CN":
       return "放弃";
@@ -311,6 +322,7 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "apply-stretch": "輕點選取框內確認展開。",
   "wait-expansion": "已確認，正在展開。",
   "expansion-parked": "展開結果正在等待原段落出現。",
+  "text-swap-parked": "改寫結果正在等待原段落出現。",
   "expansion-unavailable": "未展開，原文未變。",
   "expansion-stale": "段落已變更，未展開。",
   "circle-selection": "圈住一段連續文字，邊界停在標點處。",
@@ -338,6 +350,7 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "apply-stretch": "選択枠内をタップして確定。",
   "wait-expansion": "確定しました。展開中。",
   "expansion-parked": "展開結果は元の段落の表示を待っています。",
+  "text-swap-parked": "言い換え結果は元の段落の表示を待っています。",
   "expansion-unavailable": "展開されませんでした。原文はそのままです。",
   "expansion-stale": "段落が変わったため展開しませんでした。",
   "circle-selection": "連続した一節を囲み、句読点で境界を止めます。",
@@ -365,6 +378,7 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "apply-stretch": "Zum Bestätigen in die Auswahl tippen.",
   "wait-expansion": "Bestätigt. Wird erweitert.",
   "expansion-parked": "Die Erweiterung wartet auf ihre Passage.",
+  "text-swap-parked": "Die Umformulierung wartet auf ihre Passage.",
   "expansion-unavailable": "Nicht erweitert. Text unverändert.",
   "expansion-stale": "Passage geändert. Nicht erweitert.",
   "circle-selection": "Eine zusammenhängende Passage einkreisen; an Satzzeichen enden.",

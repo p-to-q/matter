@@ -271,6 +271,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-guidance__next { isolation: isolate; position: relative; z-index: 1; display: inline-block; margin: 0; white-space: nowrap; animation: matter-guidance-in 1s ease forwards; }
 .matter-guidance[data-guidance-kind="readout"] { pointer-events: none; }
 .matter-guidance__next--readout { inline-size: 4.5ch; font-variant-numeric: lining-nums tabular-nums; font-feature-settings: "lnum" 1, "tnum" 1; line-height: inherit; text-align: end; vertical-align: top; direction: ltr; unicode-bidi: isolate; animation: none; transition: none; }
+/* A line with a release may wrap: at 375px the German parked line alone is
+   wider than the corner, and the release must stay reachable, not clipped. */
+.matter-guidance[data-guidance-action] .matter-guidance__next { white-space: normal; }
 .matter-guidance__action { position: relative; z-index: 1; margin: 0 0 0 .75em; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; white-space: nowrap; text-decoration: underline; text-underline-offset: .2em; cursor: pointer; }
 .matter-guidance__action:focus-visible { outline: 1px solid currentColor; outline-offset: 2px; }
 .matter-guidance__next::before { position: absolute; z-index: -1; inset: 0 -4px; background: transparent; content: ""; transition: background-color 150ms ease; }
