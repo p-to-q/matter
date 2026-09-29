@@ -7,6 +7,8 @@ import {
   type WikiOccurrenceEnvironment,
   type WikiOccurrenceRestorationRequest,
   type WikiOccurrenceSettleOutcome,
+  type WikiOccurrenceSettleStatus,
+  type WikiOccurrenceTarget,
 } from "./wiki-occurrence-driver";
 import {
   MAX_LIVE_WIKI_OCCURRENCES,
@@ -195,17 +197,137 @@ describe("Wiki occurrence driver", () => {
     ]);
   });
 
-  it("leaves the takeover for the Wiki surface without settling", () => {
+  it("counts dwell only while the paper itself is available", () => {
     const harness = createHarness();
     harness.driver.admit(publication([["occ_a", FIRST]]));
+    harness.driver.markDisclosed("occ_a");
+    harness.advance(1_500);
+    // A covering dialog holds the word out of view however long it stays.
+    harness.driver.setSurfaceAvailable(false);
+    harness.advance(120_000);
+    expect(harness.settled).toEqual([]);
+    harness.driver.setSurfaceAvailable(true);
+    // Perception's own tick already counted 250 ms of the 60 s dwell.
+    harness.advance(59_500);
+    expect(harness.settled).toEqual([]);
+    harness.advance(500);
+    expect(harness.settled).toEqual([["occ_a", "accepted-implicit"]]);
+  });
+
+  it("keeps silence suspended while the Wiki surface consulted from the takeover is open", () => {
+    const harness = createHarness();
+    harness.driver.admit(publication([["occ_a", FIRST]]));
+    harness.driver.markDisclosed("occ_a");
+    harness.advance(1_500);
     harness.driver.openTakeover("occ_a");
-    harness.driver.leaveTakeover("occ_a");
+    harness.driver.leaveTakeover("occ_a", "consult");
     expect(harness.settled).toEqual([]);
     expect(harness.driver.getSnapshot()).toMatchObject([{ id: "occ_a", takeover: false }]);
-    // Silence resumes: the opened takeover already counted as disclosure.
+
+    // The dialog covers the paper; nothing, not even an export, settles it.
+    harness.driver.setSurfaceAvailable(false);
+    harness.advance(120_000);
+    harness.driver.noteHumanAdmission();
+    harness.driver.noteExported();
+    expect(harness.settled).toEqual([]);
+
+    // Once the dialog is gone, the facts it could not settle close the wait.
+    harness.driver.setSurfaceAvailable(true);
+    harness.advance(250);
+    harness.driver.noteHumanAdmission();
+    expect(harness.settled).toEqual([["occ_a", "accepted-implicit"]]);
+  });
+
+  it("lets a consult that never covered the paper lapse after a short visible wait", () => {
+    const harness = createHarness();
+    harness.driver.admit(publication([["occ_a", FIRST]]));
+    harness.driver.markDisclosed("occ_a");
+    harness.advance(1_500);
+    harness.driver.openTakeover("occ_a");
+    harness.driver.leaveTakeover("occ_a", "consult");
+    harness.driver.noteExported();
+    harness.advance(2_750);
+    expect(harness.settled).toEqual([]);
+    harness.advance(500);
+    expect(harness.settled).toEqual([["occ_a", "accepted-implicit"]]);
+  });
+
+  it("returns a takeover dismissed unread to silence without settling", () => {
+    const harness = createHarness();
+    harness.driver.admit(publication([["occ_a", FIRST]]));
+    harness.driver.markDisclosed("occ_a");
+    harness.driver.openTakeover("occ_a");
+    harness.driver.leaveTakeover("occ_a", "unread");
+    harness.driver.leaveTakeover("occ_a", "unread");
+    expect(harness.settled).toEqual([]);
+    expect(harness.driver.getSnapshot()).toMatchObject([{ id: "occ_a", takeover: false }]);
+    // Informed silence resumes at once; nothing waits for a surface.
     harness.advance(1_500);
     harness.driver.noteExported();
     expect(harness.settled).toEqual([["occ_a", "accepted-implicit"]]);
+  });
+
+  it("hit-tests only disclosed words of the addressed passage", () => {
+    const harness = createHarness();
+    harness.driver.admit(publication([["occ_a", FIRST], ["occ_b", SECOND]]));
+    harness.hitTest = (targets) => targets.map((target) => target.id).join(",");
+    expect(harness.driver.hitTest("thought", 1, 1)).toBeNull();
+    harness.driver.markDisclosed("occ_b");
+    expect(harness.driver.hitTest("thought", 1, 1)).toBe("occ_b");
+    expect(harness.driver.hitTest("other", 1, 1)).toBeNull();
+  });
+
+  it("reports an explicit choice Wiki could not record, and nothing implicit", async () => {
+    const harness = createHarness();
+    let unsaved = 0;
+    harness.driver.subscribeUnsaved(() => {
+      unsaved += 1;
+    });
+    harness.driver.admit(publication([["occ_a", FIRST], ["occ_b", SECOND]]));
+    harness.settleStatus = "failed";
+    harness.driver.markDisclosed("occ_a");
+    harness.advance(1_500);
+    harness.driver.noteExported();
+    await Promise.resolve();
+    expect(unsaved).toBe(0);
+
+    harness.driver.openTakeover("occ_b");
+    harness.settleStatus = "unattributed";
+    harness.driver.closeTakeover("occ_b", "explicit-confirm");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(unsaved).toBe(1);
+  });
+
+  it("reports a revert whose settlement throws, and keeps the restored text", async () => {
+    const harness = createHarness();
+    let unsaved = 0;
+    harness.driver.subscribeUnsaved(() => {
+      unsaved += 1;
+    });
+    harness.driver.admit(publication([["occ_a", FIRST]]));
+    harness.settleStatus = "throw";
+    expect(harness.driver.revert("occ_a")).toBe("reverted");
+    expect(unsaved).toBe(1);
+    expect(harness.material.tree.nodes.thought!.text.slice(FIRST, FIRST + 6)).toBe("P to Q");
+  });
+
+  it("forgets remembered heard forms when they expire or the document changes", () => {
+    const harness = createHarness();
+    harness.driver.admit(publication([["occ_a", FIRST]]));
+    harness.driver.markDisclosed("occ_a");
+    // A rewrite censors it and remembers its disclosure briefly.
+    harness.setMaterial(tree(TEXT, T1));
+    harness.driver.reconcile();
+    // Switching documents forgets it even inside the window.
+    harness.setMaterial(tree(TEXT, T1), 1);
+    harness.driver.reconcile();
+    harness.driver.admit({
+      ...publication([["occ_b", FIRST]]),
+      documentEpoch: 1,
+      nodeUpdatedAt: T1,
+    });
+    expect(harness.driver.getSnapshot()).toMatchObject([{ id: "occ_b", disclosed: false }]);
   });
 
   it("reverts through an ordinary material command and keeps its sibling", () => {
@@ -239,15 +361,19 @@ describe("Wiki occurrence driver", () => {
 
   it("fails a revert closed when the passage changed", () => {
     const harness = createHarness();
-    harness.driver.admit(publication([["occ_a", FIRST]]));
+    harness.driver.admit(publication([["occ_a", FIRST], ["occ_b", SECOND]]));
+    harness.driver.openTakeover("occ_a");
     harness.restoreResult = false;
     expect(harness.driver.revert("occ_a")).toBe("stale");
     expect(harness.settled).toEqual([]);
-    expect(harness.driver.getSnapshot()).toHaveLength(1);
+    // A failed restore closes the takeover but keeps the order it found.
+    expect(harness.driver.getSnapshot().map((view) => [view.id, view.takeover]))
+      .toEqual([["occ_a", false], ["occ_b", false]]);
+    harness.driver.closeTakeover("occ_b", "inspected-kept");
 
     harness.setMaterial(tree(TEXT, T1));
     expect(harness.driver.revert("occ_a")).toBe("stale");
-    expect(harness.settled).toEqual([["occ_a", "censored"]]);
+    expect(harness.settled).toEqual([["occ_a", "censored"], ["occ_b", "censored"]]);
   });
 
   it("bounds live occurrences and releases every resource once", () => {
@@ -277,6 +403,8 @@ function createHarness() {
     settled: [] as [string, WikiOccurrenceSettleOutcome][],
     restorations: [] as WikiOccurrenceRestorationRequest[],
     selectionCovers: (() => false) as (address: { start: number }) => boolean,
+    hitTest: (() => null) as (targets: readonly WikiOccurrenceTarget[]) => string | null,
+    settleStatus: null as WikiOccurrenceSettleStatus | "throw" | null,
     page: { attached: false, handlers: null as null | Record<"visibility" | "exit" | "copy", () => void> },
     ticker: null as null | (() => void),
     ticking: false,
@@ -305,13 +433,18 @@ function createHarness() {
     untrack: () => undefined,
     isPerceivable: () => state.perceivable,
     selectionCovers: (address) => state.selectionCovers(address),
+    hitTest: (targets) => state.hitTest(targets),
     dispose: () => {
       state.disposed += 1;
     },
   };
   const driver = createWikiOccurrenceDriver({
     readMaterial: () => state.material,
-    settle: (occurrenceId, outcome) => state.settled.push([occurrenceId, outcome]),
+    settle: (occurrenceId, outcome) => {
+      state.settled.push([occurrenceId, outcome]);
+      if (state.settleStatus === "throw") throw new Error("unavailable");
+      return state.settleStatus === null ? undefined : Promise.resolve(state.settleStatus);
+    },
     restore: (request) => {
       state.restorations.push(request);
       if (!state.restoreResult) return false;

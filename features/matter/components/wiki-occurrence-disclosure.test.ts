@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   copyMatchesRange,
   ghostFits,
+  interruptedDisclosureCounts,
   planWikiDisclosure,
   requiresUnderlineOnly,
   toWorldRect,
+  WIKI_DISCLOSURE_RETRIES,
   WIKI_MORPH_TIMELINE,
   WIKI_SWEEP_TIMELINE,
   type WikiDisclosureCapabilities,
@@ -64,11 +66,26 @@ describe("Wiki occurrence disclosure policy", () => {
     expect(copyMatchesRange({ ...range, x: 10.9, width: 50.9 }, range)).toBe(true);
     expect(copyMatchesRange({ ...range, x: 11.2 }, range)).toBe(false);
     expect(copyMatchesRange({ ...range, width: 48.8 }, range)).toBe(false);
+    // A copy on another line, or of another height, never overlays the word.
+    expect(copyMatchesRange({ ...range, y: 11.2 }, range)).toBe(false);
+    expect(copyMatchesRange({ ...range, height: 21.5 }, range)).toBe(false);
+    expect(copyMatchesRange({ ...range, y: 10.8, height: 20.8 }, range)).toBe(true);
     expect(ghostFits(40, 50)).toBe(true);
     expect(ghostFits(62.5, 50)).toBe(true);
     expect(ghostFits(39, 50)).toBe(false);
     expect(ghostFits(63, 50)).toBe(false);
     expect(ghostFits(0, 50)).toBe(false);
+  });
+
+  it("counts an interrupted settle only once the change was readable", () => {
+    const readable = WIKI_MORPH_TIMELINE.crossfadeEndMs;
+    expect(interruptedDisclosureCounts(readable - 1, readable)).toBe(false);
+    expect(interruptedDisclosureCounts(readable, readable)).toBe(true);
+    expect(interruptedDisclosureCounts(WIKI_SWEEP_TIMELINE.drawMs, WIKI_SWEEP_TIMELINE.drawMs))
+      .toBe(true);
+    expect(interruptedDisclosureCounts(Number.NaN, readable)).toBe(false);
+    // An early cut is retried, but not forever.
+    expect(WIKI_DISCLOSURE_RETRIES).toBe(1);
   });
 
   it("keeps the settle restrained and ordered", () => {

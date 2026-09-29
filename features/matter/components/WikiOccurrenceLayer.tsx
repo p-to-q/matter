@@ -43,6 +43,11 @@ const EMPTY_VIEWS: readonly WikiOccurrenceView[] = Object.freeze([]);
 /** How long the quiet "passage changed" line stays before it leaves. */
 const PASSAGE_CHANGED_NOTICE_MS = 1_600;
 const TAKEOVER_GAP_PX = 10;
+/**
+ * A takeover dismissed sooner than this after it could first be seen was not
+ * read, so its dismissal is not an inspection and the word returns to silence.
+ */
+const WIKI_TAKEOVER_READABLE_MS = 500;
 
 export type WikiTermRequest = Readonly<{ canonical: string; locale: MatterLocale }>;
 
@@ -243,6 +248,17 @@ function WikiOccurrenceTakeover({
   }, [geometryKey, measure, shown]);
 
   const placed = placement !== null;
+  // When this takeover could first be read: present, placed, and on screen.
+  const readableSinceRef = useRef<Readonly<{ id: string; atMs: number }> | null>(null);
+  useLayoutEffect(() => {
+    if (content === null) readableSinceRef.current = null;
+  }, [content]);
+  useLayoutEffect(() => {
+    if (!present || !placed || shown === null || shown.changed ||
+        document.visibilityState !== "visible" ||
+        readableSinceRef.current?.id === shown.occurrenceId) return;
+    readableSinceRef.current = Object.freeze({ id: shown.occurrenceId, atMs: performance.now() });
+  }, [placed, present, shown]);
   useLayoutEffect(() => {
     // A hidden surface cannot take focus; the first placed frame can.
     if (!present || !placed || shown?.changed !== false ||
@@ -256,15 +272,24 @@ function WikiOccurrenceTakeover({
     queueMicrotask(() => findMaterialTextElement(nodeId)?.focus({ preventScroll: true }));
   }, []);
 
-  const dismiss = useCallback((restoreFocus: boolean) => {
+  /**
+   * Dismissal is an inspection only when the takeover could be read and the
+   * dismissing press is not on the word itself, as the second press of a
+   * double-click is. Otherwise the word returns to silence unsettled.
+   */
+  const dismiss = useCallback((restoreFocus: boolean, onWord: boolean) => {
     if (content === null) return;
     setClosing(Object.freeze({ identity: content.occurrenceId, close: "person" }));
     if (restoreFocus) returnFocus(content.nodeId);
-    driver.closeTakeover(content.occurrenceId, "inspected-kept");
+    const since = readableSinceRef.current;
+    const read = since !== null && since.id === content.occurrenceId &&
+      performance.now() - since.atMs >= WIKI_TAKEOVER_READABLE_MS;
+    if (onWord || !read) driver.leaveTakeover(content.occurrenceId, "unread");
+    else driver.closeTakeover(content.occurrenceId, "inspected-kept");
   }, [content, driver, returnFocus]);
 
   useEscapeLayer(present && content !== null && notice === null, "transient", () => {
-    dismiss(true);
+    dismiss(true, false);
     return true;
   });
 
@@ -273,9 +298,11 @@ function WikiOccurrenceTakeover({
     let pendingTouch: (() => void) | null = null;
     const onPointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node && bubbleRef.current?.contains(event.target)) return;
+      const onWord = driver.hitTest(content.nodeId, event.clientX, event.clientY) ===
+        content.occurrenceId;
       // The press already addresses something else; focus follows it.
       if (event.pointerType !== "touch") {
-        dismiss(false);
+        dismiss(false, onWord);
         return;
       }
       // A palm beside a pen is not a tap; a touch dismisses once it commits.
@@ -283,7 +310,7 @@ function WikiOccurrenceTakeover({
       pendingTouch?.();
       pendingTouch = deferUntilTouchCommits(
         { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
-        () => dismiss(false),
+        () => dismiss(false, onWord),
       );
     };
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -291,7 +318,7 @@ function WikiOccurrenceTakeover({
       document.removeEventListener("pointerdown", onPointerDown, true);
       pendingTouch?.();
     };
-  }, [content, dismiss, notice, penActive]);
+  }, [content, dismiss, driver, notice, penActive]);
 
   useEffect(() => {
     if (notice === null) return;
@@ -323,7 +350,8 @@ function WikiOccurrenceTakeover({
   const openWiki = () => {
     if (content === null) return;
     personCloses(content.occurrenceId);
-    driver.leaveTakeover(content.occurrenceId);
+    // Silence stays suspended until the Wiki surface has come and gone.
+    driver.leaveTakeover(content.occurrenceId, "consult");
     onOpenWiki(
       Object.freeze({ canonical: content.canonical, locale: content.termLocale }),
       findMaterialTextElement(content.nodeId),

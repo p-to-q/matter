@@ -118,6 +118,7 @@ async function composedSession() {
     untrack: () => undefined,
     isPerceivable: () => true,
     selectionCovers: () => false,
+    hitTest: () => null,
     dispose: () => undefined,
   };
   let sequence = 0;

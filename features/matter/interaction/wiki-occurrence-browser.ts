@@ -1,4 +1,8 @@
-import { createMaterialTextRange } from "./range-measurement";
+import {
+  createMaterialTextRange,
+  normalizeClientRects,
+  type ClientTextRect,
+} from "./range-measurement";
 import {
   visibleAreaFraction,
   WIKI_OCCURRENCE_PERCEPTION,
@@ -6,7 +10,30 @@ import {
   type ViewportBounds,
   type WikiOccurrenceAddress,
 } from "./wiki-occurrence-lifecycle";
-import type { WikiOccurrenceEnvironment } from "./wiki-occurrence-driver";
+import {
+  createWikiOccurrenceDriver,
+  type WikiOccurrenceDriver,
+  type WikiOccurrenceDriverInput,
+  type WikiOccurrenceEnvironment,
+  type WikiOccurrenceTarget,
+} from "./wiki-occurrence-driver";
+
+/** The smallest square a tap on a marked word must be able to land in. */
+export const WIKI_TAKEOVER_TARGET_PX = 24;
+
+/**
+ * The lazily loaded browser half of Wiki occurrences: the lifecycle, its DOM
+ * environment, and the policy it settles through. Nothing here is part of the
+ * initial material bundle.
+ */
+export function createBrowserWikiOccurrenceDriver(
+  input: WikiOccurrenceDriverInput,
+): WikiOccurrenceDriver {
+  return createWikiOccurrenceDriver({
+    ...input,
+    environment: createBrowserWikiOccurrenceEnvironment(input.readMaterial),
+  });
+}
 
 /**
  * Browser capabilities for the occurrence driver. Nothing touches the DOM
@@ -115,6 +142,9 @@ export function createBrowserWikiOccurrenceEnvironment(
       }
       return false;
     },
+    hitTest(targets, clientX, clientY) {
+      return hitTestWikiOccurrence(targets, readMaterial, clientX, clientY);
+    },
     dispose() {
       observer?.disconnect();
       observer = null;
@@ -122,6 +152,85 @@ export function createBrowserWikiOccurrenceEnvironment(
       intersecting.clear();
     },
   });
+}
+
+/**
+ * Resolves a pointer to the occurrence it lands on: the caret position under
+ * it strictly inside a word, or a hit within a word's rects widened to the
+ * minimum target. The nearest rect wins when two words are close.
+ */
+export function hitTestWikiOccurrence(
+  targets: readonly WikiOccurrenceTarget[],
+  readMaterial: () => MaterialView,
+  clientX: number,
+  clientY: number,
+): string | null {
+  const nodeId = targets[0]?.address.nodeId;
+  if (nodeId === undefined) return null;
+  const element = findMaterialTextElement(nodeId);
+  const materialText = readMaterial().tree.nodes[nodeId]?.text;
+  if (element === null || materialText === undefined) return null;
+  const caretOffset = caretOffsetAt(element, clientX, clientY);
+  let best: Readonly<{ id: string; distance: number }> | null = null;
+  for (const target of targets) {
+    const { address } = target;
+    if (address.nodeId !== nodeId) continue;
+    if (caretOffset !== null && caretOffset > address.start && caretOffset < address.end) {
+      return target.id;
+    }
+    const range = createMaterialTextRange(element, materialText, address.start, address.end);
+    if (range === null) continue;
+    for (const rect of normalizeClientRects(range.getClientRects())) {
+      const distance = targetDistance(rect, clientX, clientY);
+      if (distance !== null && (best === null || distance < best.distance)) {
+        best = Object.freeze({ id: target.id, distance });
+      }
+    }
+  }
+  return best?.id ?? null;
+}
+
+function targetDistance(rect: ClientTextRect, x: number, y: number): number | null {
+  const width = Math.max(rect.width, WIKI_TAKEOVER_TARGET_PX);
+  const height = Math.max(rect.height, WIKI_TAKEOVER_TARGET_PX);
+  const centerX = rect.x + rect.width / 2;
+  const centerY = rect.y + rect.height / 2;
+  if (Math.abs(x - centerX) > width / 2 || Math.abs(y - centerY) > height / 2) return null;
+  return Math.hypot(x - centerX, y - centerY);
+}
+
+type CaretDocument = Document & {
+  caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  caretRangeFromPoint?: (x: number, y: number) => Range | null;
+};
+
+function caretOffsetAt(element: HTMLElement, x: number, y: number): number | null {
+  const pageDocument = element.ownerDocument as CaretDocument;
+  let node: Node | null = null;
+  let offset = 0;
+  try {
+    const position = pageDocument.caretPositionFromPoint?.(x, y) ?? null;
+    if (position !== null) {
+      node = position.offsetNode;
+      offset = position.offset;
+    } else {
+      const range = pageDocument.caretRangeFromPoint?.(x, y) ?? null;
+      if (range !== null) {
+        node = range.startContainer;
+        offset = range.startOffset;
+      }
+    }
+  } catch {
+    return null;
+  }
+  if (node === null || node.nodeType !== Node.TEXT_NODE || !element.contains(node)) return null;
+  let logical = 0;
+  const walker = pageDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  for (let current = walker.nextNode(); current !== null; current = walker.nextNode()) {
+    if (current === node) return logical + offset;
+    logical += (current as Text).data.length;
+  }
+  return null;
 }
 
 /** The single text owner of one rendered passage. */

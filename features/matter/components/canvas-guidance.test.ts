@@ -11,6 +11,7 @@ import {
   localizeExpansionOutcome,
   localizeParkedRelease,
   localizeRewriteOutcome,
+  localizeWikiUnsaved,
   projectCanvasGuidance,
   type CanvasExpansionGuidanceState,
   type CanvasGuidanceInput,
@@ -118,6 +119,30 @@ describe("canvas guidance projection", () => {
     expect(localizeRewriteOutcome(reason, "en-US")).toBe(text);
     expect(localizeRewriteOutcome(reason, "zh-CN"))
       .toBe(localizeCanvasGuidance({ id, kind: "recovery", text }, "zh-CN").text);
+  });
+
+  it("says once that Wiki could not record an explicit choice", () => {
+    const text = "Wiki could not save that.";
+    expect(projectCanvasGuidance(input({
+      wiki: { kind: "unsaved" },
+      language: { kind: "lasso-ready" },
+    }))).toEqual({ id: "wiki-unsaved", kind: "recovery", text });
+    expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+    // A rewrite outcome and live voice keep the line first.
+    expect(projectCanvasGuidance(input({
+      wiki: { kind: "unsaved" },
+      rewrite: { kind: "unchanged", reason: "stale" },
+    })).id).toBe("text-swap-stale");
+    expect(projectCanvasGuidance(input({
+      wiki: { kind: "unsaved" },
+      admission: attempt({ phase: "recording", startedAtMs: 1 }),
+    })).id).toBe("speak-recording");
+    for (const language of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      const localized = localizeWikiUnsaved(language);
+      expect(localized).not.toBe(text);
+      expect(localized.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+    }
+    expect(localizeWikiUnsaved("en-US")).toBe(text);
   });
 
   it("asks to place or discard held words instead of dismissing the recording", () => {
@@ -348,6 +373,7 @@ describe("canvas guidance projection", () => {
       "select-thought": true,
       "text-swap-unavailable": true,
       "text-swap-stale": true,
+      "wiki-unsaved": true,
     }) as Array<Exclude<ReturnType<typeof projectCanvasGuidance>["id"], "canvas-zoom">>;
 
     for (const id of states) {

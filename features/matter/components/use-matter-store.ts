@@ -19,11 +19,8 @@ import {
   readMatterWikiBasis,
   settleMatterWikiOccurrence,
 } from "../persistence/wiki-runtime-bridge";
-import { createBrowserWikiOccurrenceEnvironment } from "../interaction/wiki-occurrence-browser";
-import {
-  createWikiOccurrenceDriver,
-  type WikiOccurrenceDriver,
-} from "../interaction/wiki-occurrence-driver";
+import type { WikiOccurrenceDriver } from "../interaction/wiki-occurrence-driver";
+import { createLazyWikiOccurrenceDriver } from "../interaction/wiki-occurrence-handle";
 import type { MaterialView } from "../interaction/wiki-occurrence-lifecycle";
 import {
   createMatterStore,
@@ -41,20 +38,19 @@ const readMaterial = (): MaterialView => {
 
 // The occurrence driver and the store are composed side by side: the store
 // publishes committed occurrences through a neutral port and never learns
-// that Wiki, the driver, or its browser resources exist.
-const wikiOccurrences: WikiOccurrenceDriver = createWikiOccurrenceDriver({
+// that Wiki, the driver, or its browser resources exist. The driver itself
+// loads with the first committed occurrence.
+const wikiOccurrences: WikiOccurrenceDriver = createLazyWikiOccurrenceDriver({
   readMaterial,
-  settle: (occurrenceId, outcome) => {
-    void settleMatterWikiOccurrence(occurrenceId, outcome);
-  },
+  settle: settleMatterWikiOccurrence,
   restore: (request) => matterStore.getState().restoreHumanTextRange({
     ...request,
     commandId: `human_restore_${createOperationId()}`,
     createdAt: new Date().toISOString(),
     expectedDocumentEpoch: request.documentEpoch,
   }).status === "committed",
-  environment: createBrowserWikiOccurrenceEnvironment(readMaterial),
-});
+}, () => import("../interaction/wiki-occurrence-browser")
+  .then((module) => module.createBrowserWikiOccurrenceDriver));
 
 const matterStore = createMatterStore(singletonInitialDocument, {
   documentRoot: true,

@@ -50,11 +50,20 @@ export type CanvasRewriteGuidanceState =
   | Readonly<{ kind: "parked" }>
   | Readonly<{ kind: "unchanged"; reason: "unavailable" | "stale" }>;
 
+/**
+ * An explicit Keep or restore of a Wiki change that Wiki could not record.
+ * The material change stands; only the learning was lost, said once.
+ */
+export type CanvasWikiGuidanceState =
+  | Readonly<{ kind: "none" }>
+  | Readonly<{ kind: "unsaved" }>;
+
 export type CanvasGuidanceInput = Readonly<{
   admission: AdmissionInteractionState;
   camera: CanvasCameraGuidanceState;
   expansion?: CanvasExpansionGuidanceState;
   rewrite?: CanvasRewriteGuidanceState;
+  wiki?: CanvasWikiGuidanceState;
   language: CanvasLanguageGuidanceState;
   material: CanvasMaterialGuidanceState;
 }>;
@@ -87,13 +96,15 @@ type CanvasActionGuidanceId =
   | "speak-child"
   | "select-thought"
   | "text-swap-unavailable"
-  | "text-swap-stale";
+  | "text-swap-stale"
+  | "wiki-unsaved";
 
 export type CanvasGuidanceId = CanvasActionGuidanceId | "canvas-zoom";
 
 export const CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT = 34;
 const NO_EXPANSION: CanvasExpansionGuidanceState = Object.freeze({ kind: "none" });
 const NO_REWRITE: CanvasRewriteGuidanceState = Object.freeze({ kind: "none" });
+const NO_WIKI: CanvasWikiGuidanceState = Object.freeze({ kind: "none" });
 
 const GUIDANCE_COPY = Object.freeze({
   "allow-microphone": "Allow microphone access.",
@@ -124,6 +135,7 @@ const GUIDANCE_COPY = Object.freeze({
   "select-thought": "Select one thought.",
   "text-swap-unavailable": "Not rewritten. Text unchanged.",
   "text-swap-stale": "Passage changed. Not rewritten.",
+  "wiki-unsaved": "Wiki could not save that.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 const GUIDANCE_COPY_ZH = Object.freeze({
@@ -155,6 +167,7 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "select-thought": "选择一段想法。",
   "text-swap-unavailable": "未改写，原文未变。",
   "text-swap-stale": "段落已变化，未改写。",
+  "wiki-unsaved": "词典 WIKI 未能记下这次选择。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 export type CanvasGuidance =
@@ -214,6 +227,15 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
       break;
     default:
       return assertNever(rewrite);
+  }
+  const wiki = input.wiki ?? NO_WIKI;
+  switch (wiki.kind) {
+    case "unsaved":
+      return guidance("wiki-unsaved", "recovery");
+    case "none":
+      break;
+    default:
+      return assertNever(wiki);
   }
 
   if (input.material.kind === "empty") {
@@ -302,6 +324,11 @@ export function localizeRewriteOutcome(
   ).text;
 }
 
+/** The polite announcement for a Wiki choice that could not be recorded. */
+export function localizeWikiUnsaved(language: CanvasLanguage): string {
+  return localizeCanvasGuidance(guidance("wiki-unsaved", "recovery"), language).text;
+}
+
 /** The explicit release beside a parked Elastic or Point-and-Talk result. */
 export function localizeParkedRelease(language: CanvasLanguage): string {
   switch (language) {
@@ -373,6 +400,7 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "select-thought": "選擇一段想法。",
   "text-swap-unavailable": "未改寫，原文未變。",
   "text-swap-stale": "段落已變更，未改寫。",
+  "wiki-unsaved": "詞典 WIKI 未能記下這次選擇。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const GUIDANCE_COPY_JA = Object.freeze({
   "allow-microphone": "マイクの使用を許可してください。",
@@ -403,6 +431,7 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "select-thought": "考えを一つ選んでください。",
   "text-swap-unavailable": "書き換えませんでした。原文はそのままです。",
   "text-swap-stale": "段落が変わったため書き換えませんでした。",
+  "wiki-unsaved": "辞書 WIKI はこの選択を保存できませんでした。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const GUIDANCE_COPY_DE = Object.freeze({
   "allow-microphone": "Mikrofonzugriff erlauben.",
@@ -433,6 +462,7 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "select-thought": "Einen Gedanken auswählen.",
   "text-swap-unavailable": "Nicht umgeschrieben. Text unverändert.",
   "text-swap-stale": "Passage geändert. Nicht umgeschrieben.",
+  "wiki-unsaved": "Wiki konnte das nicht speichern.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 function projectAdmissionGuidance(

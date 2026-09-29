@@ -99,6 +99,7 @@ import {
   localizeParkedRelease,
   projectCanvasGuidance,
   localizeRewriteOutcome,
+  localizeWikiUnsaved,
   type CanvasExpansionGuidanceState,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
@@ -211,9 +212,12 @@ import {
 } from "../runtime/canvas-pointer-arbitration";
 import { deferUntilTouchCommits } from "./touch-commitment";
 import { useEscapeLayer } from "./escape-layers";
-import type { WikiOccurrenceDriver } from "../interaction/wiki-occurrence-driver";
-import { hitTestWikiOccurrence } from "./wiki-occurrence-disclosure";
-import { WikiOccurrenceLayer } from "./WikiOccurrenceLayer";
+import type {
+  WikiOccurrenceDriver,
+  WikiOccurrenceView,
+} from "../interaction/wiki-occurrence-driver";
+import type { NodeActionWikiReview } from "./NodeActionLens";
+import { wikiOccurrenceDescription } from "./wiki-occurrence-description-copy";
 
 const PointTalkTurn = dynamic(
   () => import("./PointTalkTurn").then((module) => module.PointTalkTurn),
@@ -229,6 +233,11 @@ const NodeActionLens = dynamic(
 );
 const MaterialFilesWithLabels = dynamic(
   () => import("./MaterialFilesWithLabels").then((module) => module.MaterialFilesWithLabels),
+  { ssr: false },
+);
+// The settle, the mark, and the takeover load with the first live occurrence.
+const WikiOccurrenceLayer = dynamic(
+  () => import("./WikiOccurrenceLayer").then((module) => module.WikiOccurrenceLayer),
   { ssr: false },
 );
 // Keep the complete grapheme and candidate policy behind the lazy turn. This
@@ -467,12 +476,31 @@ export function RootedMaterial(props: RootedMaterialProps) {
     () => setPagePresentationAvailable(true),
   ), []);
   const wikiOccurrences = props.wikiOccurrences;
-  // The word's takeover owns the passage while open; its lens would compete.
-  const wikiTakeoverOpen = useSyncExternalStore(
+  const wikiViews = useSyncExternalStore(
     wikiOccurrences?.subscribe ?? subscribeNothing,
-    () => wikiOccurrences?.getSnapshot().some((view) => view.takeover) ?? false,
-    () => false,
+    wikiOccurrences?.getSnapshot ?? noWikiViews,
+    noWikiViews,
   );
+  // The word's takeover owns the passage while open; its lens would compete.
+  const wikiTakeoverOpen = wikiViews.some((view) => view.takeover);
+  // Once loaded for a live occurrence, the layer stays for the session.
+  const [wikiLayerMounted, setWikiLayerMounted] = useState(false);
+  if (!wikiLayerMounted && wikiViews.length > 0) setWikiLayerMounted(true);
+  const wikiReviews = useMemo(() => projectWikiReviews(wikiViews), [wikiViews]);
+  // Keyed by content, so the measured list re-renders only when a count moves.
+  const wikiDescriptionKey = wikiDescriptionCountsKey(wikiViews);
+  const wikiDescriptionCounts = useMemo(
+    () => parseWikiDescriptionCounts(wikiDescriptionKey),
+    [wikiDescriptionKey],
+  );
+  // The press that dismissed a takeover, so its release never reopens that word.
+  const wikiDismissingPressRef = useRef<Readonly<{ pointerId: number; occurrenceId: string }> | null>(null);
+  const [wikiUnsaved, setWikiUnsaved] = useState<number | null>(null);
+  const wikiUnsavedSequenceRef = useRef(0);
+  useEffect(() => wikiOccurrences?.subscribeUnsaved(() => {
+    wikiUnsavedSequenceRef.current += 1;
+    setWikiUnsaved(wikiUnsavedSequenceRef.current);
+  }), [wikiOccurrences]);
   useEffect(() => {
     // A modal that owns the paper hides every word from perception.
     wikiOccurrences?.setSurfaceAvailable(materialPresentationAvailable);
@@ -1569,6 +1597,22 @@ export function RootedMaterial(props: RootedMaterialProps) {
     abortElasticExpansion();
   }, [abortElasticExpansion, closePointTalk, pointTalkExitHandoff]);
   useEffect(() => {
+    if (wikiUnsaved === null) return;
+    // Like a rewrite outcome, the line stays until the person acts again.
+    const clear = () => setWikiUnsaved(null);
+    const clearOnKey = (event: KeyboardEvent) => {
+      if (event.repeat || MODIFIER_ONLY_KEYS.has(event.key)) return;
+      clear();
+    };
+    const capture = { capture: true } as const;
+    window.addEventListener("pointerdown", clear, capture);
+    window.addEventListener("keydown", clearOnKey);
+    return () => {
+      window.removeEventListener("pointerdown", clear, capture);
+      window.removeEventListener("keydown", clearOnKey);
+    };
+  }, [wikiUnsaved]);
+  useEffect(() => {
     if (pointTalkOutcome === null) return;
     // The outcome stays until the person acts again, so a slow reader never
     // loses it to a timer. A held key's auto-repeat or a lone modifier, such
@@ -1936,18 +1980,23 @@ export function RootedMaterial(props: RootedMaterialProps) {
    * A settled tap on a marked Wiki word opens its takeover instead of selecting
    * the passage; it never starts Point and Talk or a passage selection.
    */
-  const openWikiTakeoverAt = (nodeId: string | null, clientX: number, clientY: number): boolean => {
+  const openWikiTakeoverAt = (
+    nodeId: string | null,
+    clientX: number,
+    clientY: number,
+    pointerId: number,
+  ): boolean => {
+    const dismissing = wikiDismissingPressRef.current;
+    wikiDismissingPressRef.current = null;
     if (wikiOccurrences === undefined || nodeId === null || lasso.active) return false;
-    const text = tree.nodes[nodeId]?.text;
-    if (text === undefined) return false;
-    const occurrenceId = hitTestWikiOccurrence(
-      wikiOccurrences.getSnapshot(),
-      nodeId,
-      text,
-      clientX,
-      clientY,
-    );
-    if (occurrenceId === null || !wikiOccurrences.openTakeover(occurrenceId)) return false;
+    const occurrenceId = wikiOccurrences.hitTest(nodeId, clientX, clientY);
+    // The second press of a double-click closed this word's takeover; it
+    // selects the passage like any press instead of reopening the word.
+    if (
+      occurrenceId === null ||
+      (dismissing?.pointerId === pointerId && dismissing.occurrenceId === occurrenceId) ||
+      !wikiOccurrences.openTakeover(occurrenceId)
+    ) return false;
     abortFixedExpansion();
     return true;
   };
@@ -2454,6 +2503,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         : { kind: "none" },
       expansion: expansionGuidance,
       rewrite: rewriteGuidance,
+      wiki: wikiUnsaved === null ? { kind: "none" } : { kind: "unsaved" },
       language: languageGuidance,
       material: materialGuidance,
     }),
@@ -3109,6 +3159,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
     // disposition until the next contact, so the canvas handlers that run
     // after this still recognise it.
     const noteDown = (event: PointerEvent) => {
+      // Seen before the takeover's own capture listener dismisses it.
+      const takeover = wikiOccurrences?.getSnapshot().find((view) => view.takeover);
+      wikiDismissingPressRef.current = takeover === undefined
+        ? null
+        : Object.freeze({ pointerId: event.pointerId, occurrenceId: takeover.id });
       const revoked = pointerArbiter.notePointerDown(arbitratedPointer(event));
       if (revoked.length > 0) revokeTouchesForPen(revoked);
     };
@@ -3124,7 +3179,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       window.removeEventListener("pointerup", noteEnd, true);
       window.removeEventListener("pointercancel", noteEnd, true);
     };
-  }, [pointerArbiter, revokeTouchesForPen]);
+  }, [pointerArbiter, revokeTouchesForPen, wikiOccurrences]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -3646,7 +3701,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             props.onMoveNode(nodeDrag.sourceId, targetId, targetIndex ?? undefined);
           }
           else if (!nodeDrag.dragging) {
-            if (openWikiTakeoverAt(nodeDrag.originNodeId, event.clientX, event.clientY)) return;
+            if (openWikiTakeoverAt(nodeDrag.originNodeId, event.clientX, event.clientY, event.pointerId)) return;
             if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) selectNodeAfterAbort(nodeDrag.originNodeId);
             else {
               abortFixedExpansion();
@@ -3668,7 +3723,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         pointerOriginNodeRef.current = null;
         // Pointer capture keeps dragging reliable over text, but retargets the
         // browser click. Resolve a sub-threshold gesture here as node selection.
-        if (!dragged && !openWikiTakeoverAt(originNodeId, releaseX, releaseY)) {
+        if (!dragged && !openWikiTakeoverAt(originNodeId, releaseX, releaseY, event.pointerId)) {
           setCanvasMode("material");
           if (originNodeId !== null && tree.nodes[originNodeId] !== undefined) {
             selectNodeAfterAbort(originNodeId);
@@ -3704,6 +3759,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
           <span key={`rewrite_${pointTalkOutcome.id}`}>
             {localizeRewriteOutcome(pointTalkOutcome.reason, props.locale)}
           </span>
+        ) : wikiUnsaved !== null ? (
+          <span key={`wiki_${wikiUnsaved}`}>{localizeWikiUnsaved(props.locale)}</span>
         ) : guidance.id === "expansion-parked" || guidance.id === "text-swap-parked" ? (
           <span key={guidance.id}>{guidance.text}</span>
         ) : null}
@@ -3937,6 +3994,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               transformChange={currentTransformChange}
               transformStatus={transformStatus}
               tree={tree}
+              wikiDescriptionCounts={wikiDescriptionCounts}
             />
             )}
             <AdmissionFeedback
@@ -3978,6 +4036,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
               setPointTalkOwner(createPointTalkOwner(props.documentEpoch, tree.id, nodeId));
               setPointTalkPresented(true);
             }}
+            onOpenWikiReview={wikiOccurrences === undefined ? undefined : (occurrenceId) => {
+              if (wikiOccurrences.openTakeover(occurrenceId)) abortFixedExpansion();
+            }}
             onToggleHeldAside={(nodeId) => {
               abortFixedExpansion();
               toggleHeldAside(nodeId);
@@ -3985,6 +4046,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             pointTalkEligibleNodeIds={pointTalkEligibleNodeIds}
             positioningRef={materialPlaneRef}
             tree={tree}
+            wikiReviews={wikiReviews}
           />
         ) : null}
         <footer
@@ -4080,7 +4142,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             voiceAvailable={voiceReadiness.status === "ready"}
           />
         )}
-        {wikiOccurrences === undefined ? null : (
+        {wikiOccurrences === undefined || !wikiLayerMounted ? null : (
           <WikiOccurrenceLayer
             blocked={lasso.active || stretch.dragging || interactionPending ||
               activePointTalkNodeId !== null || indexOverlayOpen || !outcomePresentationAvailable}
@@ -4176,6 +4238,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   transformChange,
   transformStatus,
   tree,
+  wikiDescriptionCounts,
 }: {
   activeProjection: readonly LayoutProjectionItem[];
   documentEpoch: number;
@@ -4206,9 +4269,13 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
     announce: boolean;
   }> | null;
   tree: ThoughtTree;
+  /** Disclosed Wiki changes per passage, described to assistive technology. */
+  wikiDescriptionCounts: ReadonlyMap<string, number>;
 }) {
   const repairPresentationScope = { treeId: tree.id, documentEpoch };
   const lassoKeyboardDescriptionId = useId();
+  const wikiDescriptionId = useId();
+  const wikiDescribedCounts = new Set(wikiDescriptionCounts.values());
   const activeProjectionById = new Map(activeProjection.map((item) => [item.node.id, item]));
   const handleThoughtClick = useCallback((event: ReactMouseEvent<HTMLOListElement>) => {
     if (interactionPending) return;
@@ -4234,6 +4301,13 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
         {lassoAccessibilityCopy(locale).keyboardSelectionHint}
       </span>
     ) : null}
+    {/* One description per count, shared by every passage with that many
+        changes; the words themselves are never wrapped. */}
+    {[...wikiDescribedCounts].map((count) => (
+      <span className="visually-hidden" id={`${wikiDescriptionId}-${count}`} key={count}>
+        {wikiOccurrenceDescription(locale, count)}
+      </span>
+    ))}
     <ol className="spatial-thoughts" onClick={handleThoughtClick}>
       {projection.map(({ node, parentId }) => {
         const activeProjectionItem = activeProjectionById.get(node.id);
@@ -4245,6 +4319,11 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
         const isProjected = lassoSelection?.nodeId === node.id && lassoSourceText === node.text;
         const isLassoSelected = lassoSelection?.nodeId === node.id;
         const isLassoKeyboardEligible = lassoActive && lassoEligibleNodeIds.has(node.id);
+        const wikiCount = wikiDescriptionCounts.get(node.id);
+        const describedBy = [
+          isLassoKeyboardEligible ? lassoKeyboardDescriptionId : null,
+          wikiCount === undefined ? null : `${wikiDescriptionId}-${wikiCount}`,
+        ].filter((id) => id !== null).join(" ");
         const repairChange = repairPresentations.get(node.id);
         const isRepairSettling = repairPresentations.size > 0 &&
           isRepairPresentationCurrent(repairChange, repairPresentationScope, tree);
@@ -4281,7 +4360,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             key={node.id}
           >
             <button
-              aria-describedby={isLassoKeyboardEligible ? lassoKeyboardDescriptionId : undefined}
+              aria-describedby={describedBy === "" ? undefined : describedBy}
               aria-pressed={isSelected}
               aria-keyshortcuts={isHeldAside
                 ? isHeldAsideRoot ? "ArrowRight" : undefined
@@ -5385,6 +5464,38 @@ export function voiceToolLabel(input: Readonly<{
   if (input.isVoiceChecking) return copy.preparingVoiceInput;
   if (!input.isPreviewReady) return copy.unavailableInPreview;
   return copy.unavailableOutsideFullView;
+}
+
+const NO_WIKI_VIEWS: readonly WikiOccurrenceView[] = Object.freeze([]);
+
+function noWikiViews(): readonly WikiOccurrenceView[] {
+  return NO_WIKI_VIEWS;
+}
+
+/** Disclosed changes a passage's lens offers for review, outside an open takeover. */
+function projectWikiReviews(
+  views: readonly WikiOccurrenceView[],
+): ReadonlyMap<string, readonly NodeActionWikiReview[]> {
+  const reviews = new Map<string, NodeActionWikiReview[]>();
+  for (const view of views) {
+    if (!view.disclosed || view.takeover) continue;
+    const list = reviews.get(view.nodeId) ?? [];
+    list.push(Object.freeze({ id: view.id, heard: view.sourceText, canonical: view.canonicalText }));
+    reviews.set(view.nodeId, list);
+  }
+  return reviews;
+}
+
+function wikiDescriptionCountsKey(views: readonly WikiOccurrenceView[]): string {
+  const counts = new Map<string, number>();
+  for (const view of views) {
+    if (view.disclosed) counts.set(view.nodeId, (counts.get(view.nodeId) ?? 0) + 1);
+  }
+  return JSON.stringify([...counts]);
+}
+
+function parseWikiDescriptionCounts(key: string): ReadonlyMap<string, number> {
+  return new Map(JSON.parse(key) as [string, number][]);
 }
 
 function subscribeNothing(): () => void {

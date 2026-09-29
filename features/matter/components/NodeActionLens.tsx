@@ -15,7 +15,7 @@ import {
 import type { NavigationState } from "../runtime/navigation";
 import type { ThoughtTree } from "../tree/model";
 import type { MatterLocale } from "../config/locales";
-import { MatterAiIcon, MinusIcon, PlusIcon } from "./icons";
+import { MatterAiIcon, MinusIcon, PlusIcon, WikiChangeIcon } from "./icons";
 import { nodeActionLensCopy } from "./node-action-lens-copy";
 import { useEscapeLayer } from "./escape-layers";
 import {
@@ -48,6 +48,13 @@ type LensPlacement = Readonly<{
   }>;
 }>;
 
+/** One word Wiki changed in a passage, as the lens may offer it for review. */
+export type NodeActionWikiReview = Readonly<{ id: string; heard: string; canonical: string }>;
+
+/** A passage offers at most this many Wiki reviews; a tap on the word reaches the rest. */
+export const MAX_NODE_ACTION_WIKI_REVIEWS = 3;
+const NO_WIKI_REVIEWS: readonly NodeActionWikiReview[] = Object.freeze([]);
+
 export type NodeActionLensProps = Readonly<{
   activeNodeIds: ReadonlySet<string>;
   canvasRef: RefObject<HTMLDivElement | null>;
@@ -59,10 +66,13 @@ export type NodeActionLensProps = Readonly<{
   locale: MatterLocale;
   navigation: NavigationState;
   onOpenPointTalk: (nodeId: string) => void;
+  onOpenWikiReview?: (occurrenceId: string) => void;
   onToggleHeldAside: (nodeId: string) => void;
   pointTalkEligibleNodeIds: ReadonlySet<string>;
   positioningRef: RefObject<HTMLElement | null>;
   tree: ThoughtTree;
+  /** Live, disclosed Wiki changes by passage: the keyboard path to each takeover. */
+  wikiReviews?: ReadonlyMap<string, readonly NodeActionWikiReview[]>;
 }>;
 
 const CLOSE_DELAY_MS = 200;
@@ -82,10 +92,12 @@ export function NodeActionLens({
   locale,
   navigation,
   onOpenPointTalk,
+  onOpenWikiReview,
   onToggleHeldAside,
   pointTalkEligibleNodeIds,
   positioningRef,
   tree,
+  wikiReviews,
 }: NodeActionLensProps) {
   const copy = nodeActionLensCopy(locale);
   const [coarse, setCoarse] = useState(false);
@@ -93,6 +105,9 @@ export function NodeActionLens({
   const [chromeSuppressed, setChromeSuppressed] = useState(false);
   const [target, setTarget] = useState<LensTarget | null>(null);
   const [placement, setPlacement] = useState<LensPlacement | null>(null);
+  // Wiki reviews are the keyboard's and touch's path to a changed word. A fine
+  // pointer taps the word itself, so its lens never grows over that word.
+  const [keyboardNodeId, setKeyboardNodeId] = useState<string | null>(null);
   const lensRef = useRef<HTMLDivElement>(null);
   const targetElementRef = useRef<HTMLElement | null>(null);
   const pendingKeyboardEntryRef = useRef<string | null>(null);
@@ -110,6 +125,7 @@ export function NodeActionLens({
     pendingKeyboardEntryRef.current = null;
     setTarget(null);
     setPlacement(null);
+    setKeyboardNodeId(null);
   }, [clearCloseTimer]);
   const scheduleClose = useCallback(() => {
     clearCloseTimer();
@@ -186,7 +202,9 @@ export function NodeActionLens({
       if (!enabled || chromeIsSuppressed()) return;
       const candidate = materialTarget(event.target);
       if (candidate?.nodeId === dismissedFocusNodeIdRef.current) return;
-      if (candidate !== null) reveal(candidate, "focus");
+      if (candidate === null) return;
+      reveal(candidate, "focus");
+      setKeyboardNodeId(isFocusVisible(candidate.element) ? candidate.nodeId : null);
     };
     const focusOut = (event: FocusEvent) => {
       const from = materialTarget(event.target);
@@ -202,6 +220,7 @@ export function NodeActionLens({
       event.preventDefault();
       dismissedFocusNodeIdRef.current = null;
       pendingKeyboardEntryRef.current = candidate.nodeId;
+      setKeyboardNodeId(candidate.nodeId);
       reveal(candidate, "focus");
       focusPendingKeyboardEntry(candidate.nodeId);
     };
@@ -265,7 +284,11 @@ export function NodeActionLens({
         : selectedTarget
       : retainedTarget;
 
-  const actionCount = activeTarget === null ? 0 : 2;
+  const reviews = activeTarget?.kind === "active" && onOpenWikiReview !== undefined &&
+      (activeTarget.source === "selection" || keyboardNodeId === activeTarget.nodeId)
+    ? (wikiReviews?.get(activeTarget.nodeId) ?? NO_WIKI_REVIEWS).slice(0, MAX_NODE_ACTION_WIKI_REVIEWS)
+    : NO_WIKI_REVIEWS;
+  const actionCount = activeTarget === null ? 0 : 2 + reviews.length;
   const currentPlacement = placement !== null && activeTarget !== null &&
     placement.owner.actionCount === actionCount &&
     placement.owner.coarse === coarse &&
@@ -476,8 +499,33 @@ export function NodeActionLens({
       >
         {activeTarget.kind === "active" ? <MinusIcon /> : <PlusIcon />}
       </button>
+      {reviews.map((review) => (
+        <button
+          aria-label={copy.wikiReview(review.heard, review.canonical)}
+          className="node-action-lens__button"
+          data-node-action="wiki-review"
+          key={review.id}
+          onClick={() => {
+            close();
+            onOpenWikiReview?.(review.id);
+          }}
+          tabIndex={-1}
+          title={copy.wikiReviewShort}
+          type="button"
+        >
+          <WikiChangeIcon />
+        </button>
+      ))}
     </div>
   );
+}
+
+function isFocusVisible(element: HTMLElement): boolean {
+  try {
+    return element.matches(":focus-visible");
+  } catch {
+    return false;
+  }
 }
 
 function measureFirstLineInkRect(element: HTMLElement) {

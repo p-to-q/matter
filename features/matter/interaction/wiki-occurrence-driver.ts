@@ -28,6 +28,12 @@ const MAX_TICK_ELAPSED_MS = 1_000;
  * continuity only: bounded, short-lived, and never evidence.
  */
 const DISCLOSURE_CONTINUITY = Object.freeze({ maxEntries: 16, windowMs: 15_000 });
+/**
+ * Wiki… hands the takeover to the settings surface. Silence stays suspended
+ * until that surface has covered the paper and let it go again; if it never
+ * covers the paper, suspension lapses after this much visible time.
+ */
+const CONSULT_WITHOUT_SURFACE_MS = 3_000;
 
 export type WikiOccurrenceSettleOutcome =
   | "accepted-implicit"
@@ -35,6 +41,22 @@ export type WikiOccurrenceSettleOutcome =
   | "explicit-confirm"
   | "reverted"
   | "censored";
+
+/** Content-free result of recording one settlement. */
+export type WikiOccurrenceSettleStatus =
+  | "unattributed"
+  | "neutral"
+  | "recorded"
+  | "unchanged"
+  | "failed";
+
+export type WikiOccurrenceSettle = (
+  occurrenceId: string,
+  outcome: WikiOccurrenceSettleOutcome,
+) => void | Promise<WikiOccurrenceSettleStatus>;
+
+/** One addressable candidate for a pointer hit test. */
+export type WikiOccurrenceTarget = Readonly<{ id: string; address: WikiOccurrenceAddress }>;
 
 export type WikiOccurrenceRestorationRequest = Readonly<{
   treeId: string;
@@ -77,6 +99,8 @@ export type WikiOccurrenceEnvironment = Readonly<{
   untrack(nodeId: string): void;
   isPerceivable(address: WikiOccurrenceAddress): boolean;
   selectionCovers(address: WikiOccurrenceAddress): boolean;
+  /** The candidate a pointer at this client point lands on, if any. */
+  hitTest(targets: readonly WikiOccurrenceTarget[], clientX: number, clientY: number): string | null;
   dispose(): void;
 }>;
 
@@ -94,10 +118,18 @@ export type WikiOccurrenceDriver = Readonly<{
   openTakeover(occurrenceId: string): boolean;
   /** Dismissal is an inspection; Keep is an explicit confirmation. */
   closeTakeover(occurrenceId: string, outcome: "inspected-kept" | "explicit-confirm"): void;
-  /** Leaves the takeover for the Wiki surface; the occurrence stays unsettled. */
-  leaveTakeover(occurrenceId: string): void;
+  /**
+   * Closes the takeover without settling. `consult` hands it to the Wiki
+   * surface and keeps silence suspended until that surface is gone; `unread`
+   * returns a takeover dismissed before it could be read to silence.
+   */
+  leaveTakeover(occurrenceId: string, reason: "consult" | "unread"): void;
   /** Restores the heard form as an ordinary human material command. */
   revert(occurrenceId: string): "reverted" | "stale";
+  /** The disclosed occurrence a pointer at this point on a passage lands on. */
+  hitTest(nodeId: string, clientX: number, clientY: number): string | null;
+  /** Keep or revert that Wiki could not record; the material change stands. */
+  subscribeUnsaved(listener: () => void): () => void;
   subscribe(listener: () => void): () => void;
   getSnapshot(): readonly WikiOccurrenceView[];
   dispose(): void;
@@ -117,23 +149,32 @@ const EMPTY_VIEWS: readonly WikiOccurrenceView[] = Object.freeze([]);
  * through `readMaterial` and settles only through `settle`; it never observes
  * Material Undo, only whether each committed address still holds.
  */
-export function createWikiOccurrenceDriver(input: Readonly<{
+export type WikiOccurrenceDriverInput = Readonly<{
   readMaterial: () => MaterialView;
-  settle: (occurrenceId: string, outcome: WikiOccurrenceSettleOutcome) => void;
+  settle: WikiOccurrenceSettle;
   restore: (request: WikiOccurrenceRestorationRequest) => boolean;
+}>;
+
+export function createWikiOccurrenceDriver(input: WikiOccurrenceDriverInput & Readonly<{
   environment: WikiOccurrenceEnvironment;
 }>): WikiOccurrenceDriver {
   const { environment } = input;
   const live = new Map<string, Record>();
   const listeners = new Set<() => void>();
+  const unsavedListeners = new Set<() => void>();
   let snapshot = EMPTY_VIEWS;
   let takeoverId: string | null = null;
+  let consulting: { id: string; covered: boolean; openMs: number } | null = null;
+  let revertingId: string | null = null;
   let surfaceAvailable = true;
   let lastTickMs: number | null = null;
   let stopTicker: (() => void) | null = null;
   let stopPage: (() => void) | null = null;
   let restoring: WikiOccurrenceRestoration | null = null;
+  let lastDocument: Readonly<{ treeId: string; documentEpoch: number }> | null = null;
   let disposed = false;
+  // Heard forms live here for at most the continuity window; content never
+  // outlives its purpose or crosses a document boundary.
   const recentlyDisclosed: {
     nodeId: string;
     canonicalText: string;
@@ -141,7 +182,15 @@ export function createWikiOccurrenceDriver(input: Readonly<{
     atMs: number;
   }[] = [];
 
+  const pruneDisclosures = (nowMs: number) => {
+    while (recentlyDisclosed.length > 0 &&
+        nowMs - recentlyDisclosed[0]!.atMs > DISCLOSURE_CONTINUITY.windowMs) {
+      recentlyDisclosed.shift();
+    }
+  };
+
   const rememberDisclosure = (occurrence: LiveWikiOccurrence, nowMs: number) => {
+    pruneDisclosures(nowMs);
     if (!occurrence.progress.disclosed) return;
     recentlyDisclosed.push({
       nodeId: occurrence.address.nodeId,
@@ -154,14 +203,58 @@ export function createWikiOccurrenceDriver(input: Readonly<{
 
   /** Takes one matching remembered disclosure, so each is inherited once. */
   const inheritDisclosure = (occurrence: LiveWikiOccurrence, nowMs: number): boolean => {
+    pruneDisclosures(nowMs);
     const index = recentlyDisclosed.findIndex((entry) =>
-      nowMs - entry.atMs <= DISCLOSURE_CONTINUITY.windowMs &&
       entry.nodeId === occurrence.address.nodeId &&
       entry.canonicalText === occurrence.address.canonicalText &&
       entry.sourceText === occurrence.sourceText);
     if (index < 0) return false;
     recentlyDisclosed.splice(index, 1);
     return true;
+  };
+
+  /** A new document or epoch leaves nothing of the old one behind. */
+  const noteDocument = (material: MaterialView) => {
+    if (
+      lastDocument !== null &&
+      (lastDocument.treeId !== material.tree.id ||
+        lastDocument.documentEpoch !== material.documentEpoch)
+    ) recentlyDisclosed.length = 0;
+    lastDocument = Object.freeze({
+      treeId: material.tree.id,
+      documentEpoch: material.documentEpoch,
+    });
+  };
+
+  const reportUnsaved = () => {
+    for (const listener of [...unsavedListeners]) {
+      try {
+        listener();
+      } catch {
+        // A presentation observer cannot change what was recorded.
+      }
+    }
+  };
+
+  /** Records one settlement; an explicit one that fails is reported once. */
+  const record = (occurrenceId: string, outcome: WikiOccurrenceSettleOutcome) => {
+    const explicit = outcome === "explicit-confirm" || outcome === "reverted";
+    let pending: void | Promise<WikiOccurrenceSettleStatus>;
+    try {
+      pending = input.settle(occurrenceId, outcome);
+    } catch {
+      if (explicit) reportUnsaved();
+      return;
+    }
+    if (!explicit || pending === undefined) return;
+    void pending.then(
+      (status) => {
+        if (!disposed && (status === "failed" || status === "unattributed")) reportUnsaved();
+      },
+      () => {
+        if (!disposed) reportUnsaved();
+      },
+    );
   };
 
   const publish = () => {
@@ -218,29 +311,26 @@ export function createWikiOccurrenceDriver(input: Readonly<{
   };
 
   const remove = (occurrenceId: string) => {
-    const record = live.get(occurrenceId);
-    if (record === undefined) return null;
+    const entry = live.get(occurrenceId);
+    if (entry === undefined) return null;
     live.delete(occurrenceId);
     if (takeoverId === occurrenceId) takeoverId = null;
-    const nodeId = record.occurrence.address.nodeId;
-    if (![...live.values()].some((entry) => entry.occurrence.address.nodeId === nodeId)) {
+    if (consulting?.id === occurrenceId) consulting = null;
+    const nodeId = entry.occurrence.address.nodeId;
+    if (![...live.values()].some((other) => other.occurrence.address.nodeId === nodeId)) {
       environment.untrack(nodeId);
     }
-    return record;
+    return entry;
   };
 
   const settle = (occurrenceId: string, outcome: WikiOccurrenceSettleOutcome) => {
     if (remove(occurrenceId) === null) return;
-    try {
-      input.settle(occurrenceId, outcome);
-    } catch {
-      // Recording is best effort; the occurrence is still settled once here.
-    }
+    record(occurrenceId, outcome);
   };
 
   const update = (occurrenceId: string, next: LiveWikiOccurrence) => {
-    const record = live.get(occurrenceId);
-    if (record !== undefined) live.set(occurrenceId, { ...record, occurrence: next });
+    const entry = live.get(occurrenceId);
+    if (entry !== undefined) live.set(occurrenceId, { ...entry, occurrence: next });
   };
 
   /** Applies every settlement that is now due; returns whether any happened. */
@@ -248,9 +338,12 @@ export function createWikiOccurrenceDriver(input: Readonly<{
     const nowMs = environment.now();
     let changed = false;
     for (const [occurrenceId, record] of [...live]) {
+      // The word being restored leaves once its restoration commits.
+      if (occurrenceId === revertingId) continue;
       const addressIntact = wikiOccurrenceAddressHolds(record.occurrence.address, material);
-      if (occurrenceId === takeoverId) {
-        // An open takeover suspends silence; leaving or losing the word ends it.
+      if (occurrenceId === takeoverId || occurrenceId === consulting?.id) {
+        // An open takeover, or the Wiki surface it handed off to, suspends
+        // silence; leaving the page or losing the word ends it.
         if (!addressIntact) {
           settle(occurrenceId, "censored");
           changed = true;
@@ -289,15 +382,26 @@ export function createWikiOccurrenceDriver(input: Readonly<{
       : Math.min(Math.max(0, nowMs - lastTickMs), MAX_TICK_ELAPSED_MS);
     lastTickMs = nowMs;
     const visible = environment.isPageVisible();
+    if (consulting !== null) {
+      if (!surfaceAvailable) consulting.covered = true;
+      else if (consulting.covered) consulting = null;
+      else {
+        consulting.openMs += elapsed;
+        if (consulting.openMs >= CONSULT_WITHOUT_SURFACE_MS) consulting = null;
+      }
+    }
+    // Only the paper itself can hold the word in view: a covering dialog,
+    // including the Wiki surface opened from this very word, counts nothing.
+    const paperVisible = visible && surfaceAvailable;
     for (const [occurrenceId, record] of live) {
+      if (occurrenceId === takeoverId || occurrenceId === consulting?.id) continue;
       const progress = record.occurrence.progress;
-      const perceivable = visible && surfaceAvailable && progress.disclosed &&
-        !progress.perceived && occurrenceId !== takeoverId &&
+      const perceivable = paperVisible && progress.disclosed && !progress.perceived &&
         environment.isPerceivable(record.occurrence.address);
       const next = advanceWikiOccurrenceDwell(
         advanceWikiOccurrencePerception(progress, elapsed, perceivable),
         elapsed,
-        visible,
+        paperVisible,
       );
       if (next !== progress) update(occurrenceId, { ...record.occurrence, progress: next });
     }
@@ -338,9 +442,11 @@ export function createWikiOccurrenceDriver(input: Readonly<{
   };
 
   function reconcile() {
-    if (disposed || live.size === 0) return;
+    if (disposed) return;
     const material = readMaterial();
     if (material === null) return;
+    noteDocument(material);
+    if (live.size === 0) return;
     if (restoring !== null) {
       const node = material.tree.nodes[restoring.nodeId];
       if (node !== undefined && node.updatedAt !== restoring.nodeUpdatedAt) {
@@ -381,6 +487,7 @@ export function createWikiOccurrenceDriver(input: Readonly<{
       if (disposed) return;
       const material = readMaterial();
       if (material === null) return;
+      noteDocument(material);
       const nowMs = environment.now();
       const admitted = admitWikiOccurrences(publication, material, nowMs);
       if (admitted.length === 0) return;
@@ -461,22 +568,23 @@ export function createWikiOccurrenceDriver(input: Readonly<{
       publish();
       syncResources();
     },
-    leaveTakeover(occurrenceId) {
+    leaveTakeover(occurrenceId, reason) {
       if (takeoverId !== occurrenceId) return;
       takeoverId = null;
+      if (reason === "consult") consulting = { id: occurrenceId, covered: false, openMs: 0 };
       publish();
     },
     revert(occurrenceId) {
-      const record = live.get(occurrenceId);
+      const entry = live.get(occurrenceId);
       const material = readMaterial();
       if (
-        record === undefined || material === null ||
-        !wikiOccurrenceAddressHolds(record.occurrence.address, material)
+        entry === undefined || material === null ||
+        !wikiOccurrenceAddressHolds(entry.occurrence.address, material)
       ) {
-        if (record !== undefined) reconcile();
+        if (entry !== undefined) reconcile();
         return "stale";
       }
-      const { address, sourceText } = record.occurrence;
+      const { address, sourceText } = entry.occurrence;
       restoring = Object.freeze({
         nodeId: address.nodeId,
         nodeUpdatedAt: address.nodeUpdatedAt,
@@ -484,9 +592,9 @@ export function createWikiOccurrenceDriver(input: Readonly<{
         end: address.end,
         replacementLength: sourceText.length,
       });
-      // The reverted occurrence leaves before the commit, so the material
-      // change it causes can never censor it.
-      remove(occurrenceId);
+      // The material change this restoration causes must never censor the
+      // occurrence it settles; a failed restoration leaves it where it was.
+      revertingId = occurrenceId;
       let restored = false;
       try {
         restored = input.restore(Object.freeze({
@@ -504,25 +612,36 @@ export function createWikiOccurrenceDriver(input: Readonly<{
         restored = false;
       } finally {
         restoring = null;
+        revertingId = null;
       }
       if (!restored) {
-        // A restoration that failed closed leaves the word untouched; the
-        // occurrence returns only if its address still holds.
-        live.set(occurrenceId, { ...record });
-        environment.track(address.nodeId);
+        if (takeoverId === occurrenceId) takeoverId = null;
         reconcile();
         publish();
         syncResources();
         return "stale";
       }
-      try {
-        input.settle(occurrenceId, "reverted");
-      } catch {
-        // The material change stands even when Wiki cannot record it.
-      }
+      remove(occurrenceId);
+      record(occurrenceId, "reverted");
       publish();
       syncResources();
       return "reverted";
+    },
+    hitTest(nodeId, clientX, clientY) {
+      if (disposed) return null;
+      const targets: WikiOccurrenceTarget[] = [];
+      for (const { occurrence } of live.values()) {
+        if (occurrence.address.nodeId === nodeId && occurrence.progress.disclosed) {
+          targets.push(Object.freeze({ id: occurrence.id, address: occurrence.address }));
+        }
+      }
+      return targets.length === 0 ? null : environment.hitTest(targets, clientX, clientY);
+    },
+    subscribeUnsaved(listener) {
+      unsavedListeners.add(listener);
+      return () => {
+        unsavedListeners.delete(listener);
+      };
     },
     subscribe(listener) {
       listeners.add(listener);
@@ -537,9 +656,11 @@ export function createWikiOccurrenceDriver(input: Readonly<{
       live.clear();
       recentlyDisclosed.length = 0;
       takeoverId = null;
+      consulting = null;
       syncResources();
       environment.dispose();
       listeners.clear();
+      unsavedListeners.clear();
       snapshot = EMPTY_VIEWS;
     },
   });

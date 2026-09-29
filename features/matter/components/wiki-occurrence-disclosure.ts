@@ -45,9 +45,19 @@ export const WIKI_DISCLOSURE_GEOMETRY = Object.freeze({
   copyTolerancePx: 1,
   ghostWidthRatioMin: 0.8,
   ghostWidthRatioMax: 1.25,
-  /** The smallest square a tap on the mark must be able to land in. */
-  takeoverTargetPx: 24,
 });
+
+/**
+ * An interrupted settle counts as disclosure only once the person could have
+ * read the change: after the crossfade, or after an underline finished its
+ * draw. An earlier interruption leaves the word undisclosed and is retried
+ * this many times before the word waits without a settle.
+ */
+export const WIKI_DISCLOSURE_RETRIES = 1;
+
+export function interruptedDisclosureCounts(elapsedMs: number, readableAfterMs: number): boolean {
+  return Number.isFinite(elapsedMs) && elapsedMs >= readableAfterMs;
+}
 
 /** A committed word waits this long so its own arrival can settle first. */
 export const WIKI_DISCLOSURE_ARRIVAL_MS = 240;
@@ -113,7 +123,9 @@ export function toWorldRect(
 export function copyMatchesRange(copy: ClientTextRect, range: ClientTextRect): boolean {
   const tolerance = WIKI_DISCLOSURE_GEOMETRY.copyTolerancePx;
   return Math.abs(copy.x - range.x) <= tolerance &&
-    Math.abs(copy.width - range.width) <= tolerance;
+    Math.abs(copy.y - range.y) <= tolerance &&
+    Math.abs(copy.width - range.width) <= tolerance &&
+    Math.abs(copy.height - range.height) <= tolerance;
 }
 
 export function ghostFits(heardWidth: number, canonicalWidth: number): boolean {
@@ -121,81 +133,6 @@ export function ghostFits(heardWidth: number, canonicalWidth: number): boolean {
   const ratio = heardWidth / canonicalWidth;
   return ratio >= WIKI_DISCLOSURE_GEOMETRY.ghostWidthRatioMin &&
     ratio <= WIKI_DISCLOSURE_GEOMETRY.ghostWidthRatioMax;
-}
-
-/**
- * Resolves a tap to the live occurrence it lands on: the caret position under
- * the pointer inside the word, or a hit within the word's rects widened to the
- * minimum target. The nearest rect wins when two words are close.
- */
-export function hitTestWikiOccurrence(
-  views: readonly WikiOccurrenceView[],
-  nodeId: string,
-  materialText: string,
-  clientX: number,
-  clientY: number,
-): string | null {
-  const element = findMaterialTextElement(nodeId);
-  if (element === null) return null;
-  const caretOffset = caretOffsetAt(element, clientX, clientY);
-  let best: Readonly<{ id: string; distance: number }> | null = null;
-  for (const view of views) {
-    if (view.nodeId !== nodeId || !view.disclosed) continue;
-    if (caretOffset !== null && caretOffset > view.start && caretOffset < view.end) return view.id;
-    const range = createMaterialTextRange(element, materialText, view.start, view.end);
-    if (range === null) continue;
-    for (const rect of normalizeClientRects(range.getClientRects())) {
-      const distance = targetDistance(rect, clientX, clientY);
-      if (distance !== null && (best === null || distance < best.distance)) {
-        best = Object.freeze({ id: view.id, distance });
-      }
-    }
-  }
-  return best?.id ?? null;
-}
-
-function targetDistance(rect: ClientTextRect, x: number, y: number): number | null {
-  const minimum = WIKI_DISCLOSURE_GEOMETRY.takeoverTargetPx;
-  const width = Math.max(rect.width, minimum);
-  const height = Math.max(rect.height, minimum);
-  const centerX = rect.x + rect.width / 2;
-  const centerY = rect.y + rect.height / 2;
-  if (Math.abs(x - centerX) > width / 2 || Math.abs(y - centerY) > height / 2) return null;
-  return Math.hypot(x - centerX, y - centerY);
-}
-
-type CaretDocument = Document & {
-  caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
-  caretRangeFromPoint?: (x: number, y: number) => Range | null;
-};
-
-function caretOffsetAt(element: HTMLElement, x: number, y: number): number | null {
-  const pageDocument = element.ownerDocument as CaretDocument;
-  let node: Node | null = null;
-  let offset = 0;
-  try {
-    const position = pageDocument.caretPositionFromPoint?.(x, y) ?? null;
-    if (position !== null) {
-      node = position.offsetNode;
-      offset = position.offset;
-    } else {
-      const range = pageDocument.caretRangeFromPoint?.(x, y) ?? null;
-      if (range !== null) {
-        node = range.startContainer;
-        offset = range.startOffset;
-      }
-    }
-  } catch {
-    return null;
-  }
-  if (node === null || node.nodeType !== Node.TEXT_NODE || !element.contains(node)) return null;
-  let logical = 0;
-  const walker = pageDocument.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-  for (let current = walker.nextNode(); current !== null; current = walker.nextNode()) {
-    if (current === node) return logical + offset;
-    logical += (current as Text).data.length;
-  }
-  return null;
 }
 
 export function readWikiDisclosureCapabilities(): WikiDisclosureCapabilities {
@@ -226,7 +163,11 @@ export type WikiDisclosureController = Readonly<{
   dispose(): void;
 }>;
 
-type RunningDisclosure = Readonly<{ stop: () => void }>;
+type RunningDisclosure = Readonly<{
+  stop: () => void;
+  startedAtMs: number;
+  readableAfterMs: number;
+}>;
 
 /**
  * Owns the short-lived resources of disclosure: one scheduling timer while a
@@ -241,8 +182,10 @@ export function createWikiDisclosureController(
   let context: WikiDisclosureContext = Object.freeze({ readText: () => undefined, blocked: true });
   const running = new Map<string, RunningDisclosure>();
   const veiled = new Map<string, Range>();
-  // A word this platform cannot disclose is never retried and never perceived.
+  // A word this platform cannot disclose, or whose settles kept being cut off
+  // early, is not retried and so is never perceived.
   const undisclosable = new Set<string>();
+  const interruptions = new Map<string, number>();
   const pressed = new Set<number>();
   let schedule: number | null = null;
   let markObserver: MutationObserver | null = null;
@@ -320,6 +263,22 @@ export function createWikiDisclosureController(
     requestMarkSync();
   };
 
+  /** Ends a running settle early; it discloses only if it was readable. */
+  const interrupt = (occurrenceId: string) => {
+    const disclosure = running.get(occurrenceId);
+    if (disclosure === undefined) return;
+    const readable = interruptedDisclosureCounts(
+      performance.now() - disclosure.startedAtMs,
+      disclosure.readableAfterMs,
+    );
+    if (!readable) {
+      const count = (interruptions.get(occurrenceId) ?? 0) + 1;
+      interruptions.set(occurrenceId, count);
+      if (count > WIKI_DISCLOSURE_RETRIES) undisclosable.add(occurrenceId);
+    }
+    finish(occurrenceId, readable);
+  };
+
   const eligible = (view: WikiOccurrenceView, nowMs: number): boolean => {
     if (context.blocked || pressed.size > 0 || document.visibilityState !== "visible") return false;
     if (nowMs - view.admittedAtMs < WIKI_DISCLOSURE_ARRIVAL_MS) return false;
@@ -365,11 +324,16 @@ export function createWikiDisclosureController(
             else veiled.set(occurrenceId, veilRange);
             syncVeil();
           },
-          done: (disclosed) => finish(view.id, disclosed),
+          done: () => finish(view.id, true),
+          interrupted: () => interrupt(view.id),
         })
       : null;
     if (stop !== null) {
-      running.set(view.id, Object.freeze({ stop }));
+      running.set(view.id, Object.freeze({
+        stop,
+        startedAtMs: performance.now(),
+        readableAfterMs: WIKI_MORPH_TIMELINE.crossfadeEndMs,
+      }));
       return;
     }
     startSweep(view, element, host, range, fragments);
@@ -382,9 +346,22 @@ export function createWikiDisclosureController(
     range: Range,
     fragments: readonly ClientTextRect[],
   ) => {
-    const stop = playSweep(element, host, range, fragments, (disclosed) => finish(view.id, disclosed));
+    const stop = playSweep(
+      element,
+      host,
+      range,
+      fragments,
+      () => finish(view.id, true),
+      () => interrupt(view.id),
+    );
     // Nothing could be drawn, so nothing was disclosed; a later check retries.
-    if (stop !== null) running.set(view.id, Object.freeze({ stop }));
+    if (stop !== null) {
+      running.set(view.id, Object.freeze({
+        stop,
+        startedAtMs: performance.now(),
+        readableAfterMs: WIKI_SWEEP_TIMELINE.drawMs,
+      }));
+    }
   };
 
   const check = () => {
@@ -415,7 +392,7 @@ export function createWikiDisclosureController(
   };
 
   const abort = () => {
-    for (const occurrenceId of [...running.keys()]) finish(occurrenceId, true);
+    for (const occurrenceId of [...running.keys()]) interrupt(occurrenceId);
   };
 
   return Object.freeze({
@@ -431,6 +408,9 @@ export function createWikiDisclosureController(
       for (const occurrenceId of undisclosable) {
         if (!live.has(occurrenceId)) undisclosable.delete(occurrenceId);
       }
+      for (const occurrenceId of interruptions.keys()) {
+        if (!live.has(occurrenceId)) interruptions.delete(occurrenceId);
+      }
       if (nextContext.blocked) abort();
       requestMarkSync();
       arm();
@@ -442,6 +422,7 @@ export function createWikiDisclosureController(
       for (const disclosure of running.values()) disclosure.stop();
       running.clear();
       veiled.clear();
+      interruptions.clear();
       if (schedule !== null) window.clearTimeout(schedule);
       schedule = null;
       if (markFrame !== null) window.cancelAnimationFrame(markFrame);
@@ -465,7 +446,8 @@ export function createWikiDisclosureController(
 
 type MorphCallbacks = Readonly<{
   veil: (occurrenceId: string, range: Range | null) => void;
-  done: (disclosed: boolean) => void;
+  done: () => void;
+  interrupted: () => void;
 }>;
 
 const COPIED_TEXT_PROPERTIES = Object.freeze([
@@ -566,7 +548,7 @@ function playMorph(
     overlay.remove();
   };
   const abort = () => {
-    if (!stopped) callbacks.done(true);
+    if (!stopped) callbacks.interrupted();
   };
 
   watchDisclosureAbort(element, host, range, abort, observers, removeListeners);
@@ -614,7 +596,7 @@ function playMorph(
   }, timeline.shiverEndMs);
   void animations.at(-1)!.finished.then(
     () => {
-      if (!stopped) callbacks.done(true);
+      if (!stopped) callbacks.done();
     },
     () => undefined,
   );
@@ -631,7 +613,8 @@ function playSweep(
   host: HTMLElement,
   range: Range,
   fragments: readonly ClientTextRect[],
-  done: (disclosed: boolean) => void,
+  done: () => void,
+  interrupted: () => void,
 ): (() => void) | null {
   if (typeof Element.prototype.animate !== "function" || fragments.length === 0) return null;
   const hostRect = host.getBoundingClientRect();
@@ -681,11 +664,11 @@ function playSweep(
     for (const bar of bars) bar.remove();
   };
   watchDisclosureAbort(element, host, range, () => {
-    if (!stopped) done(true);
+    if (!stopped) interrupted();
   }, observers, removeListeners);
   void Promise.all(animations.map((animation) => animation.finished)).then(
     () => {
-      if (!stopped) done(true);
+      if (!stopped) done();
     },
     () => undefined,
   );

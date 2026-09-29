@@ -1,4 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { nodeActionLensCopy } from "../features/matter/components/node-action-lens-copy";
+import { wikiOccurrenceDescription } from "../features/matter/components/wiki-occurrence-description-copy";
 import { wikiTakeoverCopy } from "../features/matter/components/wiki-takeover-copy";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
@@ -8,6 +10,9 @@ const TRANSCRIPT = `我觉得 ${HEARD} 很重要`;
 const ADMITTED = `我觉得 ${CANONICAL} 很重要。`;
 const REVERTED = `我觉得 ${HEARD} 很重要。`;
 const TAKEOVER = wikiTakeoverCopy("zh-CN");
+const LENS = nodeActionLensCopy("zh-CN");
+// A takeover dismissed sooner than this after it appears was not read.
+const TAKEOVER_READABLE_MS = 500;
 const WIKI_TITLE = "词典 WIKI";
 // MediaRecorder emits 250 ms chunks; one interval plus headroom proves audio.
 const MIN_SYNTHETIC_CAPTURE_MS = 350;
@@ -90,12 +95,65 @@ for (const viewport of VIEWPORTS) {
     await expect(page.locator(".wiki-takeover")).toHaveCount(0);
     await expectMarkCount(page, 1);
 
-    // Escape from a reopened takeover is an inspection.
+    // Escape from a reopened takeover, once it could be read, is an inspection.
     await tapWord(page, passage, CANONICAL);
     await expect(page.locator(".wiki-takeover")).toBeVisible();
+    await page.waitForTimeout(TAKEOVER_READABLE_MS + 200);
     await page.keyboard.press("Escape");
     await expect(page.locator(".wiki-takeover")).toHaveCount(0);
     await expectMarkCount(page, 0);
+    expect(errors).toEqual([]);
+  });
+
+  test(`the keyboard reaches and keeps a Wiki change at ${viewport.name} width`, async ({ page }) => {
+    const errors = collectBrowserErrors(page);
+    const passage = await admitWikiPassage(page, viewport);
+    await expectMarkCount(page, 1);
+    const text = passage.locator(".spatial-thought__text");
+    // Assistive technology hears that the passage holds a change to review.
+    await expect(text).toHaveAccessibleDescription(wikiOccurrenceDescription("zh-CN", 1));
+
+    await text.focus();
+    await page.keyboard.press("ArrowRight");
+    const lens = page.getByRole("toolbar", { name: LENS.actions });
+    await expect(lens).toBeVisible();
+    await page.keyboard.press("End");
+    const review = lens.getByRole("button", { name: LENS.wikiReview(HEARD, CANONICAL) });
+    await expect(review).toBeFocused();
+    await page.keyboard.press("Enter");
+
+    const takeover = page.getByRole("group", { name: TAKEOVER.changed(HEARD, CANONICAL) });
+    await expect(takeover).toBeVisible();
+    await expect(takeover.getByRole("button", { name: TAKEOVER.keepLabel(CANONICAL) })).toBeFocused();
+    await expectWithinViewport(page, takeover);
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".wiki-takeover")).toHaveCount(0);
+    await expectMarkCount(page, 0);
+    // Keep hands focus back to the passage, which no longer describes a change.
+    await expect(text).toBeFocused();
+    await expect(text).toHaveAccessibleDescription("");
+    await expectPlainText(passage, ADMITTED);
+    expect(errors).toEqual([]);
+  });
+
+  test(`a double-click on a marked word selects its passage and settles nothing at ${viewport.name} width`, async ({ page }) => {
+    const errors = collectBrowserErrors(page);
+    const passage = await admitWikiPassage(page, viewport);
+    await expectMarkCount(page, 1);
+    await clearSelection(page, passage);
+
+    const point = await wordPoint(passage, CANONICAL);
+    await page.mouse.dblclick(point.x, point.y);
+    await expect(passage).toHaveAttribute("data-selected", "true");
+    await expect(page.locator(".wiki-takeover")).toHaveCount(0);
+    // The takeover the first press opened was never read: the word waits on.
+    await page.waitForTimeout(TAKEOVER_READABLE_MS + 200);
+    await expectMarkCount(page, 1);
+
+    // A later single tap still opens the same word.
+    await tapWord(page, passage, CANONICAL);
+    await expect(page.getByRole("group", { name: TAKEOVER.changed(HEARD, CANONICAL) }))
+      .toBeVisible();
     expect(errors).toEqual([]);
   });
 }
@@ -326,7 +384,12 @@ async function admitVoice(page: Page, expectedNodeCount: number): Promise<void> 
 
 /** Taps the centre of one word's first rendered fragment, as a finger would. */
 async function tapWord(page: Page, passage: Locator, word: string): Promise<void> {
-  const point = await passage.locator(".spatial-thought__text").evaluate((element, target) => {
+  const point = await wordPoint(passage, word);
+  await page.mouse.click(point.x, point.y);
+}
+
+async function wordPoint(passage: Locator, word: string): Promise<{ x: number; y: number }> {
+  return passage.locator(".spatial-thought__text").evaluate((element, target) => {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
     for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
       const text = node as Text;
@@ -340,7 +403,17 @@ async function tapWord(page: Page, passage: Locator, word: string): Promise<void
     }
     throw new Error("word not rendered");
   }, word);
-  await page.mouse.click(point.x, point.y);
+}
+
+/** Leaves no passage selected, so a later selection is the gesture's own. */
+async function clearSelection(page: Page, passage: Locator): Promise<void> {
+  if (await passage.getAttribute("data-selected") === null) return;
+  const canvas = await page.locator(".matter-canvas").boundingBox();
+  const text = await passage.locator(".spatial-thought__text").boundingBox();
+  if (canvas === null || text === null) throw new Error("canvas must be measurable");
+  // Blank paper beside the passage, well clear of the tool rail.
+  await page.mouse.click(canvas.x + 12, Math.min(canvas.y + canvas.height - 12, text.y + text.height + 48));
+  await expect(passage).not.toHaveAttribute("data-selected", "true");
 }
 
 async function expectMarkCount(page: Page, count: number): Promise<void> {
