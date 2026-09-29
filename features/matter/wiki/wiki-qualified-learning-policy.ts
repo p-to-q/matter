@@ -57,7 +57,7 @@ export const MATTER_WIKI_QUALIFIED_LEARNING_POLICY = Object.freeze({
       "locale-segment-v1": 1,
     }),
   }),
-  policySourceDigest: "sha256:55ae9c27e8ee6f7b2b0bb0c848a27c7c441804c46c42e32b60468c5770c9f267",
+  policySourceDigest: "sha256:51e5856fb9c70a207891a43ef29ab7712cb403fc7461f60a9abd3c53babdcb55",
   corpus: Object.freeze({
     corpusVersion: "wiki-learning-policy-v3-corpus/1",
     corpusDigest: "sha256:1966beb0b5336edbe83c81bc3c7955d870dc0325b35460edcdafac988e9e08ab",
@@ -65,5 +65,5 @@ export const MATTER_WIKI_QUALIFIED_LEARNING_POLICY = Object.freeze({
   }),
   resultDigest: "sha256:7dc268d3382041b97044ed021bb5fa9a7d160636cb4cb9f736604419f49584c7",
   producerQualificationDigest:
-    "sha256:149281dc7dde4c33cc9dda8366566a2876b6ae43e14e09c10a82bd3d45cf462a",
+    "sha256:9c818096d7b1f73a29348bbfaee92721970b9d1a7ead9960d0d258ca8bea3dbb",
 }) satisfies WikiQualifiedLearningPolicyRelease;

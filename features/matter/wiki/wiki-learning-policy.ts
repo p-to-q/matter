@@ -97,6 +97,66 @@ export function isWikiAliasEvidenceProducer(
   return typeof value === "string" && Object.hasOwn(WIKI_ALIAS_PRODUCER_WEIGHTS, value);
 }
 
+/**
+ * Explicit, versioned producer precedence. Lower rank wins wherever two
+ * producers describe the same thing in one human turn, and orders otherwise
+ * tied competitors deterministically; no decision depends on producer-name
+ * spelling or on the order in which a caller listed events.
+ *
+ * Relation rank: a stronger per-observation weight first; among equal weights,
+ * the narrower relation first. `claimsCollectionSource` says whether a unique
+ * relation from this producer owns its observed source form in the same turn,
+ * so broad term collection does not also teach that source as a canonical and
+ * make the relation unreachable. Orthographic internal edits claim their
+ * source because such a form is a misspelling, not a word. Pronunciation
+ * producers do not: their sources are frequently real words, and letting such
+ * a word become canonical is a deliberate no-op veto on a risky rewrite.
+ */
+export const WIKI_PRODUCER_PRECEDENCE_VERSION = 1 as const;
+
+export const WIKI_ALIAS_PRODUCER_PRECEDENCE: Readonly<Record<
+  WikiAliasEvidenceProducer,
+  Readonly<{ rank: number; claimsCollectionSource: boolean }>
+>> = Object.freeze({
+  "en-exact-homophone-v1": Object.freeze({ rank: 1, claimsCollectionSource: false }),
+  "zh-exact-homophone-v1": Object.freeze({ rank: 2, claimsCollectionSource: false }),
+  "latin-internal-edit-v2": Object.freeze({ rank: 3, claimsCollectionSource: true }),
+  "zh-final-pair-v1": Object.freeze({ rank: 4, claimsCollectionSource: false }),
+  "en-metaphone-v1": Object.freeze({ rank: 5, claimsCollectionSource: false }),
+  "legacy-v1": Object.freeze({ rank: 6, claimsCollectionSource: false }),
+});
+
+/** A distinctive shape is more specific evidence than a broad locale segment. */
+export const WIKI_TERM_PRODUCER_PRECEDENCE: Readonly<Record<
+  WikiStoredTermEvidenceProducer,
+  number
+>> = Object.freeze({
+  "shape-specific-v1": 1,
+  "locale-segment-v1": 2,
+  "legacy-term-v1": 3,
+});
+
+export function compareWikiAliasProducerPrecedence(
+  left: WikiAliasEvidenceProducer,
+  right: WikiAliasEvidenceProducer,
+): number {
+  return WIKI_ALIAS_PRODUCER_PRECEDENCE[left].rank -
+    WIKI_ALIAS_PRODUCER_PRECEDENCE[right].rank;
+}
+
+export function compareWikiTermProducerPrecedence(
+  left: WikiStoredTermEvidenceProducer,
+  right: WikiStoredTermEvidenceProducer,
+): number {
+  return WIKI_TERM_PRODUCER_PRECEDENCE[left] - WIKI_TERM_PRODUCER_PRECEDENCE[right];
+}
+
+export function wikiAliasProducerClaimsCollectionSource(
+  producer: WikiAliasEvidenceProducer,
+): boolean {
+  return WIKI_ALIAS_PRODUCER_PRECEDENCE[producer].claimsCollectionSource;
+}
+
 export type WikiAutomaticTermPhase = "candidate" | "collected";
 
 export type WikiTermEvidence = Readonly<{
@@ -401,7 +461,8 @@ export function resolveWikiAliasCompetition(
     )
     .sort((left, right) =>
       right.score - left.score ||
-      left.candidate.candidateId.localeCompare(right.candidate.candidateId)
+      compareWikiAliasProducerPrecedence(left.candidate.producer, right.candidate.producer) ||
+      compareCodeUnits(left.candidate.candidateId, right.candidate.candidateId)
     );
 
   if (eligible.length === 0) return demoteAndFreezeAliasCandidates(candidates);
@@ -974,6 +1035,11 @@ function assertReplayBounds(
 
 function saturatingIncrement(value: number): number {
   return Math.min(MAX_WIKI_LEARNING_COUNT, value + 1);
+}
+
+function compareCodeUnits(left: string, right: string): number {
+  if (left === right) return 0;
+  return left < right ? -1 : 1;
 }
 
 function negateCount(value: number): number {

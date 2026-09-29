@@ -5,7 +5,10 @@ import {
   wikiRangeOverlapsProtected,
 } from "./canonicalize-wiki-text";
 import { isWikiCanonical } from "./wiki-invariants";
-import type { WikiTermEvidenceProducer } from "./wiki-learning-policy";
+import {
+  compareWikiTermProducerPrecedence,
+  type WikiTermEvidenceProducer,
+} from "./wiki-learning-policy";
 import {
   MAX_WIKI_OBSERVATIONS_PER_BATCH,
   type WikiObserveEvidenceEvent,
@@ -123,8 +126,7 @@ export function collectCommittedWikiTermsResult(
     const previous = events.get(key);
     if (previous === undefined || (
       previous.source === "recent-material" &&
-      previous.producer === "locale-segment-v1" &&
-      producer === "shape-specific-v1"
+      compareWikiTermProducerPrecedence(producer, previous.producer) < 0
     )) events.set(key, event);
     if (events.size > MAX_WIKI_OBSERVATIONS_PER_BATCH) {
       return Object.freeze({ status: "censored", events: Object.freeze([]) });

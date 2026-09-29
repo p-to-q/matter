@@ -6,6 +6,7 @@ import {
   normalizeWikiEligibleRanges,
   wikiRangeOverlapsProtected,
 } from "./canonicalize-wiki-text";
+import { wikiAliasProducerClaimsCollectionSource } from "./wiki-learning-policy";
 
 /** Ephemeral human-material envelope; it is never stored or exported. */
 export type WikiAdmissionObservation = Readonly<{
@@ -23,9 +24,10 @@ export type WikiAdmissionTurn = Readonly<{
 
 /**
  * Keeps collection and fitting ledgers independent without teaching a known
- * bounded Latin fitting source back as a canonical in the same admission.
- * Only one unique relation may suppress collection; competing fitting targets
- * remain ambiguous and therefore do not own the source.
+ * relation source back as a canonical in the same admission. Only a unique
+ * relation from a producer whose precedence entry claims its collection
+ * source may suppress collection; competing targets remain ambiguous and
+ * therefore do not own the source.
  */
 export function combineWikiAdmissionEvidence(
   termEvents: readonly WikiObserveEvidenceEvent[],
@@ -34,7 +36,7 @@ export function combineWikiAdmissionEvidence(
   const targetsBySource = new Map<string, Set<string>>();
   for (const event of fittingEvents) {
     if (event.source !== "machine-inference" ||
-        event.producer !== "latin-internal-edit-v2") continue;
+        !wikiAliasProducerClaimsCollectionSource(event.producer)) continue;
     const key = admissionLexicalKey(event.locale, event.form);
     const targets = targetsBySource.get(key) ?? new Set<string>();
     targets.add(event.canonical);

@@ -15,7 +15,7 @@ export const MATTER_WIKI_RUNTIME_PRODUCER_RELEASES = Object.freeze([
   release(
     "latin-internal-edit-v2",
     "2.0.0",
-    "sha256:00432d582420e0e6280dd8298ec11a2b58348a7e1bdcfe8511f47f9d688dfc6e",
+    "sha256:560a2c801c955aeb198be7008234937edf8ad70a67ccc92db49de9c1a28bbf95",
     "ascii-latin",
     "1.0.0",
     "sha256:64ab8d4ad926cba5ba19adc8fc85c0f17bc62d0c12d0e85b332aaa6d2c075ef6",
@@ -25,7 +25,7 @@ export const MATTER_WIKI_RUNTIME_PRODUCER_RELEASES = Object.freeze([
   release(
     "locale-segment-v1",
     "1.0.0",
-    "sha256:ce8838b5630b30cd02c49cd29b820c22337cafe1bfbffbad8975e6e425c9d754",
+    "sha256:98e92e7d7405d9fb1d525e065e2f1eefd785c5f7a3c81893740a103c1edd3338",
     "ecmascript-intl-segmenter-conformance",
     "fixture/2",
     "sha256:3d8c9c792f4e8346a66603fac32c5c1a048b455da1e24fd169c306c2cd30263c",
@@ -35,7 +35,7 @@ export const MATTER_WIKI_RUNTIME_PRODUCER_RELEASES = Object.freeze([
   release(
     "shape-specific-v1",
     "1.0.0",
-    "sha256:ce8838b5630b30cd02c49cd29b820c22337cafe1bfbffbad8975e6e425c9d754",
+    "sha256:98e92e7d7405d9fb1d525e065e2f1eefd785c5f7a3c81893740a103c1edd3338",
     "ecmascript-intl-segmenter-conformance",
     "fixture/2",
     "sha256:3d8c9c792f4e8346a66603fac32c5c1a048b455da1e24fd169c306c2cd30263c",

@@ -45,6 +45,8 @@ import {
   WIKI_ALIAS_PRODUCER_WEIGHTS,
   advanceWikiAliasQuietTurn,
   advanceWikiTermQuietTurn,
+  compareWikiAliasProducerPrecedence,
+  compareWikiTermProducerPrecedence,
   isQualifiedCollectedWikiTermEvidence,
   observeWikiAliasCandidate,
   observeWikiTermEvidence,
@@ -309,18 +311,13 @@ export function applyWikiObservationBatch(
   for (const event of admittedEvents) {
     // A human-admission tick can mention one canonical through several visible
     // occurrences. Recurrence is evidence across turns, not raw frequency
-    // within one material change. Alias relations remain descriptor-specific.
-    const key = event.source === "recent-material"
-      ? JSON.stringify([event.source, event.locale, event.canonical])
-      : JSON.stringify([
-          event.source,
-          event.locale,
-          event.channel,
-          event.boundary,
-          event.form,
-          event.canonical,
-        ]);
-    unique.set(key, event);
+    // within one material change. When two producers describe the same term
+    // or relation in one turn, explicit precedence decides, never input order.
+    const key = observationIdentity(event);
+    const previous = unique.get(key);
+    if (previous === undefined || compareObservationProducer(event, previous) < 0) {
+      unique.set(key, event);
+    }
   }
   let working = advanceUnobservedEvidence(state, [...unique.values()], dispositions);
   for (const event of [...unique.values()].sort(compareObservation)) {
@@ -793,6 +790,32 @@ function advanceUnobservedEvidence(
     aliasEvidence,
   });
   return validateWikiState(next).ok ? next : state;
+}
+
+function observationIdentity(event: WikiObserveEvidenceEvent): string {
+  return event.source === "recent-material"
+    ? JSON.stringify([event.source, event.locale, event.canonical])
+    : JSON.stringify([
+        event.source,
+        event.locale,
+        event.channel,
+        event.boundary,
+        event.form,
+        event.canonical,
+      ]);
+}
+
+function compareObservationProducer(
+  left: WikiObserveEvidenceEvent,
+  right: WikiObserveEvidenceEvent,
+): number {
+  if (left.source === "recent-material" && right.source === "recent-material") {
+    return compareWikiTermProducerPrecedence(left.producer, right.producer);
+  }
+  if (left.source === "machine-inference" && right.source === "machine-inference") {
+    return compareWikiAliasProducerPrecedence(left.producer, right.producer);
+  }
+  return 0;
 }
 
 function inferObservationDispositions(

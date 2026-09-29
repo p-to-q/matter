@@ -1272,6 +1272,34 @@ describe("Wiki evidence and authority", () => {
     expect(state.revision).toBe(saturatedRevision);
   });
 
+  it("lets explicit precedence, not input order, choose one producer per turn", () => {
+    const base = apply(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Engelbart", scope: "both",
+    });
+    const latin = {
+      ...observe("machine-inference", "Engelbart"),
+      producer: "latin-internal-edit-v2" as const,
+    };
+    const metaphone = { ...latin, producer: "en-metaphone-v1" as const };
+    for (const order of [[latin, metaphone], [metaphone, latin]]) {
+      expect(applyObservationBatch(base, order).aliasEvidence).toEqual([
+        expect.objectContaining({ producer: "latin-internal-edit-v2", support: 1 }),
+      ]);
+    }
+
+    const broad = observe("recent-material", "OpenAI");
+    const shape = { ...broad, producer: "shape-specific-v1" as const };
+    for (const order of [[broad, shape], [shape, broad]]) {
+      expect(applyObservationBatch(createEmptyWikiState(), order).termEvidence).toEqual([
+        expect.objectContaining({
+          producer: "shape-specific-v1",
+          phase: "collected",
+          support: 2,
+        }),
+      ]);
+    }
+  });
+
   it("rejects malformed events atomically", () => {
     const state = createEmptyWikiState();
     const malformedAlias = applyWikiEvent(state, {

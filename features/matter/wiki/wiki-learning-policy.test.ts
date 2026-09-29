@@ -9,7 +9,11 @@ import {
   advanceWikiTermQuietTurn,
   ageWikiAliasCandidate,
   ageWikiTermEvidence,
+  WIKI_ALIAS_PRODUCER_PRECEDENCE,
+  compareWikiAliasProducerPrecedence,
   compareWikiLearningCorpusEvaluations,
+  compareWikiTermProducerPrecedence,
+  wikiAliasProducerClaimsCollectionSource,
   decideWikiSoftCandidateAdmission,
   evaluateWikiLearningCorpus,
   evaluateWikiLearningInteractions,
@@ -299,6 +303,25 @@ describe("Wiki learning policy", () => {
     });
     expect(replay.candidates.map((candidate) => candidate.quietTurns))
       .toEqual([1, 1]);
+  });
+
+  it("orders tied competitors by explicit precedence rather than names", () => {
+    const tied = [
+      alias("zzz", "en-metaphone-v1", 10),
+      alias("aaa", "latin-internal-edit-v2", 10),
+    ];
+    const qualification = qualified("en-metaphone-v1", "latin-internal-edit-v2");
+    expect(activeIds(resolveWikiAliasCompetition(tied, qualification))).toEqual([]);
+    expect(compareWikiAliasProducerPrecedence("latin-internal-edit-v2", "en-metaphone-v1"))
+      .toBeLessThan(0);
+    expect(compareWikiAliasProducerPrecedence("en-exact-homophone-v1", "latin-internal-edit-v2"))
+      .toBeLessThan(0);
+    expect(compareWikiTermProducerPrecedence("shape-specific-v1", "locale-segment-v1"))
+      .toBeLessThan(0);
+    expect(new Set(Object.values(WIKI_ALIAS_PRODUCER_PRECEDENCE)
+      .map((entry) => entry.rank)).size).toBe(6);
+    expect((Object.keys(WIKI_ALIAS_PRODUCER_PRECEDENCE) as WikiAliasEvidenceProducer[])
+      .filter(wikiAliasProducerClaimsCollectionSource)).toEqual(["latin-internal-edit-v2"]);
   });
 
   it("bounds capacity and makes zero-support candidates evictable", () => {
