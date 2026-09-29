@@ -398,7 +398,7 @@ describe("admission interaction reducer", () => {
     }).state).toMatchObject({ phase: "requesting", attempt: 2, anchor: { baseRevision: 6 } });
   });
 
-  it("keeps submitted words through a stale commit, bounded to one node", () => {
+  it("keeps submitted words through any failed commit, bounded to one node", () => {
     const stale = reduceAdmissionInteraction(committing("the words I said"), {
       type: "commit-failed",
       token: "voice_1",
@@ -425,7 +425,24 @@ describe("admission interaction reducer", () => {
       attempt: 1,
       errorCode: "COMMIT_REJECTED",
     }).state;
-    expect(rejected).not.toHaveProperty("transcript");
+    expect(rejected).toMatchObject({
+      errorCode: "COMMIT_REJECTED",
+      submitted: true,
+      transcript: "the words I said",
+    });
+    expect(reduceAdmissionInteraction(committing("the words I said"), {
+      type: "commit-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "INTERNAL_FAILURE",
+    }).state).toMatchObject({ transcript: "the words I said" });
+    // Words before a commit are not yet held; failures there hold nothing.
+    expect(reduceAdmissionInteraction(transcribing(), {
+      type: "transcription-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "TRANSCRIPTION_FAILED",
+    }).state).not.toHaveProperty("transcript");
     const oversized = reduceAdmissionInteraction(committing("念".repeat(2_001)), {
       type: "commit-failed",
       token: "voice_1",

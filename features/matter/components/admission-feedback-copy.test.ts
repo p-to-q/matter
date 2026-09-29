@@ -49,6 +49,8 @@ describe("admission feedback copy", () => {
       .toBe("Where these words were going changed before they arrived.");
     expect(admissionFeedbackMessage("en-US", { ...held, transcript: undefined }))
       .toBe("That thought changed before the recording finished.");
+    expect(admissionFeedbackMessage("en-US", { ...held, errorCode: "COMMIT_REJECTED" }))
+      .toBe("These words could not be placed.");
     expect(admissionPlacementLabel("en-US", ANCHOR, null)).toBe("Place as the root thought");
     expect(admissionPlacementLabel("en-US", { ...CHILD, parentNodeId: "document" }, "document"))
       .toBe("Place as a top-level thought");
@@ -56,6 +58,8 @@ describe("admission feedback copy", () => {
       .toBe("Place below the selected material");
     for (const { value: language } of CANVAS_LANGUAGE_OPTIONS) {
       expect(admissionFeedbackMessage(language, held).length).toBeGreaterThan(0);
+      expect(admissionFeedbackMessage(language, { ...held, errorCode: "COMMIT_REJECTED" }))
+        .not.toBe(admissionFeedbackMessage(language, held));
       for (const anchor of [ANCHOR, CHILD, { ...CHILD, parentNodeId: "document" }]) {
         expect(admissionPlacementLabel(language, anchor, "document").length).toBeGreaterThan(0);
       }

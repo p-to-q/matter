@@ -17,6 +17,7 @@ type AdmissionFeedbackLocaleCopy = Readonly<{
   noAudio: string;
   staleTarget: string;
   heldWords: string;
+  heldWordsRejected: string;
   failed: string;
   stop: string;
   retry: string;
@@ -42,6 +43,7 @@ const COPY: Readonly<Record<CanvasLanguage, AdmissionFeedbackLocaleCopy>> = Obje
     noAudio: "No words were heard.",
     staleTarget: "That thought changed before the recording finished.",
     heldWords: "Where these words were going changed before they arrived.",
+    heldWordsRejected: "These words could not be placed.",
     failed: "Couldn’t turn that recording into words.",
     stop: "Stop recording",
     retry: "Record again",
@@ -65,6 +67,7 @@ const COPY: Readonly<Record<CanvasLanguage, AdmissionFeedbackLocaleCopy>> = Obje
     noAudio: "没有听到文字。",
     staleTarget: "录音结束前，这段想法已经发生变化。",
     heldWords: "这段话原本要放的位置，在它到达前变了。",
+    heldWordsRejected: "这段话没能放进材料。",
     failed: "没能把这段录音变成文字。",
     stop: "停止录音",
     retry: "重新录音",
@@ -88,6 +91,7 @@ const COPY: Readonly<Record<CanvasLanguage, AdmissionFeedbackLocaleCopy>> = Obje
     noAudio: "沒有聽到文字。",
     staleTarget: "錄音結束前，這段想法已經發生變化。",
     heldWords: "這段話原本要放的位置，在它到達前變了。",
+    heldWordsRejected: "這段話沒能放進材料。",
     failed: "沒能把這段錄音變成文字。",
     stop: "停止錄音",
     retry: "重新錄音",
@@ -111,6 +115,7 @@ const COPY: Readonly<Record<CanvasLanguage, AdmissionFeedbackLocaleCopy>> = Obje
     noAudio: "言葉を聞き取れませんでした。",
     staleTarget: "録音中に対象の考えが変更されました。",
     heldWords: "この言葉の置き場所が、届く前に変わりました。",
+    heldWordsRejected: "この言葉を配置できませんでした。",
     failed: "録音を文字にできませんでした。",
     stop: "録音を停止",
     retry: "もう一度録音",
@@ -134,6 +139,7 @@ const COPY: Readonly<Record<CanvasLanguage, AdmissionFeedbackLocaleCopy>> = Obje
     noAudio: "Es wurden keine Wörter erkannt.",
     staleTarget: "Der Gedanke wurde während der Aufnahme geändert.",
     heldWords: "Der Platz für diese Worte hat sich vor ihrem Eintreffen geändert.",
+    heldWordsRejected: "Diese Worte konnten nicht eingefügt werden.",
     failed: "Die Aufnahme konnte nicht in Text umgewandelt werden.",
     stop: "Aufnahme beenden",
     retry: "Erneut aufnehmen",
@@ -168,9 +174,8 @@ export function admissionFeedbackMessage(
   switch (state.phase) {
     case "error": {
       const copy = COPY[language];
-      return state.transcript === undefined
-        ? admissionErrorMessage(copy, state.errorCode)
-        : copy.heldWords;
+      if (state.transcript === undefined) return admissionErrorMessage(copy, state.errorCode);
+      return state.errorCode === "STALE_TARGET" ? copy.heldWords : copy.heldWordsRejected;
     }
     case "idle": return "";
     default: return admissionPhaseMessage(language, state.phase);

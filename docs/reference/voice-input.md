@@ -96,11 +96,12 @@ behalf. Words already submitted then become a `STALE_TARGET` error that holds
 them — bounded to one node's text, transient, and never persisted, logged, or
 placed in history — with a short preview and exactly two actions: place them
 at the current admission target, named by the same rule a new admission uses
-(root, top level, or below the selected material), or discard them. Placement
-is a new attempt that commits through the same revalidation, so a target lost
-again holds the words again. Retry never replaces held words. Before Stop, a
-lost parent ends capture with a visible stale-target error instead of a silent
-return to idle.
+(root, top level, or below the selected material), or discard them. Every other
+commit failure, a store rejection or a local fault, holds its words the same
+way under its own message. Placement is a new attempt that commits through the
+same revalidation, so a target lost again, or a second rejection, holds the
+words again. Retry never replaces held words. Before Stop, a lost parent ends
+capture with a visible stale-target error instead of a silent return to idle.
 
 The framework-free controller owns these serializable phases:
 

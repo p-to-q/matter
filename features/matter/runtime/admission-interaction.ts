@@ -61,8 +61,8 @@ export type AdmissionInteractionState =
       /** Stop is the submission boundary; submitted failures survive hidden UI. */
       readonly submitted: boolean;
       /**
-       * Submitted words whose target vanished. They leave this state only by
-       * an explicit placement or discard, never by retry or a timer.
+       * Submitted words a commit could not place. They leave this state only
+       * by an explicit placement or discard, never by retry or a timer.
        */
       readonly transcript?: string;
     });
@@ -308,10 +308,10 @@ function fail(
   state: Exclude<AdmissionInteractionState, { phase: "idle" } | { phase: "error" }>,
   errorCode: AdmissionErrorCode,
 ): AdmissionInteractionResult {
-  // Only a target conflict keeps words: every other commit failure would
-  // reject the same text again at any target.
+  // Every commit failure keeps the words it could not place: a target that
+  // vanished, a rejection, or a local fault. Transcription already bounds
+  // them to one node, so the bound here only refuses a malformed attempt.
   const transcript = state.phase === "committing" &&
-    errorCode === "STALE_TARGET" &&
     state.transcript.length <= MAX_NODE_TEXT_CODE_UNITS
     ? state.transcript
     : undefined;

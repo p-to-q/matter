@@ -418,6 +418,31 @@ describe("AdmissionDriver", () => {
     expect(h.driver.getSettlement()).toMatchObject({ attempt: 2, outcome: "withdrawn" });
   });
 
+  it("holds words a store rejection could not place and lets the person place them", async () => {
+    const receipts: AdmissionStoreReceipt[] = [
+      { operation: "commit", status: "rejected", revision: 4, errorCode: "HISTORY_LIMIT_EXCEEDED" },
+      { operation: "commit", status: "committed", revision: 5, affectedNodeIds: ["thought_1"] },
+    ];
+    const commit = vi.fn((): AdmissionStoreReceipt => receipts.shift()!);
+    const h = harness({ commit });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "COMMIT_REJECTED",
+      submitted: true,
+      transcript: "保留这句话。",
+    });
+    h.driver.place(ANCHOR);
+    await settle();
+    expect(commit).toHaveBeenCalledTimes(2);
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(h.driver.getSettlement()).toMatchObject({ attempt: 2, outcome: "committed" });
+  });
+
   it("re-anchors a retry after an unrelated revision so the turn is not dropped", async () => {
     const h = harness({
       transcribe: vi.fn(async () => {
