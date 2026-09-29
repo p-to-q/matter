@@ -205,6 +205,23 @@ const MaterialFilesWithLabels = dynamic(
 // the turn still owns the authoritative validation before it exposes input.
 const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
 const EMPTY_NODE_IDS: ReadonlySet<string> = new Set<string>();
+const MODIFIER_ONLY_KEYS: ReadonlySet<string> = new Set([
+  "Alt",
+  "AltGraph",
+  "CapsLock",
+  "Control",
+  "Fn",
+  "FnLock",
+  "Hyper",
+  "Meta",
+  "NumLock",
+  "OS",
+  "ScrollLock",
+  "Shift",
+  "Super",
+  "Symbol",
+  "SymbolLock",
+]);
 const ACTIVE_LAYOUT_NODE_SELECTOR = "[data-layout-node-id][data-thought-id]";
 
 export type RootedMaterialProps = {
@@ -1356,13 +1373,18 @@ export function RootedMaterial(props: RootedMaterialProps) {
   useEffect(() => {
     if (transformNotice === null) return;
     // An outcome notice stays until the person acts again, so a slow reader
-    // never loses it to a timer; any new gesture or key means they moved on.
+    // never loses it to a timer. A held key's auto-repeat or a lone modifier
+    // is not a new action.
     const acknowledge = () => acknowledgeTransformNotice();
+    const acknowledgeKey = (event: KeyboardEvent) => {
+      if (event.repeat || MODIFIER_ONLY_KEYS.has(event.key)) return;
+      acknowledgeTransformNotice();
+    };
     window.addEventListener("pointerdown", acknowledge, true);
-    window.addEventListener("keydown", acknowledge, true);
+    window.addEventListener("keydown", acknowledgeKey, true);
     return () => {
       window.removeEventListener("pointerdown", acknowledge, true);
-      window.removeEventListener("keydown", acknowledge, true);
+      window.removeEventListener("keydown", acknowledgeKey, true);
     };
   }, [acknowledgeTransformNotice, transformNotice]);
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
@@ -3396,14 +3418,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
           {materialTextSuccessAnnouncement(currentTransformChange.motionHint, props.locale)}
         </span>
       )}
-      {transformNotice === null ? null : (
-        <span className="visually-hidden" key={`expansion_${transformNotice.id}`} role="status">
-          {localizeExpansionOutcome(transformNotice.kind, props.locale)}
-        </span>
-      )}
-      {guidance.id === "expansion-parked" ? (
-        <span className="visually-hidden" role="status">{guidance.text}</span>
-      ) : null}
+      {/* Mounted empty first, so assistive technology observes each insertion. */}
+      <span aria-atomic="true" className="visually-hidden" role="status">
+        {transformNotice !== null ? (
+          <span key={`expansion_${transformNotice.id}`}>
+            {localizeExpansionOutcome(transformNotice.kind, props.locale)}
+          </span>
+        ) : guidance.id === "expansion-parked" ? (
+          <span key="expansion_parked">{guidance.text}</span>
+        ) : null}
+      </span>
       <PaperTexture />
       <header className="matter-header" data-canvas-interactive>
         <a className="matter-brand" href="https://www.ptoq.io/" aria-label="p to q — Matter">
