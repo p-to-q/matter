@@ -1,27 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
-// Force every question onto one cache key, which SHA-256 makes unreachable in
-// practice, to prove a hit is judged against its own question, not trusted.
-vi.mock("node:crypto", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("node:crypto")>();
-  return {
-    ...actual,
-    createHash: () => {
-      const hash = {
-        update: () => hash,
-        digest: () => "forced-collision",
-      };
-      return hash;
-    },
-  };
-});
 import { SEMANTIC_LABEL_PROMPT_VERSION } from "../material/semantic-label";
 import { PROTOCOL_VERSION } from "../tree/model";
 import type { LabelRequest } from "../protocol/label-contract";
 import type { ScenarioAdapter } from "./harness";
 import { generateLabel, resetLabelGeneratorState } from "./label-generator";
 
-function labelRequest(operationId: string, text: string): LabelRequest {
+const PAST = "呃，我觉得我们怀念的其实不是过去，而是那个过去仍然允许我们想象的生活。";
+const FORECAST = "呃，我觉得季度营收预测需要重新检查一下数据来源。";
+
+function labelRequest(
+  operationId: string,
+  text: string,
+  reference: LabelRequest["reference"] = {},
+): LabelRequest {
   return {
     protocolVersion: PROTOCOL_VERSION,
     promptVersion: SEMANTIC_LABEL_PROMPT_VERSION,
@@ -30,34 +22,49 @@ function labelRequest(operationId: string, text: string): LabelRequest {
     locale: "zh-CN",
     maxGraphemes: 9,
     text,
-    reference: {},
+    reference,
   };
 }
 
 afterEach(() => resetLabelGeneratorState());
 
 describe("label cache", () => {
-  it("never shows another question's label from a colliding entry", async () => {
-    const answers = ["想象的生活", "季度营收预测"];
+  it("serves each cached label only to the question it answered", async () => {
     let calls = 0;
-    const adapter: ScenarioAdapter = async () => ({ text: answers[calls++] ?? "" });
+    const adapter: ScenarioAdapter = async (call) => {
+      calls += 1;
+      const text = (call.input as { text: string }).text;
+      return { text: text.includes("季度营收预测") ? "季度营收预测" : "想象的生活" };
+    };
 
-    const first = await generateLabel(
-      labelRequest("first", "呃，我觉得我们怀念的其实不是过去，而是那个过去仍然允许我们想象的生活。"),
+    await generateLabel(labelRequest("first", PAST), new AbortController().signal, adapter);
+    await generateLabel(labelRequest("second", FORECAST), new AbortController().signal, adapter);
+    const past = await generateLabel(labelRequest("third", PAST), new AbortController().signal, adapter);
+    const forecast = await generateLabel(
+      labelRequest("fourth", FORECAST),
       new AbortController().signal,
       adapter,
     );
-    const second = await generateLabel(
-      labelRequest("second", "呃，我觉得季度营收预测需要重新检查一下数据来源。"),
-      new AbortController().signal,
-      adapter,
-    );
 
-    expect(first).toMatchObject({ source: "model", label: "想象的生活" });
-    // The stored label is well-formed but not grounded in this material, so
-    // adjudication refuses the hit and the question is asked afresh.
     expect(calls).toBe(2);
-    expect(second).toMatchObject({ source: "model", label: "季度营收预测" });
+    expect(past).toMatchObject({ source: "model", label: "想象的生活" });
+    expect(forecast).toMatchObject({ source: "model", label: "季度营收预测" });
+  });
+
+  it("never shows a cached label to a question that would refuse it", async () => {
+    const adapter: ScenarioAdapter = async () => ({ text: "想象的生活" });
+    await generateLabel(labelRequest("first", PAST), new AbortController().signal, adapter);
+
+    // The same material beside a sibling already named that way must not
+    // inherit the name: the label would blur into its sibling.
+    const beside = await generateLabel(
+      labelRequest("second", PAST, { siblingLabels: ["想象的生活"] }),
+      new AbortController().signal,
+      adapter,
+    );
+
+    expect(beside.label).not.toBe("想象的生活");
+    expect(beside.source).toBe("provisional");
   });
 
   it("never lets a different question join another question's flight", async () => {
@@ -68,17 +75,12 @@ describe("label cache", () => {
       return { text: text.includes("季度营收预测") ? "季度营收预测" : "想象的生活" };
     };
 
-    const first = generateLabel(
-      labelRequest("first", "呃，我觉得我们怀念的其实不是过去，而是那个过去仍然允许我们想象的生活。"),
-      new AbortController().signal,
-      adapter,
-    );
+    const first = generateLabel(labelRequest("first", PAST), new AbortController().signal, adapter);
     const second = generateLabel(
-      labelRequest("second", "呃，我觉得季度营收预测需要重新检查一下数据来源。"),
+      labelRequest("second", FORECAST),
       new AbortController().signal,
       adapter,
     );
-    // Both questions share a (forced) digest, yet each needs its own call.
     await vi.waitFor(() => expect(releases).toHaveLength(2));
     releases.forEach((release) => release());
 
@@ -94,9 +96,8 @@ describe("label cache", () => {
       await new Promise<void>((resolve) => releases.push(resolve));
       return { text: "想象的生活" };
     };
-    const text = "呃，我觉得我们怀念的其实不是过去，而是那个过去仍然允许我们想象的生活。";
-    const first = generateLabel(labelRequest("first", text), new AbortController().signal, adapter);
-    const second = generateLabel(labelRequest("second", text), new AbortController().signal, adapter);
+    const first = generateLabel(labelRequest("first", PAST), new AbortController().signal, adapter);
+    const second = generateLabel(labelRequest("second", PAST), new AbortController().signal, adapter);
     await vi.waitFor(() => expect(releases).toHaveLength(1));
     releases.forEach((release) => release());
 
