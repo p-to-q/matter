@@ -122,6 +122,25 @@ describe("Wiki occurrence registry", () => {
     for (const id of claimed) expect(registry.take(id, 40)).toEqual(ATTRIBUTION);
   });
 
+  it("renews only a claimed, unexpired attribution, and never revives one", () => {
+    const registry = createWikiOccurrenceRegistry();
+    const bounds = WIKI_OCCURRENCE_REGISTRY_BOUNDS;
+    registry.register("occ_open", ATTRIBUTION, 0);
+    registry.claim("occ_open", 0);
+    // The person opened the takeover late in the wait, then consulted Wiki.
+    expect(registry.renew("occ_open", bounds.claimedTtlMs - 1)).toBe(true);
+    expect(registry.renew("occ_open", 2 * bounds.claimedTtlMs - 2)).toBe(true);
+    expect(registry.take("occ_open", 3 * bounds.claimedTtlMs - 2)).toEqual(ATTRIBUTION);
+
+    registry.register("occ_unclaimed", ATTRIBUTION, 0);
+    expect(registry.renew("occ_unclaimed", 1)).toBe(false);
+    expect(registry.renew("occ_unknown", 1)).toBe(false);
+    registry.register("occ_expired", ATTRIBUTION, 0);
+    registry.claim("occ_expired", 0);
+    expect(registry.renew("occ_expired", bounds.claimedTtlMs + 1)).toBe(false);
+    expect(registry.take("occ_expired", bounds.claimedTtlMs + 1)).toBeNull();
+  });
+
   it("owns an immutable copy of the attribution", () => {
     const registry = createWikiOccurrenceRegistry();
     const mutable = { rule: { ...ATTRIBUTION.rule }, origin: ATTRIBUTION.origin };

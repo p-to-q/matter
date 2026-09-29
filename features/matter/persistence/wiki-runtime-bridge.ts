@@ -7,6 +7,7 @@ import {
 import {
   claimMatterWikiPublication,
   mintMatterWikiOccurrence,
+  renewMatterWikiOccurrence,
   takeMatterWikiOccurrence,
 } from "./wiki-occurrence-owner";
 import { matterWikiBasisPublication } from "./wiki-runtime-publication";
@@ -22,6 +23,7 @@ export {
   isMatterWikiAutomaticCollectionEnabled,
   isMatterWikiPhoneticFittingEnabled,
   mintMatterWikiOccurrence,
+  renewMatterWikiOccurrence,
 };
 
 /** A successful human turn may wake the local runtime, but never waits for it. */

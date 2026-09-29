@@ -55,6 +55,12 @@ export type WikiOccurrenceRegistry = Readonly<{
    * evicted, or expired id: its edit must not be offered as an occurrence.
    */
   claim(occurrenceId: string, nowMs: number): boolean;
+  /**
+   * Restarts a claimed entry's wait while the person is deciding about it (an
+   * open takeover, or the Wiki surface it handed off to). False when the entry
+   * is unknown, unclaimed, or already expired: renewal never revives one.
+   */
+  renew(occurrenceId: string, nowMs: number): boolean;
   /** Consumes one claimed, unexpired attribution. */
   take(occurrenceId: string, nowMs: number): WikiOccurrenceAttribution | null;
   size(): number;
@@ -122,6 +128,16 @@ export function createWikiOccurrenceRegistry(
         return false;
       }
       entry.claimedAtMs ??= nowMs;
+      return true;
+    },
+    renew(occurrenceId, nowMs) {
+      const entry = entries.get(occurrenceId);
+      if (entry === undefined || entry.claimedAtMs === null || !Number.isFinite(nowMs)) return false;
+      if (expired(entry, nowMs)) {
+        entries.delete(occurrenceId);
+        return false;
+      }
+      entry.claimedAtMs = Math.max(entry.claimedAtMs, nowMs);
       return true;
     },
     take(occurrenceId, nowMs) {

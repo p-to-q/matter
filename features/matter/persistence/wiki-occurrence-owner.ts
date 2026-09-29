@@ -49,6 +49,14 @@ export function claimMatterWikiPublication(
     : Object.freeze({ ...publication, edits: Object.freeze(edits) });
 }
 
+/**
+ * Keeps a committed occurrence attributable while the person decides about it
+ * in the takeover or the Wiki surface it handed off to.
+ */
+export function renewMatterWikiOccurrence(occurrenceId: string): void {
+  registry.renew(occurrenceId, monotonicNow());
+}
+
 /** Consumes one attribution; a second take of the same id returns nothing. */
 export function takeMatterWikiOccurrence(occurrenceId: string): WikiOccurrenceAttribution | null {
   return registry.take(occurrenceId, monotonicNow());

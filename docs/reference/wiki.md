@@ -208,7 +208,10 @@ answers every question with the empty set.
 - Wiki… hands the takeover to the settings dialog and keeps the occurrence
   suspended until that dialog has covered the paper and let it go again (or,
   if it never covers the paper, for 3 s of visible time). Nothing settles it
-  meanwhile except losing the word or leaving the page.
+  meanwhile except losing the word or leaving the page. Opening the takeover
+  and handing it to the dialog each restart the occurrence's 5 min registry
+  wait, so a word the person is still deciding about late in its life keeps
+  the attribution its Keep or revert records.
 - A Keep or revert that Wiki cannot record (a failed write or an attribution
   that already expired) is said once in the guidance line and announced
   politely: “Wiki could not save that.” The material change stands; the line

@@ -18,6 +18,7 @@ import {
   observeMatterWikiEvidence,
   readMatterWikiBasis,
   readMatterWikiInterpreter,
+  renewMatterWikiOccurrence,
   settleMatterWikiOccurrence,
 } from "../persistence/wiki-runtime-bridge";
 import type { WikiOccurrenceDriver } from "../interaction/wiki-occurrence-driver";
@@ -45,6 +46,7 @@ const readMaterial = (): MaterialView => {
 const wikiOccurrences: WikiOccurrenceDriver = createLazyWikiOccurrenceDriver({
   readMaterial,
   settle: settleMatterWikiOccurrence,
+  renew: renewMatterWikiOccurrence,
   restore: (request) => matterStore.getState().restoreHumanTextRange({
     ...request,
     commandId: `human_restore_${createOperationId()}`,
