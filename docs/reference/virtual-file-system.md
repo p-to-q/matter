@@ -102,18 +102,64 @@ latest pending bundle is retained. Inside one IndexedDB readwrite transaction,
 save compares the tab's base `writeGeneration` and increments it on success.
 Mismatch is a recoverable `PERSISTENCE_CONFLICT`, never last-write-wins; this
 also covers two tabs producing different trees with the same tree revision.
-The conflict control explicitly reloads and hydrates the newer validated stored
-tree, clearing local history. It never advances the stale generation and never
-labels the dirty local tree saved. If a newer local commit arrives while reload
-is in flight, hydration is refused and the conflict remains visible.
+Two tabs that commit the same revision with byte-identical bundles (both
+relocalizing an untouched seed, say) are not in conflict: the losing save adopts
+the stored generation, with an empty journal basis so its next save rewrites
+its own steps whole. The conflict control explicitly reloads and hydrates the
+newer validated stored tree, clearing local history. It never advances the
+stale generation and never labels the dirty local tree saved. If a newer local
+commit arrives while reload is in flight, hydration is refused and the conflict
+remains visible.
 
 Runtime persistence state tracks base generation, persisted revision, queued
-revision, dirty revision, and error. Write failure does not roll back material;
-pointer retry saves the latest dirty bundle for transient write failures;
-generation conflict instead requires explicit reload. `visibilitychange: hidden`
-requests a flush. The footer may say only that a write is in flight; its
-local-device identity never promises that a dirty revision reached storage.
-Browser crash between commit and IndexedDB completion cannot be promised away.
+revision, dirty revision, error, whether the tab holds unsaved material (a
+pending or in-flight write, or an import), a blocked upgrade, and the history
+notice. Write failure does not roll back material; pointer retry saves the
+latest dirty bundle for transient write failures; generation conflict instead
+requires explicit reload. Browser crash between commit and IndexedDB completion
+cannot be promised away.
+
+### Other tabs and the page lifecycle
+
+Every committed save, activated import, rollback, and repair is announced on the
+`matter.document-generation.v1` BroadcastChannel as `{ version: 1, treeId,
+generation, schema }`, never material. A receiver ignores a generation it
+already holds. With no unsaved material it loads and hydrates the newer row at
+once while hidden, otherwise when no pointer or admission is in flight
+(in-flight AI turns revalidate by document epoch); a commit that lands during
+that read turns it into a conflict. With unsaved material the newer row is a
+conflict immediately. A frozen or back-forward-cached page misses broadcasts,
+so `visibilitychange` to visible and `pageshow` with `persisted` perform one
+read-only generation lookup treated the same way. Web Locks are not used: the
+generation compare already lives inside one transaction, and a long-held lock
+would make pages ineligible for the back-forward cache.
+
+A hidden page no longer requests a flush: publication already starts the one
+write immediately. `beforeunload` is attached only while material is at risk —
+unsaved and either refused by storage or still writing after one second — and
+removed as soon as it is saved.
+
+A newer schema is terminal for an older tab. `blocking` closes its connection
+and every later operation reports `PERSISTENCE_SUPERSEDED` without reopening;
+`VersionError` on open means the same, and a row whose `storageSchemaVersion`
+is newer is superseded, never corrupt, so Repair cannot let an older build
+overwrite it. A deletion from another tab (`blocking` with no new version) is
+`PERSISTENCE_CLEARED`, equally terminal. Such a tab offers only an export from
+memory and a page reload, and reloads by itself only when nothing is unsaved.
+The newer tab, when an older one does not close, keeps waiting and says so.
+
+Under storage pressure the save first reclaims recomputable caches (model labels
+beyond one maximum document; never a manual name) and retries once, then sheds
+durable undo steps as described below. WebKit's full-disk `UnknownError`
+classifies as storage-full, and a connection WebKit reports as lost is reopened
+and the operation retried once. A same-document archive import normally waits
+for unsaved material, but after a full or failed write the person may confirm
+replacing the refused material with the archive; the reservation then compares
+against the row this tab last loaded or saved, and a refusal (storage still
+full) keeps the unsaved material and its error. `navigator.storage.persisted()`
+is read at startup; `persist()` is requested only inside Export, Retry, or
+Replace, a refusal is remembered on the device, and Archive says that an
+exported copy is the safeguard when storage is not persistent.
 
 Continuous editing does not add a debounce window: the controller starts the
 first save immediately, permits one write at a time, and replaces at most one
@@ -122,9 +168,8 @@ reference already owned by the in-flight or pending save is ignored. This
 reference check does not widen the existing saved-state rule: after a revision
 is saved, that revision remains authoritative. A structurally divergent value
 claiming the same revision violates the caller invariant and is not promised a
-second write. `visibilitychange: hidden` requests the same immediate drain; it
-does not pretend that a browser can synchronously guarantee disk completion
-while suspending or crashing.
+second write. Nothing pretends that a browser can synchronously guarantee disk
+completion while suspending or crashing.
 
 The canonical slug allocator stops once the persisted 48-scalar/48-byte prefix
 is decided, but produces exactly the same normalized path as the original
@@ -197,12 +242,22 @@ took 0.05 ms and wrote no record. Headless Chromium 153 with a 31.2 MB,
 median (row, one record, six range deletes), recovery at 40.4 ms median, and the
 v5 layout's inline 31 MB rewrite at 24.5 ms per save.
 
-The material-index footer is deliberately not that recovery control. It keeps
-only the localized non-account identity and local-device line, with a brief
-saving phrase while a write is actually in flight. Conflict, storage-full,
-generic save failure, corrupt-row export/repair, retry, and reload of stored
-material are owned by the explicit Archive panel, so a durable failure remains
-recoverable without becoming permanent status chrome.
+The material-index footer is deliberately not a recovery control, but it no
+longer claims the material is kept when it is not. Its one localized line under
+the non-account identity reads, until resolved: "Not saved on this device"
+(write failed, storage full, damaged row), "Not saving in this browser"
+(IndexedDB unavailable, as in a private window), "A newer copy is open in
+another tab" (conflict), "A newer Matter is open in another tab" (superseded
+schema), "Local storage was cleared in another tab", "Close other Matter tabs
+to finish updating" (blocked upgrade), or the history notice; otherwise the
+local-device line, with a brief saving phrase while a write is in flight. An
+attention line carries a static ink dot, is announced once through a polite
+live region, and its only action is opening Archive; the Archive button carries
+the same dot, and the narrow drawer's toggle keeps its own cue. There is no
+toast, banner, or modal. Conflict, storage-full, generic save failure,
+corrupt-row export/repair, retry, reload of stored material, and the terminal
+export-and-reload path are owned by the explicit Archive panel, so a durable
+failure remains recoverable without becoming permanent status chrome.
 
 The outline relationship grammar stays pure, local, and presentation-only. For
 each same-parent group in the current visible outline:
@@ -312,7 +367,9 @@ ids/order/path, unreachable node, and version mismatch rejection; IndexedDB
 reload, coalescing, generation conflict, quota, and retry; undo journal
 round-trip, per-step writes, corrupt and missing records, stale or foreign-format
 manifests, v5 migration, import epochs with rollback, and quota shedding;
-ZIP export → import;
+cross-tab generation refresh and conflict, returning-page check, superseded and
+cleared storage, same-revision adoption, and replacing refused material by
+import; ZIP export → import;
 traversal, Unicode/case collision, compressed/expanded size, path depth, and
 entry count limits. Picker absence or cancellation never removes ZIP return.
 

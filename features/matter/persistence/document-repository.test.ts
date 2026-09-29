@@ -11,6 +11,7 @@ import {
   type TreeHistory,
 } from "../tree/history";
 import type { ThoughtTree, TreeCommand } from "../tree/model";
+import { MAX_NODES_PER_TREE } from "../tree/invariants";
 import {
   emptyHistoryJournal,
   FULL_HISTORY_RETENTION,
@@ -457,62 +458,189 @@ describe("IndexedDB document repository", () => {
     expect(openDB).toHaveBeenCalledTimes(2);
   });
 
-  it("does not let an older rejection clear a newer open", async () => {
-    let rejectFirst!: (reason: unknown) => void;
-    const firstOpen = new Promise<never>((_resolve, reject) => {
-      rejectFirst = reject;
-    });
-    vi.mocked(openDB)
-      .mockReturnValueOnce(firstOpen)
-      .mockResolvedValueOnce(memory as never);
+  it("waits through a blocked upgrade, reports it, and resumes when older tabs close", async () => {
+    let resolveOpen!: (database: MemoryDatabase) => void;
+    vi.mocked(openDB).mockReturnValueOnce(new Promise((resolve) => {
+      resolveOpen = resolve;
+    }) as never);
     const repository = createIndexedDbDocumentRepository();
+    const events: string[] = [];
+    repository.subscribeLifecycle((event) => events.push(event));
 
-    const firstLoad = repository.load("tree-1");
-    const lifecycle = vi.mocked(openDB).mock.calls[0]?.[2] as
-      | { blocked?: () => void; terminated?: () => void }
-      | undefined;
-    lifecycle?.blocked?.();
-    const secondLoad = repository.load("tree-1");
-    rejectFirst(new Error("older open failed"));
+    const loading = repository.load("tree-1");
+    lifecycleOf(0).blocked?.();
+    expect(events).toEqual(["upgrade-blocked"]);
+    resolveOpen(memory);
 
-    await expect(firstLoad).resolves.toMatchObject({ ok: false });
-    await expect(secondLoad).resolves.toEqual({ ok: true, value: null });
-    lifecycle?.terminated?.();
-    await expect(repository.load("tree-1")).resolves.toEqual({ ok: true, value: null });
-    expect(openDB).toHaveBeenCalledTimes(2);
+    await expect(loading).resolves.toEqual({ ok: true, value: null });
+    expect(events).toEqual(["upgrade-blocked", "upgrade-ready"]);
+    expect(openDB).toHaveBeenCalledOnce();
   });
 
-  it("closes a late blocked database without touching the explicit retry", async () => {
-    const older = new MemoryDatabase();
-    let resolveFirst!: (database: MemoryDatabase) => void;
-    const firstOpen = new Promise<MemoryDatabase>((resolve) => {
-      resolveFirst = resolve;
+  it("closes for good when another tab upgrades the schema, and never reopens it", async () => {
+    const repository = createIndexedDbDocumentRepository();
+    const events: string[] = [];
+    repository.subscribeLifecycle((event) => events.push(event));
+    await expect(repository.load("tree-1")).resolves.toEqual({ ok: true, value: null });
+
+    lifecycleOf(0).blocking?.(6, 7);
+    await vi.waitFor(() => expect(memory.closed).toBe(1));
+    expect(events).toEqual(["superseded"]);
+    await expect(repository.load("tree-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_SUPERSEDED" },
     });
-    vi.mocked(openDB)
-      .mockReturnValueOnce(firstOpen as never)
-      .mockResolvedValueOnce(memory as never);
+    await expect(save(repository, steps(seeded(), 0), UNKNOWN)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_SUPERSEDED" },
+    });
+    expect(openDB).toHaveBeenCalledOnce();
+  });
+
+  it("reports a database deleted by another tab as cleared rather than recreating it", async () => {
+    const repository = createIndexedDbDocumentRepository();
+    await repository.load("tree-1");
+
+    lifecycleOf(0).blocking?.(6, null);
+    await expect(save(repository, steps(seeded(), 0), UNKNOWN)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_CLEARED" },
+    });
+    expect(memory.snapshot()).toEqual({ rows: [], records: [] });
+  });
+
+  it("maps an older build's VersionError to superseded instead of unavailable", async () => {
+    vi.mocked(openDB).mockRejectedValueOnce(new DOMException("requested version is lower", "VersionError"));
     const repository = createIndexedDbDocumentRepository();
 
-    const firstLoad = repository.load("tree-1");
-    const lifecycle = vi.mocked(openDB).mock.calls[0]?.[2] as
-      | { blocked?: () => void; blocking?: () => void }
-      | undefined;
-    lifecycle?.blocked?.();
-    const secondLoad = repository.load("tree-1");
-    resolveFirst(older);
-
-    await expect(firstLoad).resolves.toMatchObject({
+    await expect(repository.load("tree-1")).resolves.toMatchObject({
       ok: false,
-      error: { code: "PERSISTENCE_UNAVAILABLE" },
+      error: { code: "PERSISTENCE_SUPERSEDED" },
     });
-    await expect(secondLoad).resolves.toEqual({ ok: true, value: null });
-    await vi.waitFor(() => expect(older.closed).toBe(1));
-    lifecycle?.blocking?.();
-    expect(older.closed).toBe(1);
+    await expect(repository.load("tree-1")).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_SUPERSEDED" },
+    });
+    expect(openDB).toHaveBeenCalledOnce();
+  });
 
-    await expect(repository.load("tree-1")).resolves.toEqual({ ok: true, value: null });
-    expect(memory.closed).toBe(0);
+  it("treats a row from a newer schema as superseded, never as damage to repair", async () => {
+    const repository = createIndexedDbDocumentRepository();
+    const session = steps(seeded(), 1);
+    memory.putRow({
+      storageSchemaVersion: 2,
+      treeId: session.tree.id,
+      writeGeneration: 9,
+      layout: "unknown to this build",
+    });
+    const before = memory.snapshot();
+
+    await expect(repository.load(session.tree.id)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_SUPERSEDED" },
+    });
+    await expect(repository.exportCorrupt(session.tree.id)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_SUPERSEDED" },
+    });
+    await expect(repository.replaceCorrupt({
+      treeId: session.tree.id,
+      treeRevision: session.tree.revision,
+      bundle: treeToBundle(session.tree),
+      history: session.history,
+      retention: FULL_HISTORY_RETENTION,
+    }, { treeId: session.tree.id, serialized: JSON.stringify(memory.row(session.tree.id)) })).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_SUPERSEDED" },
+    });
+    await expect(save(repository, session, { writeGeneration: 9, journal: emptyHistoryJournal(0) }))
+      .resolves.toMatchObject({ ok: false, error: { code: "PERSISTENCE_SUPERSEDED" } });
+    expect(memory.snapshot()).toEqual(before);
+    await expect(repository.readGeneration(session.tree.id)).resolves.toEqual({
+      ok: true,
+      value: { writeGeneration: 9, storageSchemaVersion: 2 },
+    });
+  });
+
+  it("adopts a row another tab wrote with byte-identical material instead of raising a conflict", async () => {
+    const tabA = createIndexedDbDocumentRepository();
+    const tabB = createIndexedDbDocumentRepository();
+    const base = steps(seeded(), 1);
+    const created = await save(tabA, base, UNKNOWN);
+    if (!created.ok) throw new Error(created.error.code);
+    // Both tabs reach the same revision with the same material.
+    const same = commitStep(base, "same");
+    const fromA = await save(tabA, same, created.value);
+    if (!fromA.ok) throw new Error(fromA.error.code);
+
+    const adopted = await save(tabB, undo(commitStep(same, "b_only")), created.value);
+    expect(adopted).toMatchObject({ ok: false, error: { code: "PERSISTENCE_CONFLICT" } });
+    const fromB = await save(tabB, same, created.value);
+    expect(fromB).toEqual({
+      ok: true,
+      value: { writeGeneration: fromA.value.writeGeneration, journal: emptyHistoryJournal(1) },
+    });
+    if (!fromB.ok) return;
+
+    const next = commitStep(same, "after_adoption");
+    await expect(save(tabB, next, fromB.value)).resolves.toMatchObject({ ok: true, value: { writeGeneration: 3 } });
+    expect((await loadValue(tabA, base.tree.id)).history).toEqual({ history: next.history, released: false });
+  });
+
+  it("reads only the stored generation and schema for a returning page", async () => {
+    const repository = createIndexedDbDocumentRepository();
+    await expect(repository.readGeneration("tree-1")).resolves.toEqual({ ok: true, value: null });
+    const session = steps(seeded(), 0);
+    await save(repository, session, UNKNOWN);
+
+    await expect(repository.readGeneration(session.tree.id)).resolves.toEqual({
+      ok: true,
+      value: { writeGeneration: 1, storageSchemaVersion: 1 },
+    });
+  });
+
+  it("classifies WebKit's full-disk UnknownError as storage full", async () => {
+    const repository = createIndexedDbDocumentRepository();
+    memory.failNextCommit(new DOMException("Database or disk is full", "UnknownError"));
+
+    await expect(save(repository, steps(seeded(), 0), UNKNOWN)).resolves.toMatchObject({
+      ok: false,
+      error: { code: "PERSISTENCE_STORAGE_FULL" },
+    });
+  });
+
+  it("reopens a connection WebKit reports as lost and retries the operation once", async () => {
+    const repository = createIndexedDbDocumentRepository();
+    const lost = () => new DOMException("Connection to Indexed Database server lost. Refresh the page to try again", "UnknownError");
+    memory.failNextCommit(lost());
+
+    await expect(save(repository, steps(seeded(), 0), UNKNOWN)).resolves.toMatchObject({
+      ok: true,
+      value: { writeGeneration: 1 },
+    });
     expect(openDB).toHaveBeenCalledTimes(2);
+
+    memory.failNextCommit(lost());
+    memory.failNextCommit(lost());
+    await expect(save(repository, commitStep(steps(seeded(), 0), "again"), {
+      writeGeneration: 1,
+      journal: emptyHistoryJournal(0),
+    })).resolves.toMatchObject({ ok: false, error: { code: "PERSISTENCE_WRITE_FAILED" } });
+  });
+
+  it("reclaims only model labels, keeping every name a person chose", async () => {
+    const repository = createIndexedDbDocumentRepository();
+    for (let index = 0; index < MAX_NODES_PER_TREE + 3; index += 1) {
+      memory.putLabel({ key: `tree model_${index}`, origin: "model", updatedAt: new Date(index).toISOString() });
+    }
+    memory.putLabel({ key: "tree person", origin: "user", updatedAt: new Date(0).toISOString() });
+
+    await expect(repository.reclaimDerivedStorage()).resolves.toBe(true);
+    const labels = memory.labels();
+    expect(labels.filter(({ origin }) => origin === "model")).toHaveLength(MAX_NODES_PER_TREE);
+    expect(labels.some(({ key }) => key === "tree person")).toBe(true);
+    expect(labels.some(({ key }) => key === "tree model_0")).toBe(false);
+    await expect(repository.reclaimDerivedStorage()).resolves.toBe(false);
   });
 });
 
@@ -520,6 +648,13 @@ type Session = Readonly<{ tree: ThoughtTree; history: TreeHistory }>;
 type Repository = ReturnType<typeof createIndexedDbDocumentRepository>;
 
 const UNKNOWN: SnapshotBasis = Object.freeze({ writeGeneration: null, journal: emptyHistoryJournal(0) });
+
+function lifecycleOf(call: number) {
+  return (vi.mocked(openDB).mock.calls[call]?.[2] ?? {}) as {
+    blocked?: () => void;
+    blocking?: (currentVersion: number, blockedVersion: number | null) => void;
+  };
+}
 
 function seeded(): ThoughtTree {
   return createSeededDocument().tree;
@@ -595,6 +730,10 @@ type Mode = "readonly" | "readwrite";
 const STORE_KEY_PATHS: Readonly<Record<string, string | readonly string[]>> = {
   snapshots: "treeId",
   historyEntries: ["treeId", "epoch", "stack", "position"],
+  labels: "key",
+};
+const INDEX_KEY_PATHS: Readonly<Record<string, readonly string[]>> = {
+  originUpdatedAt: ["origin", "updatedAt"],
 };
 
 /** The IndexedDB key order: numbers, then strings, then arrays element-wise. */
@@ -708,6 +847,14 @@ class MemoryDatabase {
       records: this.records(),
     };
   }
+
+  putLabel(label: StoredValue) {
+    this.stores.get("labels")!.set(JSON.stringify(label.key), { key: label.key as Key, value: structuredClone(label) });
+  }
+
+  labels(): StoredValue[] {
+    return [...this.stores.get("labels")!.values()].map(({ value }) => value);
+  }
 }
 
 class MemoryTransaction {
@@ -730,6 +877,10 @@ class MemoryTransaction {
       this.rejectDone = reject;
     });
     this.scheduleCommit();
+  }
+
+  get store() {
+    return this.names.length === 1 ? this.objectStore(this.names[0]!) : undefined;
   }
 
   objectStore(name: string) {
@@ -768,6 +919,28 @@ class MemoryTransaction {
         if (name === "historyEntries") this.database.recordPuts += 1;
         return key;
       }),
+      index: (indexName: string) => {
+        const keyPath = INDEX_KEY_PATHS[indexName]!;
+        const matching = (range: MemoryKeyRange) => [...store().entries()]
+          .map(([serialized, entry]) => ({
+            serialized,
+            indexKey: keyPath.map((part) => entry.value[part]) as Key,
+          }))
+          .filter(({ indexKey }) => range.includes(indexKey))
+          .sort((left, right) => compareKeys(left.indexKey, right.indexKey));
+        const cursorAt = (rows: ReturnType<typeof matching>, position: number): unknown =>
+          position >= rows.length ? null : {
+            delete: () => request(() => {
+              writable();
+              store().delete(rows[position]!.serialized);
+            }),
+            continue: () => request(() => cursorAt(rows, position + 1)),
+          };
+        return {
+          count: (range: MemoryKeyRange) => request(() => matching(range).length),
+          openCursor: (range: MemoryKeyRange) => request(() => cursorAt(matching(range), 0)),
+        };
+      },
       delete: (target: Key | MemoryKeyRange) => request(() => {
         writable();
         for (const [serialized, { key }] of store()) {

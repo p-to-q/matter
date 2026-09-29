@@ -79,6 +79,9 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__mode-action--archive,
 .material-files__mode-action--close { grid-column: 3; }
 .material-files__mode-action[aria-pressed="true"] { background: rgba(22,29,39,.07); color: var(--index-ink); }
+/* Archive carries the same static ink dot as the durability line it resolves. */
+.material-files__mode-action[data-attention]::after { width: 3px; height: 3px; flex: 0 0 auto; border-radius: 50%; background: currentColor; content: ""; }
+.material-files__mode-action[data-attention="risk"] { color: var(--active); }
 .material-files__mode-action:disabled { cursor: default; opacity: .42; }
 .material-files__section-label { min-width: 0; padding-left: 7px; color: var(--index-ink); font: 10px/1 var(--mono); letter-spacing: .025em; }
 :lang(zh) .material-files__mode-action,
@@ -223,6 +226,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .material-files__profile[data-state="error"] .material-files__profile-meta,
 .material-files__profile[data-state="error"] .material-files__profile-action { color: var(--active); }
 .material-files__status-dot { width: 3px; height: 3px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
+/* The durability line stays text: tapping it only opens Archive. */
+.material-files__durability { display: inline-flex; min-width: 0; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; cursor: pointer; }
+.material-files__durability > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.material-files__durability:hover:not(:disabled) > span:first-child,
+.material-files__durability:focus-visible > span:first-child { text-decoration: underline; text-underline-offset: 2px; }
+.material-files__durability:disabled { cursor: default; }
+.material-files__profile-meta[data-tone="notice"] { color: var(--index-muted); }
 .material-files__status-dot[data-saving="true"] { animation: material-saving-pulse 1.2s ease-in-out infinite; }
 
 @keyframes material-search-enter {

@@ -235,6 +235,7 @@ export type RootedMaterialProps = {
     retry: () => void;
     resolveConflict: () => void;
     acknowledgeHistoryNotice?: () => void;
+    storagePersisted?: boolean | null;
   }>;
   /** Fixture-only timing marks expose the cold canvas path without changing it. */
   performanceMarking?: boolean;
@@ -1776,9 +1777,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
         abortFixedExpansion();
         return props.archive!.validateImport(file);
       },
-      replaceImport: (file: File) => {
+      replaceImport: (file: File, options: Readonly<{ replaceUnsaved: boolean }>) => {
         abortFixedExpansion();
-        return props.archive!.replaceImport(file);
+        return props.archive!.replaceImport(file, options);
       },
     });
   }, [abortFixedExpansion, props.archive]);

@@ -1,7 +1,18 @@
-import type { IDBPObjectStore, IDBPTransaction } from "idb";
+import type { IDBPDatabase, IDBPObjectStore } from "idb";
 import { bundleToTree, type SnapshotBundle } from "./snapshot-codec";
-import { createMatterDatabaseHandle, STORAGE_SCHEMA_VERSION } from "./matter-database";
-import type { HistoryStackName, MatterDatabase, StoredSnapshot } from "./matter-database";
+import {
+  CLEARED_DATABASE_ERROR,
+  createMatterDatabaseHandle,
+  retainNewestModelLabels,
+  STORAGE_SCHEMA_VERSION,
+  SUPERSEDED_DATABASE_ERROR,
+} from "./matter-database";
+import type {
+  HistoryStackName,
+  MatterDatabase,
+  MatterDatabaseLifecycle,
+  StoredSnapshot,
+} from "./matter-database";
 import {
   assembleHistoryJournal,
   emptyHistoryJournal,
@@ -13,19 +24,27 @@ import {
   type HistoryRetention,
   type PersistedHistoryJournal,
 } from "./history-journal";
-import { parseLegacyHistory, type RecoveredHistory } from "./history-recovery";
+import { isPlainRecord, parseLegacyHistory, type RecoveredHistory } from "./history-recovery";
 import type { ThoughtTree } from "../tree/model";
 import { MATTER_HISTORY_LIMITS, type TreeHistory } from "../tree/history";
+import { MAX_NODES_PER_TREE } from "../tree/invariants";
 
 export { STORAGE_SCHEMA_VERSION };
 export type { StoredSnapshot };
 
+/**
+ * `PERSISTENCE_SUPERSEDED` and `PERSISTENCE_CLEARED` are terminal for this
+ * tab: a newer schema owns the database, or another tab deleted it. Nothing
+ * this build writes may land after either.
+ */
 export type RepositoryErrorCode =
   | "PERSISTENCE_UNAVAILABLE"
   | "PERSISTENCE_CORRUPT"
   | "PERSISTENCE_CONFLICT"
   | "PERSISTENCE_STORAGE_FULL"
-  | "PERSISTENCE_WRITE_FAILED";
+  | "PERSISTENCE_WRITE_FAILED"
+  | "PERSISTENCE_SUPERSEDED"
+  | "PERSISTENCE_CLEARED";
 
 export type RepositoryResult<Value> =
   | Readonly<{ ok: true; value: Value }>
@@ -55,6 +74,12 @@ export type SnapshotWrite = Readonly<{
   retention: HistoryRetention;
 }>;
 
+/** The cheapest read that tells whether another tab moved a row on. */
+export type StoredGeneration = Readonly<{
+  writeGeneration: number;
+  storageSchemaVersion: number;
+}>;
+
 export type CorruptSnapshotBasis = Readonly<{
   treeId: string;
   /** Exact private serialization of the row the person exported. */
@@ -80,7 +105,10 @@ export type ImportedSnapshotRollback =
 
 export type DocumentRepository = Readonly<{
   load(treeId: string): Promise<RepositoryResult<LoadedSnapshot | null>>;
+  readGeneration(treeId: string): Promise<RepositoryResult<StoredGeneration | null>>;
   save(write: SnapshotWrite): Promise<RepositoryResult<SnapshotBasis>>;
+  /** Shrinks recomputable caches in the same database; never a human decision. */
+  reclaimDerivedStorage(): Promise<boolean>;
   reserveImportedSnapshot(
     treeId: string,
     treeRevision: number,
@@ -95,14 +123,17 @@ export type DocumentRepository = Readonly<{
     write: Omit<SnapshotWrite, "basis">,
     basis: CorruptSnapshotBasis,
   ): Promise<RepositoryResult<SnapshotBasis>>;
+  subscribeLifecycle(listener: (event: MatterDatabaseLifecycle) => void): () => void;
   close(): void;
 }>;
 
 type DocumentStores = ["snapshots", "historyEntries"];
-type DocumentTransaction<Mode extends IDBTransactionMode> = IDBPTransaction<MatterDatabase, DocumentStores, Mode>;
+type TransactionLike = Readonly<{ error: DOMException | null }>;
 
 const DOCUMENT_STORES: DocumentStores = ["snapshots", "historyEntries"];
 const MAX_CORRUPT_EXPORT_BYTES = 32 * 1_024 * 1_024;
+/** Under quota the model-label cache keeps one maximum document's worth. */
+const RECLAIMED_MODEL_LABELS = MAX_NODES_PER_TREE;
 
 /**
  * The snapshot row and its undo journal records move together: every write of
@@ -110,13 +141,50 @@ const MAX_CORRUPT_EXPORT_BYTES = 32 * 1_024 * 1_024;
  * writes the row whose manifest describes them. Nothing else writes that store.
  */
 export function createIndexedDbDocumentRepository(): DocumentRepository {
-  const handle = createMatterDatabaseHandle();
-  const database = handle.open;
+  const lifecycleListeners = new Set<(event: MatterDatabaseLifecycle) => void>();
+  const handle = createMatterDatabaseHandle({
+    waitWhenBlocked: true,
+    onLifecycle(event) {
+      for (const listener of lifecycleListeners) listener(event);
+    },
+  });
+
+  /**
+   * Runs one storage operation. A connection WebKit reports as lost is dropped
+   * and the operation is retried once on a fresh one; every transaction here is
+   * guarded by its own CAS, so a retry can never apply a write twice.
+   */
+  const withDatabase = async <Value>(
+    operation: (
+      database: IDBPDatabase<MatterDatabase>,
+      track: <Transaction extends TransactionLike>(transaction: Transaction) => Transaction,
+    ) => Promise<RepositoryResult<Value>>,
+    classify: (error: unknown, transaction: TransactionLike | null) => RepositoryResult<Value>,
+  ): Promise<RepositoryResult<Value>> => {
+    for (let attempt = 0; ; attempt += 1) {
+      let transaction: TransactionLike | null = null;
+      const track = <Transaction extends TransactionLike>(tracked: Transaction) => {
+        transaction = tracked;
+        return tracked;
+      };
+      try {
+        return await operation(await handle.open(), track);
+      } catch (error) {
+        const terminal = terminalFailure(error);
+        if (terminal !== null) return terminal;
+        if (attempt === 0 && isConnectionLost(error, transaction)) {
+          handle.reset();
+          continue;
+        }
+        return classify(error, transaction);
+      }
+    }
+  };
 
   return Object.freeze({
-    async load(treeId) {
-      try {
-        const transaction = (await database()).transaction(DOCUMENT_STORES, "readonly");
+    load(treeId) {
+      return withDatabase(async (database, track) => {
+        const transaction = track(database.transaction(DOCUMENT_STORES, "readonly"));
         const stored: unknown = await transaction.objectStore("snapshots").get(treeId);
         if (stored === undefined) {
           await transaction.done;
@@ -162,21 +230,47 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
           history: assembled.recovered,
           basis: Object.freeze({ writeGeneration: row.writeGeneration, journal: assembled.journal }),
         }));
-      } catch {
-        return failure("PERSISTENCE_UNAVAILABLE", "Local material storage is unavailable.");
-      }
+      }, unavailable);
     },
 
-    async save({ treeId, treeRevision, bundle, basis, history, retention }) {
+    readGeneration(treeId) {
+      return withDatabase(async (database) => {
+        const stored: unknown = await database.get("snapshots", treeId);
+        if (
+          !isPlainRecord(stored) ||
+          !Number.isSafeInteger(stored.writeGeneration) ||
+          !Number.isSafeInteger(stored.storageSchemaVersion)
+        ) return success(null);
+        return success(Object.freeze({
+          writeGeneration: stored.writeGeneration as number,
+          storageSchemaVersion: stored.storageSchemaVersion as number,
+        }));
+      }, unavailable);
+    },
+
+    save({ treeId, treeRevision, bundle, basis, history, retention }) {
       const plan = planHistoryJournalWrite(treeId, basis.journal, history, retention);
-      let transaction: DocumentTransaction<"readwrite"> | null = null;
-      try {
-        transaction = (await database()).transaction(DOCUMENT_STORES, "readwrite");
+      return withDatabase(async (database, track) => {
+        const transaction = track(database.transaction(DOCUMENT_STORES, "readwrite"));
         const snapshots = transaction.objectStore("snapshots");
-        const existing = await snapshots.get(treeId);
-        const currentGeneration = existing === undefined ? null : existing.writeGeneration;
+        const existing: unknown = await snapshots.get(treeId);
+        if (isNewerSchema(existing)) {
+          await abortTransaction(transaction);
+          return superseded();
+        }
+        const currentGeneration = existing === undefined ? null : generationOf(existing);
         if (currentGeneration !== basis.writeGeneration) {
           await abortTransaction(transaction);
+          // Two tabs can commit the same revision with the same bytes (both
+          // relocalizing an untouched seed, say). That is not a conflict: the
+          // stored row already holds this material. The journal basis starts
+          // empty, so the next save rewrites this tab's steps whole.
+          if (holdsSameMaterial(existing, treeId, treeRevision, bundle)) {
+            return success(Object.freeze({
+              writeGeneration: currentGeneration as number,
+              journal: emptyHistoryJournal(nextHistoryEpoch(existing)),
+            }));
+          }
           return failure("PERSISTENCE_CONFLICT", "Material changed in another tab.");
         }
         const writeGeneration = nextGeneration(currentGeneration);
@@ -191,21 +285,32 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
           ...compactionRanges(treeId, plan.journal).map((range) => entries.delete(range)),
         ]);
         return success(Object.freeze({ writeGeneration, journal: plan.journal }));
-      } catch (error) {
-        return writeFailure(error, transaction);
-      }
+      }, writeFailure);
     },
 
-    async reserveImportedSnapshot(treeId, treeRevision, bundle, expectedGeneration) {
+    async reclaimDerivedStorage() {
+      const reclaimed = await withDatabase(async (database, track) => {
+        const transaction = track(database.transaction("labels", "readwrite"));
+        const deleted = await retainNewestModelLabels(transaction.store, RECLAIMED_MODEL_LABELS);
+        await transaction.done;
+        return success(deleted > 0);
+      }, unavailable);
+      return reclaimed.ok && reclaimed.value;
+    },
+
+    reserveImportedSnapshot(treeId, treeRevision, bundle, expectedGeneration) {
       const decoded = bundleToTree(bundle);
       if (!decoded.ok || decoded.tree.id !== treeId || decoded.tree.revision !== treeRevision) {
-        return failure("PERSISTENCE_WRITE_FAILED", "Imported material is invalid.");
+        return Promise.resolve(failure("PERSISTENCE_WRITE_FAILED", "Imported material is invalid."));
       }
-      let transaction: DocumentTransaction<"readwrite"> | null = null;
-      try {
-        transaction = (await database()).transaction(DOCUMENT_STORES, "readwrite");
+      return withDatabase(async (database, track) => {
+        const transaction = track(database.transaction(DOCUMENT_STORES, "readwrite"));
         const snapshots = transaction.objectStore("snapshots");
         const previous = await snapshots.get(treeId);
+        if (isNewerSchema(previous)) {
+          await abortTransaction(transaction);
+          return superseded();
+        }
         const currentGeneration = previous?.writeGeneration ?? null;
         if (currentGeneration !== expectedGeneration) {
           await abortTransaction(transaction);
@@ -228,15 +333,12 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
           previous: previous ?? null,
           basis: Object.freeze({ writeGeneration, journal }),
         }));
-      } catch (error) {
-        return writeFailure(error, transaction);
-      }
+      }, writeFailure);
     },
 
-    async rollbackImportedSnapshot(reservation) {
-      let transaction: DocumentTransaction<"readwrite"> | null = null;
-      try {
-        transaction = (await database()).transaction(DOCUMENT_STORES, "readwrite");
+    rollbackImportedSnapshot(reservation) {
+      return withDatabase<ImportedSnapshotRollback>(async (database, track) => {
+        const transaction = track(database.transaction(DOCUMENT_STORES, "readwrite"));
         const snapshots = transaction.objectStore("snapshots");
         const current: unknown = await snapshots.get(reservation.treeId);
         if (serializeStoredSnapshot(current) !== serializeStoredSnapshot(reservation.imported)) {
@@ -255,14 +357,13 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
         const previous = reservation.previous;
         await commitWrites(transaction, () => [snapshots.put(restoredRow(previous, writeGeneration))]);
         return success(Object.freeze({ status: "rolled-back" as const, writeGeneration }));
-      } catch (error) {
-        return writeFailure(error, transaction);
-      }
+      }, writeFailure);
     },
 
-    async exportCorrupt(treeId) {
-      try {
-        const stored: unknown = await (await database()).get("snapshots", treeId);
+    exportCorrupt(treeId) {
+      return withDatabase(async (database) => {
+        const stored: unknown = await database.get("snapshots", treeId);
+        if (isNewerSchema(stored)) return superseded();
         if (stored === undefined || decodeStoredSnapshot(stored, treeId).ok) {
           return failure("PERSISTENCE_CONFLICT", "Stored material changed before recovery export.");
         }
@@ -278,21 +379,24 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
           basis: Object.freeze({ treeId, serialized }),
           bytes,
         }));
-      } catch {
-        return failure("PERSISTENCE_UNAVAILABLE", "Local material storage is unavailable.");
-      }
+      }, unavailable);
     },
 
-    async replaceCorrupt({ treeId, treeRevision, bundle, history, retention }, basis) {
+    replaceCorrupt({ treeId, treeRevision, bundle, history, retention }, basis) {
       const decoded = bundleToTree(bundle);
       if (!decoded.ok || decoded.tree.id !== treeId || decoded.tree.revision !== treeRevision) {
-        return failure("PERSISTENCE_WRITE_FAILED", "Replacement material is invalid.");
+        return Promise.resolve(failure("PERSISTENCE_WRITE_FAILED", "Replacement material is invalid."));
       }
-      let transaction: DocumentTransaction<"readwrite"> | null = null;
-      try {
-        transaction = (await database()).transaction(DOCUMENT_STORES, "readwrite");
+      return withDatabase(async (database, track) => {
+        const transaction = track(database.transaction(DOCUMENT_STORES, "readwrite"));
         const snapshots = transaction.objectStore("snapshots");
         const existing: unknown = await snapshots.get(treeId);
+        // A row from a newer schema is not damaged; repairing it would let
+        // this older build overwrite valid newer material.
+        if (isNewerSchema(existing)) {
+          await abortTransaction(transaction);
+          return superseded();
+        }
         const serialized = serializeStoredSnapshot(existing);
         if (
           basis.treeId !== treeId ||
@@ -320,12 +424,16 @@ export function createIndexedDbDocumentRepository(): DocumentRepository {
           ...compactionRanges(treeId, plan.journal).map((range) => entries.delete(range)),
         ]);
         return success(Object.freeze({ writeGeneration, journal: plan.journal }));
-      } catch (error) {
-        return writeFailure(error, transaction);
-      }
+      }, writeFailure);
+    },
+
+    subscribeLifecycle(listener) {
+      lifecycleListeners.add(listener);
+      return () => lifecycleListeners.delete(listener);
     },
 
     close() {
+      lifecycleListeners.clear();
       handle.close();
     },
   });
@@ -402,6 +510,7 @@ function compactionRanges(treeId: string, journal: PersistedHistoryJournal): IDB
 }
 
 function decodeStoredSnapshot(value: unknown, treeId: string): RepositoryResult<ThoughtTree> {
+  if (isNewerSchema(value)) return superseded();
   if (
     !isRecord(value) ||
     value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
@@ -417,6 +526,40 @@ function decodeStoredSnapshot(value: unknown, treeId: string): RepositoryResult<
     return failure("PERSISTENCE_CORRUPT", "The stored Markdown bundle is invalid.");
   }
   return success(decoded.tree);
+}
+
+/** A newer build's row is valid material this build cannot read, not damage. */
+function isNewerSchema(value: unknown): boolean {
+  return isRecord(value) &&
+    Number.isSafeInteger(value.storageSchemaVersion) &&
+    (value.storageSchemaVersion as number) > STORAGE_SCHEMA_VERSION;
+}
+
+function generationOf(value: unknown): unknown {
+  return isRecord(value) ? value.writeGeneration : undefined;
+}
+
+function holdsSameMaterial(
+  value: unknown,
+  treeId: string,
+  treeRevision: number,
+  bundle: SnapshotBundle,
+): boolean {
+  if (
+    !isRecord(value) ||
+    value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
+    value.treeId !== treeId ||
+    value.treeRevision !== treeRevision ||
+    !Number.isSafeInteger(value.writeGeneration) ||
+    (value.writeGeneration as number) < 1 ||
+    !isRecord(value.bundle) ||
+    !isRecord(value.bundle.files)
+  ) return false;
+  const stored = value.bundle.files;
+  const files = bundle.files as Readonly<Record<string, string>>;
+  const paths = Object.keys(files);
+  if (Object.keys(stored).length !== paths.length) return false;
+  return paths.every((path) => Object.hasOwn(stored, path) && stored[path] === files[path]);
 }
 
 function serializeStoredSnapshot(value: unknown): string | null {
@@ -437,9 +580,9 @@ function nextRecoveryGeneration(value: unknown): number {
     : 1;
 }
 
-function nextGeneration(current: number | null): number | null {
+function nextGeneration(current: unknown): number | null {
   if (current === null) return 1;
-  return Number.isSafeInteger(current) && current >= 1 && current < Number.MAX_SAFE_INTEGER
+  return typeof current === "number" && Number.isSafeInteger(current) && current >= 1 && current < Number.MAX_SAFE_INTEGER
     ? current + 1
     : null;
 }
@@ -478,14 +621,31 @@ async function abortTransaction(transaction: { abort(): void; done: Promise<unkn
  */
 function writeFailure(
   error: unknown,
-  transaction: Readonly<{ error: DOMException | null }> | null,
+  transaction: TransactionLike | null,
 ): Extract<RepositoryResult<never>, { ok: false }> {
   return isQuotaError(transactionError(transaction)) || isQuotaError(error)
     ? failure("PERSISTENCE_STORAGE_FULL", "Local material storage is full.")
     : failure("PERSISTENCE_WRITE_FAILED", "The latest material could not be saved locally.");
 }
 
-function transactionError(transaction: Readonly<{ error: DOMException | null }> | null): unknown {
+function unavailable(): Extract<RepositoryResult<never>, { ok: false }> {
+  return failure("PERSISTENCE_UNAVAILABLE", "Local material storage is unavailable.");
+}
+
+function superseded(): Extract<RepositoryResult<never>, { ok: false }> {
+  return failure("PERSISTENCE_SUPERSEDED", "A newer Matter owns local material storage.");
+}
+
+function terminalFailure(error: unknown): Extract<RepositoryResult<never>, { ok: false }> | null {
+  if (!(error instanceof Error)) return null;
+  if (error.name === SUPERSEDED_DATABASE_ERROR) return superseded();
+  if (error.name === CLEARED_DATABASE_ERROR) {
+    return failure("PERSISTENCE_CLEARED", "Local material storage was cleared in another tab.");
+  }
+  return null;
+}
+
+function transactionError(transaction: TransactionLike | null): unknown {
   try {
     return transaction?.error ?? null;
   } catch {
@@ -494,8 +654,19 @@ function transactionError(transaction: Readonly<{ error: DOMException | null }> 
   }
 }
 
+/** WebKit reports a full disk as an `UnknownError`, not a quota error. */
 function isQuotaError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === "QuotaExceededError";
+  return error instanceof DOMException && (
+    error.name === "QuotaExceededError" ||
+    (error.name === "UnknownError" && /disk is full/iu.test(error.message))
+  );
+}
+
+function isConnectionLost(error: unknown, transaction: TransactionLike | null): boolean {
+  return [error, transactionError(transaction)].some((candidate) =>
+    candidate instanceof DOMException &&
+    candidate.name === "UnknownError" &&
+    /connection to indexed database server lost/iu.test(candidate.message));
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

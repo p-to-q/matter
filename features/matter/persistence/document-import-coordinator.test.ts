@@ -41,6 +41,23 @@ describe("document import coordinator", () => {
     expect(events).toEqual(["prepare", "switch", "activate"]);
   });
 
+  it("carries the person's replace-unsaved confirmation and reports unsaved material distinctly", async () => {
+    const tree = createSeededDocument().tree;
+    const persistence = {
+      prepareImportedTree: vi.fn(async () => ({ ok: false, errorCode: "IMPORT_DIRTY" } as const)),
+      activateImportedDocument: vi.fn(),
+      discardImportedDocument: vi.fn(async () => null),
+    } satisfies Pick<PersistenceController, "prepareImportedTree" | "activateImportedDocument" | "discardImportedDocument">;
+    const basis = { treeId: tree.id, revision: tree.revision, documentEpoch: 2 };
+    const coordinator = createDocumentImportCoordinator(persistence, vi.fn(), () => basis);
+
+    await expect(coordinator.importValidatedTree(tree, basis, { replaceUnsaved: true })).resolves.toEqual({
+      status: "rejected",
+      errorCode: "IMPORT_DIRTY",
+    });
+    expect(persistence.prepareImportedTree).toHaveBeenCalledWith(tree, { replaceUnsaved: true });
+  });
+
   it("leaves runtime untouched when persistence rejects a conflict", async () => {
     const tree = createSeededDocument().tree;
     const persistence = {

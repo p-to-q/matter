@@ -196,6 +196,41 @@ describe("Matter database upgrades", () => {
     expect(objectStore).not.toHaveBeenCalledWith("snapshots");
   });
 
+  it("closes for good when another tab needs a newer version or deletes the database", async () => {
+    for (const [blockedVersion, expected] of [
+      [7, { event: "superseded", name: "MatterDatabaseSupersededError" }],
+      [null, { event: "cleared", name: "MatterDatabaseClearedError" }],
+    ] as const) {
+      vi.mocked(openDB).mockReset();
+      const database = { close: vi.fn() };
+      vi.mocked(openDB).mockResolvedValue(database as never);
+      const onLifecycle = vi.fn();
+      const handle = createMatterDatabaseHandle({ onLifecycle });
+
+      await handle.open();
+      vi.mocked(openDB).mock.calls[0]?.[2]?.blocking?.(
+        6,
+        blockedVersion,
+        new Event("versionchange") as IDBVersionChangeEvent,
+      );
+      await vi.waitFor(() => expect(database.close).toHaveBeenCalledOnce());
+      expect(onLifecycle).toHaveBeenCalledExactlyOnceWith(expected.event);
+      await expect(handle.open()).rejects.toMatchObject({ name: expected.name });
+      expect(openDB).toHaveBeenCalledOnce();
+    }
+  });
+
+  it("treats a database newer than this build as superseded rather than unavailable", async () => {
+    vi.mocked(openDB).mockRejectedValue(new DOMException("lower version", "VersionError"));
+    const onLifecycle = vi.fn();
+    const handle = createMatterDatabaseHandle({ onLifecycle });
+
+    await expect(handle.open()).rejects.toMatchObject({ name: "MatterDatabaseSupersededError" });
+    await expect(handle.open()).rejects.toMatchObject({ name: "MatterDatabaseSupersededError" });
+    expect(onLifecycle).toHaveBeenCalledExactlyOnceWith("superseded");
+    expect(openDB).toHaveBeenCalledOnce();
+  });
+
   it("rejects a blocked open and lets an explicit retry create a new attempt", async () => {
     let callbacks: Parameters<typeof openDB>[2] | undefined;
     vi.mocked(openDB).mockImplementationOnce((_name, _version, options) => {

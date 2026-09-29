@@ -24,6 +24,39 @@ describe("material files copy", () => {
       copy.archiveNoteStorageFull,
       copy.archiveNoteSaveFailed,
       copy.archiveConfirmReplace,
+      copy.archiveConfirmOlder,
+      copy.archiveConfirmReplaceUnsaved,
+      copy.archiveErrorAction,
+      copy.archiveErrorCleared,
+      copy.archiveErrorConflict,
+      copy.archiveErrorCorrupt,
+      copy.archiveErrorDirty,
+      copy.archiveErrorForeign,
+      copy.archiveErrorInvalid,
+      copy.archiveErrorInvalidTree,
+      copy.archiveErrorSaveFailed,
+      copy.archiveErrorStale,
+      copy.archiveErrorStorageFull,
+      copy.archiveErrorSuperseded,
+      copy.archiveErrorTooLarge,
+      copy.archiveErrorUnavailable,
+      copy.archiveErrorUnsupported,
+      copy.archiveNoteCleared,
+      copy.archiveNoteHistoryReleased,
+      copy.archiveNoteHistoryUnavailable,
+      copy.archiveNoteNotPersisted,
+      copy.archiveNoteSuperseded,
+      copy.archiveNoteUnavailable,
+      copy.archiveNoteUpgradeBlocked,
+      copy.archiveReloadPage,
+      copy.durabilityCleared,
+      copy.durabilityNewerCopy,
+      copy.durabilityNewerMatter,
+      copy.durabilityNotSaved,
+      copy.durabilityNotSaving,
+      copy.durabilityUpgradeBlocked,
+      copy.historyReleased,
+      copy.historyUnavailable,
       copy.archiveKeepCurrent,
       copy.archiveReplace,
       copy.canvasTitle,
@@ -70,5 +103,23 @@ describe("material files copy", () => {
     ];
 
     expect(labels.every((label) => label.trim().length > 0)).toBe(true);
+  });
+
+  it("localizes every durability line and archive error away from English", () => {
+    const english = materialFilesCopy("en-US");
+    for (const { value: locale } of CANVAS_LANGUAGE_OPTIONS) {
+      if (locale === "en-US") continue;
+      const copy = materialFilesCopy(locale);
+      for (const key of [
+        "durabilityNotSaved",
+        "durabilityNewerCopy",
+        "durabilityNewerMatter",
+        "archiveErrorStorageFull",
+        "archiveErrorInvalid",
+        "historyUnavailable",
+      ] as const) {
+        expect(copy[key]).not.toBe(english[key]);
+      }
+    }
   });
 });

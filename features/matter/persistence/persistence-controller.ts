@@ -1,11 +1,13 @@
-import type {
-  CorruptSnapshotBasis,
-  DocumentRepository,
-  ImportedSnapshotReservation,
-  RepositoryErrorCode,
-  RepositoryResult,
-  SnapshotBasis,
+import {
+  STORAGE_SCHEMA_VERSION,
+  type CorruptSnapshotBasis,
+  type DocumentRepository,
+  type ImportedSnapshotReservation,
+  type RepositoryErrorCode,
+  type RepositoryResult,
+  type SnapshotBasis,
 } from "./document-repository";
+import type { DocumentGeneration } from "./document-generation-channel";
 import {
   emptyHistoryJournal,
   FULL_HISTORY_RETENTION,
@@ -31,12 +33,23 @@ export type PersistenceStatus = Readonly<{
   dirtyRevision: number | null;
   errorCode: RepositoryErrorCode | null;
   historyNotice: HistoryNotice | null;
+  /** This tab holds material, or an import, that no stored row holds yet. */
+  unsaved: boolean;
+  /** This newer build waits for an older Matter tab to close its database. */
+  upgradeBlocked: boolean;
 }>;
 
 export type StoredDocument = Readonly<{
   storedTree: ThoughtTree | null;
   storedHistory: RecoveredHistory | null;
 }>;
+
+/**
+ * What a newer stored generation means for this tab: nothing, a silent
+ * refresh (no unsaved work), a conflict (unsaved work), or a terminal newer
+ * schema.
+ */
+export type StoredGenerationDecision = "ignored" | "refresh" | "conflict" | "superseded";
 
 export type ImportedDocumentPreparation = Readonly<{
   ok: true;
@@ -49,13 +62,29 @@ export type ImportedDocumentPreparation = Readonly<{
 
 export type ImportedDocumentRejection = Readonly<{
   ok: false;
-  errorCode: "IMPORT_INVALID_TREE" | "IMPORT_CONFLICT" | Exclude<RepositoryErrorCode, "PERSISTENCE_CONFLICT">;
+  errorCode:
+    | "IMPORT_INVALID_TREE"
+    | "IMPORT_CONFLICT"
+    | "IMPORT_DIRTY"
+    | Exclude<RepositoryErrorCode, "PERSISTENCE_CONFLICT">;
+}>;
+
+export type ImportOptions = Readonly<{
+  /**
+   * The person confirmed that this archive replaces material storage refused.
+   * Only honored for the same document after a full or failed write, with no
+   * write in flight.
+   */
+  replaceUnsaved?: boolean;
 }>;
 
 export type PersistenceController = Readonly<{
   start(tree: ThoughtTree, history?: TreeHistory): Promise<StoredDocument>;
   publish(tree: ThoughtTree, history?: TreeHistory): void;
-  prepareImportedTree(tree: ThoughtTree): Promise<ImportedDocumentPreparation | ImportedDocumentRejection>;
+  prepareImportedTree(
+    tree: ThoughtTree,
+    options?: ImportOptions,
+  ): Promise<ImportedDocumentPreparation | ImportedDocumentRejection>;
   activateImportedDocument(prepared: ImportedDocumentPreparation): void;
   discardImportedDocument(prepared: ImportedDocumentPreparation): Promise<RepositoryErrorCode | null>;
   exportCorruptRecovery(): Promise<
@@ -74,23 +103,46 @@ export type PersistenceController = Readonly<{
   declareConflict(tree: ThoughtTree, history?: TreeHistory): void;
   retry(): void;
   resolveConflict(): Promise<StoredDocument>;
+  /** Another tab committed a row; classifies what that means here. */
+  observeStoredGeneration(generation: DocumentGeneration): StoredGenerationDecision;
+  /** Reads the stored generation (a returning page) and classifies it. */
+  checkStoredGeneration(): Promise<StoredGenerationDecision>;
+  /**
+   * Loads a newer stored row for a tab with no unsaved work. A local commit
+   * that lands during the read turns the refresh into a conflict instead.
+   */
+  refreshFromStorage(): Promise<StoredDocument>;
   /** Undo steps were released because they could not be restored or applied. */
   reportHistoryUnavailable(): void;
   /** The person has seen the history notice where recovery lives. */
   acknowledgeHistoryNotice(): void;
-  flush(): void;
   dispose(): void;
   getStatus(): PersistenceStatus;
   subscribe(listener: () => void): () => void;
 }>;
 
+export type PersistenceControllerOptions = Readonly<{
+  /** Tells other tabs about every row this tab commits. */
+  announceGeneration?: (generation: DocumentGeneration) => void;
+}>;
+
 type PendingDocument = Readonly<{ tree: ThoughtTree; history: TreeHistory }>;
+type StatusFields = Omit<PersistenceStatus, "unsaved">;
+type TerminalCode = "PERSISTENCE_SUPERSEDED" | "PERSISTENCE_CLEARED";
 
 const NO_STORED_DOCUMENT: StoredDocument = Object.freeze({ storedTree: null, storedHistory: null });
 /** No row is known: the first save creates one, or meets another tab's as a conflict. */
 const UNKNOWN_BASIS: SnapshotBasis = Object.freeze({ writeGeneration: null, journal: emptyHistoryJournal(0) });
+/** Storage refused material, not the row's basis: an archive may replace it. */
+const REPLACEABLE_ERRORS: ReadonlySet<RepositoryErrorCode | null> = new Set([
+  "PERSISTENCE_STORAGE_FULL",
+  "PERSISTENCE_WRITE_FAILED",
+]);
 
-export function createPersistenceController(repository: DocumentRepository): PersistenceController {
+export function createPersistenceController(
+  repository: DocumentRepository,
+  options: PersistenceControllerOptions = {},
+): PersistenceController {
   let active = true;
   let ready = false;
   let writing = false;
@@ -104,6 +156,10 @@ export function createPersistenceController(repository: DocumentRepository): Per
   let writingDocument: PendingDocument | null = null;
   let importAttemptSequence = 0;
   let activeImportAttempt: number | null = null;
+  // A newer schema or a deleted database ends durability for this tab. It is
+  // never cleared: every later write would target storage this build no
+  // longer owns.
+  let terminal: TerminalCode | null = null;
   let corruptRecovery: Readonly<{
     basis: CorruptSnapshotBasis;
     documentEpoch: number;
@@ -115,15 +171,48 @@ export function createPersistenceController(repository: DocumentRepository): Per
     dirtyRevision: null,
     errorCode: null,
     historyNotice: null,
+    unsaved: false,
+    upgradeBlocked: false,
   });
   const listeners = new Set<() => void>();
   // Async repository writes may overlap a publish() call; reading through this
   // seam prevents compile-time narrowing from erasing that runtime transition.
   const currentPending = (): PendingDocument | null => pending;
+  const hasUnsaved = () => pending !== null || writing || activeImportAttempt !== null;
 
-  const update = (next: PersistenceStatus) => {
-    status = Object.freeze(next);
+  const update = (next: StatusFields) => {
+    status = Object.freeze({
+      ...next,
+      phase: terminal === null ? next.phase : "error",
+      errorCode: terminal ?? next.errorCode,
+      unsaved: hasUnsaved(),
+    });
     for (const listener of listeners) listener();
+  };
+  const syncUnsaved = () => {
+    if (active && status.unsaved !== hasUnsaved()) update(status);
+  };
+
+  const enterTerminal = (code: RepositoryErrorCode): boolean => {
+    if (code !== "PERSISTENCE_SUPERSEDED" && code !== "PERSISTENCE_CLEARED") return false;
+    if (terminal === null) {
+      terminal = code;
+      corruptRecovery = null;
+      if (active) update({ ...status, upgradeBlocked: false });
+    }
+    return true;
+  };
+
+  const unsubscribeLifecycle = repository.subscribeLifecycle((event) => {
+    if (!active) return;
+    if (event === "superseded") enterTerminal("PERSISTENCE_SUPERSEDED");
+    else if (event === "cleared") enterTerminal("PERSISTENCE_CLEARED");
+    else update({ ...status, upgradeBlocked: event === "upgrade-blocked" });
+  });
+
+  const announce = (treeId: string, writeGeneration: number | null) => {
+    if (writeGeneration === null) return;
+    options.announceGeneration?.({ treeId, writeGeneration, storageSchemaVersion: STORAGE_SCHEMA_VERSION });
   };
 
   const beginDocument = (treeId: string) => {
@@ -137,8 +226,9 @@ export function createPersistenceController(repository: DocumentRepository): Per
 
   /**
    * Material before history: when storage refuses the write, the same
-   * transaction is retried with fewer durable undo steps before the save is
-   * reported as storage-full. Only a snapshot that cannot fit alone fails.
+   * transaction is retried once after reclaiming recomputable caches, then
+   * with fewer durable undo steps. Only a snapshot that cannot fit alone is
+   * reported as storage-full.
    */
   const saveShedding = async (
     document: PendingDocument,
@@ -146,6 +236,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
     saveEpoch: number,
   ): Promise<Readonly<{ saved: RepositoryResult<SnapshotBasis>; retention: HistoryRetention }>> => {
     let attempt = retention;
+    let reclaimed = false;
     for (;;) {
       const saved = await repository.save({
         treeId: document.tree.id,
@@ -157,6 +248,10 @@ export function createPersistenceController(repository: DocumentRepository): Per
       });
       if (saved.ok || saved.error.code !== "PERSISTENCE_STORAGE_FULL") return { saved, retention: attempt };
       if (!active || saveEpoch !== documentEpoch) return { saved, retention: attempt };
+      if (!reclaimed) {
+        reclaimed = true;
+        if (await repository.reclaimDerivedStorage()) continue;
+      }
       const next = shedHistoryRetention(document.history, attempt);
       if (next === null) return { saved, retention: attempt };
       attempt = next;
@@ -164,7 +259,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
   };
 
   const drain = async () => {
-    if (!active || writing || !ready || pending === null || activeImportAttempt !== null) return;
+    if (!active || writing || !ready || pending === null || activeImportAttempt !== null || terminal !== null) return;
     writing = true;
     const drainEpoch = documentEpoch;
     while (active && pending !== null) {
@@ -190,14 +285,17 @@ export function createPersistenceController(repository: DocumentRepository): Per
       if (!active || drainEpoch !== documentEpoch || tree.id !== activeTreeId) break;
       if (!saved.ok) {
         pending ??= pendingDocument;
+        enterTerminal(saved.error.code);
         update({ ...status, phase: "error", dirtyRevision: pending.tree.revision, errorCode: saved.error.code });
         break;
       }
       basis = saved.value;
       const shed = savedRetention !== retention;
       retention = savedRetention;
+      announce(tree.id, saved.value.writeGeneration);
       const queuedAfterWrite = currentPending();
       update({
+        ...status,
         phase: queuedAfterWrite === null ? "saved" : "saving",
         persistedRevision: tree.revision,
         dirtyRevision: queuedAfterWrite?.tree.revision ?? null,
@@ -207,6 +305,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
     }
     writingDocument = null;
     writing = false;
+    syncUnsaved();
     if (active && pending !== null && status.phase !== "error") void drain();
   };
 
@@ -215,6 +314,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
   ): StoredDocument => {
     basis = loaded.basis;
     update({
+      ...status,
       phase: "saved",
       persistedRevision: loaded.tree.revision,
       dirtyRevision: null,
@@ -222,6 +322,29 @@ export function createPersistenceController(repository: DocumentRepository): Per
       historyNotice: null,
     });
     return Object.freeze({ storedTree: loaded.tree, storedHistory: loaded.history });
+  };
+
+  const holdConflict = () => {
+    if (pending === null) return;
+    update({ ...status, phase: "error", dirtyRevision: pending.tree.revision, errorCode: "PERSISTENCE_CONFLICT" });
+  };
+
+  const observe = (generation: DocumentGeneration): StoredGenerationDecision => {
+    if (!active) return "ignored";
+    if (generation.storageSchemaVersion > STORAGE_SCHEMA_VERSION) {
+      enterTerminal("PERSISTENCE_SUPERSEDED");
+      return "superseded";
+    }
+    if (!ready || terminal !== null || generation.treeId !== activeTreeId) return "ignored";
+    if (basis.writeGeneration !== null && generation.writeGeneration <= basis.writeGeneration) return "ignored";
+    if (status.errorCode === "PERSISTENCE_CONFLICT") return "conflict";
+    // An in-flight write or import meets the newer row through its own CAS.
+    if (writing || activeImportAttempt !== null) return "conflict";
+    if (pending !== null) {
+      holdConflict();
+      return "conflict";
+    }
+    return "refresh";
   };
 
   return Object.freeze({
@@ -233,7 +356,9 @@ export function createPersistenceController(repository: DocumentRepository): Per
       if (!loaded.ok) {
         ready = true;
         pending = Object.freeze({ tree, history });
+        enterTerminal(loaded.error.code);
         update({
+          ...status,
           phase: "error",
           persistedRevision: null,
           dirtyRevision: tree.revision,
@@ -260,15 +385,17 @@ export function createPersistenceController(repository: DocumentRepository): Per
         // merely because it arrived between the two identical publications.
         // If this write fails, drain's failure path requeues writingDocument.
         pending = null;
+        syncUnsaved();
         return;
       }
       if (pending === null && status.phase === "saved" && status.persistedRevision === tree.revision) return;
       pending = Object.freeze({ tree, history });
       if (ready && status.phase !== "error") void drain();
       else if (ready) update({ ...status, dirtyRevision: tree.revision });
+      syncUnsaved();
     },
 
-    async prepareImportedTree(tree) {
+    async prepareImportedTree(tree, importOptions = {}) {
       const validation = validateThoughtTree(tree);
       if (!validation.ok) return Object.freeze({ ok: false, errorCode: "IMPORT_INVALID_TREE" });
 
@@ -278,32 +405,52 @@ export function createPersistenceController(repository: DocumentRepository): Per
       } catch {
         return Object.freeze({ ok: false, errorCode: "IMPORT_INVALID_TREE" });
       }
+      if (terminal !== null) return Object.freeze({ ok: false, errorCode: terminal });
       // One preparation owns the persistence seam until it is either activated
       // or explicitly discarded. This prevents two archives from reserving the
       // same missing row and making the newer attempt fail behind the older one.
       if (activeImportAttempt !== null) {
         return Object.freeze({ ok: false, errorCode: "IMPORT_CONFLICT" });
       }
-      // A same-document import cannot race an old in-memory save. Rejecting it
-      // keeps the successful CAS generation and the runtime switch coherent.
-      if (tree.id === activeTreeId && (writing || pending !== null)) {
-        return Object.freeze({ ok: false, errorCode: "IMPORT_CONFLICT" });
+      // A same-document import cannot race an old in-memory save. Unsaved
+      // material storage refused may be replaced only by explicit choice, and
+      // only while nothing is being written.
+      const sameDocument = tree.id === activeTreeId;
+      const dirty = sameDocument && (writing || pending !== null);
+      const replacingUnsaved = dirty &&
+        importOptions.replaceUnsaved === true &&
+        !writing &&
+        REPLACEABLE_ERRORS.has(status.errorCode);
+      if (dirty && !replacingUnsaved) {
+        return Object.freeze({ ok: false, errorCode: "IMPORT_DIRTY" });
       }
       const attemptId = ++importAttemptSequence;
       activeImportAttempt = attemptId;
+      syncUnsaved();
       const rejectAttempt = (errorCode: ImportedDocumentRejection["errorCode"]): ImportedDocumentRejection => {
         if (activeImportAttempt === attemptId) {
           activeImportAttempt = null;
+          syncUnsaved();
           if (active && pending !== null && status.phase !== "error") void drain();
         }
         return Object.freeze({ ok: false, errorCode });
       };
-      const loaded = await repository.load(tree.id);
-      if (!active || activeImportAttempt !== attemptId) return rejectAttempt("PERSISTENCE_UNAVAILABLE");
-      if (!loaded.ok) return rejectAttempt(importRepositoryError(loaded.error.code));
-
-      if (loaded.value !== null && tree.id === activeTreeId && (writing || pending !== null)) {
-        return rejectAttempt("IMPORT_CONFLICT");
+      let expectedGeneration: number | null;
+      if (replacingUnsaved) {
+        // The refused material never reached storage, so the row this tab
+        // last loaded or saved remains the CAS basis for the replacement.
+        expectedGeneration = basis.writeGeneration;
+      } else {
+        const loaded = await repository.load(tree.id);
+        if (!active || activeImportAttempt !== attemptId) return rejectAttempt("PERSISTENCE_UNAVAILABLE");
+        if (!loaded.ok) {
+          enterTerminal(loaded.error.code);
+          return rejectAttempt(importRepositoryError(loaded.error.code));
+        }
+        if (loaded.value !== null && sameDocument && (writing || pending !== null)) {
+          return rejectAttempt("IMPORT_DIRTY");
+        }
+        expectedGeneration = loaded.value?.basis.writeGeneration ?? null;
       }
       // Replace is an explicit document-boundary authorization. A valid older
       // bundle with the same tree id may therefore replace the current row; the
@@ -312,17 +459,20 @@ export function createPersistenceController(repository: DocumentRepository): Per
         tree.id,
         tree.revision,
         bundle,
-        loaded.value?.basis.writeGeneration ?? null,
+        expectedGeneration,
       );
       if (!active || activeImportAttempt !== attemptId) {
         if (reserved.ok) await repository.rollbackImportedSnapshot(reserved.value);
         return rejectAttempt("PERSISTENCE_UNAVAILABLE");
       }
-      if (!reserved.ok) return rejectAttempt(importRepositoryError(reserved.error.code));
+      if (!reserved.ok) {
+        enterTerminal(reserved.error.code);
+        return rejectAttempt(importRepositoryError(reserved.error.code));
+      }
       return Object.freeze({
         ok: true,
         attemptId,
-        createdSnapshot: loaded.value === null,
+        createdSnapshot: expectedGeneration === null,
         tree,
         writeGeneration: reserved.value.basis.writeGeneration,
         reservation: reserved.value,
@@ -338,12 +488,14 @@ export function createPersistenceController(repository: DocumentRepository): Per
       basis = prepared.reservation.basis;
       pending = null;
       update({
+        ...status,
         phase: "saved",
         persistedRevision: prepared.tree.revision,
         dirtyRevision: null,
         errorCode: null,
         historyNotice: null,
       });
+      announce(prepared.tree.id, basis.writeGeneration);
     },
 
     async discardImportedDocument(prepared) {
@@ -358,6 +510,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
       activeImportAttempt = null;
       if (!rolledBack.ok || rolledBack.value.status === "stale") {
         const errorCode = rolledBack.ok ? "PERSISTENCE_CONFLICT" : rolledBack.error.code;
+        enterTerminal(errorCode);
         if (active && pending !== null) {
           update({
             ...status,
@@ -366,6 +519,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
             errorCode,
           });
         }
+        syncUnsaved();
         return errorCode;
       }
       // Rollback restores the exact row the import replaced, journal included.
@@ -376,6 +530,8 @@ export function createPersistenceController(repository: DocumentRepository): Per
       if (prepared.tree.id === activeTreeId && previousGeneration === basis.writeGeneration) {
         basis = Object.freeze({ writeGeneration: rolledBack.value.writeGeneration, journal: basis.journal });
       }
+      announce(prepared.tree.id, rolledBack.value.writeGeneration);
+      syncUnsaved();
       if (active && pending !== null && status.phase !== "error") void drain();
       return null;
     },
@@ -392,6 +548,9 @@ export function createPersistenceController(repository: DocumentRepository): Per
       const recoveryEpoch = documentEpoch;
       const dirtyDocument = pending;
       const exported = await repository.exportCorrupt(activeTreeId);
+      if (!exported.ok && enterTerminal(exported.error.code)) {
+        return Object.freeze({ ok: false, errorCode: exported.error.code });
+      }
       if (
         !active ||
         recoveryEpoch !== documentEpoch ||
@@ -439,6 +598,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
       }, recovery.basis);
       if (!replaced.ok) {
         corruptRecovery = null;
+        enterTerminal(replaced.error.code);
         update({ ...status, errorCode: replaced.error.code });
         return Object.freeze({ ok: false, errorCode: replaced.error.code });
       }
@@ -447,6 +607,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
         return Object.freeze({ ok: false, errorCode: "PERSISTENCE_CONFLICT" });
       }
       basis = replaced.value;
+      announce(replacement.tree.id, replaced.value.writeGeneration);
       if (pending === replacement) pending = null;
       const queued = pending;
       update({
@@ -463,17 +624,16 @@ export function createPersistenceController(repository: DocumentRepository): Per
     declareConflict(tree, history = createTreeHistory()) {
       if (!active || !ready || tree.id !== activeTreeId) return;
       pending = Object.freeze({ tree, history });
-      update({
-        ...status,
-        phase: "error",
-        dirtyRevision: tree.revision,
-        errorCode: "PERSISTENCE_CONFLICT",
-      });
+      holdConflict();
     },
 
     retry() {
-      if (!active || !ready || pending === null) return;
-      if (status.errorCode === "PERSISTENCE_CONFLICT" || status.errorCode === "PERSISTENCE_CORRUPT") return;
+      if (!active || !ready || pending === null || activeImportAttempt !== null) return;
+      if (
+        terminal !== null ||
+        status.errorCode === "PERSISTENCE_CONFLICT" ||
+        status.errorCode === "PERSISTENCE_CORRUPT"
+      ) return;
       retention = FULL_HISTORY_RETENTION;
       update({ ...status, phase: "saving", errorCode: null });
       void drain();
@@ -487,6 +647,7 @@ export function createPersistenceController(repository: DocumentRepository): Per
       const loaded = await repository.load(dirtyDocument.tree.id);
       if (!active) return NO_STORED_DOCUMENT;
       if (!loaded.ok || loaded.value === null) {
+        if (!loaded.ok) enterTerminal(loaded.error.code);
         update({
           ...status,
           phase: "error",
@@ -503,6 +664,45 @@ export function createPersistenceController(repository: DocumentRepository): Per
       return adoptLoaded(loaded.value);
     },
 
+    observeStoredGeneration: observe,
+
+    async checkStoredGeneration() {
+      if (!active || !ready || activeTreeId === null || terminal !== null) return "ignored";
+      const treeId = activeTreeId;
+      const read = await repository.readGeneration(treeId);
+      if (!read.ok) return enterTerminal(read.error.code) ? "superseded" : "ignored";
+      if (read.value === null) return "ignored";
+      return observe(Object.freeze({ treeId, ...read.value }));
+    },
+
+    async refreshFromStorage() {
+      if (
+        !active ||
+        !ready ||
+        activeTreeId === null ||
+        terminal !== null ||
+        status.errorCode !== null ||
+        hasUnsaved()
+      ) return NO_STORED_DOCUMENT;
+      const refreshEpoch = documentEpoch;
+      const loaded = await repository.load(activeTreeId);
+      if (!active || refreshEpoch !== documentEpoch) return NO_STORED_DOCUMENT;
+      if (!loaded.ok) {
+        enterTerminal(loaded.error.code);
+        return NO_STORED_DOCUMENT;
+      }
+      if (
+        loaded.value === null ||
+        (basis.writeGeneration !== null && loaded.value.basis.writeGeneration <= basis.writeGeneration)
+      ) return NO_STORED_DOCUMENT;
+      if (hasUnsaved()) {
+        if (!writing) holdConflict();
+        return NO_STORED_DOCUMENT;
+      }
+      retention = FULL_HISTORY_RETENTION;
+      return adoptLoaded(loaded.value);
+    },
+
     reportHistoryUnavailable() {
       if (!active || status.historyNotice === "unavailable") return;
       update({ ...status, historyNotice: "unavailable" });
@@ -513,16 +713,13 @@ export function createPersistenceController(repository: DocumentRepository): Per
       update({ ...status, historyNotice: null });
     },
 
-    flush() {
-      if (active && ready && status.phase !== "error") void drain();
-    },
-
     dispose() {
       active = false;
       writingDocument = null;
       activeImportAttempt = null;
       corruptRecovery = null;
       listeners.clear();
+      unsubscribeLifecycle();
       repository.close();
     },
 

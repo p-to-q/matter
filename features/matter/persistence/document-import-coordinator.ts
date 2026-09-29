@@ -1,11 +1,12 @@
 import type { ThoughtTree } from "../tree/model";
 import type { DocumentSwitchReceipt } from "../store/matter-store";
 import type { RepositoryErrorCode } from "./document-repository";
-import type { ImportedDocumentPreparation, PersistenceController } from "./persistence-controller";
+import type { ImportedDocumentPreparation, ImportOptions, PersistenceController } from "./persistence-controller";
 
 export type DocumentImportErrorCode =
   | "IMPORT_INVALID_TREE"
   | "IMPORT_CONFLICT"
+  | "IMPORT_DIRTY"
   | "IMPORT_FOREIGN_DOCUMENT"
   | "IMPORT_STALE"
   | Exclude<RepositoryErrorCode, "PERSISTENCE_CONFLICT">;
@@ -15,7 +16,11 @@ export type DocumentImportReceipt =
   | Readonly<{ status: "rejected"; errorCode: DocumentImportErrorCode }>;
 
 export type DocumentImportCoordinator = Readonly<{
-  importValidatedTree(tree: ThoughtTree, basis: DocumentImportBasis): Promise<DocumentImportReceipt>;
+  importValidatedTree(
+    tree: ThoughtTree,
+    basis: DocumentImportBasis,
+    options?: ImportOptions,
+  ): Promise<DocumentImportReceipt>;
 }>;
 
 export type DocumentImportBasis = Readonly<{
@@ -40,7 +45,7 @@ export function createDocumentImportCoordinator(
 ): DocumentImportCoordinator {
   let importing = false;
   return Object.freeze({
-    async importValidatedTree(tree, basis) {
+    async importValidatedTree(tree, basis, options = {}) {
       if (importing) return Object.freeze({ status: "rejected", errorCode: "IMPORT_CONFLICT" });
       importing = true;
       let prepared: ImportedDocumentPreparation | null = null;
@@ -55,7 +60,7 @@ export function createDocumentImportCoordinator(
         if (tree.id !== basis.treeId) {
           return Object.freeze({ status: "rejected", errorCode: "IMPORT_FOREIGN_DOCUMENT" });
         }
-        const result = await persistence.prepareImportedTree(tree);
+        const result = await persistence.prepareImportedTree(tree, options);
         if (!result.ok) {
           return Object.freeze({ status: "rejected", errorCode: result.errorCode });
         }
