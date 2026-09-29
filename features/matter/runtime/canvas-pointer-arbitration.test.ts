@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  canvasPressDismissal,
   createCanvasPointerArbiter,
+  isPalmPress,
+  outsidePressDismissal,
   PEN_PALM_GRACE_MS,
   PEN_TAKEOVER_WINDOW_MS,
   REJECTED_CLICK_TTL_MS,
@@ -270,6 +273,40 @@ describe("canvas pointer arbitration", () => {
     expect(arbiter.isRejected(PALM)).toBe(false);
     expect(arbiter.penActive(11)).toBe(false);
     expect(down(arbiter, pointer(FINGER, "touch", 12))).toEqual({ kind: "accept", founder: true });
+  });
+});
+
+describe("press dismissal", () => {
+  it("lets a mouse or pen press dismiss at once, even while a pen writes", () => {
+    for (const pointerType of ["mouse", "pen"]) {
+      expect(outsidePressDismissal(pointerType, false)).toBe("now");
+      expect(outsidePressDismissal(pointerType, true)).toBe("now");
+    }
+  });
+
+  it("never lets a palm dismiss, and makes any other touch commit first", () => {
+    expect(isPalmPress("touch", true)).toBe(true);
+    expect(isPalmPress("touch", false)).toBe(false);
+    expect(isPalmPress("pen", true)).toBe(false);
+    expect(outsidePressDismissal("touch", true)).toBe("never");
+    expect(outsidePressDismissal("touch", false)).toBe("when-touch-commits");
+  });
+
+  it("defers only a founding touch on the canvas and dismisses nothing it rejected", () => {
+    const arbiter = createCanvasPointerArbiter();
+    const founder = down(arbiter, pointer(FINGER, "touch", 0));
+    expect(canvasPressDismissal("touch", founder)).toBe("when-touch-commits");
+    // A second finger makes a pinch, which is already a real gesture.
+    const joined = down(arbiter, pointer(PALM, "touch", 5));
+    expect(canvasPressDismissal("touch", joined)).toBe("now");
+
+    const writing = createCanvasPointerArbiter();
+    const pen = down(writing, pointer(PEN, "pen", 0));
+    expect(canvasPressDismissal("pen", pen)).toBe("now");
+    const palm = down(writing, pointer(PALM, "touch", 10));
+    expect(canvasPressDismissal("touch", palm)).toBe("never");
+    // A secondary mouse button never asks the owner, yet the press still acts.
+    expect(canvasPressDismissal("mouse", null)).toBe("now");
   });
 });
 

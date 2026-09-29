@@ -166,8 +166,10 @@ camera to where it began, and its tap never settles. Until a touch founder
 commits (it travels `TOUCH_COMMIT_SLOP_PX`, ends as a tap, or outlives the
 window) it dismisses nothing a person made: Point and Talk, a committed Elastic
 degree, and repair presentations wait, while camera interruption stays
-immediate. The grips and Point and Talk's outside dismissal apply the same rule
-themselves, since they sit outside the canvas owner. Otherwise the
+immediate. The grips, Point and Talk's outside dismissal, and the Wiki
+takeover's outside dismissal sit outside the canvas owner, so they apply the
+same rule through the arbitration module's one press-dismissal policy.
+Otherwise the
 first pointer owns the gesture and only another touch may join it, so two
 fingers still pinch whenever no pen is touching. Pen hover is not activity, and
 a mouse alone behaves as before. Pen contact is noted in the window capture

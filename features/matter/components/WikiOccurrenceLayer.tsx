@@ -22,6 +22,7 @@ import type {
   WikiOccurrenceDriver,
   WikiOccurrenceView,
 } from "../interaction/wiki-occurrence-driver";
+import { outsidePressDismissal } from "../runtime/canvas-pointer-arbitration";
 import type { ThoughtTree } from "../tree/model";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { useEscapeLayer } from "./escape-layers";
@@ -301,18 +302,22 @@ function WikiOccurrenceTakeover({
       if (event.target instanceof Node && bubbleRef.current?.contains(event.target)) return;
       const onWord = driver.hitTest(content.nodeId, event.clientX, event.clientY) ===
         content.occurrenceId;
-      // The press already addresses something else; focus follows it.
-      if (event.pointerType !== "touch") {
-        dismiss(false, onWord);
-        return;
+      // The press already addresses something else, so focus follows it. A
+      // palm beside a pen is not a tap; a touch dismisses once it commits.
+      switch (outsidePressDismissal(event.pointerType, penActive(event.timeStamp))) {
+        case "now":
+          dismiss(false, onWord);
+          return;
+        case "when-touch-commits":
+          pendingTouch?.();
+          pendingTouch = deferUntilTouchCommits(
+            { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
+            () => dismiss(false, onWord),
+          );
+          return;
+        case "never":
+          return;
       }
-      // A palm beside a pen is not a tap; a touch dismisses once it commits.
-      if (penActive(event.timeStamp)) return;
-      pendingTouch?.();
-      pendingTouch = deferUntilTouchCommits(
-        { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
-        () => dismiss(false, onWord),
-      );
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => {

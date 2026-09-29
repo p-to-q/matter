@@ -117,6 +117,49 @@ test.describe("mobile canvas Pan", () => {
     await expect(page.locator(".spatial-thought[data-selected=true]")).toHaveCount(selectedBeforeMoveExit);
   });
 
+  test("keeps controls outside the camera gesture and ends a pan when the window loses focus", async ({ page }) => {
+    await page.goto("/matter");
+    await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    const shell = page.locator("main.matter-shell");
+    // Only the material world takes custom gestures; the index keeps its
+    // native vertical scroll and the shell its native behaviour.
+    await expect(shell).toHaveCSS("touch-action", "auto");
+    await expect(page.locator(".matter-world")).toHaveCSS("touch-action", "none");
+    await expect(page.locator(".material-files")).toHaveCSS("touch-action", "pan-y");
+    await page.locator('[data-tool-id="move"]').tap();
+    await expect(shell).toHaveAttribute("data-canvas-mode", "pan");
+
+    // A drag that begins on a control is never a camera gesture.
+    const rail = await page.locator(".tool-rail").boundingBox();
+    if (rail === null) throw new Error("tool rail is not visible");
+    const onControl = { x: rail.x + rail.width / 2, y: rail.y + 3 };
+    const beforeControl = await viewportReceipt(shell);
+    await withTouchSession(page, async (session) => {
+      await touchStart(session, onControl);
+      await touchMove(session, { x: onControl.x - 60, y: onControl.y + 40 });
+      await touchMove(session, { x: onControl.x - 120, y: onControl.y + 80 });
+      await touchEnd(session);
+    });
+    await expect(shell).not.toHaveAttribute("data-dragging", "true");
+    expect(await viewportReceipt(shell)).toEqual(beforeControl);
+
+    // Losing the window ends the pan; the same touch then moves nothing.
+    const paperBox = await page.locator(".matter-document").boundingBox();
+    if (paperBox === null) throw new Error("mobile paper is not visible");
+    const start = { x: paperBox.x + 52, y: paperBox.y + 210 };
+    await withTouchSession(page, async (session) => {
+      await touchStart(session, start);
+      await touchMove(session, { x: start.x + 30, y: start.y + 18 });
+      await expect(shell).toHaveAttribute("data-dragging", "true");
+      await page.evaluate(() => window.dispatchEvent(new Event("blur")));
+      await expect(shell).not.toHaveAttribute("data-dragging", "true");
+      const afterBlur = await viewportReceipt(shell);
+      await touchMove(session, { x: start.x + 120, y: start.y + 90 });
+      await touchEnd(session);
+      await expect.poll(() => viewportReceipt(shell)).toEqual(afterBlur);
+    });
+  });
+
   test("a stationary touch remains a tap after Pan translates the material plane", async ({ page }) => {
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");

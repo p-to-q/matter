@@ -206,7 +206,9 @@ import type { TypographyHeightAuthority } from "./typography-height-authority";
 import { isCancelEscape, isImeKeydown } from "./composition-safe-keys";
 import { canvasRegionCopy } from "./canvas-region-copy";
 import {
+  canvasPressDismissal,
   createCanvasPointerArbiter,
+  isPalmPress,
   type ArbitratedPointer,
 } from "../runtime/canvas-pointer-arbitration";
 import { deferUntilTouchCommits } from "./touch-commitment";
@@ -3342,7 +3344,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }
         // Interrupting camera motion loses nothing and stays immediate.
         const pointerViewport = interruptIndexCameraMotion();
-        if (event.pointerType === "touch" && claim?.kind === "accept" && claim.founder) {
+        if (canvasPressDismissal(event.pointerType, claim) === "when-touch-commits") {
           // A resting palm must not close Point and Talk or drop a committed
           // degree before the pen that follows it can take over.
           settleTouchFounderEffects(false);
@@ -4854,7 +4856,7 @@ function StretchHandleButton({
         if (status === "requesting") return;
         // The grips sit outside the canvas owner, so they apply the same palm
         // rule themselves: a touch while a pen writes is not a stretch.
-        if (event.pointerType === "touch" && penActive(event.timeStamp)) return;
+        if (isPalmPress(event.pointerType, penActive(event.timeStamp))) return;
         onFocusRestored(handle);
         if (stretch.pointerDown(handle, event)) {
           onBeginAdjustment();

@@ -276,6 +276,40 @@ export function touchCommitment(
   }
 }
 
+/**
+ * When a press may dismiss a surface a person is still reading. A mouse or pen
+ * press is deliberate and acts at once; a touch while a pen writes is a palm
+ * and never acts; any other touch may be a palm that a pen is about to
+ * follow, so it acts only once it commits (see `touchCommitment`).
+ */
+export type PressDismissal = "now" | "when-touch-commits" | "never";
+
+/** A touch that lands while a pen writes is a palm, never a gesture. */
+export function isPalmPress(pointerType: string, penActive: boolean): boolean {
+  return pointerType === "touch" && penActive;
+}
+
+/** The palm rule for a surface outside the canvas owner, such as a local field. */
+export function outsidePressDismissal(pointerType: string, penActive: boolean): PressDismissal {
+  if (pointerType !== "touch") return "now";
+  return isPalmPress(pointerType, penActive) ? "never" : "when-touch-commits";
+}
+
+/**
+ * The palm rule for a press the canvas owner has already arbitrated: a
+ * rejected pointer dismisses nothing, and only a founding touch may be a palm.
+ * A touch that joins a pinch is already a real gesture.
+ */
+export function canvasPressDismissal(
+  pointerType: string,
+  claim: CanvasPointerClaim | null,
+): PressDismissal {
+  if (claim?.kind === "reject") return "never";
+  return pointerType === "touch" && claim?.kind === "accept" && claim.founder
+    ? "when-touch-commits"
+    : "now";
+}
+
 const NONE: readonly number[] = Object.freeze([]);
 const REJECT: CanvasPointerClaim = Object.freeze({ kind: "reject" });
 const FOUNDER: CanvasPointerClaim = Object.freeze({ kind: "accept", founder: true });

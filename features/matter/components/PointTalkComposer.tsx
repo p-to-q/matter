@@ -31,6 +31,7 @@ import {
 import { constrainPointTalkDirectionInput } from "./point-talk-direction-input";
 import { useEscapeLayer } from "./escape-layers";
 import { deferUntilTouchCommits } from "./touch-commitment";
+import { outsidePressDismissal } from "../runtime/canvas-pointer-arbitration";
 
 export type PointTalkStatusPhase = Extract<
   TextSwapInteractionState["phase"],
@@ -268,19 +269,23 @@ export function PointTalkComposer({
         insideVoiceTool: targetElement?.closest('[data-tool-id="voice"]') != null,
         submitted,
       })) return;
-      if (event.pointerType !== "touch") {
-        onCancel();
-        return;
+      // A palm while a pen writes (perhaps into this very field) is not a tap,
+      // and a palm resting beside the pen must not discard a typed direction:
+      // a touch dismisses only once it commits to a real tap or gesture.
+      switch (outsidePressDismissal(event.pointerType, penActive(event.timeStamp))) {
+        case "now":
+          onCancel();
+          return;
+        case "when-touch-commits":
+          pendingTouchDismissal?.();
+          pendingTouchDismissal = deferUntilTouchCommits(
+            { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
+            onCancel,
+          );
+          return;
+        case "never":
+          return;
       }
-      // A palm while a pen writes (perhaps into this very field) is not a tap.
-      if (penActive(event.timeStamp)) return;
-      // A palm resting beside the pen must not discard a typed direction: a
-      // touch dismisses only once it commits to a real tap or gesture.
-      pendingTouchDismissal?.();
-      pendingTouchDismissal = deferUntilTouchCommits(
-        { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
-        onCancel,
-      );
     };
     document.addEventListener("pointerdown", cancelFromOutsidePointer, true);
     return () => {
