@@ -1452,11 +1452,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
   // Escape after an Elastic submit only removes the committed degree from the
   // paper. The submitted request keeps its immutable basis and may still
   // deliver; dismissing a presentation is never cancellation after submit.
-  useEscapeLayer(transformState.phase === "requesting", "gesture", () => {
-    if (stretch.mode !== "committed") return false;
-    stretchKeyDown("Escape");
-    return true;
-  });
+  // It is a transient surface, and only while nothing covers the paper: a
+  // menu, dialog, Ask Matter, or the overlay index above it closes first.
+  useEscapeLayer(
+    transformState.phase === "requesting" && canvasOverlay === null && !indexOverlayOpen,
+    "transient",
+    () => {
+      if (stretch.mode !== "committed") return false;
+      stretchKeyDown("Escape");
+      return true;
+    },
+  );
   const currentTransformChange = isTransformPresentationCurrent(
     transformPresentation.change,
     { treeId: tree.id, documentEpoch: props.documentEpoch },
@@ -3949,8 +3955,8 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
                   node.id,
                   event.key === "ArrowRight" ? "next" : "previous",
                 )) return;
+                // preventDefault is the claim; no keydown stops propagation.
                 event.preventDefault();
-                event.stopPropagation();
               }}
               tabIndex={isHeldAside && !isHeldAsideRoot ? -1 : undefined}
               type="button"
