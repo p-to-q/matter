@@ -20,12 +20,13 @@ the request boundary. A locale addition is a protocol change: update the
 shared allow-list, client copy, provider handling, and focused tests together.
 
 The built-in preview seed may follow this preference only through a strict
-provenance-gated material migration after local hydration: recognized seed tree
-and node ids, original timestamps, canonical copy, and the absence of a text
-replacement in either Undo or Redo must all agree. The migration uses ordinary
-validated tree mutations, rebases only structural mementos that contain the
-same proven seed, and publishes nothing unless both history stacks replay
-exactly. It never adds a locale field, tag, or value to `ThoughtTree`, history,
+provenance-gated material migration after local hydration, once every material
+turn has settled: recognized seed tree and node ids, original timestamps, and
+canonical copy must all agree. The migration uses ordinary validated tree
+mutations and rewrites the same untouched seed copy inside Undo and Redo
+mementos, so an Undo restores a seed passage in the current language. It
+replays nothing: only the next Undo and Redo are dry-run, and a stale top
+releases its stack with the ordinary history notice. It never adds a locale field, tag, or value to `ThoughtTree`, history,
 or an export; the localized seed text itself is ordinary material and therefore
 does appear at those material boundaries. The migration never translates a
 Branch result, admitted transcript, model output, or person-edited material.
@@ -320,8 +321,12 @@ usable selection state while operational receipts remain server-side. After
 submit, a new selection or stretch, navigation, presentation dismissal, an
 unrelated revision, or temporary page hiding does not abort the immutable
 request. A document/tree switch, change anywhere in the exact visible lineage
-addressed by the turn, target removal, import, page exit, unmount, or explicit
-Escape does. Global revision is a receipt, not the read set: an unrelated
+addressed by the turn, target removal, import, page exit, or unmount does.
+`Escape` after confirmation, like another surface taking the paper, removes
+only the presented degree; the request still lands once. A turn that ends
+unchanged reports `unavailable` or `stale` to the browser's outcome line, and a
+resolved plan parked for an unlaid-out target may be discarded explicitly.
+Global revision is a receipt, not the read set: an unrelated
 sibling edit may settle while the addressed lineage is still exact. A resolved
 plan waits for visible, global pointer-idle, target-visible delivery, then
 pre-commit validation repeats request version, interaction, tree, current target
@@ -591,6 +596,20 @@ carrying the fingerprint of the material it came from, so a node is named once
 rather than once per reload. A deterministic label is never stored: recomputing
 it is cheaper than reading it back.
 
+## Transcription boundary
+
+`POST /api/transcribe` is strict multipart: protocol version, interaction id,
+attempt, `purpose` (`admission`, `direction`, or `swap-direction`), locale,
+duration, and audio, and never a tree, target, lineage, provider, or fixture
+flag. The browser also declares the purpose once as the URL query parameter
+`?purpose=`, so a route whose purpose is closed refuses with retryable
+`TRANSCRIPTION_UNAVAILABLE` (503) before reading a recording byte. The form
+field stays authoritative: a URL value that is repeated, invalid, or different
+from the field is `INVALID_REQUEST` (400), and a request without the URL value
+is gated as soon as the field is parsed. Each purpose has its own product gate;
+`swap-direction` belongs to the Text Swap surface. Lifecycle and bounds are in
+[`reference/voice-input.md`](reference/voice-input.md).
+
 ## Repair boundaries
 
 The strict transcription success envelope carries only the final transcript.
@@ -758,17 +777,21 @@ the read-only answer while the operation and local `{ treeId, documentEpoch }`
 owner remain current. Later edits or selections do not reinterpret the captured
 question and snapshot. Closing the surface, switching AI presentations, or
 temporary page hiding detaches the bubble without aborting the submitted
-request; a terminal result may enter the bounded local record and a later open
-still starts clean. Page exit, unmount, or owner replacement aborts the request
-and makes a late completion inert.
+request; a terminal result may enter the bounded local record. A later opening
+starts clean except for a question still in flight or not yet seen settled,
+which it carries until the person has seen it. Explicit Cancel, shown in place
+of Ask while a question waits, page exit, unmount, or owner replacement aborts
+the request and makes a late completion inert.
 
 An error response is also parsed as an exact Matter envelope. Its server message
 is validated and discarded; the closed `fallbackReason` remains an operational
-receipt only. `MODEL_BUSY`, `MODEL_TIMEOUT`, and temporary model unavailability
-remain distinct for diagnosis, but do not become an inquiry turn or localized
-failure message: the submitted question returns to the field. A legacy,
-malformed, oversized, unknown, or proxy-authored 429/503 fails closed the same
-way. No provider message, status, model, or relay identity crosses this boundary.
+receipt only. `RATE_LIMITED`, `MODEL_BUSY`, `MODEL_TIMEOUT`, and temporary model
+unavailability remain distinct for diagnosis. None becomes an inquiry turn: the
+submitted question returns to the field with one quiet localized line in the
+bubble's status slot, chosen from that closed code and never from a provider
+message. A legacy, malformed, oversized, unknown, or proxy-authored 429/503
+fails closed the same way. No provider message, status, model, or relay
+identity crosses this boundary.
 
 The browser may project the current lasso passage or the one complete passage
 explicitly addressed by a local inquiry icon. With neither, it projects the
@@ -1053,20 +1076,31 @@ commands without treating provenance as authorization.
 not only while translating a plan. Undo restores material, structure, sibling
 order, and node timestamps exactly. It is itself a new commit, so tree revision
 always increments and is never rolled back. Committed human, repair, and agent
-commands may enter pointer undo history; their source remains distinguishable. The browser
-retains the complete local inverse journal alongside its material snapshot,
-within the physical IndexedDB quota, and saves both in one compare-and-swap
-record. It is deliberately excluded from archives.
+commands may enter pointer undo history; their source remains distinguishable.
+History is bounded to the newest 1,000 steps and 32 MiB of serialized inverses
+across both stacks (`MATTER_HISTORY_LIMITS`,
+[`reference/history-and-undo.md`](reference/history-and-undo.md)); the byte bound exceeds the
+largest legal inverse, so no valid change is refused, and older steps are
+released. The browser stores one IndexedDB record per retained step beside the
+material snapshot and writes both in one compare-and-swap transaction (database
+schema v6; layout in
+[`reference/virtual-file-system.md`](reference/virtual-file-system.md#undo-journal-schema-v6)).
+The journal is deliberately excluded from archives, which are the long-term
+recovery path.
 
 The engine sets an inverse's expected revision to the newly committed revision.
 When sequential undo reaches it after newer commands have themselves been
 undone, history clones the inverse and rebases only that revision to the current
 one. Every structural or text mutation still verifies its complete memento, so
-rebasing cannot become an unconditional overwrite. Successful undo removes the
-entry and does not push the inverse produced by undo; failure changes neither
-tree nor history. Hydration validates the whole saved inverse chain against the
-restored tree before exposing it; a malformed or legacy journal is discarded
-without affecting material. Restoring an archive of the current document starts
+rebasing cannot become an unconditional overwrite. Successful undo moves the
+engine-produced inverse to the redo stack; a new human command clears the redo
+future, while a delivered material-turn result keeps the part of it that still
+replays. A top inverse the engine refuses (`HISTORY_UNAVAILABLE`) leaves the
+tree unchanged and releases that whole stack. Hydration never replays the
+journal: after a shape check it dry-runs only the next Undo and Redo, every
+deeper step is validated by the engine when used, and a step that cannot be
+read or applied releases its stack with one notice. A v5 inline journal
+migrates on its first save. Restoring an archive of the current document starts
 a new history, and every document transition clears pending turns. Until a
 durable active-document pointer exists, the first release rejects a foreign
 tree id before persistence rather than claiming a switch that reload cannot

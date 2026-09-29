@@ -192,7 +192,10 @@ service. It never uses the fixture transcript in production. The microphone
 remains visible in its stable composer position. `POST /api/transcribe` is strict
 multipart and echoes protocol version,
 interaction id and attempt. It receives purpose, locale, duration and audio,
-but no tree, target, lineage, provider name or fixture flag. The route parses;
+but no tree, target, lineage, provider name or fixture flag. The purpose also
+travels once as `?purpose=`, so a closed purpose is refused before any audio is
+read; the form field stays authoritative (see
+[`../protocol.md`](../protocol.md#transcription-boundary)). The route parses;
 server-only adapters transcribe. Provider selection is deployment configuration.
 Fixture and live adapters use the same controller, request, response and human
 tree-command path.
