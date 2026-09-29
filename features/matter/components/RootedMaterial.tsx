@@ -176,8 +176,16 @@ import { TransformingMaterialText } from "./TransformingMaterialText";
 import {
   admissionFeedbackActions,
   admissionFeedbackMessage,
+  admissionPhaseMessage,
   admissionPlacementLabel,
 } from "./admission-feedback-copy";
+import {
+  presenceReservesSpace,
+  type PresenceClose,
+  type PresenceFrame,
+  type PresenceLive,
+} from "./presence";
+import { usePresence, useSettledStatus } from "./use-presence";
 import { lassoAccessibilityCopy } from "./lasso-accessibility-copy";
 import { voiceToolCopy } from "./voice-tool-copy";
 import type { TypographyHeightAuthority } from "./typography-height-authority";
@@ -561,7 +569,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const [languagePresentationDamage, setLanguagePresentationDamage] = useState<PresentationDamage | null>(null);
   const languagePresentationDamageRef = useRef<PresentationDamage | null>(null);
   const [admissionFeedbackHeight, setAdmissionFeedbackHeight] = useState(0);
-  const admissionAnchor = props.admission.state.phase === "idle" ? null : props.admission.state.anchor;
   const [canvasNavigationState, setCanvasNavigationState] = useState(
     () => createCanvasNavigationSession(props.documentEpoch),
   );
@@ -873,20 +880,40 @@ export function RootedMaterial(props: RootedMaterialProps) {
       layout,
     );
   }, []);
-  const admissionParentBox = useMemo(
+  const admissionLiveState = outcomePresentationAvailable && props.admission.state.phase !== "idle"
+    ? props.admission.state
+    : null;
+  const admissionLiveAnchor = admissionLiveState?.anchor ?? null;
+  const admissionLiveBox = useMemo(
     () => findAdmissionFeedbackParentBox(
-      admissionAnchor,
+      admissionLiveAnchor,
       activeLayout?.boxes ?? null,
       navigation.selectedNodeId,
     ),
-    [activeLayout?.boxes, admissionAnchor, navigation.selectedNodeId],
+    [activeLayout?.boxes, admissionLiveAnchor, navigation.selectedNodeId],
   );
+  const admissionLive = useMemo<PresenceLive<AdmissionFeedbackView>>(
+    () => admissionLiveState === null
+      ? null
+      : {
+          identity: admissionLiveState.token,
+          view: { state: admissionLiveState, box: admissionLiveBox },
+        },
+    [admissionLiveBox, admissionLiveState],
+  );
+  const admissionFrame = usePresence(
+    admissionLive,
+    admissionPresenceClose(outcomePresentationAvailable, props.admission.settlement),
+  );
+  const admissionReservedNodeId = presenceReservesSpace(admissionFrame)
+    ? admissionFrame?.view.box?.nodeId ?? null
+    : null;
   const admissionPresentationDamage = useMemo<PresentationDamage | null>(
     () => projectAdmissionFeedbackPresentation(
-      admissionParentBox?.nodeId ?? null,
+      admissionReservedNodeId,
       admissionFeedbackHeight,
     ),
-    [admissionFeedbackHeight, admissionParentBox?.nodeId],
+    [admissionFeedbackHeight, admissionReservedNodeId],
   );
   // Voice admission and selected-language work are mutually exclusive. Giving
   // admission precedence still makes the rendering boundary deterministic if
@@ -2117,7 +2144,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
       cancelAdmissionFocusRestore();
     };
   }, [cancelAdmissionFocusRestore]);
-  const restoreVoiceToolFocus = useCallback((basis: AdmissionFocusRestorationBasis | null) => {
+  const restoreVoiceToolFocus = useCallback((
+    basis: AdmissionFocusRestorationBasis | null,
+    focusWasInside: boolean,
+  ) => {
     cancelAdmissionFocusRestore();
     if (basis === null) return;
     if (!admissionFocusRestorationIsCurrent(
@@ -2126,6 +2156,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
       props.documentEpoch,
       document.visibilityState === "visible",
     )) return;
+    const voiceTool = shellRef.current?.querySelector<HTMLButtonElement>('[data-tool-id="voice"]');
+    if (focusWasInside && voiceTool !== null && voiceTool !== undefined) {
+      // The leaving feedback is about to become inert. Move focus in this
+      // commit so it follows the live phase instead of falling to the body.
+      voiceTool.focus({ preventScroll: true });
+      if (document.activeElement === voiceTool) return;
+    }
     const frameId = requestAnimationFrame(() => {
       const pending = admissionFocusFrameRef.current;
       if (pending === null || pending.frameId !== frameId) return;
@@ -3567,8 +3604,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             />
             )}
             <AdmissionFeedback
-              anchor={admissionAnchor}
-              parentBox={admissionParentBox}
+              frame={admissionFrame}
               controller={props.admission}
               locale={props.locale}
               onDismiss={() => {
@@ -4623,7 +4659,10 @@ function normalizePointerType(value: string): CanvasPointerType {
 
 function documentFocusIsOwned(): boolean {
   const active = document.activeElement;
-  return active instanceof HTMLElement && active !== document.body && active.isConnected;
+  // A browser may keep reporting focus inside a subtree that just became
+  // inert, such as a leaving transient surface; nobody can act on it there.
+  return active instanceof HTMLElement && active !== document.body && active.isConnected &&
+    active.closest("[inert]") === null;
 }
 
 function projectCanvasTouchContact(
@@ -4648,10 +4687,33 @@ function projectCanvasTouchContact(
   });
 }
 
+type AdmissionFeedbackView = Readonly<{
+  state: Exclude<AdmissionController["state"], { readonly phase: "idle" }>;
+  /** The material lane the surface sits under while it is live. */
+  box: Readonly<{ nodeId: string; x: number; y: number; height: number }> | null;
+}>;
+
+function admissionPresenceClose(
+  presented: boolean,
+  settlement: AdmissionController["settlement"],
+): PresenceClose {
+  if (!presented) return "preempted";
+  switch (settlement?.outcome) {
+    case "committed": return "finished";
+    case "withdrawn": return "person";
+    default: return "preempted";
+  }
+}
+
+/**
+ * Recording feedback under one material lane. Focus, announcements, and
+ * height measurement follow the live phase; once the frame leaves `present`
+ * the surface renders its frozen last content without handlers, owns no live
+ * region, and becomes inert only after any focus inside it has been returned.
+ */
 function AdmissionFeedback({
-  anchor,
-  parentBox,
   controller,
+  frame,
   locale,
   onDismiss,
   onReturnFocus,
@@ -4660,12 +4722,11 @@ function AdmissionFeedback({
   presented,
   rootId,
 }: {
-  anchor: InteractionAdmissionAnchor | null;
-  parentBox: Readonly<{ nodeId: string; x: number; y: number; width: number; height: number }> | null;
   controller: AdmissionController;
+  frame: PresenceFrame<AdmissionFeedbackView>;
   locale: CanvasLanguage;
   onDismiss: () => void;
-  onReturnFocus: (basis: AdmissionFocusRestorationBasis | null) => void;
+  onReturnFocus: (basis: AdmissionFocusRestorationBasis | null, focusWasInside: boolean) => void;
   onHeightChange: (height: number) => void;
   /** Where a new admission would go now; held words may be placed only here. */
   placeAnchor: InteractionAdmissionAnchor | null;
@@ -4674,90 +4735,129 @@ function AdmissionFeedback({
 }) {
   const feedbackRef = useRef<HTMLDivElement>(null);
   const retryFocusRef = useRef(false);
-  const phase = controller.state.phase;
-  const previousStateRef = useRef(controller.state);
+  const liveState = controller.state;
+  const previousLiveStateRef = useRef(liveState);
+  const present = frame?.stage === "present";
+  const view = frame?.view.state ?? null;
+  const shownPhase = useSettledStatus<AdmissionController["state"]["phase"]>({
+    scope: frame?.identity ?? null,
+    value: view?.phase ?? null,
+    // Capture starting or ending and every error are shown at once; waiting
+    // for permission, transcription, or placement settles first.
+    urgent: view?.phase === "recording" || view?.phase === "stopping" || view?.phase === "error",
+    lingers: view?.phase !== "error",
+  }, !present);
+  const surfaceMounted = frame !== null;
+
   useLayoutEffect(() => {
+    // Only a present surface is measured. A leaving one keeps its last height
+    // until the reservation it belongs to is released.
+    if (!present) return;
     const element = feedbackRef.current;
-    if (element === null) {
-      onHeightChange(0);
-      return;
-    }
+    if (element === null) return;
     const publishHeight = () => onHeightChange(Math.ceil(element.getBoundingClientRect().height));
     publishHeight();
-    if (typeof ResizeObserver === "undefined") return () => onHeightChange(0);
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(publishHeight);
     observer.observe(element);
-    return () => {
-      observer.disconnect();
-      onHeightChange(0);
-    };
-  }, [anchor, onHeightChange, phase, presented]);
+    return () => observer.disconnect();
+  }, [frame?.identity, onHeightChange, present]);
   useLayoutEffect(() => {
-    const previousState = previousStateRef.current;
-    previousStateRef.current = controller.state;
+    if (!surfaceMounted) return;
+    return () => onHeightChange(0);
+  }, [onHeightChange, surfaceMounted]);
+  useLayoutEffect(() => {
+    const previousLiveState = previousLiveStateRef.current;
+    previousLiveStateRef.current = liveState;
     if (!presented || document.visibilityState !== "visible") return;
-    if (phase === "error") {
+    const firstButton = () => feedbackRef.current?.querySelector<HTMLButtonElement>("button");
+    if (liveState.phase === "error") {
       retryFocusRef.current = false;
-      feedbackRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+      firstButton()?.focus({ preventScroll: true });
       return;
     }
-    if (phase === "recording" && retryFocusRef.current) {
-      feedbackRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+    if (liveState.phase === "recording" && retryFocusRef.current) {
+      firstButton()?.focus({ preventScroll: true });
       retryFocusRef.current = false;
     }
-    if (phase === "idle") {
+    if (liveState.phase === "idle") {
       retryFocusRef.current = false;
-      if (previousState.phase !== "idle") onReturnFocus(controller.settlement);
+      if (previousLiveState.phase !== "idle") {
+        const active = document.activeElement;
+        onReturnFocus(
+          controller.settlement,
+          active !== null && feedbackRef.current?.contains(active) === true,
+        );
+      }
     }
-  }, [controller.settlement, controller.state, onReturnFocus, phase, presented]);
-  if (!presented || controller.state.phase === "idle" || anchor === null) return null;
+  }, [controller.settlement, liveState, onReturnFocus, presented]);
+  useLayoutEffect(() => {
+    // Declared after the focus effect: focus leaves before the surface
+    // becomes inert, so it is returned rather than dropped to the body.
+    const element = feedbackRef.current;
+    if (element !== null) element.inert = !present;
+  }, [frame?.identity, present]);
+
+  const retry = () => {
+    retryFocusRef.current = true;
+    controller.retry();
+  };
+
+  if (frame === null || view === null) return null;
+  const box = frame.view.box;
   const style = {
-    transform: `translate3d(${parentBox?.x ?? 0}px, ${(parentBox?.y ?? 0) + (parentBox?.height ?? 0) + 18}px, 0)`,
+    transform: `translate3d(${box?.x ?? 0}px, ${(box?.y ?? 0) + (box?.height ?? 0) + 18}px, 0)`,
   } as CSSProperties;
-  const copy = admissionFeedbackMessage(locale, controller.state);
+  const label = shownPhase === null
+    ? ""
+    : shownPhase === "error" || shownPhase === "idle"
+      ? admissionFeedbackMessage(locale, view)
+      : admissionPhaseMessage(locale, shownPhase);
   const actions = admissionFeedbackActions(locale);
+  const preview = view.phase === "recording" || view.phase === "error" ? view.transcript : undefined;
+  const liveRegion = present
+    ? view.phase === "error"
+      ? { role: "alert" as const }
+      : { role: "status" as const, "aria-live": "polite" as const }
+    : {};
   return (
     <div
-      aria-live={phase === "error" ? undefined : "polite"}
       className="admission-feedback"
-      data-admission-anchor-node-id={parentBox?.nodeId}
-      data-canvas-interactive
-      data-phase={phase}
+      data-admission-anchor-node-id={box?.nodeId}
+      data-canvas-interactive={present || undefined}
+      data-phase={view.phase}
+      data-presence={frame.stage}
+      data-presence-close={frame.close ?? undefined}
+      key={frame.identity}
       ref={feedbackRef}
-      role={phase === "error" ? "alert" : "status"}
       style={style}
     >
       <span aria-hidden="true" className="admission-feedback__signal" />
-      <span>{copy}</span>
-      {(phase === "recording" || phase === "error") &&
-      "transcript" in controller.state &&
-      controller.state.transcript ? (
-        <span className="admission-feedback__preview" dir="auto">{controller.state.transcript}</span>
+      <span aria-atomic="true" className="admission-feedback__label" {...liveRegion}>{label}</span>
+      {preview ? (
+        <span className="admission-feedback__preview" dir="auto">{preview}</span>
       ) : null}
-      {phase === "recording" ? (
-        <button onClick={controller.stop} type="button">{actions.stop}</button>
-      ) : phase === "error" && admissionHoldsTranscript(controller.state) ? (
+      {view.phase === "recording" ? (
+        <button onClick={present ? controller.stop : undefined} type="button">{actions.stop}</button>
+      ) : view.phase === "error" && admissionHoldsTranscript(view) ? (
         <>
           {placeAnchor === null ? null : (
-            <button onClick={() => controller.place(placeAnchor)} type="button">
+            <button onClick={present ? () => controller.place(placeAnchor) : undefined} type="button">
               {admissionPlacementLabel(locale, placeAnchor, rootId)}
             </button>
           )}
-          <button onClick={onDismiss} type="button">{actions.discard}</button>
+          <button onClick={present ? onDismiss : undefined} type="button">{actions.discard}</button>
         </>
-      ) : phase === "error" ? (
+      ) : view.phase === "error" ? (
         <>
-          {controller.state.errorCode === "STALE_TARGET" ? null : (
-            <button onClick={() => {
-              retryFocusRef.current = true;
-              controller.retry();
-            }} type="button">{actions.retry}</button>
+          {view.errorCode === "STALE_TARGET" ? null : (
+            <button onClick={present ? retry : undefined} type="button">{actions.retry}</button>
           )}
-          <button onClick={onDismiss} type="button">{actions.dismiss}</button>
+          <button onClick={present ? onDismiss : undefined} type="button">{actions.dismiss}</button>
         </>
       ) : (
-        <button onClick={controller.cancel} type="button">
-          {phase === "transcribing" ? actions.cancelTranscription : actions.cancel}
+        <button onClick={present ? controller.cancel : undefined} type="button">
+          {view.phase === "transcribing" ? actions.cancelTranscription : actions.cancel}
         </button>
       )}
     </div>

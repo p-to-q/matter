@@ -156,22 +156,39 @@ export type AdmissionFeedbackActions = Readonly<{
   discard: string;
 }>;
 
+export type AdmissionProgressPhase = Exclude<
+  AdmissionInteractionState["phase"],
+  "idle" | "error"
+>;
+
 export function admissionFeedbackMessage(
   language: CanvasLanguage,
   state: AdmissionInteractionState,
 ): string {
-  const copy = COPY[language];
   switch (state.phase) {
+    case "error": {
+      const copy = COPY[language];
+      return state.transcript === undefined
+        ? admissionErrorMessage(copy, state.errorCode)
+        : copy.heldWords;
+    }
+    case "idle": return "";
+    default: return admissionPhaseMessage(language, state.phase);
+  }
+}
+
+/** A phase label by itself, for a label still shown after its phase ended. */
+export function admissionPhaseMessage(
+  language: CanvasLanguage,
+  phase: AdmissionProgressPhase,
+): string {
+  const copy = COPY[language];
+  switch (phase) {
     case "requesting": return copy.requesting;
     case "recording": return copy.recording;
     case "stopping": return copy.stopping;
     case "transcribing": return copy.transcribing;
     case "committing": return copy.committing;
-    case "error":
-      return state.transcript === undefined
-        ? admissionErrorMessage(copy, state.errorCode)
-        : copy.heldWords;
-    case "idle": return "";
   }
 }
 
