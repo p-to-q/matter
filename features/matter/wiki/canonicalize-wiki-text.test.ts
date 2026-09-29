@@ -59,7 +59,14 @@ describe("canonicalizeWikiText", () => {
 
     expect(apply(compiled, "written", "gift", "en-US").text).toBe("present");
     expect(apply(compiled, "written", "gift", "de-DE").text).toBe("poison");
-    expect(apply(compiled, "written", "gift", "ja-JP").text).toBe("gift");
+    // A Latin word in a Japanese turn is routed by its script to the one
+    // Latin ledger, en-US; it never falls back to any other locale.
+    expect(apply(compiled, "written", "gift", "ja-JP").text).toBe("present");
+
+    const german = snapshot([rule("gift", "poison", { locale: "de-DE" })]);
+    for (const locale of ["en-US", "zh-CN", "zh-TW", "ja-JP"] as const) {
+      expect(apply(german, "written", "gift", locale).text).toBe("gift");
+    }
   });
 
   it("uses leftmost-longest matches and applies every disjoint occurrence", () => {
@@ -270,5 +277,158 @@ describe("canonicalizeWikiText", () => {
     expect(result.transitionCount).toBeGreaterThan(30_000);
     expect(result.transitionCount).toBeLessThanOrEqual(budget);
     expect(budget).toBe(512 * 64);
+  });
+});
+
+describe("canonicalizeWikiText script routing", () => {
+  const LATIN = rule("Englebart", "Engelbart", {
+    locale: "en-US",
+    channel: "spoken",
+    boundary: "word",
+    authority: "provisional",
+    provenance: "aggregate-evidence",
+  });
+
+  function spoken(compiled: CompiledWikiSnapshot, text: string, locale: MatterLocale = "zh-CN") {
+    return canonicalizeWikiText(compiled, locale, "spoken", text);
+  }
+
+  it("applies the en-US ledger to Latin words inside Chinese and Japanese turns", () => {
+    const compiled = snapshot([LATIN]);
+    const text = "我读了Englebart的论文";
+    const result = spoken(compiled, text);
+
+    expect(result.text).toBe("我读了Engelbart的论文");
+    expect(result.edits).toEqual([expect.objectContaining({
+      start: text.indexOf("E"),
+      end: text.indexOf("的"),
+    })]);
+    expect(compiled.rules[result.edits[0]!.ruleIndex]).toMatchObject({ locale: "en-US" });
+    expect(spoken(compiled, "我讀了 Englebart 的論文", "zh-TW").text)
+      .toBe("我讀了 Engelbart 的論文");
+    expect(spoken(compiled, "Englebartの論文を読んだ", "ja-JP").text)
+      .toBe("Engelbartの論文を読んだ");
+    expect(spoken(compiled, "ｴﾝｹﾞﾙEnglebart", "ja-JP").text).toBe("ｴﾝｹﾞﾙEngelbart");
+  });
+
+  it("ends a routed word at punctuation, spacing, emoji, or a CJK letter only", () => {
+    const compiled = snapshot([LATIN]);
+
+    expect(spoken(compiled, "Englebart，Englebart！😀Englebart😀").text)
+      .toBe("Engelbart，Engelbart！😀Engelbart😀");
+    for (const text of [
+      "Englebarts的论文",
+      "Englebart2号",
+      "Englebart's论文",
+      "Englebart-style",
+      "#Englebart",
+      "Englebartα",
+    ]) {
+      expect(spoken(compiled, text).text).toBe(text);
+    }
+  });
+
+  it("matches full-width Latin for matching only and replaces the span as written", () => {
+    const compiled = snapshot([LATIN]);
+    const text = "我读了Ｅｎｇｌｅｂａｒｔ的论文";
+    const result = spoken(compiled, text);
+
+    expect(result.text).toBe("我读了Engelbart的论文");
+    expect(result.edits).toEqual([expect.objectContaining({
+      start: text.indexOf("Ｅ"),
+      end: text.indexOf("的"),
+    })]);
+    // Width is never normalized where no rule applies.
+    expect(spoken(compiled, "我读了Ｍｏｒｐｈ的论文").text).toBe("我读了Ｍｏｒｐｈ的论文");
+  });
+
+  it("protects URLs, email, code, quotes, and full-width identifiers in routed spans", () => {
+    const compiled = snapshot([
+      LATIN,
+      rule("EngleBart", "EngelBart", { locale: "en-US", channel: "spoken" }),
+    ]);
+    for (const text of [
+      "看https://example.com/Englebart的页面",
+      "邮箱Englebart@example.com",
+      "代码`Englebart`里",
+      "他说“Englebart”",
+      "路径/docs/Englebart",
+      "打开ＥｎｇｌｅＢａｒｔ模块",
+    ]) {
+      expect(spoken(compiled, text).text).toBe(text);
+    }
+  });
+
+  it("never lets a CJK span, a digit-only form, or a German rule reach a routed turn", () => {
+    const compiled = snapshot([
+      rule("材料", "material", { locale: "en-US", channel: "spoken" }),
+      rule("A股", "A-share", { locale: "en-US", channel: "spoken" }),
+      rule("2", "two", { locale: "en-US", channel: "spoken" }),
+      rule("Englebart", "Engelbart", { locale: "de-DE", channel: "spoken" }),
+    ]);
+
+    for (const text of ["这个材料", "A股", "我有2个", "我读了Englebart的论文"]) {
+      expect(spoken(compiled, text).text).toBe(text);
+    }
+  });
+
+  it("routes only out of CJK turns", () => {
+    const compiled = snapshot([LATIN]);
+
+    expect(spoken(compiled, "Englebart", "en-US").text).toBe("Engelbart");
+    expect(spoken(compiled, "Englebart", "de-DE").text).toBe("Englebart");
+    // An English turn does not fold width; only a routed span is matched folded.
+    expect(spoken(compiled, "Ｅｎｇｌｅｂａｒｔ", "en-US").text).toBe("Ｅｎｇｌｅｂａｒｔ");
+  });
+
+  it("is additive: the turn's own rules keep every span they match", () => {
+    const own = rule("P to Q", "[p → q]", {
+      locale: "zh-CN",
+      channel: "spoken",
+      boundary: "word",
+    });
+    const compiled = snapshot([
+      own,
+      rule("Q", "queue", { locale: "en-US", channel: "spoken", boundary: "word" }),
+      rule("to", "TO", { locale: "en-US", channel: "spoken", boundary: "word" }),
+    ]);
+    const ownOnly = snapshot([own]);
+    const text = "P to Q and Q";
+
+    expect(spoken(ownOnly, text).text).toBe("[p → q] and Q");
+    expect(spoken(compiled, text).text).toBe("[p → q] and queue");
+    expect(spoken(compiled, text).edits.map(({ start, end }) => [start, end]))
+      .toEqual([[0, 6], [11, 12]]);
+  });
+
+  it("respects eligible ranges and the channel for routed spans", () => {
+    const compiled = snapshot([LATIN]);
+    const text = "Englebart说Englebart";
+
+    expect(canonicalizeWikiText(compiled, "zh-CN", "spoken", text, {
+      eligibleRanges: [{ start: 10, end: text.length }],
+    }).text).toBe("Englebart说Engelbart");
+    expect(canonicalizeWikiText(compiled, "zh-CN", "written", text).text).toBe(text);
+  });
+
+  it("bounds a routed turn by both views it walks", () => {
+    const rules = Array.from({ length: 31 }, (_, index) =>
+      rule(`${"a".repeat(index + 1)}b`, `replacement-${index + 1}`, { locale: "en-US" }));
+    const compiled = snapshot([
+      ...rules,
+      rule("材料", "材料库", { locale: "zh-CN" }),
+    ]);
+    const text = `${"a".repeat(256)}材料`;
+    const result = canonicalizeWikiText(compiled, "zh-CN", "written", text);
+    const budget = wikiCanonicalizationOperationBudget(
+      compiled.views["zh-CN"].written,
+      result.graphemeCount,
+      compiled.views["en-US"].written,
+    );
+
+    expect(result.text).toBe(`${"a".repeat(256)}材料库`);
+    expect(result.transitionCount).toBeGreaterThan(4_000);
+    expect(result.transitionCount).toBeLessThanOrEqual(budget);
+    expect(budget).toBe(258 * (2 + 32));
   });
 });

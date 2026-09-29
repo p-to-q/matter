@@ -1,5 +1,6 @@
 import {
   findProtectedWikiSpans,
+  findRoutedWikiProtectedSpans,
   isWikiRangeEligible,
   normalizeWikiEligibleRanges,
   wikiRangeOverlapsProtected,
@@ -18,6 +19,7 @@ import type {
   WikiAdmissionProducerResult,
 } from "./wiki-admission";
 import { wikiScriptClassesFromMask, wikiScriptMask } from "./wiki-script";
+import { routeWikiWord, wikiLatinRouteLocale } from "./wiki-script-routing";
 import type { MatterLocale } from "../config/locales";
 
 const LATIN = /^[\p{Script=Latin}\p{M}]+$/u;
@@ -99,6 +101,12 @@ const CENSORED_COLLECTION: WikiTermCollectionResult = Object.freeze({
  * exceed the per-ledger bound, scanning stops before that word and the result
  * is `partial`: what was scanned still counts, and nothing beyond it may be
  * treated as absent.
+ *
+ * Each word is classified in the ledger its script routes to, so a Latin word
+ * inside a Chinese or Japanese turn is an `en-US` term under English stop words
+ * and shape rules. A routed word written in full-width Latin is neither a vote
+ * nor an opportunity: a collected canonical becomes rewrite output, so it must
+ * be a spelling the person produced, and width folding is for matching only.
  */
 export function collectCommittedWikiTermsResult(
   request: WikiAdmissionObservation,
@@ -113,9 +121,13 @@ export function collectCommittedWikiTermsResult(
   );
   if (eligibleRanges === null) return CENSORED_COLLECTION;
   const protectedSpans = findProtectedWikiSpans(request.text, "evidence");
+  const routedProtectedSpans = wikiLatinRouteLocale(request.locale) === null
+    ? protectedSpans
+    : findRoutedWikiProtectedSpans(request.text, "evidence");
   const segmenter = wordSegmenter(request.locale);
   const events = new Map<string, WikiObserveEvidenceEvent>();
   let scannedScripts = 0;
+  let routedScripts = 0;
   let partial = false;
 
   for (const segment of segmenter.segment(request.text)) {
@@ -125,10 +137,13 @@ export function collectCommittedWikiTermsResult(
     if (!isWikiRangeEligible(start, end, eligibleRanges, 0) ||
         wikiRangeOverlapsProtected(start, end, protectedSpans, 0)) continue;
     const canonical = segment.segment.normalize("NFC");
-    const producer = classifyTerm(request.locale, canonical);
+    const route = routeWikiWord(request.locale, canonical);
+    if (route.routed && (route.widthFolded ||
+        wikiRangeOverlapsProtected(start, end, routedProtectedSpans, 0))) continue;
+    const producer = classifyTerm(route.locale, canonical);
     if (producer !== null && isWikiCanonical(canonical) &&
         (enabledProducers === undefined || enabledProducers.has(producer))) {
-      const key = JSON.stringify([request.locale, canonical]);
+      const key = JSON.stringify([route.locale, canonical]);
       const previous = events.get(key);
       if (previous === undefined && events.size >= MAX_WIKI_OBSERVATIONS_PER_LEDGER) {
         partial = true;
@@ -140,20 +155,23 @@ export function collectCommittedWikiTermsResult(
       )) {
         events.set(key, Object.freeze({
           type: "observe-evidence",
-          locale: request.locale,
+          locale: route.locale,
           canonical,
           source: "recent-material",
           producer,
         }));
       }
     }
-    scannedScripts |= wikiScriptMask(segment.segment);
+    const scripts = wikiScriptMask(segment.segment);
+    scannedScripts |= scripts;
+    if (route.routed) routedScripts |= scripts;
   }
   return Object.freeze({
     status: partial ? "partial" : "ok",
     events: Object.freeze([...events.values()].sort((left, right) =>
       left.canonical.localeCompare(right.canonical, request.locale))),
     scannedScripts: wikiScriptClassesFromMask(scannedScripts),
+    routedScripts: wikiScriptClassesFromMask(routedScripts),
   });
 }
 

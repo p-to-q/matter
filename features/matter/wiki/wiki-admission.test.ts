@@ -6,6 +6,7 @@ import {
   type WikiAdmissionTurn,
 } from "./wiki-admission";
 import type { WikiObserveEvidenceEvent } from "./wiki-model";
+import type { WikiScriptClass } from "./wiki-script";
 
 const TURN: WikiAdmissionTurn = Object.freeze({
   observed: Object.freeze({ locale: "en-US", channel: "spoken", text: "Englebart spoke" }),
@@ -59,6 +60,47 @@ describe("Wiki admission planning", () => {
     });
   });
 
+  it("offers the routed Latin ledger only when a CJK turn scanned Latin words", () => {
+    const chinese: WikiAdmissionTurn = Object.freeze({
+      observed: Object.freeze({ locale: "zh-CN", channel: "spoken", text: "我读了Englebart的论文" }),
+      committed: Object.freeze({ locale: "zh-CN", channel: "spoken", text: "我读了Engelbart的论文" }),
+    });
+    const own = Object.freeze({ locale: "zh-CN", channel: "spoken", scripts: ["latin", "han"] });
+    const latin = Object.freeze({ locale: "en-US", channel: "spoken", scripts: ["latin"] });
+
+    expect(planWikiAdmissionBatch(
+      chinese,
+      result("ok", [], ["latin", "han"], ["latin"]),
+      result("ok", [relation("Englebart", "Engelbart", "latin-internal-edit-v2")],
+        ["latin", "han"], ["latin"]),
+    ).tick).toEqual({
+      term: { disposition: "quiet", opportunity: own, routedOpportunity: latin },
+      alias: { disposition: "observed", opportunity: own, routedOpportunity: latin },
+    });
+    expect(planWikiAdmissionBatch(
+      chinese,
+      result("ok", [], ["han"], []),
+      result("ok", [], ["han"]),
+    ).tick).toEqual({
+      term: { disposition: "quiet", opportunity: { ...own, scripts: ["han"] } },
+      alias: { disposition: "quiet", opportunity: { ...own, scripts: ["han"] } },
+    });
+    // An English turn routes nothing, whatever a producer reports.
+    expect(planWikiAdmissionBatch(TURN, result("ok", [], ["latin"], ["latin"]), null).tick.term)
+      .toEqual({ disposition: "quiet", opportunity: ENGLISH });
+  });
+
+  it("lets a routed relation suppress the same routed source as a term", () => {
+    const source = Object.freeze({ ...term("Englebart"), locale: "en-US" as const });
+    expect(combineWikiAdmissionEvidence(
+      [source, Object.freeze({ ...term("研究"), locale: "zh-CN" as const })],
+      [relation("Englebart", "Engelbart", "latin-internal-edit-v2")],
+    )).toEqual([
+      Object.freeze({ ...term("研究"), locale: "zh-CN" }),
+      relation("Englebart", "Engelbart", "latin-internal-edit-v2"),
+    ]);
+  });
+
   it("lets only a unique relation from a claiming producer suppress its source term", () => {
     const source = term("Englebart");
     expect(combineWikiAdmissionEvidence(
@@ -79,11 +121,14 @@ describe("Wiki admission planning", () => {
 function result(
   status: WikiAdmissionProducerResult["status"],
   events: readonly WikiObserveEvidenceEvent[],
+  scannedScripts: readonly WikiScriptClass[] = status === "censored" ? [] : ["latin"],
+  routedScripts?: readonly WikiScriptClass[],
 ): WikiAdmissionProducerResult {
   return Object.freeze({
     status,
     events: Object.freeze([...events]),
-    scannedScripts: Object.freeze(status === "censored" ? [] : ["latin" as const]),
+    scannedScripts: Object.freeze([...scannedScripts]),
+    ...(routedScripts === undefined ? {} : { routedScripts: Object.freeze([...routedScripts]) }),
   });
 }
 

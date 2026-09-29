@@ -1344,6 +1344,85 @@ describe("Wiki evidence and authority", () => {
     expect(mixed.termEvidence[0]!.quietTurns).toBe(termQuiet + 1);
   });
 
+  it("ages the routed Latin ledger only on CJK turns that contained Latin words", () => {
+    let state = repeatEvidence(createEmptyWikiState(), "recent-material", 2);
+    state = applyObservationBatch(state, [observe("machine-inference")]);
+    const termQuiet = state.termEvidence[0]!.quietTurns;
+    const chinese = Object.freeze({
+      locale: "zh-CN" as const,
+      channel: "spoken" as const,
+      scripts: Object.freeze(["han" as const]),
+    });
+
+    expect(applyWikiObservationBatch(state, [], tick("quiet", "quiet", chinese)))
+      .toEqual({ ok: true, state, changed: false });
+    const aged = applyObservationBatch(state, [], routedTick(
+      "quiet",
+      "quiet",
+      { ...chinese, scripts: ["latin", "han"] },
+    ));
+    expect(aged.termEvidence[0]).toMatchObject({ locale: "en-US", quietTurns: termQuiet + 1 });
+    expect(aged.aliasEvidence[0]).toMatchObject({ quietTurns: 1 });
+
+    // A routed observation in a Chinese turn is an ordinary en-US vote.
+    const observed = applyObservationBatch(state, [observe("recent-material")], routedTick(
+      "observed",
+      "quiet",
+      { ...chinese, scripts: ["latin", "han"] },
+    ));
+    expect(observed.termEvidence[0]).toMatchObject({ support: 12, quietTurns: 0 });
+    expect(observed.aliasEvidence[0]).toMatchObject({ quietTurns: 1 });
+  });
+
+  it("retires a turn-locale Latin term that routing can no longer observe", () => {
+    const chineseLatin = Object.freeze({
+      locale: "zh-CN" as const,
+      channel: "spoken" as const,
+      scripts: Object.freeze(["latin" as const]),
+    });
+    const legacy = applyObservationBatch(
+      createEmptyWikiState(),
+      [observe("recent-material", "OpenAI", "zh-CN")],
+      tick("observed", "paused", chineseLatin),
+    );
+    const aged = applyObservationBatch(legacy, [], routedTick(
+      "quiet",
+      "paused",
+      { ...chineseLatin, scripts: ["latin", "han"] },
+    ));
+
+    expect(aged.termEvidence).toEqual([
+      expect.objectContaining({ locale: "zh-CN", canonical: "OpenAI", quietTurns: 1 }),
+    ]);
+  });
+
+  it("rejects a routed opportunity for any ledger but the turn's own route", () => {
+    const own = { locale: "zh-CN", channel: "spoken", scripts: ["latin", "han"] };
+    const latin = { locale: "en-US", channel: "spoken", scripts: ["latin"] };
+    for (const [opportunity, routedOpportunity] of [
+      [{ ...own, locale: "en-US" }, latin],
+      [{ ...own, locale: "de-DE" }, latin],
+      [own, { ...latin, locale: "zh-TW" }],
+      [own, { ...latin, channel: "written" }],
+      [own, { ...latin, scripts: ["latin", "han"] }],
+      [own, { ...latin, scripts: [] }],
+      [own, { ...latin, excerpt: "Englebart" }],
+    ]) {
+      expect(applyWikiObservationBatch(createEmptyWikiState(), [], {
+        term: { disposition: "quiet", opportunity, routedOpportunity },
+        alias: { disposition: "paused" },
+      } as never)).toMatchObject({ ok: false, error: { code: "INVALID_EVENT" } });
+    }
+    expect(applyWikiObservationBatch(createEmptyWikiState(), [], {
+      term: { disposition: "partial", routedOpportunity: latin },
+      alias: { disposition: "paused" },
+    } as never)).toMatchObject({ ok: false, error: { code: "INVALID_EVENT" } });
+    expect(applyWikiObservationBatch(createEmptyWikiState(), [], {
+      term: { disposition: "quiet", opportunity: own, routedOpportunity: latin },
+      alias: { disposition: "paused" },
+    } as never)).toEqual({ ok: true, state: createEmptyWikiState(), changed: false });
+  });
+
   it("scores what a partial scan saw and ages nothing it did not", () => {
     let state = apply(createEmptyWikiState(), {
       type: "create-lexeme", locale: "en-US", canonical: "Codex", scope: "both",
@@ -2076,10 +2155,30 @@ function ledgerTick(
     channel: "spoken" | "written";
     scripts: readonly WikiScriptClass[];
   }>,
+  routedOpportunity?: typeof LATIN_OPPORTUNITY,
 ): WikiLedgerTick {
-  return disposition === "observed" || disposition === "quiet"
+  if (disposition !== "observed" && disposition !== "quiet") {
+    return Object.freeze({ disposition });
+  }
+  return routedOpportunity === undefined
     ? Object.freeze({ disposition, opportunity })
-    : Object.freeze({ disposition });
+    : Object.freeze({ disposition, opportunity, routedOpportunity });
+}
+
+/** One complete Chinese spoken turn whose Latin words routed to en-US. */
+function routedTick(
+  term: WikiEvidenceTickDisposition,
+  alias: WikiEvidenceTickDisposition,
+  opportunity: Readonly<{
+    locale: "zh-CN" | "zh-TW" | "ja-JP";
+    channel: "spoken";
+    scripts: readonly WikiScriptClass[];
+  }>,
+): WikiObservationTick {
+  return Object.freeze({
+    term: ledgerTick(term, opportunity, LATIN_OPPORTUNITY),
+    alias: ledgerTick(alias, opportunity, LATIN_OPPORTUNITY),
+  });
 }
 
 let occurrenceSequence = 0;

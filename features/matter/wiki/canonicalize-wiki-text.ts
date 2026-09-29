@@ -6,6 +6,14 @@ import type {
   CompiledWikiSnapshot,
   CompiledWikiView,
 } from "./wiki-compiler";
+import {
+  foldWikiFullWidthLatin,
+  hasWikiFullWidthLatin,
+  isWikiCjkLetter,
+  isWikiLatinWord,
+  isWikiRoutableGrapheme,
+  wikiLatinRouteLocale,
+} from "./wiki-script-routing";
 
 const GRAPHEME_SEGMENTER = new Intl.Segmenter("und", {
   granularity: "grapheme",
@@ -49,6 +57,8 @@ export type WikiCanonicalizationResult = Readonly<{
 /**
  * Applies one compiled channel immediately before a material commit. Matches
  * inspect only the original text, so replacements cannot trigger more rules.
+ * In a Chinese or Japanese turn, Latin-script spans the turn's own rules left
+ * untouched are also matched against the Latin ledger they route to.
  */
 export function canonicalizeWikiText(
   snapshot: CompiledWikiSnapshot,
@@ -66,7 +76,9 @@ export function canonicalizeWikiText(
     return result("invalid-text", text, snapshot.generation, EMPTY_EDITS, 0, 0);
   }
   const view = snapshot.views[locale][channel];
-  if (text.length === 0 || view.ruleCount === 0) {
+  const routedLocale = wikiLatinRouteLocale(locale);
+  const routedView = routedLocale === null ? null : snapshot.views[routedLocale][channel];
+  if (text.length === 0 || (view.ruleCount === 0 && (routedView?.ruleCount ?? 0) === 0)) {
     return result("unchanged", text, snapshot.generation, EMPTY_EDITS, 0, 0);
   }
 
@@ -131,6 +143,22 @@ export function canonicalizeWikiText(
       sourceIndex: rule.sourceIndex,
     }));
     graphemeIndex = bestEndGrapheme;
+  }
+
+  if (routedView !== null && routedView.ruleCount > 0) {
+    const routed = matchRoutedWikiView(
+      snapshot,
+      routedView,
+      text,
+      input,
+      eligibleRanges,
+      pendingEdits,
+    );
+    transitionCount += routed.transitionCount;
+    if (routed.edits.length > 0) {
+      pendingEdits.push(...routed.edits);
+      pendingEdits.sort((left, right) => left.start - right.start);
+    }
   }
 
   if (pendingEdits.length === 0) {
@@ -225,6 +253,119 @@ function hasRequiredBoundary(
     (next === undefined || !WORD_CONSTITUENT.test(next));
 }
 
+type RoutedWikiMatches = Readonly<{
+  edits: readonly WikiCanonicalizationEdit[];
+  transitionCount: number;
+}>;
+
+/**
+ * Matches the Latin ledger a CJK turn routes to. Routing is additive: a routed
+ * match never covers a grapheme holding a non-Latin letter, nor one the turn's
+ * own rules already replaced, so it cannot change an own-locale outcome and no
+ * CJK span can reach the Latin ledger. Keys are width-folded for matching
+ * only; the replaced span is always the text as written.
+ */
+function matchRoutedWikiView(
+  snapshot: CompiledWikiSnapshot,
+  view: CompiledWikiView,
+  text: string,
+  input: readonly Grapheme[],
+  eligibleRanges: readonly WikiEligibleRange[],
+  ownEdits: readonly WikiCanonicalizationEdit[],
+): RoutedWikiMatches {
+  const keys: (string | null)[] = input.map((grapheme) =>
+    isWikiRoutableGrapheme(grapheme.segment)
+      ? foldWikiFullWidthLatin(grapheme.normalized)
+      : null);
+  // A routable grapheme's letters are all Latin, so a routed span is a Latin
+  // word exactly when one of its graphemes holds a letter.
+  const letters = input.map((grapheme, index) =>
+    keys[index] !== null && isWikiLatinWord(grapheme.segment));
+  let ownIndex = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    while (ownIndex < ownEdits.length && ownEdits[ownIndex].end <= input[index].start) {
+      ownIndex += 1;
+    }
+    const own = ownEdits[ownIndex];
+    if (own !== undefined && own.start <= input[index].start) keys[index] = null;
+  }
+
+  const protectedSpans = findRoutedWikiProtectedSpans(text);
+  const edits: WikiCanonicalizationEdit[] = [];
+  let transitionCount = 0;
+  let protectedIndex = 0;
+  let eligibleIndex = 0;
+  let graphemeIndex = 0;
+  while (graphemeIndex < input.length) {
+    const start = input[graphemeIndex].start;
+    while (
+      protectedIndex < protectedSpans.length &&
+      protectedSpans[protectedIndex][1] <= start
+    ) protectedIndex += 1;
+    while (
+      eligibleIndex < eligibleRanges.length &&
+      eligibleRanges[eligibleIndex].end <= start
+    ) eligibleIndex += 1;
+
+    let nodeIndex = 0;
+    let cursor = graphemeIndex;
+    let latinWord = false;
+    let bestRuleIndex: number | null = null;
+    let bestEndGrapheme = graphemeIndex;
+    while (cursor < input.length && cursor - graphemeIndex < view.maxFormGraphemes) {
+      const key = keys[cursor];
+      if (key === null) break;
+      transitionCount += 1;
+      const nextNodeIndex = view.nodes[nodeIndex].edges[key];
+      if (nextNodeIndex === undefined) break;
+      nodeIndex = nextNodeIndex;
+      latinWord ||= letters[cursor];
+      cursor += 1;
+      const terminalRuleIndex = view.nodes[nodeIndex].terminalRuleIndex;
+      if (terminalRuleIndex === null) continue;
+      const end = input[cursor - 1].end;
+      if (
+        latinWord &&
+        !wikiRangeOverlapsProtected(start, end, protectedSpans, protectedIndex) &&
+        isWikiRangeEligible(start, end, eligibleRanges, eligibleIndex) &&
+        hasRoutedBoundary(snapshot.rules[terminalRuleIndex], input, graphemeIndex, cursor)
+      ) {
+        bestRuleIndex = terminalRuleIndex;
+        bestEndGrapheme = cursor;
+      }
+    }
+
+    if (bestRuleIndex === null) {
+      graphemeIndex += 1;
+      continue;
+    }
+    edits.push(Object.freeze({
+      start,
+      end: input[bestEndGrapheme - 1].end,
+      ruleIndex: bestRuleIndex,
+      sourceIndex: snapshot.rules[bestRuleIndex].sourceIndex,
+    }));
+    graphemeIndex = bestEndGrapheme;
+  }
+  return Object.freeze({ edits: Object.freeze(edits), transitionCount });
+}
+
+/** A routed word also ends where a CJK letter begins, with no space needed. */
+function hasRoutedBoundary(
+  rule: CompiledWikiRule,
+  input: readonly Grapheme[],
+  start: number,
+  end: number,
+): boolean {
+  if (rule.boundary === "literal") return true;
+  return endsRoutedWord(input[start - 1]?.segment) && endsRoutedWord(input[end]?.segment);
+}
+
+function endsRoutedWord(neighbor: string | undefined): boolean {
+  return neighbor === undefined || !WORD_CONSTITUENT.test(neighbor) ||
+    isWikiCjkLetter(neighbor);
+}
+
 export function wikiRangeOverlapsProtected(
   start: number,
   end: number,
@@ -247,6 +388,43 @@ export function findProtectedWikiSpans(
   const spans = Array.from(text.matchAll(protectedLiteralPattern(level)), (match) =>
     Object.freeze([match.index, match.index + match[0].length] as const));
   return Object.freeze(spans);
+}
+
+/**
+ * Protection for script-routed words: every literal of the text as written,
+ * plus every literal that appears once full-width Latin is folded, so a
+ * full-width URL, path, or identifier stays protected. The union can only
+ * protect more; own-locale matching keeps the written-text spans alone.
+ */
+export function findRoutedWikiProtectedSpans(
+  text: string,
+  level: "matching" | "evidence" = "matching",
+): readonly WikiProtectedSpan[] {
+  const written = findProtectedWikiSpans(text, level);
+  if (!hasWikiFullWidthLatin(text)) return written;
+  return mergeProtectedSpans(
+    written,
+    findProtectedWikiSpans(foldWikiFullWidthLatin(text), level),
+  );
+}
+
+/** Sorted, non-overlapping union; overlap scans rely on both properties. */
+function mergeProtectedSpans(
+  left: readonly WikiProtectedSpan[],
+  right: readonly WikiProtectedSpan[],
+): readonly WikiProtectedSpan[] {
+  if (right.length === 0) return left;
+  if (left.length === 0) return right;
+  const sorted = [...left, ...right].sort((first, second) =>
+    first[0] - second[0] || first[1] - second[1]);
+  const merged: [number, number][] = [];
+  for (const [start, end] of sorted) {
+    const last = merged[merged.length - 1];
+    if (last !== undefined && start <= last[1]) last[1] = Math.max(last[1], end);
+    else merged.push([start, end]);
+  }
+  return Object.freeze(merged.map(([start, end]) =>
+    Object.freeze([start, end] as const)));
 }
 
 function protectedLiteralPattern(level: "matching" | "evidence"): RegExp {
@@ -274,10 +452,14 @@ function result(
   });
 }
 
-/** Maximum trie transitions for one call, independent of corpus size. */
+/**
+ * Maximum trie transitions for one call, independent of corpus size. A
+ * script-routed turn also walks the one view its Latin spans route to.
+ */
 export function wikiCanonicalizationOperationBudget(
   view: CompiledWikiView,
   graphemeCount: number,
+  routedView?: CompiledWikiView,
 ): number {
-  return graphemeCount * view.maxFormGraphemes;
+  return graphemeCount * (view.maxFormGraphemes + (routedView?.maxFormGraphemes ?? 0));
 }

@@ -13,6 +13,7 @@ import {
 } from "./canonicalize-wiki-text";
 import { wikiAliasProducerClaimsCollectionSource } from "./wiki-learning-policy";
 import type { WikiScriptClass } from "./wiki-script";
+import { wikiLatinRouteLocale } from "./wiki-script-routing";
 
 /** Ephemeral human-material envelope; it is never stored or exported. */
 export type WikiAdmissionObservation = Readonly<{
@@ -32,12 +33,15 @@ export type WikiAdmissionTurn = Readonly<{
  * One producer's content-free result for one ledger of one human turn.
  * `scannedScripts` names the scripts of the eligible, unprotected words the
  * producer actually scanned; it is the comparable opportunity that turn
- * offered, never a record of what was said.
+ * offered, never a record of what was said. `routedScripts` names the scripts
+ * of the scanned words that routed to the turn's Latin ledger (see
+ * wiki-script-routing); it is empty when the turn's locale routes nothing.
  */
 export type WikiAdmissionProducerResult = Readonly<{
   status: "ok" | "partial" | "censored";
   events: readonly WikiObserveEvidenceEvent[];
   scannedScripts: readonly WikiScriptClass[];
+  routedScripts?: readonly WikiScriptClass[];
 }>;
 
 export type WikiAdmissionBatch = Readonly<{
@@ -84,7 +88,9 @@ export function combineWikiAdmissionEvidence(
  * A ledger whose producer did not run is paused; a turn without eligible
  * content, or a producer that could not scan, is censored and neutral; a
  * partial scan scores what it saw and ages nothing; a complete scan offers
- * its locale, channel, and scanned scripts as the comparable opportunity.
+ * its locale, channel, and scanned scripts as the comparable opportunity and,
+ * when Latin words routed out of a Chinese or Japanese turn, the routed
+ * ledger's opportunity as well, so that ledger ages only on turns with Latin.
  */
 export function planWikiAdmissionBatch(
   turn: WikiAdmissionTurn,
@@ -140,12 +146,24 @@ function ledgerTick(
     return CENSORED_TICK;
   }
   if (result.status === "partial") return PARTIAL_TICK;
+  const disposition = observed ? "observed" : "quiet";
+  const opportunity = Object.freeze({
+    locale: observation.locale,
+    channel: observation.channel,
+    scripts: result.scannedScripts,
+  });
+  const routedLocale = wikiLatinRouteLocale(observation.locale);
+  const routedScripts = result.routedScripts ?? [];
+  if (routedLocale === null || routedScripts.length === 0) {
+    return Object.freeze({ disposition, opportunity });
+  }
   return Object.freeze({
-    disposition: observed ? "observed" : "quiet",
-    opportunity: Object.freeze({
-      locale: observation.locale,
+    disposition,
+    opportunity,
+    routedOpportunity: Object.freeze({
+      locale: routedLocale,
       channel: observation.channel,
-      scripts: result.scannedScripts,
+      scripts: routedScripts,
     }),
   });
 }

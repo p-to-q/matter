@@ -110,12 +110,14 @@ describe("qualified Wiki producer releases", () => {
       "wiki-model.ts",
       "wiki-learning-policy.ts",
       "wiki-script.ts",
+      "wiki-script-routing.ts",
       "config/locales.ts",
       "tree/unicode-text.ts",
     ]) expect(termText).toContain(file);
     for (const file of [
       "pronunciation-fitting-v1.ts",
       "canonicalize-wiki-text.ts",
+      "wiki-script-routing.ts",
       "wiki-text-safety.ts",
       "wiki-learning-policy.ts",
       "wiki-model.ts",
@@ -127,6 +129,7 @@ describe("qualified Wiki producer releases", () => {
       "wiki-learning-policy.ts",
       "wiki-model.ts",
       "wiki-script.ts",
+      "wiki-script-routing.ts",
     ]) expect(latinText).toContain(file);
 
     const changed = fitting.slice();

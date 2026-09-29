@@ -57,16 +57,23 @@ const TERM_PRODUCER_FILES = Object.freeze([
   "features/matter/wiki/wiki-model.ts",
   "features/matter/wiki/wiki-learning-policy.ts",
   "features/matter/wiki/wiki-script.ts",
+  "features/matter/wiki/wiki-script-routing.ts",
   "features/matter/config/locales.ts",
   "features/matter/tree/unicode-text.ts",
 ]);
 const FITTING_PRODUCER_FILES = Object.freeze([
   "scripts/wiki/qualification/pronunciation-fitting-v1.ts",
   "features/matter/wiki/canonicalize-wiki-text.ts",
+  "features/matter/wiki/wiki-script-routing.ts",
   "features/matter/wiki/wiki-text-safety.ts",
   "features/matter/wiki/wiki-learning-policy.ts",
   "features/matter/wiki/wiki-model.ts",
 ]);
+// Term producers 1.1 classify a Latin word of a Chinese or Japanese turn in
+// the en-US ledger. The classifier and what a stored vote means are unchanged,
+// so the families stay v1; corpus 2 binds the ledger locale into every action.
+const TERM_PRODUCER_VERSION = "1.1.0";
+const TERM_CORPUS_GENERATION = 2;
 
 type LocalProducer = Exclude<WikiQualifiableProducerId,
   "latin-internal-edit-v2" | "en-exact-homophone-v1">;
@@ -82,32 +89,49 @@ const STATIC_PERFORMANCE: Readonly<Record<LocalProducer, WikiProducerPerformance
 
 const CASES: Readonly<Record<LocalProducer, readonly WikiProducerExpectedCase[]>> =
   Object.freeze({
+    // Term actions name the ledger locale. A Latin word of a Chinese or
+    // Japanese turn is an en-US term; corpus 1 could not tell the two apart.
     "shape-specific-v1": Object.freeze([
-      termCase("shape-positive", "positive", "en-US", "OpenAI", "term:OpenAI"),
-      termCase("shape-positive-de", "positive", "de-DE", "GitHub", "term:GitHub"),
-      termCase("shape-positive-zh-cn", "positive", "zh-CN", "OpenAI", "term:OpenAI"),
-      termCase("shape-positive-zh-tw", "positive", "zh-TW", "OpenAI", "term:OpenAI"),
-      termCase("shape-positive-ja", "positive", "ja-JP", "カタカナ", "term:カタカナ"),
+      termCase("shape-positive", "positive", "en-US", "OpenAI", "term:en-US:OpenAI"),
+      termCase("shape-positive-de", "positive", "de-DE", "GitHub", "term:de-DE:GitHub"),
+      termCase("shape-positive-zh-cn", "positive", "zh-CN", "OpenAI", "term:en-US:OpenAI"),
+      termCase("shape-positive-zh-tw", "positive", "zh-TW", "OpenAI", "term:en-US:OpenAI"),
+      termCase("shape-positive-ja", "positive", "ja-JP", "カタカナ", "term:ja-JP:カタカナ"),
+      termCase("shape-positive-routed-sentence", "positive", "zh-CN",
+        "我们用OpenAI的模型", "term:en-US:OpenAI"),
+      termCase("shape-positive-routed-ja", "positive", "ja-JP", "これはGitHubです",
+        "term:en-US:GitHub"),
       termCase("shape-title-case", "adversarial", "en-US", "Matter", null),
       termCase("shape-adversarial", "adversarial", "en-US", "ordinary", null),
+      termCase("shape-routed-title-case", "adversarial", "zh-CN", "Matter的", null),
+      termCase("shape-routed-full-width", "adversarial", "zh-CN", "ＯｐｅｎＡＩ的模型", null),
       termCase("shape-ambiguity", "ambiguity", "en-US", "2026", null),
       termCase("shape-locale", "locale-isolation", "en-US", "カタカナ", null),
       termCase("shape-protected", "protected", "en-US", "OpenAI", null),
+      termCase("shape-routed-protected", "protected", "zh-CN", "我们用OpenAI的模型", null),
       termCase("shape-generated", "generated", "en-US", "OpenAI", null),
+      termCase("shape-routed-generated", "generated", "zh-CN", "我们用OpenAI的模型", null),
     ]),
     "locale-segment-v1": Object.freeze([
       termCase("segment-positive", "positive", "en-US", "morphogenesis",
-        "term:morphogenesis"),
+        "term:en-US:morphogenesis"),
       termCase("segment-positive-de", "positive", "de-DE", "Morphogenese",
-        "term:Morphogenese"),
-      termCase("segment-positive-zh-cn", "positive", "zh-CN", "青色", "term:青色"),
-      termCase("segment-positive-zh-tw", "positive", "zh-TW", "青色", "term:青色"),
-      termCase("segment-positive-ja", "positive", "ja-JP", "物語", "term:物語"),
+        "term:de-DE:Morphogenese"),
+      termCase("segment-positive-zh-cn", "positive", "zh-CN", "青色", "term:zh-CN:青色"),
+      termCase("segment-positive-zh-tw", "positive", "zh-TW", "青色", "term:zh-TW:青色"),
+      termCase("segment-positive-ja", "positive", "ja-JP", "物語", "term:ja-JP:物語"),
+      termCase("segment-positive-routed", "positive", "zh-CN", "morphogenesis的",
+        "term:en-US:morphogenesis"),
       termCase("segment-adversarial", "adversarial", "en-US", "the", null),
+      termCase("segment-routed-english-stop-word", "adversarial", "zh-CN", "with的", null),
+      termCase("segment-routed-full-width", "adversarial", "zh-CN", "ｍｏｒｐｈｏｇｅｎｅｓｉｓ的",
+        null),
       termCase("segment-ambiguity", "ambiguity", "en-US", "2026", null),
       termCase("segment-locale", "locale-isolation", "en-US", "普通名词", null),
       termCase("segment-protected", "protected", "en-US", "morphogenesis", null),
+      termCase("segment-routed-protected", "protected", "zh-CN", "morphogenesis的", null),
       termCase("segment-generated", "generated", "en-US", "morphogenesis", null),
+      termCase("segment-routed-generated", "generated", "zh-CN", "morphogenesis的", null),
     ]),
     "en-metaphone-v1": Object.freeze([
       aliasCase("metaphone-positive-codex", "positive", "en-US", "Codecs", ["Codex"],
@@ -274,16 +298,17 @@ async function buildCandidate(
   const cases = CASES[producer];
   const corpusDigest = await digestWikiProducerCorpus(cases);
   if (corpusDigest === null) throw new Error(`The ${producer} corpus is invalid.`);
+  const termProducer = producer === "shape-specific-v1" || producer === "locale-segment-v1";
   const identity = Object.freeze({
     producerId: producer,
-    producerVersion: "1.0.0",
+    producerVersion: termProducer ? TERM_PRODUCER_VERSION : "1.0.0",
     producerDigest: await digestWikiProducerArtifact(producerBytes),
     resourceId: resourceId(producer),
     resourceVersion: resourceVersion(producer),
     resourceDigest: await digestWikiProducerArtifact(resourceBytes),
   });
   const corpus = Object.freeze({
-    corpusVersion: `${producer}-corpus/1`,
+    corpusVersion: `${producer}-corpus/${termProducer ? TERM_CORPUS_GENERATION : 1}`,
     corpusDigest,
   });
   const manifest: WikiProducerQualificationManifest = Object.freeze({
@@ -331,7 +356,7 @@ function runCase(
       text,
       ...(eligibleRanges === undefined ? {} : { eligibleRanges }),
     }, new Set<WikiTermEvidenceProducer>([producer]));
-    return events.length === 1 ? `term:${events[0].canonical}` : null;
+    return events.length === 1 ? `term:${events[0].locale}:${events[0].canonical}` : null;
   }
   const candidateLocale = item.category === "locale-isolation"
     ? producer === "en-metaphone-v1" ? "en-US" : "zh-CN"

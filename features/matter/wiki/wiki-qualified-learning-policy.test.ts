@@ -21,6 +21,7 @@ describe("qualified Wiki learning policy", () => {
       "quarter-unit-gradual-decay",
       "broad-term-two-turn-collection",
       "non-comparable-turns-do-not-age",
+      "routed-latin-ledger-ages-only-on-latin-turns",
       "partial-scan-scores-only-what-it-saw",
       "informed-acceptance-retains-a-used-rule",
       "generated-implicit-acceptance-counts-by-policy",
@@ -36,7 +37,7 @@ describe("qualified Wiki learning policy", () => {
   }, 60_000);
 
   it("keeps the compact release separate from labelled scenarios", () => {
-    expect(WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST.scenarios).toHaveLength(17);
+    expect(WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST.scenarios).toHaveLength(18);
     expect(MATTER_WIKI_QUALIFIED_LEARNING_POLICY).not.toHaveProperty("scenarios");
     expect(MATTER_WIKI_QUALIFIED_LEARNING_POLICY).not.toHaveProperty("results");
     expect(Object.isFrozen(MATTER_WIKI_QUALIFIED_LEARNING_POLICY)).toBe(true);
@@ -52,6 +53,7 @@ describe("qualified Wiki learning policy", () => {
       "wiki-model.ts",
       "wiki-invariants.ts",
       "wiki-script.ts",
+      "wiki-script-routing.ts",
       "wiki-producer-qualification.ts",
       "wiki-text-safety.ts",
       "config/locales.ts",

@@ -53,6 +53,7 @@ const POLICY_SOURCE_FILES = Object.freeze([
   "features/matter/wiki/wiki-model.ts",
   "features/matter/wiki/wiki-invariants.ts",
   "features/matter/wiki/wiki-script.ts",
+  "features/matter/wiki/wiki-script-routing.ts",
   "features/matter/wiki/wiki-producer-qualification.ts",
   "features/matter/wiki/wiki-text-safety.ts",
   "features/matter/config/locales.ts",
@@ -71,14 +72,16 @@ type ScenarioLexeme = Readonly<{
 /**
  * One human-admission tick. `context` states whether the turn was a comparable
  * opportunity for the scenario's candidates; `scan` states whether the
- * producer scanned the whole turn.
+ * producer scanned the whole turn. `routed` and `unrouted` are Chinese turns
+ * for an en-US Latin scenario: only a routed turn contained Latin words and
+ * so offers the Latin ledger its routed opportunity.
  */
 type AdmissionTurn = Readonly<{
   kind: "admission";
   environment: WikiLearningReplayEnvironment;
   observations: readonly string[];
   scan: "complete" | "partial";
-  context: "comparable" | "other-locale" | "other-script";
+  context: "comparable" | "other-locale" | "other-script" | "routed" | "unrouted";
 }>;
 
 /**
@@ -186,6 +189,7 @@ const POLICY_CONSTANTS: QualifiedPolicyConstants = Object.freeze({
 
 const PROVISIONAL_MATERIAL = "zh-CN:spoken:word:才料=>材料";
 const RESTRICTED_SILENCE = "zh-CN:spoken:word:近音=>静音";
+const ROUTED_LATIN = "en-US:spoken:word:Englebart=>Engelbart";
 const RESTRICTED_PAIR = Object.freeze([lexeme("zh-CN", "静音"), lexeme("zh-CN", "境音")]);
 
 /**
@@ -196,7 +200,7 @@ const RESTRICTED_PAIR = Object.freeze([lexeme("zh-CN", "静音"), lexeme("zh-CN"
  */
 export const WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST = Object.freeze({
   qualificationVersion: WIKI_LEARNING_POLICY_QUALIFICATION_VERSION,
-  corpusVersion: "wiki-learning-policy-v4-corpus/1",
+  corpusVersion: "wiki-learning-policy-v4-corpus/2",
   policyVersion: WIKI_LEARNING_POLICY_VERSION,
   scoringVersion: WIKI_SCORING_VERSION,
   policyConstants: POLICY_CONSTANTS,
@@ -317,6 +321,39 @@ export const WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST = Object.freeze({
           qualified: [PROVISIONAL_MATERIAL],
         }),
         checkpoint(76, { alias: [alias("材料", "candidate", 6, 0)] }),
+      ],
+    }),
+    aliasScenario({
+      scenarioId: "routed-latin-ledger-ages-only-on-latin-turns",
+      locale: "en-US",
+      scripts: ["latin"],
+      form: "Englebart",
+      producer: "latin-internal-edit-v2",
+      lexemes: [lexeme("en-US", "Engelbart")],
+      turns: [
+        routed("Engelbart"),
+        routed("Engelbart"),
+        routed("Engelbart"),
+        routed("Engelbart"),
+        ...quiet(40, "unrouted"),
+        ...quiet(31, "routed"),
+        ...quiet(1, "routed"),
+      ],
+      checkpointTurns: [4, 44, 75, 76],
+      expected: [
+        checkpoint(4, {
+          alias: [alias("Engelbart", "active", 16, 0)],
+          qualified: [ROUTED_LATIN],
+        }),
+        checkpoint(44, {
+          alias: [alias("Engelbart", "active", 16, 0)],
+          qualified: [ROUTED_LATIN],
+        }),
+        checkpoint(75, {
+          alias: [alias("Engelbart", "active", 16, 31)],
+          qualified: [ROUTED_LATIN],
+        }),
+        checkpoint(76, { alias: [alias("Engelbart", "candidate", 8, 0)] }),
       ],
     }),
     materialScenario({
@@ -719,23 +756,50 @@ function tickFor(
       alias: Object.freeze({ disposition: "censored" }),
     });
   }
+  const disposition = turn.observations.length > 0 ? "observed" : "quiet";
   const ledger: WikiLedgerTick = turn.scan === "partial"
     ? Object.freeze({ disposition: "partial" })
-    : Object.freeze({
-        disposition: turn.observations.length > 0 ? "observed" : "quiet",
-        opportunity: Object.freeze({
-          locale: turn.context === "other-locale"
-            ? otherLocale(scenario.locale)
-            : scenario.locale,
-          channel: scenario.channel,
-          scripts: turn.context === "other-script"
-            ? otherScripts(scenario.scripts)
-            : scenario.scripts,
-        }),
-      });
+    : turn.context === "routed" || turn.context === "unrouted"
+      ? chineseTurnTick(scenario, disposition, turn.context === "routed")
+      : Object.freeze({
+          disposition,
+          opportunity: Object.freeze({
+            locale: turn.context === "other-locale"
+              ? otherLocale(scenario.locale)
+              : scenario.locale,
+            channel: scenario.channel,
+            scripts: turn.context === "other-script"
+              ? otherScripts(scenario.scripts)
+              : scenario.scripts,
+          }),
+        });
   return scenario.kind === "alias"
     ? Object.freeze({ term: paused, alias: ledger })
     : Object.freeze({ term: ledger, alias: paused });
+}
+
+/** A complete zh-CN turn; its Latin words, when present, routed to en-US. */
+function chineseTurnTick(
+  scenario: WikiLearningPolicyQualificationScenario,
+  disposition: "observed" | "quiet",
+  containedLatin: boolean,
+): WikiLedgerTick {
+  const opportunity = Object.freeze({
+    locale: "zh-CN" as const,
+    channel: scenario.channel,
+    scripts: Object.freeze(containedLatin ? ["latin", "han"] as const : ["han"] as const),
+  });
+  return containedLatin
+    ? Object.freeze({
+        disposition,
+        opportunity,
+        routedOpportunity: Object.freeze({
+          locale: scenario.locale,
+          channel: scenario.channel,
+          scripts: scenario.scripts,
+        }),
+      })
+    : Object.freeze({ disposition, opportunity });
 }
 
 function otherLocale(locale: ScenarioLexeme["locale"]): MatterLocale {
@@ -928,6 +992,10 @@ function human(...observations: string[]): AdmissionTurn {
 
 function partial(...observations: string[]): AdmissionTurn {
   return admission("human-admission", observations, "partial", "comparable");
+}
+
+function routed(...observations: string[]): AdmissionTurn {
+  return admission("human-admission", observations, "complete", "routed");
 }
 
 function quiet(
