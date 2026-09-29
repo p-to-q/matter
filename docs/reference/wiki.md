@@ -188,6 +188,11 @@ occurrence is live, and releases them idempotently.
 - A live occurrence expires 15 s before its registry attribution would, and at
   most 64 stay live; both censor. So does `pagehide` before perception, which
   covers a tab that stayed hidden the whole time.
+- A rewrite that re-applies the same correction to the same passage within
+  15 s, typically its late repair, is a new occurrence that inherits the
+  earlier disclosure instead of settling on screen a second time. That memory
+  is presentation continuity only; perception, evidence, and settlement start
+  afresh.
 
 Informed acceptance adds `kept` evidence to the relation that was applied: +4
 quarter-units for informed silence and +8 for an inspection, saturating at 24,

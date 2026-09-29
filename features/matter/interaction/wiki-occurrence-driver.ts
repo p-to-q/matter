@@ -21,6 +21,13 @@ import {
 export const WIKI_OCCURRENCE_TICK_MS = 250;
 /** A throttled or suspended timer never grants more than this per sample. */
 const MAX_TICK_ELAPSED_MS = 1_000;
+/**
+ * A rewrite of a passage (typically its late repair) re-applies the same
+ * correction as a new occurrence. The person already watched it settle, so the
+ * successor is disclosed without a second settle. This memory is presentation
+ * continuity only: bounded, short-lived, and never evidence.
+ */
+const DISCLOSURE_CONTINUITY = Object.freeze({ maxEntries: 16, windowMs: 15_000 });
 
 export type WikiOccurrenceSettleOutcome =
   | "accepted-implicit"
@@ -127,6 +134,35 @@ export function createWikiOccurrenceDriver(input: Readonly<{
   let stopPage: (() => void) | null = null;
   let restoring: WikiOccurrenceRestoration | null = null;
   let disposed = false;
+  const recentlyDisclosed: {
+    nodeId: string;
+    canonicalText: string;
+    sourceText: string;
+    atMs: number;
+  }[] = [];
+
+  const rememberDisclosure = (occurrence: LiveWikiOccurrence, nowMs: number) => {
+    if (!occurrence.progress.disclosed) return;
+    recentlyDisclosed.push({
+      nodeId: occurrence.address.nodeId,
+      canonicalText: occurrence.address.canonicalText,
+      sourceText: occurrence.sourceText,
+      atMs: nowMs,
+    });
+    if (recentlyDisclosed.length > DISCLOSURE_CONTINUITY.maxEntries) recentlyDisclosed.shift();
+  };
+
+  /** Takes one matching remembered disclosure, so each is inherited once. */
+  const inheritDisclosure = (occurrence: LiveWikiOccurrence, nowMs: number): boolean => {
+    const index = recentlyDisclosed.findIndex((entry) =>
+      nowMs - entry.atMs <= DISCLOSURE_CONTINUITY.windowMs &&
+      entry.nodeId === occurrence.address.nodeId &&
+      entry.canonicalText === occurrence.address.canonicalText &&
+      entry.sourceText === occurrence.sourceText);
+    if (index < 0) return false;
+    recentlyDisclosed.splice(index, 1);
+    return true;
+  };
 
   const publish = () => {
     snapshot = live.size === 0
@@ -230,6 +266,7 @@ export function createWikiOccurrenceDriver(input: Readonly<{
         nowMs,
       });
       if (decision === "pending") continue;
+      if (!addressIntact) rememberDisclosure(record.occurrence, nowMs);
       settle(occurrenceId, decision);
       changed = true;
     }
@@ -344,11 +381,18 @@ export function createWikiOccurrenceDriver(input: Readonly<{
       if (disposed) return;
       const material = readMaterial();
       if (material === null) return;
-      const admitted = admitWikiOccurrences(publication, material, environment.now());
+      const nowMs = environment.now();
+      const admitted = admitWikiOccurrences(publication, material, nowMs);
       if (admitted.length === 0) return;
       for (const occurrence of admitted) {
         if (live.has(occurrence.id)) continue;
-        live.set(occurrence.id, { occurrence, locale: publication.locale });
+        const disclosed = inheritDisclosure(occurrence, nowMs)
+          ? Object.freeze({
+              ...occurrence,
+              progress: markWikiOccurrenceDisclosed(occurrence.progress),
+            })
+          : occurrence;
+        live.set(occurrence.id, { occurrence: disclosed, locale: publication.locale });
         environment.track(occurrence.address.nodeId);
       }
       // The bound censors the oldest; a burst never grows unowned memory.
@@ -491,6 +535,7 @@ export function createWikiOccurrenceDriver(input: Readonly<{
       if (disposed) return;
       disposed = true;
       live.clear();
+      recentlyDisclosed.length = 0;
       takeoverId = null;
       syncResources();
       environment.dispose();

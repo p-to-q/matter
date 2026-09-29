@@ -126,6 +126,31 @@ describe("Wiki occurrence driver", () => {
     ]);
   });
 
+  it("does not replay a settle when a rewrite re-applies the same change", () => {
+    const harness = createHarness();
+    harness.driver.admit(publication([["occ_admitted", FIRST]]));
+    harness.driver.markDisclosed("occ_admitted");
+    // A late repair rewrites the passage and re-applies the same correction.
+    harness.setMaterial(tree(TEXT, T1));
+    harness.driver.reconcile();
+    harness.driver.admit({ ...publication([["occ_repaired", FIRST]]), nodeUpdatedAt: T1, stage: "repair" });
+    expect(harness.settled).toEqual([["occ_admitted", "censored"]]);
+    expect(harness.driver.getSnapshot()).toMatchObject([{ id: "occ_repaired", disclosed: true }]);
+    // Continuity is inherited once; a later identical change settles anew.
+    harness.driver.admit({ ...publication([["occ_second", SECOND]]), nodeUpdatedAt: T1, stage: "repair" });
+    expect(harness.driver.getSnapshot().find((view) => view.id === "occ_second"))
+      .toMatchObject({ disclosed: false });
+
+    // A remembered disclosure fades after its short window.
+    harness.now += 20_000;
+    harness.setMaterial(tree(TEXT, T0));
+    harness.driver.reconcile();
+    harness.now += 20_000;
+    harness.driver.admit(publication([["occ_late", FIRST]]));
+    expect(harness.driver.getSnapshot().find((view) => view.id === "occ_late"))
+      .toMatchObject({ disclosed: false });
+  });
+
   it("accepts a perceived occurrence when the page is left", () => {
     const harness = createHarness();
     harness.driver.admit(publication([["occ_a", FIRST]]));
