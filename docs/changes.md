@@ -17,6 +17,30 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-30 — the Point and Talk field leaves only for a named, visible reason
+
+Changed: the field has exactly five close reasons — the person's close,
+the result, another surface taking the slot, the target passage changing,
+and a modal or hidden page — owned by one typed enumeration. Geometry never
+closes it; it holds and re-places. It grows from the AI mark (200 ms),
+stays at least 800 ms once painted, remains in place while a submitted
+direction is pending (at least 600 ms), fades with its result (240 ms),
+fades on the person's close (200 ms) and on a slot takeover (120 ms), and
+cuts only for a modal or hidden page. A vanished or changed target adds the
+"passage changed" outcome line. A selected passage keeps its action lens
+for a fine pointer. A back-forward-cache hide suspends submitted Point and
+Talk and Elastic turns instead of cancelling them.
+
+Why: the field disappeared without a reason the person could see — lost
+measurements hid it and stole focus, reduced motion refused its focus, a
+changed passage cut it silently, and the lens depended on a hover event
+after the click. The 2026-09-29 presence entry's 0 ms cut for a displaced
+surface read as a defect; it is superseded here for Point and Talk.
+
+Forecloses: closing the field from geometry, layout, or re-render;
+a sixth close path outside the enumeration; a 0 ms cut other than a modal
+or hidden page; and cancelling submitted work on a back-forward-cache hide.
+
 ## 2026-09-29 — the initial runtime carries only first paint and the first gesture
 
 Changed: the storage engine loads behind a synchronous stand-in that reports
