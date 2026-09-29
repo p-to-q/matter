@@ -63,7 +63,8 @@ support a candidate but can never invent the relation between two forms.
 Evidence is deliberately lossy and bounded. Record V7 keeps separate term and
 alias ledgers of saturating integers in quarter-observation units, each with a
 candidate-local quiet counter; every alias row also carries bounded kept
-evidence, and a separate bounded ledger holds revert strikes. One successful
+evidence, a separate bounded ledger holds revert strikes, and a bounded window
+holds the opaque identities of recently settled occurrences. One successful
 human admission is one logical clock tick; a candidate ages only on a tick that
 was a comparable opportunity for it, and after a bounded number of such quiet
 ticks its support halves. It stores no passage, node id, tree id, timestamp,
@@ -123,7 +124,13 @@ itself.
 Informed implicit acceptance is approval (owner decision, 2026-09-29). One
 exact applied occurrence settles exactly once, through the pure policy in
 `wiki-learning-policy.ts` and the state transition
-`applyWikiOccurrenceSettlement` in `wiki-evidence.ts`:
+`applyWikiOccurrenceSettlement` in `wiki-evidence.ts`. A settlement carries an
+opaque random occurrence identity minted by the occurrence owner (never derived
+from text or an address), the applied rule descriptor, the Wiki state revision
+of the basis that applied it (the lexical session's `sourceRevision`), and the
+origin of the material. It never carries surrounding text, and it never claims
+authority: the current state decides whether the rule is human-confirmed when
+the occurrence settles. The outcomes are:
 
 - `accepted-implicit`: the change was disclosed and perceivable, the unchanged
   word still stands at its committed address, and one informed trigger fired:
@@ -151,24 +158,46 @@ disappears censors the occurrence without a Wiki event.
 Informed acceptance adds `kept` evidence to the relation that was applied: +4
 quarter-units for informed silence and +8 for an inspection, saturating at 24,
 halving after 32 comparable ticks, and at most one implicit settlement per
-alias between comparable ticks. Kept evidence counts toward the retention
-floor and toward both sides of a competition margin, so a rule in use does not
-decay while it is used and resists a challenger. Only producer evidence can
-clear the activation floor: implicit evidence never creates a relation, never
-activates one, and never becomes human-confirmed authority, which remains a
-human act. The first revert returns every automatic relation for that visible
-form to zero, so a competing canonical cannot take over merely because the
-reverted one stepped aside, and records one strike for 128 comparable ticks. A
-second revert inside that memory, a full strike ledger, or a reject in the
-Wiki surface makes a tombstone; tombstones are permanent until a person
-decides otherwise. Confirmed human rules and tombstones stay outside scoring:
-implicit acceptance, inspection, and reversion of a confirmed rule are neutral,
-and changing that authority is an explicit Wiki decision. Explicit outcomes on
-generated text always count. Informed implicit acceptance on generated text
-counts at the same weights behind the single `countGeneratedImplicitAcceptance`
-policy switch, which defaults to counting; the risk it accepts is that silence
-over disclosed but unread generated text is weaker evidence than silence over
-a person's own dictation. Every weight and memory is a calibration candidate.
+alias between comparable ticks. Kept evidence only retains. While a relation
+is active, its retention score (producer evidence plus kept evidence) must
+clear the retention floor and lead every rival's retention score by the
+retention margin, so a rule in use does not decay while it is used and resists
+a challenger. Whenever no relation is active, candidates are ranked, and the
+activation floor and margin are measured, on producer evidence alone. Implicit
+evidence therefore never creates a relation, never activates one, never
+re-activates a demoted one, never picks a winner between candidates, and never
+becomes human-confirmed authority, which remains a human act. Acceptance of an
+occurrence applied before a later revert of the same relation is neutral.
+
+The first revert returns every automatic relation for that visible form to
+zero, so a competing canonical cannot take over merely because the reverted one
+stepped aside, and records one strike, stamped with its revision, for 128
+comparable ticks. A second revert becomes a tombstone only when its occurrence
+was applied from a basis that already held the strike: two reverts of
+occurrences applied in the same turn, or one revert delivered twice, strike
+once. A revert of a relation that no longer holds evidence is neutral; it never
+strikes and never tombstones, even when strike memory is full. With evidence
+and a full strike ledger the stronger reading wins and the revert tombstones. A
+reject in the Wiki surface also tombstones; tombstones are permanent until a
+person decides otherwise. Confirmed human rules and tombstones stay outside
+scoring: implicit acceptance, inspection, and reversion of a confirmed rule are
+neutral, and changing that authority is an explicit Wiki decision.
+
+Settle-once is also a state guarantee. The state keeps the identities of the
+128 most recent occurrences that produced an effect; a second kept or strike
+effect for a recorded identity is ignored, while a person's explicit confirm,
+reject, or replace is never swallowed by that window. Neutral outcomes leave no
+record and cost no write.
+
+Explicit outcomes on generated text always count. Informed implicit acceptance
+on generated text counts at the same weights behind the single
+`countGeneratedImplicitAcceptance` switch, which defaults to counting (the
+owner's "basically all counts as approval"). Because kept evidence only
+retains, that switch can keep an already active relation alive and defend it
+against a challenger; it can never activate or create one. The risk it accepts
+is that silence over disclosed but unread generated text is weaker evidence
+than silence over a person's own dictation. Every weight and memory is a
+calibration candidate.
 
 No rule falls back across locales. The same form may resolve differently in
 `zh-CN`, `zh-TW`, `ja-JP`, `de-DE`, and `en-US`; an unsupported or missing
@@ -374,9 +403,12 @@ stores evidence in quarter-observation units, adds kept evidence to every alias
 row, and adds a bounded revert-strike ledger. Strict V6 migration multiplies
 every stored support value by four, starts with no kept evidence and no
 strikes, and preserves every former phase, gate, and projection; older schemas
-migrate through the same scaling. A current-record V6 row is migrated in
-memory on load and persisted as V7 by the next ordinary write. Raw rows are
-bounded by the schema that wrote them.
+migrate through the same scaling. Wiki record version 7 makes the repository
+write that migration back once on load, with a monotonic record generation,
+exactly as the V5-to-V6 normalization did. Raw rows are bounded by the schema
+that wrote them. A row written by a newer Matter is not corrupt: this build
+reports Wiki storage as unavailable, keeps the last basis, and refuses the
+corrupt-row reset, so an older tab can never destroy a newer Wiki.
 Strictly corrupt local state
 exposes an explicit reset that rechecks the row inside the write transaction and
 refuses to replace data that has become valid. It must not require the person
@@ -513,9 +545,23 @@ far-horizon aging boundary, never an activation requirement. The retention
 band prevents a collected term from flickering out at the first quiet horizon;
 without new evidence it sinks at the next aging, while stronger repeated
 support survives proportionally longer. A partial scan scores what it saw and
-ages nothing. Fully decayed machine-only candidates may be evicted only when
-they have no authority, alias evidence, or tombstone. Human decisions and
-product seeds never enter that eviction policy.
+ages nothing. An automatic lexeme is listed only while its term is collected or
+a relation, human decision, or tombstone depends on it; a demoted term keeps its
+fading support in the ledger but no longer appears under `Automatically added`
+or blocks a canonical form. Fully decayed machine-only candidates may be
+evicted only when they have no authority, alias evidence, or tombstone. Human
+decisions and product seeds never enter that eviction policy.
+
+A full automatic reservoir (512 term rows or 512 relation rows) never refuses a
+newcomer while an independent row can leave. Because a candidate ages only on
+comparable turns, rows learned in another locale or script would otherwise
+hold the reservoir forever after a person switches language. The newcomer
+therefore evicts the weakest row that nothing depends on: never a human-owned
+term, a product starter, an active relation, a row observed in the same turn,
+or an identity that a relation, human decision, tombstone, or strike depends
+on. Candidates leave before collected terms and relations with kept evidence;
+then lower support, then the longest quiet, then code-unit identity decides.
+Evicting a collected term also removes its automatic lexeme.
 
 Alias evidence is producer-specific. The relation score is producer weight
 times support: exact pronunciation producers have weight `3`; restricted
@@ -525,8 +571,9 @@ gates three independent turns for exact relations and four for restricted
 relations. Activation margin `16` accepts exact `3 versus 1` and restricted `4
 versus 2`, but abstains on exact `3 versus 2` or restricted `4 versus 3`
 (observations). Retention uses score `20` and margin `12`; a challenger never
-inherits that lower gate. Kept evidence adds to the retention score and to both
-sides of a margin, but only the relation score can clear the activation floor.
+inherits that lower gate. Kept evidence adds to the retention score of an
+active relation and of its rivals; whenever no relation is active, ranking and
+the activation gates use relation scores alone.
 Competition is immediate counter-evidence, while one addressed human reject or
 replacement bypasses the score and becomes durable authority. Production
 projection supplies complete runtime-allowlisted identities for two term
@@ -570,7 +617,8 @@ an allowance for new human entries. Neither bound is misreported as the
 automatic hot-index size. The persistence ceiling is 9 MiB plus a proved
 256 KiB V5-to-V6 producer-field allowance and a proved 160 KiB V6-to-V7
 allowance for the kept fields, one quarter-unit digit per evidence row, and the
-empty strike ledger. Every committed receipt reports zero
+two empty strike and settled-occurrence collections. Every committed receipt
+reports zero
 false applications for cases labelled adversarial or ambiguous by its frozen
 corpus, plus zero cross-locale, protected, or generated applications, and stays
 below the background-compile and hot-lookup budgets. That bounded result is not
@@ -583,14 +631,16 @@ fixture continues to prove only the parser and gate.
 The default-on learning policy has its own controlled receipt rather than
 borrowing producer success. A manifest-owned replay (policy V4,
 `scripts/wiki/qualification/learning-policy-v4.ts`) runs the production state
-transitions, occurrence settlements, and projection over fourteen scenarios:
+transitions, occurrence settlements, and projection over seventeen scenarios:
 exact three-turn activation, restricted four-turn activation, ambiguity-margin
 abstention and later activation, quiet decay and retention, quarter-unit
 gradual decay, two-turn ordinary-term collection, non-comparable turns that do
 not age, a partial scan that scores only what it saw, informed acceptance that
 retains a used rule, generated-text implicit acceptance under the policy
 switch, two-strike reversion, strike-memory expiry, confirmed authority outside
-scoring, and generated/protected zero-vote behavior. Its compact release binds
+scoring, two same-epoch reverts that strike once, duplicate delivery that
+settles once, kept evidence that never re-activates a demoted relation, and
+generated/protected zero-vote behavior. Its compact release binds
 policy and scoring versions, all units, gates, weights, precedence, and
 occurrence-outcome constants, the policy source digest, the exact
 qualification catalog, corpus digest, and result digest. Any change to those
@@ -633,8 +683,8 @@ telemetry, or online reinforcement learning enters the running product; the
 weights stay versioned integers.
 
 V7 persists term and alias evidence as separate bounded ledgers, records the
-producer family for automatic term evidence, and keeps kept evidence and revert
-strikes bounded beside them. Legacy aggregate evidence migrates to a
+producer family for automatic term evidence, and keeps kept evidence, revert
+strikes, and the settled-occurrence window bounded beside them. Legacy aggregate evidence migrates to a
 zero-weight producer and therefore cannot acquire authority during migration.
 Runtime-allowlisted fitting producers may project provisional rules only after
 their own relation evidence clears the calibrated gate; closing `近音`
