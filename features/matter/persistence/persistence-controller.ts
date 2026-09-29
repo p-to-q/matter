@@ -260,7 +260,7 @@ export function createPersistenceController(
   // Whether any write or import is outstanding, touched or not. Control flow
   // (refresh, adoption, conflicts) depends on this; the reported `unsaved`
   // counts only material the person made.
-  const hasUnsaved = () => pending !== null || writing || activeImportAttempt !== null;
+  const hasOutstandingWrite = () => pending !== null || writing || activeImportAttempt !== null;
   const holdsUnsavedMaterial = () =>
     pending?.authored === true ||
     (writing && writingDocument?.authored === true) ||
@@ -282,7 +282,7 @@ export function createPersistenceController(
     });
     for (const listener of listeners) listener();
   };
-  const syncUnsaved = () => {
+  const syncDerivedStatus = () => {
     if (
       active &&
       (status.unsaved !== holdsUnsavedMaterial() || status.replaceableByImport !== importMayReplace(status.errorCode))
@@ -403,7 +403,7 @@ export function createPersistenceController(
     }
     writingDocument = null;
     writing = false;
-    syncUnsaved();
+    syncDerivedStatus();
     if (active && pending !== null && status.phase !== "error") void drain();
   };
 
@@ -433,7 +433,7 @@ export function createPersistenceController(
   const candidateCurrent = (candidate: StoredCandidate): boolean => {
     if (!active || candidate.documentEpoch !== documentEpoch || terminal !== null) return false;
     return candidate.replaces === null
-      ? !hasUnsaved() && status.errorCode === null
+      ? !hasOutstandingWrite() && status.errorCode === null
       : pending === candidate.replaces && !writing && status.errorCode === "PERSISTENCE_CONFLICT";
   };
 
@@ -527,7 +527,7 @@ export function createPersistenceController(
         // merely because it arrived between the two identical publications.
         // If this write fails, drain's failure path requeues writingDocument.
         pending = null;
-        syncUnsaved();
+        syncDerivedStatus();
         return;
       }
       // An unchanged revision is skipped only with the history last saved or
@@ -543,7 +543,7 @@ export function createPersistenceController(
       pending = Object.freeze({ tree, history, authored });
       if (ready && status.phase !== "error") void drain();
       else if (ready) update({ ...status, dirtyRevision: tree.revision });
-      syncUnsaved();
+      syncDerivedStatus();
     },
 
     async prepareImportedTree(tree, importOptions = {}) {
@@ -576,11 +576,11 @@ export function createPersistenceController(
       }
       const attemptId = ++importAttemptSequence;
       activeImportAttempt = attemptId;
-      syncUnsaved();
+      syncDerivedStatus();
       const rejectAttempt = (errorCode: ImportedDocumentRejection["errorCode"]): ImportedDocumentRejection => {
         if (activeImportAttempt === attemptId) {
           activeImportAttempt = null;
-          syncUnsaved();
+          syncDerivedStatus();
           if (active && pending !== null && status.phase !== "error") void drain();
         }
         return Object.freeze({ ok: false, errorCode });
@@ -670,7 +670,7 @@ export function createPersistenceController(
             errorCode,
           });
         }
-        syncUnsaved();
+        syncDerivedStatus();
         return errorCode;
       }
       // Rollback restores the exact row the import replaced, journal included.
@@ -682,7 +682,7 @@ export function createPersistenceController(
         basis = Object.freeze({ writeGeneration: rolledBack.value.writeGeneration, journal: basis.journal });
       }
       announce(prepared.tree.id, rolledBack.value.writeGeneration);
-      syncUnsaved();
+      syncDerivedStatus();
       if (active && pending !== null && status.phase !== "error") void drain();
       return null;
     },
@@ -835,7 +835,7 @@ export function createPersistenceController(
         activeTreeId === null ||
         terminal !== null ||
         status.errorCode !== null ||
-        hasUnsaved()
+        hasOutstandingWrite()
       ) return null;
       const refreshEpoch = documentEpoch;
       const loaded = await repository.load(activeTreeId);
@@ -851,7 +851,7 @@ export function createPersistenceController(
       if (basis.writeGeneration !== null && loaded.value.basis.writeGeneration <= basis.writeGeneration) {
         return null;
       }
-      if (hasUnsaved()) {
+      if (hasOutstandingWrite()) {
         if (!writing) holdConflict("another-tab");
         return null;
       }
