@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { subscribePageExit, subscribePageSuspension } from "./page-suspension";
+import { trackPressedPointers } from "./pressed-pointers";
 
 /**
  * Owns the pointer-idle delivery window shared by admission, Point Talk, and
@@ -41,53 +42,19 @@ export function subscribeDeliveryWindow(
   }
   const pageWindow = window;
   const pageDocument = document;
-  const pressed = new Set<number>();
   let subscribed = true;
   const evaluate = () => {
     if (!subscribed) return;
     binding.onChange(
       binding.isAvailable() &&
         pageDocument.visibilityState === "visible" &&
-        pressed.size === 0,
+        !pressed.isPressed(),
     );
   };
-  const onPointerDown = (event: PointerEvent) => {
-    pressed.add(event.pointerId);
-    binding.onChange(false);
-  };
-  const onPointerReleased = (event: PointerEvent) => {
-    pressed.delete(event.pointerId);
-    evaluate();
-  };
-  const onCaptureLost = (event: PointerEvent) => {
-    if (event.buttons !== 0) return;
-    onPointerReleased(event);
-  };
-  const onPointerMove = (event: PointerEvent) => {
-    if (event.buttons === 0) {
-      if (pressed.delete(event.pointerId)) evaluate();
-      return;
-    }
-    if (pressed.has(event.pointerId)) return;
-    pressed.add(event.pointerId);
-    binding.onChange(false);
-  };
-  const onWindowBlur = (event: Event) => {
-    // Element blur does not bubble, but a capturing ancestor would still see
-    // it; only the window's own focus loss means a release may be lost.
-    if (event.target !== pageWindow || pressed.size === 0) return;
-    pressed.clear();
-    evaluate();
-  };
-  // Option objects rather than a boolean: some EventTarget implementations
-  // (Node's) ignore a boolean capture flag on removal.
-  const capture = { capture: true } as const;
-  pageWindow.addEventListener("pointerdown", onPointerDown, capture);
-  pageWindow.addEventListener("pointerup", onPointerReleased, capture);
-  pageWindow.addEventListener("pointercancel", onPointerReleased, capture);
-  pageWindow.addEventListener("lostpointercapture", onCaptureLost, capture);
-  pageWindow.addEventListener("pointermove", onPointerMove, { capture: true, passive: true });
-  pageWindow.addEventListener("blur", onWindowBlur);
+  const pressed = trackPressedPointers(pageWindow, {
+    onPress: () => binding.onChange(false),
+    onRelease: evaluate,
+  });
   const unsubscribeSuspension = subscribePageSuspension(
     () => {
       pressed.clear();
@@ -103,12 +70,7 @@ export function subscribeDeliveryWindow(
     unsubscribe: () => {
       if (!subscribed) return;
       subscribed = false;
-      pageWindow.removeEventListener("pointerdown", onPointerDown, capture);
-      pageWindow.removeEventListener("pointerup", onPointerReleased, capture);
-      pageWindow.removeEventListener("pointercancel", onPointerReleased, capture);
-      pageWindow.removeEventListener("lostpointercapture", onCaptureLost, capture);
-      pageWindow.removeEventListener("pointermove", onPointerMove, capture);
-      pageWindow.removeEventListener("blur", onWindowBlur);
+      pressed.dispose();
       unsubscribeSuspension();
       unsubscribeExit();
     },

@@ -3,6 +3,7 @@ import {
   normalizeClientRects,
   type ClientTextRect,
 } from "../interaction/range-measurement";
+import { trackPressedPointers } from "../interaction/pressed-pointers";
 import type { WikiOccurrenceView } from "../interaction/wiki-occurrence-driver";
 import {
   findMaterialTextElement,
@@ -186,20 +187,13 @@ export function createWikiDisclosureController(
   // early, is not retried and so is never perceived.
   const undisclosable = new Set<string>();
   const interruptions = new Map<string, number>();
-  const pressed = new Set<number>();
+  // Shared with delivery, including recovery from a release never delivered.
+  const pressed = trackPressedPointers(window);
   let schedule: number | null = null;
   let markObserver: MutationObserver | null = null;
   let observedList: Element | null = null;
   let markFrame: number | null = null;
   let disposed = false;
-
-  const onPointerDown = (event: PointerEvent) => pressed.add(event.pointerId);
-  const onPointerEnd = (event: PointerEvent) => pressed.delete(event.pointerId);
-  const onBlur = () => pressed.clear();
-  window.addEventListener("pointerdown", onPointerDown, true);
-  window.addEventListener("pointerup", onPointerEnd, true);
-  window.addEventListener("pointercancel", onPointerEnd, true);
-  window.addEventListener("blur", onBlur);
 
   const syncVeil = () => {
     if (!capabilities.highlights) return;
@@ -280,7 +274,7 @@ export function createWikiDisclosureController(
   };
 
   const eligible = (view: WikiOccurrenceView, nowMs: number): boolean => {
-    if (context.blocked || pressed.size > 0 || document.visibilityState !== "visible") return false;
+    if (context.blocked || pressed.isPressed() || document.visibilityState !== "visible") return false;
     if (nowMs - view.admittedAtMs < WIKI_DISCLOSURE_ARRIVAL_MS) return false;
     const element = findMaterialTextElement(view.nodeId);
     const text = context.readText(view.nodeId);
@@ -431,11 +425,7 @@ export function createWikiDisclosureController(
       markObserver = null;
       observedList = null;
       undisclosable.clear();
-      pressed.clear();
-      window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("pointerup", onPointerEnd, true);
-      window.removeEventListener("pointercancel", onPointerEnd, true);
-      window.removeEventListener("blur", onBlur);
+      pressed.dispose();
       if (capabilities.highlights) {
         CSS.highlights.delete(WIKI_LEXEME_VEIL);
         CSS.highlights.delete(WIKI_APPLIED_MARK);
