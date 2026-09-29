@@ -263,7 +263,50 @@ invalid source nor veto otherwise valid unchanged material.
 Elastic expansion is stricter than whole-text replacement. Source-carried
 spans remain protected; only ranges proven to be newly generated are eligible
 for Wiki. If that projection is ambiguous, it protects more text rather than
-guessing.
+guessing. Matching runs over the complete final node text restricted to those
+generated gaps, so word boundaries and protected literals see the real
+neighbouring language rather than the edge of the answer.
+
+### Occurrence attribution
+
+Each applied edit may carry one opaque occurrence token. The Wiki session mints
+it per edit from a secure random source (never from text or position) and
+registers `occurrence → { rule, appliedAtRevision, origin }` in a bounded
+in-memory registry owned by the Wiki runtime: at most 64 entries, a 10 s window
+for a token whose candidate never committed, and 5 min for a committed one.
+The rule is the exact `locale, channel, boundary, form, canonical` identity;
+`appliedAtRevision` is the session's `sourceRevision`; the spoken channel is
+`human-admission` origin and the written channel is `generated`. The neutral
+lexical port checks only the token's shape (`[A-Za-z0-9_-]{1,64}`) and
+uniqueness within one suggestion; a malformed or repeated token loses its
+attribution, never its edit.
+
+`canonicalizeMaterialText` returns its applied edits in output coordinates with
+the form it replaced (`sourceText`). `MaterialIngress` maps attributed edits
+into the committed node text for every stage: admission (only when the second
+admission normalization leaves the canonical text untouched), repair (the whole
+repaired node), Elastic (the final node text), and Text Swap (the swapped
+segment or whole node at its start offset). Each mapped edit must land exactly
+on its canonical form, or all attribution for that commit is dropped. A
+withheld canonicalization carries no edits. The content-free ingress receipt
+lists `lexicalEdits: { start, end, occurrence }[]`; the heard form travels
+only in the transient prepared value.
+
+After a successful commit whose committed node still equals the text those
+edits measured, the store calls one narrow port,
+`publishCommittedLexicalOccurrences({ treeId, documentEpoch, nodeId,
+nodeUpdatedAt, stage, channel, locale, edits })`, after its state update and
+after the committed-observation call. Composition claims the tokens in the
+registry and hands the publication to the browser occurrence driver. The store
+never learns that Wiki exists, and no heard form reaches store state, history,
+a receipt, persistence, the archive, a model request, or a log.
+
+Settlement consumes the registry entry before any write, so a repeated,
+late, or expired id settles to nothing. A censored occurrence releases its
+memory without loading durable storage. `coordinator.settle` records the rest:
+informed acceptance and inspection take the soft byte-bound path; Keep and
+revert report every failure; both rebase over a concurrent write because a
+settlement addresses a rule, not a configuration view.
 
 ## Persistence and cache
 

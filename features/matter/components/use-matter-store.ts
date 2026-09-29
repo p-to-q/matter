@@ -12,7 +12,9 @@ import {
   createWikiMaterialLexicalPort,
 } from "../application/wiki-material-lexical-adapter";
 import {
+  claimMatterWikiOccurrences,
   isMatterWikiPhoneticFittingEnabled,
+  mintMatterWikiOccurrence,
   observeMatterWikiEvidence,
   readMatterWikiBasis,
 } from "../persistence/wiki-runtime-bridge";
@@ -29,10 +31,16 @@ const matterStore = createMatterStore(singletonInitialDocument, {
   documentRoot: true,
   materialLexical: createWikiMaterialLexicalPort(readMatterWikiBasis, {
     phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
+    mintOccurrence: mintMatterWikiOccurrence,
   }),
   humanAdmissionObservation: createWikiMaterialLexicalObservationPort(
     observeMatterWikiEvidence,
   ),
+  lexicalOccurrences: Object.freeze({
+    publishCommitted: (publication) => {
+      claimMatterWikiOccurrences(publication.edits.map((edit) => edit.occurrence));
+    },
+  }),
   initialTitle: singletonInitialDocument === "empty"
     ? EMPTY_MATTER_DOCUMENT_TITLE
     : DEFAULT_MATTER_DOCUMENT_TITLE,

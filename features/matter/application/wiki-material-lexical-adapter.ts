@@ -1,6 +1,8 @@
 import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import type { WikiBasis } from "../wiki/wiki-basis";
+import type { WikiOccurrenceAttribution } from "../wiki/wiki-occurrence-registry";
 import type {
+  MaterialLexicalChannel,
   MaterialLexicalPort,
   MaterialLexicalSuggestion,
   MaterialLexicalSession,
@@ -10,6 +12,11 @@ import type { MaterialLexicalObservation } from "./material-lexical-observation-
 
 export type WikiConsumptionPolicy = Readonly<{
   phoneticFittingEnabled?: () => boolean;
+  /**
+   * Registers one applied rule and returns its opaque random occurrence id,
+   * or null when attribution is unavailable. Absent, edits stay unattributed.
+   */
+  mintOccurrence?: (attribution: WikiOccurrenceAttribution) => string | null;
 }>;
 
 export type WikiCommittedObservationSink = (
@@ -48,10 +55,22 @@ export function createWikiMaterialLexicalPort(
           }
           const patches = result.edits.map((edit) => {
             const rule = snapshot.rules[edit.ruleIndex];
+            const occurrence = mintOccurrence(policy, Object.freeze({
+              rule: Object.freeze({
+                locale: rule.locale,
+                channel: rule.channel,
+                boundary: rule.boundary,
+                form: rule.form,
+                canonical: rule.canonical,
+                appliedAtRevision: basis.stateRevision,
+              }),
+              origin: occurrenceOrigin(request.channel),
+            }));
             return Object.freeze({
               start: edit.start,
               end: edit.end,
               replacement: rule.canonical,
+              ...(occurrence === null ? {} : { occurrence }),
             });
           });
           return Object.freeze({
@@ -62,6 +81,24 @@ export function createWikiMaterialLexicalPort(
       });
     },
   });
+}
+
+/** Spoken words are the person's admission; written text is generated. */
+function occurrenceOrigin(channel: MaterialLexicalChannel): WikiOccurrenceAttribution["origin"] {
+  return channel === "spoken" ? "human-admission" : "generated";
+}
+
+function mintOccurrence(
+  policy: WikiConsumptionPolicy,
+  attribution: WikiOccurrenceAttribution,
+): string | null {
+  if (policy.mintOccurrence === undefined) return null;
+  try {
+    return policy.mintOccurrence(attribution);
+  } catch {
+    // Attribution is optional; the edit itself never depends on it.
+    return null;
+  }
 }
 
 /** Write capability exposed only to the successful human-admission owner. */

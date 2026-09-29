@@ -16,6 +16,7 @@ import type { WikiAliasEvidenceProducer } from "../wiki/wiki-learning-policy";
 import type {
   WikiEvidenceTickDisposition,
   WikiObservationTick,
+  WikiOccurrenceSettlement,
   WikiState,
 } from "../wiki/wiki-model";
 
@@ -698,6 +699,91 @@ describe("Wiki coordinator", () => {
     expect(coordinator.getStatus()).toMatchObject({ phase: "ready", generation: 4 });
   });
 
+  it("hydrates, records informed acceptance as kept evidence, and settles once", async () => {
+    const state = observedAliasState();
+    const repository = fakeRepository();
+    repository.load.mockResolvedValue({ ok: true, value: { state, writeGeneration: 3 } });
+    repository.save.mockResolvedValue({ ok: true, value: 4 });
+    const coordinator = createWikiCoordinator(repository);
+
+    const settlement = occurrenceSettlement("occ_implicit", "accepted-implicit", state.revision);
+    await expect(coordinator.settle(settlement)).resolves.toMatchObject({
+      ok: true,
+      changed: true,
+      generation: 4,
+    });
+    expect(coordinator.readState()?.aliasEvidence[0]).toMatchObject({ form: "Englebart", kept: 4 });
+    expect(coordinator.readState()?.settledOccurrences).toEqual(["occ_implicit"]);
+
+    await expect(coordinator.settle(settlement)).resolves.toMatchObject({ ok: true, changed: false });
+    expect(repository.save).toHaveBeenCalledOnce();
+  });
+
+  it("rebases a settlement over a concurrent durable write", async () => {
+    const initial = observedAliasState();
+    const external = applyWikiEvent(initial, {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Morphogenesis",
+      scope: "both",
+    });
+    if (!external.ok) throw new Error(external.error.message);
+    const repository = fakeRepository();
+    repository.load
+      .mockResolvedValueOnce({ ok: true, value: { state: initial, writeGeneration: 1 } })
+      .mockResolvedValueOnce({ ok: true, value: { state: external.state, writeGeneration: 2 } });
+    repository.save
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { code: "PERSISTENCE_CONFLICT", message: "newer tab" },
+      })
+      .mockResolvedValueOnce({ ok: true, value: 3 });
+    const coordinator = createWikiCoordinator(repository);
+
+    await expect(coordinator.settle(
+      occurrenceSettlement("occ_rebased", "inspected-kept", initial.revision),
+    )).resolves.toMatchObject({ ok: true, changed: true, generation: 3 });
+    expect(repository.save).toHaveBeenCalledTimes(2);
+    expect(coordinator.readState()?.lexemes.map((lexeme) => lexeme.canonical))
+      .toContain("Morphogenesis");
+    expect(coordinator.readState()?.aliasEvidence[0]).toMatchObject({ kept: 8 });
+  });
+
+  it("routes Keep through human authority and reports an explicit failure", async () => {
+    const state = observedAliasState();
+    const repository = fakeRepository();
+    repository.load.mockResolvedValue({ ok: true, value: { state, writeGeneration: 1 } });
+    repository.save
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { code: "PERSISTENCE_WRITE_FAILED", message: "quota" },
+      })
+      .mockResolvedValueOnce({ ok: true, value: 2 });
+    const coordinator = createWikiCoordinator(repository);
+    const keep = occurrenceSettlement("occ_keep", "explicit-confirm", state.revision);
+
+    await expect(coordinator.settle(keep)).resolves.toEqual({
+      ok: false,
+      code: "PERSISTENCE_FAILED",
+    });
+    await expect(coordinator.settle(keep)).resolves.toMatchObject({ ok: true, changed: true });
+    expect(coordinator.readState()?.authorities).toEqual([
+      expect.objectContaining({ form: "Englebart", channel: "spoken" }),
+    ]);
+  });
+
+  it("rejects a settlement applied from a basis newer than durable authority", async () => {
+    const state = observedAliasState();
+    const repository = fakeRepository();
+    repository.load.mockResolvedValue({ ok: true, value: { state, writeGeneration: 1 } });
+    const coordinator = createWikiCoordinator(repository);
+
+    await expect(coordinator.settle(
+      occurrenceSettlement("occ_future", "reverted", state.revision + 1),
+    )).resolves.toEqual({ ok: false, code: "INVALID_DECISION" });
+    expect(repository.save).not.toHaveBeenCalled();
+  });
+
   it("does not expose corrupt reset as a general clear shortcut", async () => {
     const repository = fakeRepository();
     const coordinator = createWikiCoordinator(repository);
@@ -784,6 +870,32 @@ function sharedRepositoryPair(initialState?: WikiState): Readonly<{
     close() {},
   });
   return Object.freeze({ first: create(), second: create() });
+}
+
+function observedAliasState(): WikiState {
+  const result = applyWikiEvent(createdLexemeState(), OBSERVATION);
+  if (!result.ok) throw new Error(result.error.message);
+  return result.state;
+}
+
+function occurrenceSettlement(
+  occurrenceId: string,
+  outcome: "accepted-implicit" | "inspected-kept" | "explicit-confirm" | "reverted",
+  appliedAtRevision: number,
+): WikiOccurrenceSettlement {
+  return Object.freeze({
+    occurrenceId,
+    outcome,
+    origin: "human-admission",
+    rule: Object.freeze({
+      locale: "en-US",
+      channel: "spoken",
+      boundary: "word",
+      form: "Englebart",
+      canonical: "Engelbart",
+      appliedAtRevision,
+    }),
+  });
 }
 
 function createdLexemeState(): WikiState {

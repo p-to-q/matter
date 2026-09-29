@@ -119,6 +119,69 @@ describe("Wiki runtime bridge", () => {
     expect(observe).toHaveBeenCalledOnce();
     expect(observe).toHaveBeenCalledWith(ADMISSION);
   });
+
+  it("settles one claimed occurrence once with its minted attribution", async () => {
+    const settle = vi.fn().mockResolvedValue({
+      ok: true,
+      changed: true,
+      generation: 2,
+      stateRevision: 4,
+    });
+    vi.doMock("./wiki-runtime-core", () => ({
+      settleHydratedMatterWikiOccurrence: settle,
+    }));
+    const bridge = await import("./wiki-runtime-bridge");
+    const occurrenceId = bridge.mintMatterWikiOccurrence(ATTRIBUTION);
+    expect(occurrenceId).toMatch(/^[0-9a-f]{32}$/u);
+    bridge.claimMatterWikiOccurrences([occurrenceId!]);
+
+    await expect(bridge.settleMatterWikiOccurrence(occurrenceId!, "accepted-implicit"))
+      .resolves.toBe("recorded");
+    await expect(bridge.settleMatterWikiOccurrence(occurrenceId!, "explicit-confirm"))
+      .resolves.toBe("unattributed");
+    expect(settle).toHaveBeenCalledOnce();
+    expect(settle).toHaveBeenCalledWith({
+      occurrenceId,
+      outcome: "accepted-implicit",
+      rule: ATTRIBUTION.rule,
+      origin: "human-admission",
+    });
+  });
+
+  it("releases a censored or uncommitted occurrence without waking storage", async () => {
+    const settle = vi.fn();
+    vi.doMock("./wiki-runtime-core", () => ({
+      settleHydratedMatterWikiOccurrence: settle,
+    }));
+    const bridge = await import("./wiki-runtime-bridge");
+    const censored = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
+    bridge.claimMatterWikiOccurrences([censored]);
+    const uncommitted = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
+
+    await expect(bridge.settleMatterWikiOccurrence(censored, "censored")).resolves.toBe("neutral");
+    await expect(bridge.settleMatterWikiOccurrence(uncommitted, "explicit-confirm"))
+      .resolves.toBe("unattributed");
+    await vi.dynamicImportSettled();
+    expect(settle).not.toHaveBeenCalled();
+  });
+
+  it("mints no attribution without a secure random source", async () => {
+    vi.stubGlobal("crypto", undefined);
+    const bridge = await import("./wiki-runtime-bridge");
+    expect(bridge.mintMatterWikiOccurrence(ATTRIBUTION)).toBeNull();
+  });
+});
+
+const ATTRIBUTION = Object.freeze({
+  rule: Object.freeze({
+    locale: "zh-CN" as const,
+    channel: "spoken" as const,
+    boundary: "word" as const,
+    form: "P to Q",
+    canonical: "[p → q]",
+    appliedAtRevision: 0,
+  }),
+  origin: "human-admission" as const,
 });
 
 const ADMISSION_TEXT = Object.freeze({

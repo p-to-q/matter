@@ -4,6 +4,7 @@ import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 const GRAPHEME_SEGMENTER = new Intl.Segmenter("und", { granularity: "grapheme" });
 const MAX_MATERIAL_LEXICAL_OUTPUT_CODE_UNITS = MAX_NODE_TEXT_CODE_UNITS * 128;
+const OCCURRENCE_TOKEN = /^[A-Za-z0-9_-]{1,64}$/u;
 
 export type MaterialLexicalChannel = "spoken" | "written";
 
@@ -23,6 +24,31 @@ export type MaterialLexicalPatch = Readonly<{
   start: number;
   end: number;
   replacement: string;
+  /**
+   * Opaque attribution minted by the adapter for this one edit. Matter checks
+   * only its shape and uniqueness, drops anything else, and never reads it.
+   */
+  occurrence?: string;
+}>;
+
+/**
+ * One applied patch in the coordinates of the returned text. `sourceText` is
+ * content: the form before the patch. It may travel only through transient
+ * memory and must never reach a receipt, state, history, storage, or log.
+ */
+export type MaterialLexicalAppliedEdit = Readonly<{
+  start: number;
+  end: number;
+  sourceText: string;
+  occurrence?: string;
+}>;
+
+/** One attributed edit addressed in committed node text. */
+export type MaterialLexicalOccurrenceEdit = Readonly<{
+  start: number;
+  end: number;
+  occurrence: string;
+  sourceText: string;
 }>;
 
 /**
@@ -41,6 +67,8 @@ export type MaterialLexicalResult = Readonly<{
   text: string;
   changed: boolean;
   editCount: number;
+  /** Ordered, non-overlapping applied edits in `text` coordinates. */
+  edits: readonly MaterialLexicalAppliedEdit[];
 }>;
 
 export type MaterialLexicalSnapshot = Readonly<{
@@ -61,12 +89,20 @@ export type MaterialLexicalPort = Readonly<{
   capture: () => MaterialLexicalSession;
 }>;
 
+const NO_EDITS: readonly MaterialLexicalAppliedEdit[] = Object.freeze([]);
+
 const IDENTITY_RESULT = (text: string): MaterialLexicalResult => Object.freeze({
   status: "unchanged",
   text,
   changed: false,
   editCount: 0,
+  edits: NO_EDITS,
 });
+
+/** Shape of an opaque occurrence token; content-free by construction. */
+export function isMaterialLexicalOccurrenceToken(value: unknown): value is string {
+  return typeof value === "string" && OCCURRENCE_TOKEN.test(value);
+}
 
 export const IDENTITY_MATERIAL_LEXICAL_SESSION: MaterialLexicalSession = Object.freeze({
   snapshot: Object.freeze({ generation: 0, sourceRevision: 0 }),
@@ -117,13 +153,14 @@ export function canonicalizeMaterialText(
     if (suggestion?.status !== "changed" || !Array.isArray(suggestion.patches)) {
       return IDENTITY_RESULT(ownedRequest.text);
     }
-    const text = applyPatches(ownedRequest, suggestion.patches);
-    if (text !== null && text !== ownedRequest.text) {
+    const applied = applyPatches(ownedRequest, suggestion.patches);
+    if (applied !== null && applied.text !== ownedRequest.text) {
       return Object.freeze({
         status: "changed",
-        text,
+        text: applied.text,
         changed: true,
         editCount: suggestion.patches.length,
+        edits: applied.edits,
       });
     }
   } catch {
@@ -155,13 +192,14 @@ function ownRequest(request: MaterialLexicalRequest): MaterialLexicalRequest | n
 function applyPatches(
   request: MaterialLexicalRequest,
   patches: readonly MaterialLexicalPatch[],
-): string | null {
+): Readonly<{ text: string; edits: readonly MaterialLexicalAppliedEdit[] }> | null {
   if (patches.length === 0 || patches.length > MAX_NODE_TEXT_CODE_UNITS) return null;
   const seams = graphemeSeams(request.text);
   const eligibleRanges = request.eligibleRanges ?? Object.freeze([
     Object.freeze({ start: 0, end: request.text.length }),
   ]);
   const owned: MaterialLexicalPatch[] = [];
+  const occurrences = new Set<string>();
   let priorEnd = 0;
   let eligibleIndex = 0;
   let outputLength = request.text.length;
@@ -195,23 +233,43 @@ function applyPatches(
       outputLength < 0 ||
       outputLength > MAX_MATERIAL_LEXICAL_OUTPUT_CODE_UNITS
     ) return null;
+    // A malformed or repeated token only loses attribution, never the edit.
+    const occurrence = isMaterialLexicalOccurrenceToken(patch.occurrence) &&
+        !occurrences.has(patch.occurrence)
+      ? patch.occurrence
+      : undefined;
+    if (occurrence !== undefined) occurrences.add(occurrence);
     owned.push(Object.freeze({
       start: patch.start,
       end: patch.end,
       replacement: patch.replacement,
+      ...(occurrence === undefined ? {} : { occurrence }),
     }));
     priorEnd = patch.end;
   }
 
   const output: string[] = [];
+  const edits: MaterialLexicalAppliedEdit[] = [];
   let cursor = 0;
+  let outputCursor = 0;
   for (const patch of owned) {
-    output.push(request.text.slice(cursor, patch.start), patch.replacement);
+    const unchanged = request.text.slice(cursor, patch.start);
+    output.push(unchanged, patch.replacement);
+    outputCursor += unchanged.length;
+    edits.push(Object.freeze({
+      start: outputCursor,
+      end: outputCursor + patch.replacement.length,
+      sourceText: request.text.slice(patch.start, patch.end),
+      ...(patch.occurrence === undefined ? {} : { occurrence: patch.occurrence }),
+    }));
+    outputCursor += patch.replacement.length;
     cursor = patch.end;
   }
   output.push(request.text.slice(cursor));
   const text = output.join("");
-  return text.length === outputLength ? text : null;
+  return text.length === outputLength
+    ? Object.freeze({ text, edits: Object.freeze(edits) })
+    : null;
 }
 
 function normalizeRanges(

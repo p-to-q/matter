@@ -22,6 +22,8 @@ import {
 import type { ThoughtTree, TreeCommand } from "../tree/model";
 import {
   canonicalizeMaterialText,
+  type MaterialLexicalChannel,
+  type MaterialLexicalOccurrenceEdit,
   type MaterialLexicalResult,
   type MaterialLexicalSession,
 } from "./material-lexical-port";
@@ -38,10 +40,19 @@ import type { MatterLocale } from "../config/locales";
 
 export type MaterialIngressStage = "admission" | "repair" | "transform" | "text-swap";
 
+/** Where one attributed lexical edit landed in the committed node text. */
+export type MaterialIngressLexicalEdit = Readonly<{
+  start: number;
+  end: number;
+  occurrence: string;
+}>;
+
 /**
  * Content-free evidence that one immutable lexical session was used.
  * `canonicalizationWithheld` records that proposed edits made an otherwise
- * valid result invalid, so the raw validated result was kept instead.
+ * valid result invalid, so the raw validated result was kept instead; it then
+ * carries no lexical edits. `lexicalEdits` lists only attributed edits, in the
+ * coordinates of the node text the command commits.
  */
 export type MaterialIngressReceipt = Readonly<{
   stage: MaterialIngressStage;
@@ -50,6 +61,19 @@ export type MaterialIngressReceipt = Readonly<{
   canonicalized: boolean;
   editCount: number;
   canonicalizationWithheld: boolean;
+  lexicalEdits: readonly MaterialIngressLexicalEdit[];
+}>;
+
+/**
+ * The content half of an attributed canonicalization, for the one transient
+ * publication after commit. `nodeText` is the exact node text the coordinates
+ * address; a caller publishes only when the committed node still equals it.
+ */
+export type MaterialLexicalOccurrences = Readonly<{
+  channel: MaterialLexicalChannel;
+  locale: MatterLocale;
+  nodeText: string;
+  edits: readonly MaterialLexicalOccurrenceEdit[];
 }>;
 
 export type PrepareAdmissionInput = Readonly<{
@@ -66,6 +90,8 @@ export type PreparedAdmission = Readonly<{
   command: TreeCommand;
   admittedText: string;
   receipt: MaterialIngressReceipt;
+  /** Transient content for the committed-occurrence publication; never stored. */
+  lexicalOccurrences: MaterialLexicalOccurrences | null;
 }>;
 
 export type PrepareAdmissionResult =
@@ -84,6 +110,8 @@ export type PreparedRepair = Readonly<{
   command: TreeCommand;
   values: AdmissionRepairValues;
   receipt: MaterialIngressReceipt;
+  /** Transient content for the committed-occurrence publication; never stored. */
+  lexicalOccurrences: MaterialLexicalOccurrences | null;
 }>;
 
 export type PrepareRepairResult =
@@ -105,6 +133,8 @@ export type PreparedTextSwap = Readonly<{
   command: TreeCommand;
   plan: TextSwapPlan;
   receipt: MaterialIngressReceipt;
+  /** Transient content for the committed-occurrence publication; never stored. */
+  lexicalOccurrences: MaterialLexicalOccurrences | null;
 }>;
 
 export type PrepareTextSwapResult =
@@ -125,6 +155,8 @@ export type PreparedTransform = Readonly<{
   command: TreeCommand;
   plan: TransformPlan;
   receipt: MaterialIngressReceipt;
+  /** Transient content for the committed-occurrence publication; never stored. */
+  lexicalOccurrences: MaterialLexicalOccurrences | null;
 }>;
 
 export type PrepareTransformResult =
@@ -160,7 +192,8 @@ export function prepareAdmissionIngress(
       ok: true,
       command: raw.command,
       admittedText: rawAdmittedText,
-      receipt: createReceipt("admission", input.lexicalSession, canonical),
+      receipt: createReceipt("admission", input.lexicalSession, canonical, null),
+      lexicalOccurrences: null,
     });
   }
   const translated = admissionToTreeCommand(
@@ -177,14 +210,21 @@ export function prepareAdmissionIngress(
       command: raw.command,
       admittedText: rawAdmittedText,
       receipt: withheldReceipt("admission", input.lexicalSession),
+      lexicalOccurrences: null,
     });
   }
 
+  // Admission normalizes its transcript again. Edits address the admitted
+  // node only when that second pass left the canonical text untouched.
+  const occurrences = admittedText === canonical.text
+    ? attributeOccurrences("spoken", input.locale, admittedText, canonical, 0)
+    : null;
   return Object.freeze({
     ok: true,
     command: translated.command,
     admittedText,
-    receipt: createReceipt("admission", input.lexicalSession, canonical),
+    receipt: createReceipt("admission", input.lexicalSession, canonical, occurrences),
+    lexicalOccurrences: occurrences,
   });
 }
 
@@ -202,7 +242,8 @@ export function prepareRepairIngress(input: PrepareRepairInput): PrepareRepairRe
       ok: true,
       command: raw.command,
       values: input.values,
-      receipt: createReceipt("repair", input.lexicalSession, canonical),
+      receipt: createReceipt("repair", input.lexicalSession, canonical, null),
+      lexicalOccurrences: null,
     });
   }
   const values = Object.freeze({ ...input.values, text: canonical.text });
@@ -216,17 +257,31 @@ export function prepareRepairIngress(input: PrepareRepairInput): PrepareRepairRe
       command: raw.command,
       values: input.values,
       receipt: withheldReceipt("repair", input.lexicalSession),
+      lexicalOccurrences: null,
     });
   }
+  // A repair replaces the whole node, so its output coordinates are the node's.
+  const occurrences = attributeOccurrences(
+    "spoken",
+    input.locale,
+    replacedText(final.command),
+    canonical,
+    0,
+  );
   return Object.freeze({
     ok: true,
     command: final.command,
     values,
-    receipt: createReceipt("repair", input.lexicalSession, canonical),
+    receipt: createReceipt("repair", input.lexicalSession, canonical, occurrences),
+    lexicalOccurrences: occurrences,
   });
 }
 
-/** Protects all source lexical spans and canonicalizes generated gaps only. */
+/**
+ * Canonicalizes the complete final node text, but only inside the gaps proven
+ * to be newly generated. Matching therefore sees the real neighbouring
+ * language and protected literals while source-carried spans stay untouched.
+ */
 export function prepareTransformIngress(
   input: PrepareTransformInput,
 ): PrepareTransformResult {
@@ -241,51 +296,76 @@ export function prepareTransformIngress(
   if (!parsedEnvelope.ok) return rejectedTransform();
   const parsedPlan = parseTransformPlan(input.rawPlan, parsedEnvelope.envelope);
   if (parsedPlan === null) return rejectedTransform();
-  const eligibleRanges = projectExpandGeneratedRanges(
+  const generatedRanges = projectExpandGeneratedRanges(
     parsedEnvelope.envelope.selection.selectedText,
     parsedPlan.action.text,
   );
-  if (eligibleRanges === null) return rejectedTransform();
+  const rawText = replacedText(raw.command);
+  const actionStart = parsedPlan.action.start;
+  const actionEnd = actionStart + parsedPlan.action.text.length;
+  if (
+    generatedRanges === null ||
+    rawText === null ||
+    rawText.slice(actionStart, actionEnd) !== parsedPlan.action.text
+  ) return rejectedTransform();
   const canonical = canonicalizeMaterialText(input.lexicalSession, {
     locale: parsedEnvelope.envelope.locale,
     channel: "written",
-    text: parsedPlan.action.text,
-    eligibleRanges,
+    text: rawText,
+    eligibleRanges: generatedRanges.map((range) => Object.freeze({
+      start: actionStart + range.start,
+      end: actionStart + range.end,
+    })),
   });
   if (!canonical.changed) {
     return Object.freeze({
       ok: true,
       command: raw.command,
       plan: parsedPlan,
-      receipt: createReceipt("transform", input.lexicalSession, canonical),
+      receipt: createReceipt("transform", input.lexicalSession, canonical, null),
+      lexicalOccurrences: null,
     });
   }
-  const finalPlan = replaceTransformPlanText(parsedPlan, canonical.text);
+  const suffixLength = rawText.length - actionEnd;
+  const canonicalAction = canonical.text.slice(actionStart, canonical.text.length - suffixLength);
+  if (
+    canonical.text.slice(0, actionStart) !== rawText.slice(0, actionStart) ||
+    canonical.text.slice(canonical.text.length - suffixLength) !== rawText.slice(actionEnd) ||
+    canonicalAction.length === 0
+  ) {
+    // Eligible ranges sit inside the answer, so this cannot happen for a
+    // coherent suggestion; an incoherent one is only withheld.
+    return withheldTransform(raw.command, parsedPlan, input.lexicalSession);
+  }
+  const finalPlan = replaceTransformPlanText(parsedPlan, canonicalAction);
   const final = planToTreeCommand(
     input.tree,
     parsedEnvelope.envelope,
     finalPlan,
     options,
   );
-  if (!final.ok && canonical.text === parsedEnvelope.envelope.selection.selectedText) {
+  if (!final.ok && canonicalAction === parsedEnvelope.envelope.selection.selectedText) {
     return final;
   }
   if (!final.ok) {
     // Local spelling authority may refine a valid answer, never cost it. Only
     // a real change that a canonical form pushes past a bound or policy keeps
     // its validated raw form.
-    return Object.freeze({
-      ok: true,
-      command: raw.command,
-      plan: parsedPlan,
-      receipt: withheldReceipt("transform", input.lexicalSession),
-    });
+    return withheldTransform(raw.command, parsedPlan, input.lexicalSession);
   }
+  const occurrences = attributeOccurrences(
+    "written",
+    parsedEnvelope.envelope.locale,
+    replacedText(final.command),
+    canonical,
+    0,
+  );
   return Object.freeze({
     ok: true,
     command: final.command,
     plan: finalPlan,
-    receipt: createReceipt("transform", input.lexicalSession, canonical),
+    receipt: createReceipt("transform", input.lexicalSession, canonical, occurrences),
+    lexicalOccurrences: occurrences,
   });
 }
 
@@ -336,7 +416,8 @@ export function prepareTextSwapIngress(
       ok: true,
       command: raw.command,
       plan: parsedPlan,
-      receipt: createReceipt("text-swap", input.lexicalSession, canonical),
+      receipt: createReceipt("text-swap", input.lexicalSession, canonical, null),
+      lexicalOccurrences: null,
     });
   }
   const finalPlan = replaceTextSwapPlanText(parsedPlan, canonical.text);
@@ -358,14 +439,24 @@ export function prepareTextSwapIngress(
       command: raw.command,
       plan: parsedPlan,
       receipt: withheldReceipt("text-swap", input.lexicalSession),
+      lexicalOccurrences: null,
     });
   }
 
+  // The answer replaces one exact segment or the complete node at its start.
+  const occurrences = attributeOccurrences(
+    "written",
+    parsedEnvelope.envelope.locale,
+    replacedText(final.command),
+    canonical,
+    finalPlan.action.start,
+  );
   return Object.freeze({
     ok: true,
     command: final.command,
     plan: finalPlan,
-    receipt: createReceipt("text-swap", input.lexicalSession, canonical),
+    receipt: createReceipt("text-swap", input.lexicalSession, canonical, occurrences),
+    lexicalOccurrences: occurrences,
   });
 }
 
@@ -374,6 +465,45 @@ function readAdmissionText(result: Extract<AdmissionCommandResult, { ok: true }>
   if (mutation.type === "initialize-root") return mutation.root.text;
   if (mutation.type === "insert-node") return mutation.node.text;
   return null;
+}
+
+function replacedText(command: TreeCommand): string | null {
+  return command.mutation.type === "replace-text" ? command.mutation.text : null;
+}
+
+/**
+ * Maps attributed edits from canonical output coordinates into node text.
+ * Every edit must land exactly on its canonical form in `nodeText`; any
+ * disagreement drops all attribution rather than address the wrong word.
+ */
+function attributeOccurrences(
+  channel: MaterialLexicalChannel,
+  locale: MatterLocale,
+  nodeText: string | null,
+  canonical: MaterialLexicalResult,
+  offset: number,
+): MaterialLexicalOccurrences | null {
+  if (nodeText === null || !Number.isSafeInteger(offset) || offset < 0) return null;
+  const edits: MaterialLexicalOccurrenceEdit[] = [];
+  for (const edit of canonical.edits) {
+    if (edit.occurrence === undefined) continue;
+    const start = offset + edit.start;
+    const end = offset + edit.end;
+    if (
+      end <= start ||
+      end > nodeText.length ||
+      nodeText.slice(start, end) !== canonical.text.slice(edit.start, edit.end)
+    ) return null;
+    edits.push(Object.freeze({
+      start,
+      end,
+      occurrence: edit.occurrence,
+      sourceText: edit.sourceText,
+    }));
+  }
+  return edits.length === 0
+    ? null
+    : Object.freeze({ channel, locale, nodeText, edits: Object.freeze(edits) });
 }
 
 function replaceTextSwapPlanText(plan: TextSwapPlan, text: string): TextSwapPlan {
@@ -390,10 +520,27 @@ function replaceTransformPlanText(plan: TransformPlan, text: string): TransformP
   });
 }
 
+function withheldTransform(
+  command: TreeCommand,
+  plan: TransformPlan,
+  session: MaterialLexicalSession,
+): PreparedTransform {
+  return Object.freeze({
+    ok: true,
+    command,
+    plan,
+    receipt: withheldReceipt("transform", session),
+    lexicalOccurrences: null,
+  });
+}
+
+const NO_LEXICAL_EDITS: readonly MaterialIngressLexicalEdit[] = Object.freeze([]);
+
 function createReceipt(
   stage: MaterialIngressStage,
   session: MaterialLexicalSession,
   canonical: MaterialLexicalResult,
+  occurrences: MaterialLexicalOccurrences | null,
 ): MaterialIngressReceipt {
   return Object.freeze({
     stage,
@@ -402,6 +549,13 @@ function createReceipt(
     canonicalized: canonical.changed,
     editCount: canonical.editCount,
     canonicalizationWithheld: false,
+    lexicalEdits: occurrences === null
+      ? NO_LEXICAL_EDITS
+      : Object.freeze(occurrences.edits.map((edit) => Object.freeze({
+          start: edit.start,
+          end: edit.end,
+          occurrence: edit.occurrence,
+        }))),
   });
 }
 
@@ -416,6 +570,7 @@ function withheldReceipt(
     canonicalized: false,
     editCount: 0,
     canonicalizationWithheld: true,
+    lexicalEdits: NO_LEXICAL_EDITS,
   });
 }
 
