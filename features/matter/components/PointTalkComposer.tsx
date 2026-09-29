@@ -20,7 +20,7 @@ import {
 } from "../runtime/text-swap-interaction";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { VoiceIcon } from "./icons";
-import type { PresenceHandoff } from "./presence";
+import type { PresenceHandoff, SettledStatusInput } from "./presence";
 import { usePresence, useSettledStatus } from "./use-presence";
 import {
   projectPointTalkPlacementWithinSurfaces,
@@ -30,7 +30,7 @@ import {
 } from "./point-talk-placement";
 import { constrainPointTalkDirectionInput } from "./point-talk-direction-input";
 
-type PointTalkStatusPhase = Extract<
+export type PointTalkStatusPhase = Extract<
   TextSwapInteractionState["phase"],
   "permission" | "recording" | "transcribing" | "pending" | "error"
 >;
@@ -292,14 +292,7 @@ export function PointTalkComposer({
     activeState.phase !== "stale";
   const statusPhase: PointTalkStatusPhase | null =
     surfaceLive && !formVisible ? activeState.phase as PointTalkStatusPhase : null;
-  const shownStatus = useSettledStatus<PointTalkStatusPhase>({
-    scope: presenceIdentity,
-    value: statusPhase,
-    // Listening, the person's own submit, and a failure show at once; waiting
-    // for the microphone or for transcription settles first.
-    urgent: statusPhase === "recording" || statusPhase === "pending" || statusPhase === "error",
-    lingers: statusPhase !== "error",
-  }, false);
+  const shownStatus = useSettledStatus(pointTalkStatusInput(presenceIdentity, statusPhase), false);
   const partialDirection = activeState.phase === "recording"
     ? activeState.partialDirection?.trim() ?? ""
     : "";
@@ -634,6 +627,24 @@ function visualViewportBounds(): Readonly<{
         right: visual.offsetLeft + visual.width,
         bottom: visual.offsetTop + visual.height,
       };
+}
+
+/**
+ * How one status phase settles. Listening, the person's own submit, and a
+ * failure show at once; waiting for the microphone or for transcription
+ * settles first. Neither "Listening" nor a failure may stay once its phase
+ * ended: after the person's Stop the field must not claim it still listens.
+ */
+export function pointTalkStatusInput(
+  scope: string,
+  phase: PointTalkStatusPhase | null,
+): SettledStatusInput<PointTalkStatusPhase> {
+  return {
+    scope,
+    value: phase,
+    urgent: phase === "recording" || phase === "pending" || phase === "error",
+    lingers: phase !== "recording" && phase !== "error",
+  };
 }
 
 export function pointTalkPhaseLabel(
