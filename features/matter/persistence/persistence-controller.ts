@@ -19,6 +19,7 @@ import { treeToBundle, type SnapshotBundle } from "./snapshot-codec";
 import { validateThoughtTree } from "../tree/invariants";
 import type { ThoughtTree } from "../tree/model";
 import { createTreeHistory, type TreeHistory } from "../tree/history";
+import { LOADING_PERSISTENCE_STATUS } from "./persistence-status";
 
 /**
  * `released`: storage pressure kept material durable by saving fewer undo
@@ -117,19 +118,6 @@ export type ImportOptions = Readonly<{
    */
   replaceUnsaved?: boolean;
 }>;
-
-/**
- * The one answer both exit guards use: this tab holds material the person
- * made that no stored row holds. Until the first load is reconciled the
- * controller has not received that material, so authorship alone answers.
- */
-export function holdsUnsavedPersonMaterial(
-  status: PersistenceStatus,
-  reconciled: boolean,
-  authored: boolean,
-): boolean {
-  return reconciled ? status.unsaved : authored;
-}
 
 export type PersistenceController = Readonly<{
   /**
@@ -242,17 +230,7 @@ export function createPersistenceController(
     documentEpoch: number;
     dirtyDocument: PendingDocument;
   }> | null = null;
-  let status: PersistenceStatus = Object.freeze({
-    phase: "loading",
-    persistedRevision: null,
-    dirtyRevision: null,
-    errorCode: null,
-    historyNotice: null,
-    unsaved: false,
-    replaceableByImport: false,
-    upgradeBlocked: false,
-    conflictOrigin: null,
-  });
+  let status: PersistenceStatus = LOADING_PERSISTENCE_STATUS;
   const listeners = new Set<() => void>();
   // Async repository writes may overlap a publish() call; reading through this
   // seam prevents compile-time narrowing from erasing that runtime transition.

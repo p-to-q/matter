@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ThoughtTree } from "../tree/model";
 import type { TreeHistory } from "../tree/history";
-import { createIndexedDbDocumentRepository } from "./document-repository";
 import {
   createDocumentGenerationChannel,
   type DocumentGeneration,
@@ -12,12 +11,9 @@ import {
 import { createDocumentImportCoordinator } from "./document-import-coordinator";
 import type { RecoveredHistory } from "./history-recovery";
 import { resolveHydrationDecision } from "./hydration-decision";
-import {
-  createPersistenceController,
-  holdsUnsavedPersonMaterial,
-  type ConflictOrigin,
-  type StoredCandidate,
-} from "./persistence-controller";
+import type { ConflictOrigin, StoredCandidate } from "./persistence-controller";
+import { createDeferredPersistenceController } from "./deferred-persistence-controller";
+import { holdsUnsavedPersonMaterial } from "./persistence-status";
 import {
   createStoredGenerationWatch,
   type StoredGenerationWatch,
@@ -51,9 +47,10 @@ export function useMaterialPersistence(
   // on it creates and closes it; the controller announces every committed row
   // through it while it is open. Constructing the controller opens nothing, so
   // a Strict Mode rehearsal of this initializer leaks no channel or database.
+  // Its storage engine is a lazy chunk; the facade stands in until it arrives.
   const [owner] = useState(() => {
     const announcer = new GenerationAnnouncer();
-    const controller = createPersistenceController(createIndexedDbDocumentRepository(), {
+    const controller = createDeferredPersistenceController({
       announceGeneration: (generation) => announcer.publish(generation),
     });
     return Object.freeze({ announcer, controller });

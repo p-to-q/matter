@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openDB } from "idb";
 import { createIndexedDbDocumentRepository } from "./document-repository";
-import { createPersistenceController, holdsUnsavedPersonMaterial } from "./persistence-controller";
+import { createPersistenceController } from "./persistence-controller";
+import { holdsUnsavedPersonMaterial } from "./persistence-status";
 import { createUnloadGuard, SLOW_SAVE_MS, type UnloadGuardEnvironment, type UnloadRisk } from "./unload-guard";
 import { relocalizeSeededSession } from "../material/seeded-session-localization";
 import { createMatterStore } from "../store/matter-store";

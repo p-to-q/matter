@@ -10,7 +10,8 @@ import {
   type SnapshotBasis,
   type SnapshotWrite,
 } from "./document-repository";
-import { createPersistenceController, holdsUnsavedPersonMaterial } from "./persistence-controller";
+import { createPersistenceController } from "./persistence-controller";
+import { holdsUnsavedPersonMaterial } from "./persistence-status";
 import { treeToBundle } from "./snapshot-codec";
 import { createTreeHistory, type TreeHistory } from "../tree/history";
 import type { ThoughtTree } from "../tree/model";
