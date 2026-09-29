@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  createMaterialTextRange,
   measureTextRange,
   normalizeClientRects,
   type LogicalTextRange,
@@ -77,6 +78,31 @@ describe("DOM Range measurement", () => {
     expect(measureTextRange(empty, "甲", address(0, 1, "甲"))).toEqual(
       failure("EMPTY_GEOMETRY"),
     );
+  });
+});
+
+describe("grapheme boundary validation", () => {
+  // Parity-dependent flags, a ZWJ family, combining marks, and a lone
+  // regional indicator at the end: every boundary must agree with a full
+  // segmentation of the passage, although only the two ends are examined.
+  const passage = `a${"🇨🇳".repeat(5)}🇺 👩‍👩‍👧 é̂ [p → q] 很重要。`;
+  const boundaries = new Set<number>([0, passage.length]);
+  for (const part of new Intl.Segmenter("en", { granularity: "grapheme" }).segment(passage)) {
+    boundaries.add(part.index);
+  }
+
+  it("accepts exactly the offsets a full segmentation accepts", () => {
+    const root = element([text(passage)], rangeWithRects([{ left: 0, top: 0, right: 4, bottom: 4 }]));
+    for (let offset = 1; offset < passage.length; offset += 1) {
+      const leading = createMaterialTextRange(root, passage, 0, offset) !== null;
+      const trailing = createMaterialTextRange(root, passage, offset, passage.length) !== null;
+      expect({ offset, leading, trailing }).toEqual({
+        offset,
+        leading: boundaries.has(offset),
+        trailing: boundaries.has(offset),
+      });
+      expect(measureTextRange(root, passage, address(0, offset, passage)).ok).toBe(boundaries.has(offset));
+    }
   });
 });
 
