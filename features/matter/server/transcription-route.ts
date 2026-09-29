@@ -13,8 +13,8 @@ import {
   type TranscriptionRequest,
 } from "../protocol/transcription-contract";
 import { isMatterLocale } from "../config/locales";
-import { rejectOnAbort } from "./abort-boundary";
-import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
+import { createRequestDeadline, endedOnDeadline, rejectOnAbort } from "./abort-boundary";
+import { TranscriptionServerError } from "./transcription-errors";
 import {
   assertTranscriptionPurposeAvailable,
   resolveTranscriptionAdapter,
@@ -39,11 +39,13 @@ const FIELD_NAMES = new Set([
 export async function handleTranscriptionRequest(request: Request): Promise<Response> {
   const admission = transcriptionAdmission.admit(request);
   if (!admission.ok) throw transcriptionAdmissionError(admission.reason);
-  const boundary = createRequestBoundary(request.signal);
+  // This deadline starts at route entry and remains authoritative through both
+  // reading the recording and provider transcription.
+  const deadline = createRequestDeadline(request.signal, TRANSCRIPTION_SERVER_TIMEOUT_MS);
   try {
-    return await handleBoundedTranscriptionRequest(request, boundary.signal);
+    return await handleBoundedTranscriptionRequest(request, deadline.signal);
   } finally {
-    boundary.dispose();
+    deadline.dispose();
     admission.release();
   }
 }
@@ -215,35 +217,12 @@ async function readBoundedBody(
   return bytes.snapshot().buffer;
 }
 
-function createRequestBoundary(requestSignal: AbortSignal): {
-  signal: AbortSignal;
-  dispose: () => void;
-} {
-  // This deadline starts at route entry and remains authoritative through both
-  // request admission and provider transcription.
-  const controller = new AbortController();
-  const cancel = () => controller.abort(new DOMException("Cancelled", "AbortError"));
-  if (requestSignal.aborted) cancel();
-  else requestSignal.addEventListener("abort", cancel, { once: true });
-  const timeout = setTimeout(
-    () => controller.abort(new DOMException("Timed out", "TimeoutError")),
-    TRANSCRIPTION_SERVER_TIMEOUT_MS,
-  );
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timeout);
-      requestSignal.removeEventListener("abort", cancel);
-    },
-  };
-}
-
 function throwIfRequestInterrupted(signal: AbortSignal): void {
   if (signal.aborted) throw requestInterruptionError(signal);
 }
 
 function requestInterruptionError(signal: AbortSignal): TranscriptionServerError {
-  return isTimeoutSignal(signal)
+  return endedOnDeadline(signal)
     ? new TranscriptionServerError(
         "TRANSCRIPTION_TIMEOUT",
         "Speech transcription timed out.",

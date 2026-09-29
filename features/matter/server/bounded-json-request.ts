@@ -1,4 +1,5 @@
 import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
+import { createRequestDeadline, endedOnDeadline, rejectOnAbort } from "./abort-boundary";
 import { isJsonContentType } from "./content-type";
 
 /**
@@ -66,7 +67,7 @@ export async function withBoundedJsonRequest<T>(
     throw policy.fail("unsupported-media-type");
   }
 
-  const boundary = createRequestBoundary(request.signal, policy.timeoutMs);
+  const boundary = createRequestDeadline(request.signal, policy.timeoutMs);
   try {
     const body = await readBoundedText(request, policy, boundary.signal);
     let payload: unknown;
@@ -110,9 +111,7 @@ function isAbortError(error: unknown): boolean {
 
 /** Distinguishes a deadline from a disconnect so a route can attribute it. */
 export function boundedRequestInterruption(signal: AbortSignal): BoundedRequestFailure {
-  return signal.reason instanceof DOMException && signal.reason.name === "TimeoutError"
-    ? "timed-out"
-    : "cancelled";
+  return endedOnDeadline(signal) ? "timed-out" : "cancelled";
 }
 
 async function readBoundedText(
@@ -124,22 +123,30 @@ async function readBoundedText(
   if (body === null) throw policy.fail("missing-body");
   const reader = body.getReader();
   const bytes = new BoundedByteAccumulator(policy.maxBytes);
+  const interruption = rejectOnAbort(
+    signal,
+    () => policy.fail(boundedRequestInterruption(signal)),
+  );
   try {
     for (;;) {
-      const { done, value } = await readWithSignal(reader, policy, signal);
+      // The interruption is raced first: once the boundary has ended, it wins
+      // over a chunk the stream already had buffered.
+      const { done, value } = await Promise.race([interruption.promise, reader.read()]);
       if (done) break;
       if (value === undefined) continue;
       // A declared length may be absent or untrue, so the real bound is here.
-      if (!bytes.append(value)) {
-        cancelReader(reader);
-        throw policy.fail("too-large");
-      }
+      if (!bytes.append(value)) throw policy.fail("too-large");
     }
+  } catch (error) {
+    // The boundary settles without waiting for the stream to accept this.
+    void reader.cancel().catch(() => undefined);
+    throw error;
   } finally {
+    interruption.dispose();
     try {
       reader.releaseLock();
     } catch {
-      // The abort path may already have released the reader.
+      // Releasing is best effort after a broken stream source.
     }
   }
 
@@ -151,60 +158,6 @@ async function readBoundedText(
     });
   } catch {
     throw policy.fail("not-utf8");
-  }
-}
-
-async function readWithSignal(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  policy: BoundedRequestPolicy,
-  signal: AbortSignal,
-): Promise<ReadableStreamReadResult<Uint8Array>> {
-  if (signal.aborted) throw policy.fail(boundedRequestInterruption(signal));
-  let rejectInterruption!: (error: Error) => void;
-  const abort = () => {
-    void reader.cancel().catch(() => undefined);
-    rejectInterruption(policy.fail(boundedRequestInterruption(signal)));
-  };
-  const interrupted = new Promise<never>((_, reject) => {
-    rejectInterruption = reject;
-  });
-  signal.addEventListener("abort", abort, { once: true });
-  try {
-    const result = await Promise.race([reader.read(), interrupted]);
-    if (signal.aborted) throw policy.fail(boundedRequestInterruption(signal));
-    return result;
-  } finally {
-    signal.removeEventListener("abort", abort);
-  }
-}
-
-function createRequestBoundary(
-  requestSignal: AbortSignal,
-  timeoutMs: number,
-): { signal: AbortSignal; dispose: () => void } {
-  const controller = new AbortController();
-  const cancel = () => controller.abort(new DOMException("Cancelled", "AbortError"));
-  if (requestSignal.aborted) cancel();
-  else requestSignal.addEventListener("abort", cancel, { once: true });
-  const timeout = setTimeout(
-    () => controller.abort(new DOMException("Timed out", "TimeoutError")),
-    timeoutMs,
-  );
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timeout);
-      requestSignal.removeEventListener("abort", cancel);
-    },
-  };
-}
-
-function cancelReader(reader: ReadableStreamDefaultReader<Uint8Array>): void {
-  void reader.cancel().catch(() => undefined);
-  try {
-    reader.releaseLock();
-  } catch {
-    // Releasing is best effort after a broken stream source.
   }
 }
 

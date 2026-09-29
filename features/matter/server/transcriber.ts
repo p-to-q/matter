@@ -11,8 +11,8 @@ import {
   maxTranscriptionOutputCodePoints,
   transcriptionTextFitsCapacity,
 } from "../protocol/transcription-contract";
-import { rejectOnAbort } from "./abort-boundary";
-import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
+import { createRequestDeadline, endedOnDeadline, rejectOnAbort } from "./abort-boundary";
+import { TranscriptionServerError } from "./transcription-errors";
 import { materialModelSurfaceAuthorized } from "./material-model-surface";
 import {
   normalizeSpokenTranscript,
@@ -36,16 +36,16 @@ export async function transcribeRecording(
   requestSignal: AbortSignal,
   adapter: TranscriptionAdapter,
 ): Promise<TranscriptionSuccess> {
-  const timeoutController = new AbortController();
-  const timeout = setTimeout(() => timeoutController.abort(), TRANSCRIPTION_SERVER_TIMEOUT_MS);
-  const combined = combineSignals(requestSignal, timeoutController.signal);
-  const abortBoundary = rejectOnAbort(combined.signal);
+  // The adapter's own deadline. A route-entry deadline that elapses first
+  // keeps its timeout identity through this signal.
+  const deadline = createRequestDeadline(requestSignal, TRANSCRIPTION_SERVER_TIMEOUT_MS);
+  const abortBoundary = rejectOnAbort(deadline.signal);
   try {
     if (requestSignal.aborted) throw new DOMException("Aborted", "AbortError");
     // Aborting a signal is advisory. The boundary must still settle when an SDK
     // or provider adapter ignores it, otherwise one request can hang forever.
     const result = await Promise.race([
-      adapter(request, combined.signal),
+      adapter(request, deadline.signal),
       abortBoundary.promise,
     ]);
     const transcript = validateTranscript(result.transcript, request, result.pauses);
@@ -57,7 +57,7 @@ export async function transcribeRecording(
     };
   } catch (error) {
     if (error instanceof TranscriptionServerError) throw error;
-    if (timeoutController.signal.aborted || isTimeoutSignal(requestSignal)) {
+    if (endedOnDeadline(deadline.signal)) {
       throw new TranscriptionServerError(
         "TRANSCRIPTION_TIMEOUT",
         "Speech transcription timed out.",
@@ -86,9 +86,8 @@ export async function transcribeRecording(
       request.attempt,
     );
   } finally {
-    clearTimeout(timeout);
     abortBoundary.dispose();
-    combined.dispose();
+    deadline.dispose();
   }
 }
 
@@ -214,22 +213,4 @@ function providerResponseError(request: TranscriptionRequest) {
     request.interactionId,
     request.attempt,
   );
-}
-
-function combineSignals(...signals: AbortSignal[]): {
-  signal: AbortSignal;
-  dispose: () => void;
-} {
-  const controller = new AbortController();
-  const abort = () => controller.abort();
-  for (const signal of signals) {
-    if (signal.aborted) controller.abort();
-    else signal.addEventListener("abort", abort, { once: true });
-  }
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      for (const signal of signals) signal.removeEventListener("abort", abort);
-    },
-  };
 }
