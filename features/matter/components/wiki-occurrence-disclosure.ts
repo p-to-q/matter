@@ -25,6 +25,38 @@ import {
 export const WIKI_LEXEME_VEIL = "matter-lexeme-veil";
 export const WIKI_APPLIED_MARK = "matter-wiki-applied";
 
+const WIKI_HIGHLIGHT_STYLE_ATTRIBUTE = "data-matter-wiki-highlights";
+
+/**
+ * The paint of the two highlights this module registers. Highlight pseudos
+ * accept only highlight-legal properties and do not resolve paper custom
+ * properties reliably, so each theme names its own ink; the veil hides only
+ * the word's glyphs during its settle. The rules live with the registration
+ * rather than in the app stylesheet, which the development CSS parser cannot
+ * read when it contains `::highlight()`.
+ */
+export const WIKI_HIGHLIGHT_STYLE_TEXT = [
+  `.spatial-thought__text::highlight(${WIKI_APPLIED_MARK}) { text-decoration-line: underline; text-decoration-style: dotted; text-decoration-thickness: 1px; text-decoration-color: rgba(22, 29, 39, .35); text-underline-offset: 3px; }`,
+  `.matter-shell[data-canvas-theme="dark"] .spatial-thought__text::highlight(${WIKI_APPLIED_MARK}) { text-decoration-color: rgba(243, 244, 241, .35); }`,
+  `.spatial-thought__text::highlight(${WIKI_LEXEME_VEIL}) { color: transparent; -webkit-text-fill-color: transparent; text-shadow: none; text-decoration-color: transparent; }`,
+  `@media (forced-colors: active) { .spatial-thought__text::highlight(${WIKI_APPLIED_MARK}) { text-decoration-color: CanvasText; } }`,
+].join("\n");
+
+type HighlightStyleHost = Readonly<{
+  head: Pick<HTMLHeadElement, "append">;
+  createElement: (tagName: "style") => HTMLStyleElement;
+  querySelector: (selectors: string) => Element | null;
+}>;
+
+/** Installs the highlight paint once per document; later calls are no-ops. */
+export function installWikiHighlightStyles(host: HighlightStyleHost): void {
+  if (host.querySelector(`style[${WIKI_HIGHLIGHT_STYLE_ATTRIBUTE}]`) !== null) return;
+  const style = host.createElement("style");
+  style.setAttribute(WIKI_HIGHLIGHT_STYLE_ATTRIBUTE, "");
+  style.textContent = WIKI_HIGHLIGHT_STYLE_TEXT;
+  host.head.append(style);
+}
+
 /** Heard-to-canonical settle; every value is milliseconds from its start. */
 export const WIKI_MORPH_TIMELINE = Object.freeze({
   holdMs: 160,
@@ -198,6 +230,7 @@ export function createWikiDisclosureController(
   const settleExhausted = new Set<string>();
   // Shared with delivery, including recovery from a release never delivered.
   const pressed = trackPressedPointers(window);
+  if (capabilities.highlights) installWikiHighlightStyles(document);
   let schedule: number | null = null;
   let markObserver: MutationObserver | null = null;
   let observedList: Element | null = null;

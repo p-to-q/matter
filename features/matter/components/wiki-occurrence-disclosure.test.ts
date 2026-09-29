@@ -104,3 +104,25 @@ describe("Wiki occurrence disclosure policy", () => {
     expect(WIKI_SWEEP_TIMELINE.drawMs + WIKI_SWEEP_TIMELINE.fadeMs).toBeLessThanOrEqual(400);
   });
 });
+
+describe("Wiki highlight paint", () => {
+  it("installs its highlight rules once per document", async () => {
+    const { installWikiHighlightStyles, WIKI_HIGHLIGHT_STYLE_TEXT } = await import("./wiki-occurrence-disclosure");
+    const appended: { attributes: Map<string, string>; textContent: string }[] = [];
+    const host = {
+      head: { append: (style: unknown) => { appended.push(style as (typeof appended)[number]); } },
+      createElement: () => {
+        const attributes = new Map<string, string>();
+        return { attributes, textContent: "", setAttribute: (name: string, value: string) => attributes.set(name, value) } as unknown as HTMLStyleElement;
+      },
+      querySelector: () => (appended.length > 0 ? ({} as Element) : null),
+    };
+    installWikiHighlightStyles(host);
+    installWikiHighlightStyles(host);
+    expect(appended).toHaveLength(1);
+    expect(appended[0].textContent).toBe(WIKI_HIGHLIGHT_STYLE_TEXT);
+    expect(WIKI_HIGHLIGHT_STYLE_TEXT).toContain("::highlight(matter-wiki-applied)");
+    expect(WIKI_HIGHLIGHT_STYLE_TEXT).toContain("::highlight(matter-lexeme-veil)");
+    expect(WIKI_HIGHLIGHT_STYLE_TEXT).toContain("forced-colors: active");
+  });
+});

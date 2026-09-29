@@ -131,12 +131,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .transform-text[data-transform-motion="settle"] .transform-text__group { animation-name: material-language-settle; animation-timing-function: cubic-bezier(.22,.7,.24,1); }
 @keyframes material-language-settle { 0% { color: transparent; filter: blur(1px); opacity: .35; } 100% { color: var(--material-text-color); filter: blur(0); opacity: 1; } }
 .spatial-thought[data-transform-phase] .spatial-thought__text::after { position: absolute; bottom: -9px; left: 50%; width: 24px; height: 1px; background: currentColor; content: ""; opacity: .28; pointer-events: none; transform: translateX(-50%); }
-/* Wiki occurrences. Highlight pseudos accept only highlight-legal properties
-   and do not resolve paper custom properties reliably, so each theme names
-   its own ink. The veil hides only the word's glyphs during its settle. */
-.spatial-thought__text::highlight(matter-wiki-applied) { text-decoration-line: underline; text-decoration-style: dotted; text-decoration-thickness: 1px; text-decoration-color: rgba(22, 29, 39, .35); text-underline-offset: 3px; }
-.matter-shell[data-canvas-theme="dark"] .spatial-thought__text::highlight(matter-wiki-applied) { text-decoration-color: rgba(243, 244, 241, .35); }
-.spatial-thought__text::highlight(matter-lexeme-veil) { color: transparent; -webkit-text-fill-color: transparent; text-shadow: none; text-decoration-color: transparent; }
 .matter-shell[data-node-dragging="true"] .spatial-thought::before { position: absolute; z-index: 0; inset: -14px; content: ""; pointer-events: auto; }
 .spatial-thought[data-drag-over] .spatial-thought__text { border-radius: 6px; background: color-mix(in srgb, currentColor 10%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent); }
 .spatial-thought[data-drag-over="nest"]::after { position: absolute; top: 50%; right: -30px; width: 22px; height: 1px; background: currentColor; content: ""; opacity: .48; }
@@ -394,7 +388,6 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .tool-rail__button[aria-disabled="true"] { color: GrayText; }
   .stretch-handle::after { forced-color-adjust: none; background: ButtonText; box-shadow: none; }
   .stretch-handle:focus-visible { outline-color: Highlight; }
-        .spatial-thought__text::highlight(matter-wiki-applied) { text-decoration-color: CanvasText; }
       .canvas-ruling { display: none; }
   .matter-guidance::before,
   .matter-guidance::after { -webkit-backdrop-filter: none; backdrop-filter: none; -webkit-mask-image: none; mask-image: none; }
