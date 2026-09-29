@@ -9,8 +9,6 @@ export type WikiTakeoverCopy = Readonly<{
   restoreLabel: (heard: string) => string;
   wiki: string;
   wikiLabel: (canonical: string) => string;
-  /** The quiet line when the passage no longer holds the word. */
-  passageChanged: string;
 }>;
 
 const COPY: Readonly<Record<CanvasLanguage, WikiTakeoverCopy>> = Object.freeze({
@@ -21,7 +19,6 @@ const COPY: Readonly<Record<CanvasLanguage, WikiTakeoverCopy>> = Object.freeze({
     restoreLabel: (heard) => `Restore ‘${heard}’`,
     wiki: "Wiki…",
     wikiLabel: (canonical) => `Open ‘${canonical}’ in Wiki`,
-    passageChanged: "The passage changed.",
   }),
   "zh-CN": table({
     changed: (heard, canonical) => `词典 WIKI 把“${heard}”改成了“${canonical}”`,
@@ -30,7 +27,6 @@ const COPY: Readonly<Record<CanvasLanguage, WikiTakeoverCopy>> = Object.freeze({
     restoreLabel: (heard) => `恢复为“${heard}”`,
     wiki: "词典…",
     wikiLabel: (canonical) => `在词典 WIKI 中查看“${canonical}”`,
-    passageChanged: "这段文字已经变了。",
   }),
   "zh-TW": table({
     changed: (heard, canonical) => `詞典 WIKI 把「${heard}」改成了「${canonical}」`,
@@ -39,7 +35,6 @@ const COPY: Readonly<Record<CanvasLanguage, WikiTakeoverCopy>> = Object.freeze({
     restoreLabel: (heard) => `恢復為「${heard}」`,
     wiki: "詞典…",
     wikiLabel: (canonical) => `在詞典 WIKI 中查看「${canonical}」`,
-    passageChanged: "這段文字已經變了。",
   }),
   "ja-JP": table({
     changed: (heard, canonical) => `辞書 WIKI が「${heard}」を「${canonical}」に変えました`,
@@ -48,7 +43,6 @@ const COPY: Readonly<Record<CanvasLanguage, WikiTakeoverCopy>> = Object.freeze({
     restoreLabel: (heard) => `「${heard}」に戻す`,
     wiki: "辞書…",
     wikiLabel: (canonical) => `辞書 WIKI で「${canonical}」を開く`,
-    passageChanged: "この文は変更されています。",
   }),
   "de-DE": table({
     changed: (heard, canonical) => `Wörterbuch Wiki hat „${heard}“ in „${canonical}“ geändert`,
@@ -57,7 +51,6 @@ const COPY: Readonly<Record<CanvasLanguage, WikiTakeoverCopy>> = Object.freeze({
     restoreLabel: (heard) => `„${heard}“ wiederherstellen`,
     wiki: "Wiki…",
     wikiLabel: (canonical) => `„${canonical}“ im Wörterbuch Wiki öffnen`,
-    passageChanged: "Die Passage hat sich geändert.",
   }),
 });
 

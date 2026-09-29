@@ -24,9 +24,9 @@ import type {
 import type { ThoughtTree } from "../tree/model";
 import { selectLineage } from "../tree/selectors";
 import { createBrowserVoicePort } from "./browser-voice";
+import type { MaterialTurnCommitResult } from "./material-turn-result";
 import {
   TextSwapDriver,
-  type TextSwapCommitResult,
   type TextSwapScope,
 } from "./text-swap-driver";
 import { requestTextSwap } from "./text-swap-client";
@@ -47,7 +47,7 @@ export type UseTextSwapInput<TCommitted> = Readonly<{
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
     expectedDocumentEpoch: number,
-  ) => TextSwapCommitResult<TCommitted>;
+  ) => MaterialTurnCommitResult<TCommitted>;
   onCommitted: (change: TCommitted) => void;
 }>;
 

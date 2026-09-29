@@ -184,11 +184,13 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; text-decoration-color: transparent; }
 .admission-feedback { position: absolute; z-index: 6; display: flex; width: min(var(--matter-column-width), calc(100vw - 44px)); max-width: calc(100vw - 44px); min-height: 40px; box-sizing: border-box; align-items: center; gap: 9px; color: var(--muted); font: 10px/1.4 var(--mono); flex-wrap: wrap; pointer-events: auto; opacity: 1; translate: 0 0; transition: opacity 180ms cubic-bezier(.2,.8,.2,1), translate 180ms cubic-bezier(.2,.8,.2,1); }
 /* Placement owns the inline transform, so presence moves only `translate`.
-   Transitions, not keyframes, let a returning surface reverse mid-exit. */
+   Transitions, not keyframes, let a returning surface reverse mid-exit. The
+   shell sets `--presence-exit-duration` from the presence timer that unmounts
+   a leaving surface, so the fade and the unmount cannot drift apart. */
 @starting-style { .admission-feedback { opacity: 0; translate: 0 3px; } }
 .admission-feedback[data-presence="holding"],
 .admission-feedback[data-presence="exiting"] { pointer-events: none; }
-.admission-feedback[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: 140ms; }
+.admission-feedback[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: var(--presence-exit-duration); }
 /* Finished work already released its lane; only opacity may change. */
 .admission-feedback[data-presence="exiting"][data-presence-close="finished"] { translate: 0 0; }
 .admission-feedback__signal { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--ink); opacity: .72; }
@@ -379,7 +381,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 }
 
 @media (pointer: coarse) {
-                  .admission-feedback button { min-width: 48px; min-height: 48px; }
+                .admission-feedback button { min-width: 48px; min-height: 48px; }
                     .tool-rail__button { height: var(--instrument-size); }
   .tool-rail__button::before,
   .tool-rail__button[data-tool-emphasis="primary"]::before { inset-block: 2px; }

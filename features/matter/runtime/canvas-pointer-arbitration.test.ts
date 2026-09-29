@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  canvasPressDismissal,
   createCanvasPointerArbiter,
+  isPalmPress,
+  outsidePressDismissal,
   PEN_PALM_GRACE_MS,
   PEN_TAKEOVER_WINDOW_MS,
   REJECTED_CLICK_TTL_MS,
@@ -16,8 +19,19 @@ const SECOND_PALM = 3;
 const FINGER = 4;
 const MOUSE = 5;
 
-function pointer(pointerId: number, pointerType: string, timeStamp: number): ArbitratedPointer {
-  return { pointerId, pointerType, timeStamp };
+/** A pointer event; by default something is pressed, as in a contact. */
+function pointer(
+  pointerId: number,
+  pointerType: string,
+  timeStamp: number,
+  buttons = 1,
+): ArbitratedPointer {
+  return { pointerId, pointerType, buttons, timeStamp };
+}
+
+/** A move with nothing pressed: a hovering pen or a mouse with no button held. */
+function hover(pointerId: number, pointerType: string, timeStamp: number): ArbitratedPointer {
+  return pointer(pointerId, pointerType, timeStamp, 0);
 }
 
 /** The browser order: window capture notes the down, then the canvas claims it. */
@@ -78,7 +92,7 @@ describe("canvas pointer arbitration", () => {
 
   it("does not treat pen hover as activity", () => {
     const arbiter = createCanvasPointerArbiter();
-    arbiter.notePointerMove(pointer(PEN, "pen", 0));
+    arbiter.notePointerMove(hover(PEN, "pen", 0));
     expect(arbiter.penActive(10)).toBe(false);
     expect(down(arbiter, pointer(FINGER, "touch", 10))).toEqual({ kind: "accept", founder: true });
   });
@@ -189,6 +203,61 @@ describe("canvas pointer arbitration", () => {
     expect(arbiter.isRejected(PALM)).toBe(false);
   });
 
+  it("settles a pen whose release the page never saw at its next hover", () => {
+    const arbiter = createCanvasPointerArbiter();
+    expect(down(arbiter, pointer(PEN, "pen", 0))).toEqual({ kind: "accept", founder: true });
+    arbiter.notePointerMove(pointer(PEN, "pen", 100));
+    // The pen lifted outside the page; its pointer-up never arrived. Hovering
+    // proves the lift, so a finger is no longer a palm and may own the canvas.
+    arbiter.notePointerMove(hover(PEN, "pen", 1_000));
+    expect(arbiter.penActive(1_000)).toBe(false);
+    expect(down(arbiter, pointer(FINGER, "touch", 1_001))).toEqual({ kind: "accept", founder: true });
+  });
+
+  it("never lets hover refresh a lifted pen's grace", () => {
+    const arbiter = createCanvasPointerArbiter();
+    down(arbiter, pointer(PEN, "pen", 0));
+    arbiter.notePointerMove(pointer(PEN, "pen", 100));
+    // Grace belongs to the last real contact, not to the hover that proved it.
+    arbiter.notePointerMove(hover(PEN, "pen", 200));
+    arbiter.notePointerMove(hover(PEN, "pen", 450));
+    expect(arbiter.penActive(100 + PEN_PALM_GRACE_MS - 1)).toBe(true);
+    expect(arbiter.penActive(100 + PEN_PALM_GRACE_MS)).toBe(false);
+  });
+
+  it("settles a lost pen contact when the stylus returns under a new id", () => {
+    const arbiter = createCanvasPointerArbiter();
+    down(arbiter, pointer(PEN, "pen", 0));
+    const returning = 9;
+    // Out of range and back again: the same stylus hovers under a fresh id.
+    arbiter.notePointerMove(hover(returning, "pen", 1_000));
+    expect(arbiter.penActive(1_000)).toBe(false);
+    expect(down(arbiter, pointer(returning, "pen", 1_100))).toEqual({ kind: "accept", founder: true });
+    arbiter.notePointerEnd(pointer(returning, "pen", 1_200, 0));
+    expect(arbiter.penActive(1_200 + PEN_PALM_GRACE_MS)).toBe(false);
+  });
+
+  it("settles a mouse owner whose button-up was lost at its next buttonless move", () => {
+    const arbiter = createCanvasPointerArbiter();
+    expect(down(arbiter, pointer(MOUSE, "mouse", 0))).toEqual({ kind: "accept", founder: true });
+    arbiter.notePointerMove(pointer(MOUSE, "mouse", 20));
+    expect(down(arbiter, pointer(FINGER, "touch", 30))).toEqual({ kind: "reject" });
+    arbiter.notePointerEnd(pointer(FINGER, "touch", 40, 0));
+    arbiter.notePointerMove(hover(MOUSE, "mouse", 50));
+    expect(down(arbiter, pointer(FINGER, "touch", 60))).toEqual({ kind: "accept", founder: true });
+  });
+
+  it("does not count a barrel press while the pen hovers as contact", () => {
+    const arbiter = createCanvasPointerArbiter();
+    arbiter.notePointerDown(pointer(PEN, "pen", 0, 2));
+    expect(arbiter.penActive(10)).toBe(false);
+    expect(down(arbiter, pointer(FINGER, "touch", 10))).toEqual({ kind: "accept", founder: true });
+    // The eraser, like the tip, touches the surface.
+    const erasing = createCanvasPointerArbiter();
+    erasing.notePointerDown(pointer(PEN, "pen", 0, 32));
+    expect(erasing.penActive(10)).toBe(true);
+  });
+
   it("forgets a rejected click after its time bound", () => {
     const arbiter = createCanvasPointerArbiter();
     down(arbiter, pointer(PEN, "pen", 0));
@@ -204,6 +273,40 @@ describe("canvas pointer arbitration", () => {
     expect(arbiter.isRejected(PALM)).toBe(false);
     expect(arbiter.penActive(11)).toBe(false);
     expect(down(arbiter, pointer(FINGER, "touch", 12))).toEqual({ kind: "accept", founder: true });
+  });
+});
+
+describe("press dismissal", () => {
+  it("lets a mouse or pen press dismiss at once, even while a pen writes", () => {
+    for (const pointerType of ["mouse", "pen"]) {
+      expect(outsidePressDismissal(pointerType, false)).toBe("now");
+      expect(outsidePressDismissal(pointerType, true)).toBe("now");
+    }
+  });
+
+  it("never lets a palm dismiss, and makes any other touch commit first", () => {
+    expect(isPalmPress("touch", true)).toBe(true);
+    expect(isPalmPress("touch", false)).toBe(false);
+    expect(isPalmPress("pen", true)).toBe(false);
+    expect(outsidePressDismissal("touch", true)).toBe("never");
+    expect(outsidePressDismissal("touch", false)).toBe("when-touch-commits");
+  });
+
+  it("defers only a founding touch on the canvas and dismisses nothing it rejected", () => {
+    const arbiter = createCanvasPointerArbiter();
+    const founder = down(arbiter, pointer(FINGER, "touch", 0));
+    expect(canvasPressDismissal("touch", founder)).toBe("when-touch-commits");
+    // A second finger makes a pinch, which is already a real gesture.
+    const joined = down(arbiter, pointer(PALM, "touch", 5));
+    expect(canvasPressDismissal("touch", joined)).toBe("now");
+
+    const writing = createCanvasPointerArbiter();
+    const pen = down(writing, pointer(PEN, "pen", 0));
+    expect(canvasPressDismissal("pen", pen)).toBe("now");
+    const palm = down(writing, pointer(PALM, "touch", 10));
+    expect(canvasPressDismissal("touch", palm)).toBe("never");
+    // A secondary mouse button never asks the owner, yet the press still acts.
+    expect(canvasPressDismissal("mouse", null)).toBe("now");
   });
 });
 

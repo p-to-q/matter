@@ -5,7 +5,7 @@
 .point-talk:not([data-placed]) { opacity: 0; translate: 0 3px; }
 .point-talk[data-presence="holding"],
 .point-talk[data-presence="exiting"] { pointer-events: none; }
-.point-talk[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: 140ms; }
+.point-talk[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: var(--presence-exit-duration); }
 .point-talk[data-presence="exiting"][data-presence-close="finished"] { translate: 0 0; }
 
 @starting-style {

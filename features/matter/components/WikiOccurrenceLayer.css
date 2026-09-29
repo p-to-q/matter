@@ -11,7 +11,7 @@
 }
 .wiki-takeover[data-presence="holding"],
 .wiki-takeover[data-presence="exiting"] { pointer-events: none; }
-.wiki-takeover[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: 140ms; }
+.wiki-takeover[data-presence="exiting"] { opacity: 0; translate: 0 -2px; transition-duration: var(--presence-exit-duration); }
 .wiki-takeover[data-presence="exiting"][data-presence-close="finished"] { translate: 0 0; }
 .matter-shell[data-canvas-theme="dark"] .wiki-takeover { --paper-solid: #2b343d; --ink: #f3f4f1; --muted: #c0c5ca; }
 .wiki-takeover button { min-width: 40px; min-height: 30px; flex: 0 1 auto; overflow: hidden; padding: 0 9px; border: 0; border-radius: 5px; background: transparent; color: var(--muted); font-family: var(--mono); font-size: 11px; font-weight: 400; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -21,7 +21,6 @@
   .wiki-takeover button:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
 }
 .wiki-takeover button:focus-visible { outline: none; background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
-.wiki-takeover__notice { margin: 0; padding: 0 9px; color: var(--muted); font-family: var(--mono); font-size: 11px; line-height: 30px; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) {
   .wiki-takeover { transition: none; }
@@ -29,7 +28,6 @@
 
 @media (pointer: coarse) {
   .wiki-takeover button { min-width: 48px; min-height: 44px; }
-  .wiki-takeover__notice { line-height: 44px; }
 }
 
 @media (forced-colors: active) {

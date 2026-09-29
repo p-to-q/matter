@@ -21,7 +21,12 @@
  *   pen owns;
  * - a pointer-down that reuses an id still held as owned or rejected settles
  *   that earlier contact first. Pointer Events keep an id unique among active
- *   pointers, so the reuse proves the earlier end was never delivered here.
+ *   pointers, so the reuse proves the earlier end was never delivered here;
+ * - a move with nothing pressed proves the same for its own pointer, and a
+ *   hovering pen proves it for every pen contact still recorded, whatever its
+ *   id: a stylus gets a fresh id when it returns into range, and one touch
+ *   screen carries one stylus. A settled contact keeps the grace of its last
+ *   real contact event; hover never refreshes it.
  *
  * Pen hover does not count as activity: a person may pan with a finger while
  * holding a pencil above the glass.
@@ -39,9 +44,14 @@ export const REJECTED_CLICK_TTL_MS = 1_000;
 export type ArbitratedPointer = Readonly<{
   pointerId: number;
   pointerType: string;
+  /** `PointerEvent.buttons`: what the pointer presses, a pen tip or eraser included. */
+  buttons: number;
   /** `Event.timeStamp`: monotonic milliseconds shared by one document. */
   timeStamp: number;
 }>;
+
+/** A pen touches the surface with its tip (1) or its eraser (32), never its barrel. */
+const PEN_CONTACT_BUTTONS = 1 | 32;
 
 export type CanvasPointerClaim =
   | Readonly<{ kind: "reject" }>
@@ -64,7 +74,10 @@ export type CanvasPointerArbiter = Readonly<{
    * a pen revoked by landing just after them; the caller cancels them.
    */
   notePointerDown: (pointer: ArbitratedPointer) => readonly number[];
-  /** Window capture phase, for every pointer-move anywhere. */
+  /**
+   * Window capture phase, for every pointer-move anywhere, hover included. A
+   * move with nothing pressed settles a release the page never saw.
+   */
   notePointerMove: (pointer: ArbitratedPointer) => void;
   /** Window capture phase, for every pointer-up and pointer-cancel anywhere. */
   notePointerEnd: (pointer: ArbitratedPointer) => void;
@@ -96,6 +109,16 @@ export function createCanvasPointerArbiter(): CanvasPointerArbiter {
     rejectedClicks.set(pointerId, timeStamp);
   };
 
+  /** Ends one contact; a pen's grace stays with its last real contact event. */
+  const settleEnd = (pointerId: number) => {
+    pensInContact.delete(pointerId);
+    if (rejected.delete(pointerId)) endedRejected.add(pointerId);
+    if (owner !== null && owner.pointerIds.delete(pointerId)) {
+      endedOwned.add(pointerId);
+      if (owner.pointerIds.size === 0) owner = null;
+    }
+  };
+
   const found = (type: OwnerType, pointer: ArbitratedPointer) => {
     owner = {
       type,
@@ -122,7 +145,8 @@ export function createCanvasPointerArbiter(): CanvasPointerArbiter {
       // A new contact with a reused id (a mouse is always 1) owns its own
       // click; only a claim that rejects it may suppress that click again.
       rejectedClicks.delete(pointer.pointerId);
-      if (pointer.pointerType !== "pen") return NONE;
+      // A barrel press while the pen hovers touches nothing.
+      if (pointer.pointerType !== "pen" || !pressesSurface(pointer)) return NONE;
       pensInContact.add(pointer.pointerId);
       lastPenContactAt = pointer.timeStamp;
       if (
@@ -136,19 +160,27 @@ export function createCanvasPointerArbiter(): CanvasPointerArbiter {
       return revoked;
     },
     notePointerMove(pointer: ArbitratedPointer) {
+      if (pressesSurface(pointer)) {
+        if (pointer.pointerType === "pen" && pensInContact.has(pointer.pointerId)) {
+          lastPenContactAt = pointer.timeStamp;
+        }
+        return;
+      }
+      // Nothing is pressed, so a contact still recorded ended where this page
+      // could not see it. A hovering stylus ends every recorded pen contact.
+      if (pointer.pointerType === "pen") {
+        for (const pointerId of Array.from(pensInContact)) settleEnd(pointerId);
+      }
+      if (
+        rejected.has(pointer.pointerId) ||
+        owner?.pointerIds.has(pointer.pointerId) === true
+      ) settleEnd(pointer.pointerId);
+    },
+    notePointerEnd(pointer: ArbitratedPointer) {
       if (pointer.pointerType === "pen" && pensInContact.has(pointer.pointerId)) {
         lastPenContactAt = pointer.timeStamp;
       }
-    },
-    notePointerEnd(pointer: ArbitratedPointer) {
-      if (pointer.pointerType === "pen" && pensInContact.delete(pointer.pointerId)) {
-        lastPenContactAt = pointer.timeStamp;
-      }
-      if (rejected.delete(pointer.pointerId)) endedRejected.add(pointer.pointerId);
-      if (owner !== null && owner.pointerIds.delete(pointer.pointerId)) {
-        endedOwned.add(pointer.pointerId);
-        if (owner.pointerIds.size === 0) owner = null;
-      }
+      settleEnd(pointer.pointerId);
     },
     claim(pointer: ArbitratedPointer): CanvasPointerClaim {
       const type = ownerType(pointer.pointerType);
@@ -244,10 +276,50 @@ export function touchCommitment(
   }
 }
 
+/**
+ * When a press may dismiss a surface a person is still reading. A mouse or pen
+ * press is deliberate and acts at once; a touch while a pen writes is a palm
+ * and never acts; any other touch may be a palm that a pen is about to
+ * follow, so it acts only once it commits (see `touchCommitment`).
+ */
+export type PressDismissal = "now" | "when-touch-commits" | "never";
+
+/** A touch that lands while a pen writes is a palm, never a gesture. */
+export function isPalmPress(pointerType: string, penActive: boolean): boolean {
+  return pointerType === "touch" && penActive;
+}
+
+/** The palm rule for a surface outside the canvas owner, such as a local field. */
+export function outsidePressDismissal(pointerType: string, penActive: boolean): PressDismissal {
+  if (pointerType !== "touch") return "now";
+  return isPalmPress(pointerType, penActive) ? "never" : "when-touch-commits";
+}
+
+/**
+ * The palm rule for a press the canvas owner has already arbitrated: a
+ * rejected pointer dismisses nothing, and only a founding touch may be a palm.
+ * A touch that joins a pinch is already a real gesture.
+ */
+export function canvasPressDismissal(
+  pointerType: string,
+  claim: CanvasPointerClaim | null,
+): PressDismissal {
+  if (claim?.kind === "reject") return "never";
+  return pointerType === "touch" && claim?.kind === "accept" && claim.founder
+    ? "when-touch-commits"
+    : "now";
+}
+
 const NONE: readonly number[] = Object.freeze([]);
 const REJECT: CanvasPointerClaim = Object.freeze({ kind: "reject" });
 const FOUNDER: CanvasPointerClaim = Object.freeze({ kind: "accept", founder: true });
 const JOINED: CanvasPointerClaim = Object.freeze({ kind: "accept", founder: false });
+
+function pressesSurface(pointer: ArbitratedPointer): boolean {
+  return pointer.pointerType === "pen"
+    ? (pointer.buttons & PEN_CONTACT_BUTTONS) !== 0
+    : pointer.buttons !== 0;
+}
 
 function ownerType(pointerType: string): OwnerType {
   return pointerType === "pen" || pointerType === "touch" ? pointerType : "mouse";

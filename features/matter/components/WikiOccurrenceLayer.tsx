@@ -24,6 +24,7 @@ import type {
   WikiOccurrenceDriver,
   WikiOccurrenceView,
 } from "../interaction/wiki-occurrence-driver";
+import { outsidePressDismissal } from "../runtime/canvas-pointer-arbitration";
 import type { ThoughtTree } from "../tree/model";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { useEscapeLayer } from "./escape-layers";
@@ -42,8 +43,6 @@ import {
 import { wikiTakeoverCopy } from "./wiki-takeover-copy";
 
 const EMPTY_VIEWS: readonly WikiOccurrenceView[] = Object.freeze([]);
-/** How long the quiet "passage changed" line stays before it leaves. */
-const PASSAGE_CHANGED_NOTICE_MS = 1_600;
 const TAKEOVER_GAP_PX = 10;
 /**
  * A takeover dismissed sooner than this after it could first be seen was not
@@ -65,6 +64,7 @@ export function WikiOccurrenceLayer({
   geometryKey,
   locale,
   onOpenWiki,
+  onRestoreRefused,
   penActive,
   positioningRef,
   surfaceAvailable,
@@ -77,6 +77,8 @@ export function WikiOccurrenceLayer({
   geometryKey: string;
   locale: CanvasLanguage;
   onOpenWiki: (term: WikiTermRequest, trigger: HTMLElement | null) => void;
+  /** Restore found the passage no longer holding the word; nothing changed. */
+  onRestoreRefused: () => void;
   penActive: (timeStamp: number) => boolean;
   positioningRef: RefObject<HTMLElement | null>;
   surfaceAvailable: boolean;
@@ -112,6 +114,7 @@ export function WikiOccurrenceLayer({
       geometryKey={geometryKey}
       locale={locale}
       onOpenWiki={onOpenWiki}
+      onRestoreRefused={onRestoreRefused}
       penActive={penActive}
       positioningRef={positioningRef}
       surfaceAvailable={surfaceAvailable}
@@ -129,7 +132,6 @@ type TakeoverContent = Readonly<{
   heard: string;
   canonical: string;
   termLocale: MatterLocale;
-  changed: boolean;
 }>;
 
 function WikiOccurrenceTakeover({
@@ -138,6 +140,7 @@ function WikiOccurrenceTakeover({
   geometryKey,
   locale,
   onOpenWiki,
+  onRestoreRefused,
   penActive,
   positioningRef,
   surfaceAvailable,
@@ -149,6 +152,7 @@ function WikiOccurrenceTakeover({
   geometryKey: string;
   locale: CanvasLanguage;
   onOpenWiki: (term: WikiTermRequest, trigger: HTMLElement | null) => void;
+  onRestoreRefused: () => void;
   penActive: (timeStamp: number) => boolean;
   positioningRef: RefObject<HTMLElement | null>;
   surfaceAvailable: boolean;
@@ -161,7 +165,6 @@ function WikiOccurrenceTakeover({
   // A close belongs to the surface identity it ended; any other ending, such
   // as a censored word or a covering surface, is a preemption.
   const [closing, setClosing] = useState<Readonly<{ identity: string; close: PresenceClose }> | null>(null);
-  const [notice, setNotice] = useState<TakeoverContent | null>(null);
   const [placement, setPlacement] = useState<PointTalkPlacement | null>(null);
   const content = useMemo<TakeoverContent | null>(() => view === null ? null : Object.freeze({
     occurrenceId: view.id,
@@ -171,13 +174,13 @@ function WikiOccurrenceTakeover({
     heard: view.sourceText,
     canonical: view.canonicalText,
     termLocale: view.locale,
-    changed: false,
   }), [view]);
-  const live = useMemo(() => {
-    if (!surfaceAvailable) return null;
-    if (notice !== null) return Object.freeze({ identity: `${notice.occurrenceId}:changed`, view: notice });
-    return content === null ? null : Object.freeze({ identity: content.occurrenceId, view: content });
-  }, [content, notice, surfaceAvailable]);
+  const live = useMemo(
+    () => !surfaceAvailable || content === null
+      ? null
+      : Object.freeze({ identity: content.occurrenceId, view: content }),
+    [content, surfaceAvailable],
+  );
   const [lastIdentity, setLastIdentity] = useState<string | null>(null);
   if (live !== null && live.identity !== lastIdentity) setLastIdentity(live.identity);
   const endingIdentity = live?.identity ?? lastIdentity;
@@ -192,10 +195,9 @@ function WikiOccurrenceTakeover({
     const bubble = bubbleRef.current;
     const boundary = boundaryRef.current;
     const positioning = positioningRef.current;
-    // A frozen exit and the quiet notice keep the last placement: the word
-    // they describe may already be gone.
+    // A frozen exit keeps the last placement: the word may already be gone.
     if (
-      !present || shown === null || shown.changed ||
+      !present || shown === null ||
       bubble === null || boundary === null || positioning === null
     ) return;
     const target = wordBounds(shown, tree);
@@ -256,14 +258,14 @@ function WikiOccurrenceTakeover({
     if (content === null) readableSinceRef.current = null;
   }, [content]);
   useLayoutEffect(() => {
-    if (!present || !placed || shown === null || shown.changed ||
+    if (!present || !placed || shown === null ||
         document.visibilityState !== "visible" ||
         readableSinceRef.current?.id === shown.occurrenceId) return;
     readableSinceRef.current = Object.freeze({ id: shown.occurrenceId, atMs: performance.now() });
   }, [placed, present, shown]);
   useLayoutEffect(() => {
     // A hidden surface cannot take focus; the first placed frame can.
-    if (!present || !placed || shown?.changed !== false ||
+    if (!present || !placed || shown === null ||
         document.visibilityState !== "visible") return;
     keepRef.current?.focus({ preventScroll: true });
   }, [placed, present, shown]);
@@ -290,46 +292,42 @@ function WikiOccurrenceTakeover({
     else driver.closeTakeover(content.occurrenceId, "inspected-kept");
   }, [content, driver, returnFocus]);
 
-  useEscapeLayer(present && content !== null && notice === null, "transient", () => {
+  // A paper surface at its word: chrome or a panel that covers it closes first.
+  useEscapeLayer(present && content !== null, "paper", () => {
     dismiss(true, false);
     return true;
   });
 
   useEffect(() => {
-    if (content === null || notice !== null) return;
+    if (content === null) return;
     let pendingTouch: (() => void) | null = null;
     const onPointerDown = (event: PointerEvent) => {
       if (event.target instanceof Node && bubbleRef.current?.contains(event.target)) return;
       const onWord = driver.hitTest(content.nodeId, event.clientX, event.clientY) ===
         content.occurrenceId;
-      // The press already addresses something else; focus follows it.
-      if (event.pointerType !== "touch") {
-        dismiss(false, onWord);
-        return;
+      // The press already addresses something else, so focus follows it. A
+      // palm beside a pen is not a tap; a touch dismisses once it commits.
+      switch (outsidePressDismissal(event.pointerType, penActive(event.timeStamp))) {
+        case "now":
+          dismiss(false, onWord);
+          return;
+        case "when-touch-commits":
+          pendingTouch?.();
+          pendingTouch = deferUntilTouchCommits(
+            { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
+            () => dismiss(false, onWord),
+          );
+          return;
+        case "never":
+          return;
       }
-      // A palm beside a pen is not a tap; a touch dismisses once it commits.
-      if (penActive(event.timeStamp)) return;
-      pendingTouch?.();
-      pendingTouch = deferUntilTouchCommits(
-        { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
-        () => dismiss(false, onWord),
-      );
     };
     document.addEventListener("pointerdown", onPointerDown, true);
     return () => {
       document.removeEventListener("pointerdown", onPointerDown, true);
       pendingTouch?.();
     };
-  }, [content, dismiss, driver, notice, penActive]);
-
-  useEffect(() => {
-    if (notice === null) return;
-    const timer = window.setTimeout(() => {
-      setClosing(Object.freeze({ identity: `${notice.occurrenceId}:changed`, close: "finished" }));
-      setNotice(null);
-    }, PASSAGE_CHANGED_NOTICE_MS);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
+  }, [content, dismiss, driver, penActive]);
 
   const personCloses = (occurrenceId: string) =>
     setClosing(Object.freeze({ identity: occurrenceId, close: "person" }));
@@ -345,9 +343,9 @@ function WikiOccurrenceTakeover({
     if (content === null) return;
     personCloses(content.occurrenceId);
     if (event.detail === 0) returnFocus(content.nodeId);
-    if (driver.revert(content.occurrenceId) === "reverted") return;
-    // The passage no longer holds the word: say so quietly, change nothing.
-    setNotice(Object.freeze({ ...content, changed: true }));
+    // The passage no longer holds the word: change nothing, and let the one
+    // outcome line say so until the person's next action.
+    if (driver.revert(content.occurrenceId) !== "reverted") onRestoreRefused();
   };
   const openWiki = () => {
     if (content === null) return;
@@ -361,16 +359,15 @@ function WikiOccurrenceTakeover({
   };
 
   if (frame === null || shown === null) return null;
-  const actionable = present && !shown.changed;
   return (
     <div
       aria-hidden={!present || undefined}
-      aria-label={shown.changed ? undefined : copy.changed(shown.heard, shown.canonical)}
+      aria-label={copy.changed(shown.heard, shown.canonical)}
       className="wiki-takeover"
       data-canvas-interactive
       data-presence={frame.stage}
       data-presence-close={frame.close ?? undefined}
-      data-wiki-takeover={shown.changed ? "changed" : "open"}
+      data-wiki-takeover="open"
       inert={!present || undefined}
       onPointerDown={(event) => event.stopPropagation()}
       ref={bubbleRef}
@@ -379,35 +376,29 @@ function WikiOccurrenceTakeover({
         ? { left: placement.left, top: placement.top, maxWidth: placement.maxWidth } as CSSProperties
         : { visibility: "hidden" }}
     >
-      {shown.changed ? (
-        <p className="wiki-takeover__notice" role="status">{copy.passageChanged}</p>
-      ) : (
-        <>
-          <button
-            aria-label={copy.keepLabel(shown.canonical)}
-            onClick={actionable ? keep : undefined}
-            ref={keepRef}
-            type="button"
-          >
-            {copy.keep}
-          </button>
-          <button
-            aria-label={copy.restoreLabel(shown.heard)}
-            className="wiki-takeover__heard"
-            onClick={actionable ? restore : undefined}
-            type="button"
-          >
-            {shown.heard}
-          </button>
-          <button
-            aria-label={copy.wikiLabel(shown.canonical)}
-            onClick={actionable ? openWiki : undefined}
-            type="button"
-          >
-            {copy.wiki}
-          </button>
-        </>
-      )}
+      <button
+        aria-label={copy.keepLabel(shown.canonical)}
+        onClick={present ? keep : undefined}
+        ref={keepRef}
+        type="button"
+      >
+        {copy.keep}
+      </button>
+      <button
+        aria-label={copy.restoreLabel(shown.heard)}
+        className="wiki-takeover__heard"
+        onClick={present ? restore : undefined}
+        type="button"
+      >
+        {shown.heard}
+      </button>
+      <button
+        aria-label={copy.wikiLabel(shown.canonical)}
+        onClick={present ? openWiki : undefined}
+        type="button"
+      >
+        {copy.wiki}
+      </button>
     </div>
   );
 }

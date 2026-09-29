@@ -18,30 +18,24 @@ import { selectLineage } from "../tree/selectors";
 import { useDeliveryWindow } from "../interaction/use-delivery-window";
 
 /**
- * The last submitted turn ended without changing material. `unavailable`
- * covers provider, transport, and admissibility failures; `stale` means its
- * exact passage changed first. Each notice has a fresh id for announcement.
+ * How a submitted turn ended without changing material. `unavailable` covers
+ * provider, transport, and admissibility failures; `stale` means its exact
+ * passage changed first.
  */
-export type FixedExpandTurnNotice = Readonly<{
-  id: number;
-  kind: "unavailable" | "stale";
-}>;
+export type FixedExpandTurnOutcome = "unavailable" | "stale";
 
 export type FixedExpandTurnState = Readonly<{
   phase: "idle" | "requesting";
   basis: StretchCommitBasis | null;
   /** A resolved result is held only because its exact passage is not laid out. */
   parked: boolean;
-  notice: FixedExpandTurnNotice | null;
 }>;
 
 export type FixedExpandTurn = Readonly<{
   state: FixedExpandTurnState;
   start: (basis: StretchCommitBasis) => boolean;
-  /** Explicitly releases the submitted or parked turn without a notice. */
+  /** Explicitly releases the submitted or parked turn without an outcome. */
   cancel: () => void;
-  /** Clears an outcome notice once the person has moved on. */
-  acknowledgeNotice: () => void;
 }>;
 
 type FixedExpandInput = Readonly<{
@@ -59,6 +53,8 @@ type FixedExpandInput = Readonly<{
     expectedDocumentEpoch: number,
   ) => MaterialTurnCommitResult<TransformCommittedChange>;
   onCommitted: (change: TransformCommittedChange) => void;
+  /** Reports, once, a turn that ended without the change the person asked for. */
+  onOutcome?: (outcome: FixedExpandTurnOutcome) => void;
   onUnavailable?: () => void;
 }>;
 
@@ -66,7 +62,6 @@ const IDLE: FixedExpandTurnState = Object.freeze({
   phase: "idle",
   basis: null,
   parked: false,
-  notice: null,
 });
 
 type OwnedFixedExpandRequest = {
@@ -84,8 +79,6 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
   const [invariantFailure, setInvariantFailure] = useState<Readonly<{ error: unknown }> | null>(null);
   const inputRef = useRef(input);
   const requestRef = useRef<OwnedFixedExpandRequest | null>(null);
-  const noticeRef = useRef<FixedExpandTurnNotice | null>(null);
-  const noticeSequenceRef = useRef(0);
   const deliveryAvailableRef = useRef(input.deliveryWindowAvailable !== false);
   const deliveryWindowOpenRef = useRef(
     typeof document === "undefined" || document.visibilityState === "visible",
@@ -100,40 +93,27 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
   const cancel = useCallback(() => {
     requestRef.current?.controller.abort(new DOMException("Aborted", "AbortError"));
     requestRef.current = null;
-    noticeRef.current = null;
-    setState(IDLE);
-  }, []);
-
-  const acknowledgeNotice = useCallback(() => {
-    if (requestRef.current !== null || noticeRef.current === null) return;
-    noticeRef.current = null;
     setState(IDLE);
   }, []);
 
   /**
    * Returns to idle after a turn that changed nothing. A failure the person
-   * should know about leaves one quiet notice; a replaced document leaves
+   * should know about reports one quiet outcome; a replaced document reports
    * none, because its passage no longer exists for them.
    */
-  const publishUnchanged = useCallback((kind: FixedExpandTurnNotice["kind"] | null) => {
-    if (kind === null) {
-      noticeRef.current = null;
-      setState(IDLE);
-      return;
-    }
-    const notice = Object.freeze({ id: ++noticeSequenceRef.current, kind });
-    noticeRef.current = notice;
-    setState(Object.freeze({ ...IDLE, notice }));
+  const publishUnchanged = useCallback((outcome: FixedExpandTurnOutcome | null) => {
+    setState(IDLE);
+    if (outcome !== null) inputRef.current.onOutcome?.(outcome);
   }, []);
 
   const settleUnchanged = useCallback((
     request: OwnedFixedExpandRequest,
-    kind: FixedExpandTurnNotice["kind"] | null,
+    outcome: FixedExpandTurnOutcome | null,
   ) => {
     if (requestRef.current !== request) return;
     request.controller.abort(new DOMException("Settled", "AbortError"));
     requestRef.current = null;
-    publishUnchanged(kind);
+    publishUnchanged(outcome);
   }, [publishUnchanged]);
 
   const settleConflict = useCallback((request: OwnedFixedExpandRequest) => {
@@ -176,11 +156,9 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
         current.onUnavailable?.();
         return;
       }
-      noticeRef.current = null;
       current.onCommitted(result.change);
       setState(IDLE);
     } catch (error) {
-      noticeRef.current = null;
       setState(IDLE);
       setInvariantFailure(Object.freeze({ error }));
     }
@@ -217,7 +195,6 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
       parked: false,
     };
     requestRef.current = request;
-    noticeRef.current = null;
     setState(requestingState(request));
     void requestTransform(envelope, controller.signal).then(
       (plan) => {
@@ -269,7 +246,7 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
   // committed degree from the paper, which the composition's Escape layer does.
   useEffect(() => () => cancel(), [cancel]);
 
-  return { state, start, cancel, acknowledgeNotice };
+  return { state, start, cancel };
 }
 
 function requestingState(request: OwnedFixedExpandRequest): FixedExpandTurnState {
@@ -277,7 +254,6 @@ function requestingState(request: OwnedFixedExpandRequest): FixedExpandTurnState
     phase: "requesting",
     basis: request.basis,
     parked: request.parked,
-    notice: null,
   });
 }
 

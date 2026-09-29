@@ -7,6 +7,7 @@ const hookSpies = vi.hoisted(() => ({
   requestTransform: vi.fn(),
   setState: vi.fn(),
   setInvariantFailure: vi.fn(),
+  onOutcome: vi.fn(),
   cleanups: [] as Array<() => void>,
 }));
 
@@ -52,7 +53,7 @@ const BASIS: StretchCommitBasis = Object.freeze({
   amount: .5,
 });
 
-const IDLE_STATE = Object.freeze({ phase: "idle", basis: null, parked: false, notice: null });
+const IDLE_STATE = Object.freeze({ phase: "idle", basis: null, parked: false });
 const REJECTED = Object.freeze({ status: "rejected" as const });
 const COMMITTED = Object.freeze({
   status: "committed" as const,
@@ -68,14 +69,17 @@ const COMMITTED = Object.freeze({
   }),
 });
 
-function unchanged(id: number, kind: "unavailable" | "stale") {
-  return { phase: "idle", basis: null, parked: false, notice: { id, kind } };
+/** The turn returned to idle and reported exactly one outcome. */
+function expectUnchanged(outcome: "unavailable" | "stale"): void {
+  expect(hookSpies.setState).toHaveBeenLastCalledWith(IDLE_STATE);
+  expect(hookSpies.onOutcome.mock.calls).toEqual([[outcome]]);
 }
 
 beforeEach(() => {
   hookSpies.requestTransform.mockReset();
   hookSpies.setState.mockReset();
   hookSpies.setInvariantFailure.mockReset();
+  hookSpies.onOutcome.mockReset();
   hookSpies.cleanups.length = 0;
   vi.stubGlobal("window", new EventTarget());
   const pageDocument = new EventTarget() as EventTarget & {
@@ -151,6 +155,7 @@ describe("useFixedExpandTurn", () => {
       enabled: true,
       commit,
       onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
       onUnavailable,
     });
 
@@ -161,10 +166,10 @@ describe("useFixedExpandTurn", () => {
       BASIS.documentEpoch,
     ));
     expect(onUnavailable).toHaveBeenCalledTimes(1);
-    expect(hookSpies.setState).toHaveBeenLastCalledWith(unchanged(1, "unavailable"));
+    expectUnchanged("unavailable");
   });
 
-  it("returns to idle with one quiet unchanged notice when the provider is unavailable", async () => {
+  it("returns to idle with one quiet unchanged outcome when the provider is unavailable", async () => {
     hookSpies.requestTransform.mockRejectedValue(new Error("provider unavailable"));
     const onUnavailable = vi.fn();
     const turn = useFixedExpandTurn({
@@ -175,18 +180,15 @@ describe("useFixedExpandTurn", () => {
       enabled: true,
       commit: vi.fn(),
       onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
       onUnavailable,
     });
 
     expect(turn.start(BASIS)).toBe(true);
-    await vi.waitFor(() => expect(hookSpies.setState)
-      .toHaveBeenLastCalledWith(unchanged(1, "unavailable")));
+    await vi.waitFor(() => expect(hookSpies.onOutcome).toHaveBeenCalled());
+    expectUnchanged("unavailable");
     expect(onUnavailable).toHaveBeenCalledTimes(1);
     expect(hookSpies.setInvariantFailure).not.toHaveBeenCalled();
-
-    // The next gesture acknowledges it; the outcome is not a lasting state.
-    turn.acknowledgeNotice();
-    expect(hookSpies.setState).toHaveBeenLastCalledWith(IDLE_STATE);
   });
 
   it.each(["commit", "onCommitted"] as const)(
@@ -210,6 +212,7 @@ describe("useFixedExpandTurn", () => {
         enabled: true,
         commit,
         onCommitted,
+        onOutcome: hookSpies.onOutcome,
         onUnavailable,
       });
 
@@ -237,6 +240,7 @@ describe("useFixedExpandTurn", () => {
       enabled: true,
       commit,
       onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
     });
 
     expect(turn.start(BASIS)).toBe(true);
@@ -270,6 +274,7 @@ describe("useFixedExpandTurn", () => {
         enabled: true,
         commit,
         onCommitted,
+        onOutcome: hookSpies.onOutcome,
         onUnavailable,
       };
       const turn = useFixedExpandTurn(input);
@@ -285,9 +290,8 @@ describe("useFixedExpandTurn", () => {
         pending.reject(new Error("provider unavailable"));
       }
 
-      await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith(
-        outcome === "plan" ? IDLE_STATE : unchanged(1, "unavailable"),
-      ));
+      await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith(IDLE_STATE));
+      expect(hookSpies.onOutcome.mock.calls).toEqual(outcome === "plan" ? [] : [["unavailable"]]);
       expect(input.tree.revision).toBe(BASIS.baseRevision);
       if (outcome === "plan") {
         expect(commit).toHaveBeenCalledTimes(1);
@@ -316,6 +320,7 @@ describe("useFixedExpandTurn", () => {
       enabled: true,
       commit,
       onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
     };
     const turn = useFixedExpandTurn(input);
 
@@ -340,6 +345,7 @@ describe("useFixedExpandTurn", () => {
       enabled: true,
       commit,
       onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
     });
     expect(turn.start(BASIS)).toBe(true);
     const pageDocument = document as Document & { visibilityState: DocumentVisibilityState };
@@ -370,6 +376,7 @@ describe("useFixedExpandTurn", () => {
       deliveryVisibleNodeIds: new Set<string>(),
       commit,
       onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
     };
     const turn = useFixedExpandTurn(input);
     expect(turn.start(BASIS)).toBe(true);
@@ -382,7 +389,6 @@ describe("useFixedExpandTurn", () => {
       phase: "requesting",
       basis: BASIS,
       parked: true,
-      notice: null,
     });
 
     input.deliveryVisibleNodeIds.add("thought");
@@ -392,7 +398,6 @@ describe("useFixedExpandTurn", () => {
       phase: "requesting",
       basis: BASIS,
       parked: false,
-      notice: null,
     });
   });
 
@@ -411,6 +416,7 @@ describe("useFixedExpandTurn", () => {
       deliveryVisibleNodeIds: new Set<string>(),
       commit,
       onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
     };
     const turn = useFixedExpandTurn(input);
     expect(turn.start(BASIS)).toBe(true);
@@ -442,12 +448,13 @@ describe("useFixedExpandTurn", () => {
       enabled: true,
       commit: vi.fn(() => Object.freeze({ status: "stale" as const })),
       onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
       onUnavailable,
     });
 
     expect(turn.start(BASIS)).toBe(true);
-    await vi.waitFor(() => expect(hookSpies.setState)
-      .toHaveBeenLastCalledWith(unchanged(1, "stale")));
+    await vi.waitFor(() => expect(hookSpies.onOutcome).toHaveBeenCalled());
+    expectUnchanged("stale");
     expect(onUnavailable).toHaveBeenCalledTimes(1);
   });
 
@@ -465,6 +472,7 @@ describe("useFixedExpandTurn", () => {
       enabled: true,
       commit,
       onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
     };
     const turn = useFixedExpandTurn(input);
     expect(turn.start(BASIS)).toBe(true);
@@ -473,6 +481,8 @@ describe("useFixedExpandTurn", () => {
     pending.resolve(buildTransformPlan(pending.envelope, "source more"));
     await vi.waitFor(() => expect(hookSpies.setState).toHaveBeenLastCalledWith(IDLE_STATE));
     expect(commit).not.toHaveBeenCalled();
+    // The passage no longer exists for the person, so nothing is said.
+    expect(hookSpies.onOutcome).not.toHaveBeenCalled();
   });
 
   it("holds a resolved expansion while another pointer gesture is active", async () => {
@@ -489,6 +499,7 @@ describe("useFixedExpandTurn", () => {
       enabled: true,
       commit,
       onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
     });
     expect(turn.start(BASIS)).toBe(true);
     window.dispatchEvent(Object.assign(new Event("pointerdown"), { pointerId: 7 }));
@@ -516,6 +527,7 @@ describe("useFixedExpandTurn", () => {
       enabled: true,
       commit,
       onCommitted: vi.fn(),
+      onOutcome: hookSpies.onOutcome,
     };
     const turn = useFixedExpandTurn(input);
 
@@ -534,8 +546,8 @@ describe("useFixedExpandTurn", () => {
     };
     if (pending === undefined) throw new Error("Transform request did not start.");
     pending.resolve(buildTransformPlan(pending.envelope, "source more"));
-    await vi.waitFor(() => expect(hookSpies.setState)
-      .toHaveBeenLastCalledWith(unchanged(1, "stale")));
+    await vi.waitFor(() => expect(hookSpies.onOutcome).toHaveBeenCalled());
+    expectUnchanged("stale");
     expect(commit).not.toHaveBeenCalled();
   });
 
@@ -561,6 +573,7 @@ describe("useFixedExpandTurn", () => {
         enabled: true,
         commit,
         onCommitted: vi.fn(),
+        onOutcome: hookSpies.onOutcome,
         onUnavailable,
       });
 
@@ -587,7 +600,7 @@ describe("useFixedExpandTurn", () => {
     })).toMatchObject({ selection: whole });
   });
 
-  it("reopens with a quiet unchanged notice and no request when local envelope construction fails", () => {
+  it("reopens with a quiet unchanged outcome and no request when local envelope construction fails", () => {
     const commit = vi.fn();
     const onCommitted = vi.fn();
     const onUnavailable = vi.fn();
@@ -599,12 +612,13 @@ describe("useFixedExpandTurn", () => {
       enabled: true,
       commit,
       onCommitted,
+      onOutcome: hookSpies.onOutcome,
       onUnavailable,
     });
 
     expect(turn.start(BASIS)).toBe(false);
     expect(hookSpies.setState).toHaveBeenCalledTimes(1);
-    expect(hookSpies.setState).toHaveBeenCalledWith(unchanged(1, "unavailable"));
+    expectUnchanged("unavailable");
     expect(onUnavailable).toHaveBeenCalledTimes(1);
     expect(hookSpies.requestTransform).not.toHaveBeenCalled();
     expect(commit).not.toHaveBeenCalled();

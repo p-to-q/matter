@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { localizeWikiUnsaved } from "../features/matter/components/canvas-guidance";
+import { localizeOutcome } from "../features/matter/components/canvas-guidance";
 import { nodeActionLensCopy } from "../features/matter/components/node-action-lens-copy";
 import { wikiOccurrenceDescription } from "../features/matter/components/wiki-occurrence-description-copy";
 import { wikiTakeoverCopy } from "../features/matter/components/wiki-takeover-copy";
@@ -14,7 +14,7 @@ const TAKEOVER = wikiTakeoverCopy("zh-CN");
 const LENS = nodeActionLensCopy("zh-CN");
 // A takeover dismissed sooner than this after it appears was not read.
 const TAKEOVER_READABLE_MS = 500;
-const WIKI_UNSAVED = localizeWikiUnsaved("zh-CN");
+const WIKI_UNSAVED = localizeOutcome({ owner: "wiki", reason: "unsaved" }, "zh-CN");
 const WIKI_TITLE = "词典 WIKI";
 // MediaRecorder emits 250 ms chunks; one interval plus headroom proves audio.
 const MIN_SYNTHETIC_CAPTURE_MS = 350;
@@ -191,6 +191,84 @@ test("a Keep Wiki could not record is said once and clears on the next action", 
   await page.keyboard.press("Tab");
   await expect(line).not.toHaveAttribute("data-guidance-state", "wiki-unsaved");
   expect(errors).toEqual([]);
+});
+
+test("outcomes that end together are each said, one per next action", async ({ page }) => {
+  const errors = collectBrowserErrors(page);
+  let releaseRewrite!: () => void;
+  const rewriteBarrier = new Promise<void>((resolve) => {
+    releaseRewrite = resolve;
+  });
+  let rewriteAnswered!: () => void;
+  const rewriteFailed = new Promise<void>((resolve) => {
+    rewriteAnswered = resolve;
+  });
+  await page.route("**/api/text-swap", async (route) => {
+    await rewriteBarrier;
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      headers: { "Cache-Control": "no-store" },
+      body: JSON.stringify({
+        error: {
+          code: "TURN_UNAVAILABLE",
+          message: "Synthetic model unavailable.",
+          retryable: true,
+          fallbackReason: "MODEL_UNAVAILABLE",
+        },
+      }),
+    }).catch(() => undefined);
+    rewriteAnswered();
+  });
+  const passage = await admitWikiPassage(page, VIEWPORTS[0]);
+  await expectMarkCount(page, 1);
+  await page.evaluate(() => {
+    const slot = (globalThis as unknown as Record<symbol, { registry: { clear(): void } } | undefined>)[
+      Symbol.for("ptoq.matter.wiki-occurrence-registry")
+    ];
+    slot?.registry.clear();
+  });
+  const line = page.locator(".matter-guidance");
+  const said = (text: string) => page.getByRole("status").filter({ hasText: text });
+  const rewriteUnchanged = localizeOutcome({ owner: "rewrite", reason: "unavailable" }, "zh-CN");
+
+  // A rewrite is submitted, then its field detaches while the request runs.
+  await passage.locator(".spatial-thought__text").hover();
+  await page.locator("[data-node-action=point-talk]").click();
+  await page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" }).fill("更凝练一些");
+  await page.getByRole("button", { name: "改写", exact: true }).click();
+  await expect(page.locator('.point-talk[data-phase="pending"]')).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".point-talk")).toHaveCount(0);
+
+  // Wiki cannot record a Keep, and the rewrite then fails: two outcomes.
+  await tapWord(page, passage, CANONICAL);
+  await page.getByRole("group", { name: TAKEOVER.changed(HEARD, CANONICAL) })
+    .getByRole("button", { name: TAKEOVER.keepLabel(CANONICAL) }).click();
+  await expect(line).toHaveAttribute("data-guidance-state", "wiki-unsaved");
+  releaseRewrite();
+  await rewriteFailed;
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+
+  // The later outcome waits its turn rather than hiding the shown one.
+  await expect(line).toHaveAttribute("data-guidance-state", "wiki-unsaved");
+  await expect(said(WIKI_UNSAVED)).toHaveCount(1);
+  await expect(said(rewriteUnchanged)).toHaveCount(0);
+  // The next action retires only the outcome that was shown; the waiting one
+  // is then shown and announced in its turn.
+  await page.keyboard.press("Tab");
+  await expect(line).toHaveAttribute("data-guidance-state", "text-swap-unavailable");
+  await expect(line).toHaveText(rewriteUnchanged);
+  await expect(said(rewriteUnchanged)).toHaveCount(1);
+  await expect(said(WIKI_UNSAVED)).toHaveCount(0);
+  await page.keyboard.press("Tab");
+  await expect(line).not.toHaveAttribute("data-guidance-state", "text-swap-unavailable");
+  await expect(said(rewriteUnchanged)).toHaveCount(0);
+  await expect(passage.locator(".spatial-thought__text")).toHaveText(ADMITTED);
+  // The browser logs the deliberate 503 itself; nothing else may fail.
+  expect(errors.filter((error) => !error.includes("status of 503"))).toEqual([]);
 });
 
 test("informed silence settles after two further admissions", async ({ page }) => {

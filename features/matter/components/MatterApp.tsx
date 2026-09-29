@@ -16,10 +16,10 @@ import type {
 } from "../store/matter-store";
 import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import {
+  IDLE_PAPER_ACTIVITY,
   materialIsIdle,
   materialTurnsHoldBasis,
-  SETTLED_PAPER_MATERIAL_TURNS,
-  type PaperMaterialTurnPhases,
+  type PaperActivity,
 } from "./material-turn-activity";
 import {
   seededFallbackBranchTexts,
@@ -78,10 +78,9 @@ export function MatterApp() {
     scope: { treeId: tree.id, revision: tree.revision, documentEpoch },
     locale: canvasPreferences.preferences.language,
   });
-  const [paperTurnPhases, setPaperTurnPhases] =
-    useState<PaperMaterialTurnPhases>(SETTLED_PAPER_MATERIAL_TURNS);
+  const [paperActivity, setPaperActivity] = useState<PaperActivity>(IDLE_PAPER_ACTIVITY);
   // One signal gates every replacement of the loaded document instance.
-  const materialTurns = { admission: admission.state.phase, paper: paperTurnPhases };
+  const materialTurns = { admission: admission.state.phase, paper: paperActivity };
   const persistence = useMaterialPersistence(
     tree,
     history,
@@ -335,7 +334,7 @@ export function MatterApp() {
       onClearSelection={clearSelection}
       onTransformCommit={commitTransformTurn}
       onTextSwapCommit={commitTextSwapTurn}
-      onMaterialTurnPhasesChange={setPaperTurnPhases}
+      onPaperActivityChange={setPaperActivity}
       onExitFocus={showFull}
       onFocusNode={focus}
       onInsertChild={extendChild}
