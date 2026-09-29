@@ -50,6 +50,16 @@ interaction. Both carry completion receipts. They are the record of how the
 Superseded by:
 [`../plans/active-tree-material.md`](../plans/active-tree-material.md).
 
+### `plans-0.2-history.md`
+
+Every proven, completed, historical, archived, reverted, deferred, or
+superseded section of the `0.2` first-release plan, moved verbatim and in order
+on 2026-09-29, plus the few plan lines corrected in place that day. The active
+plan ends with an index of these sections and the open item each still carries.
+
+Superseded by:
+[`../plans/active-tree-material.md`](../plans/active-tree-material.md).
+
 ### `canvas-foreground-2026-08-24/`
 
 A short recovery index for the superseded Canvas foreground experiment. The
