@@ -18,7 +18,9 @@ at the end of this plan lists them.
 
 State: frozen 2026-09-29 after a nine-part audit of `c6027c8` and five external
 research passes (bounded undo, local durability, exit motion, IME/Escape/pen
-input, implicit feedback). Target: Preview.64 on `main`.
+input, implicit feedback). Every code slice except the bundle budget is merged
+on `claude/material-trust` with its round-1 fixes; whole-diff verifier rounds 2
+and 3 and the release gate below remain. Target: Preview.64 on `main`.
 
 Owner decisions of 2026-09-29 that reopen earlier freezes:
 
@@ -59,21 +61,23 @@ Non-goals:  RootedMaterial decomposition and pan/fold render cost (next
             proof, managed provider promotion, and the #104 key ring
 ```
 
-Slices, in dependency order. T-slices run in parallel; W-slices follow W1.
+Slices, in dependency order. Each landed on `claude/material-trust` as one
+merge; round-1 whole-diff verifier findings were fixed in three more merges.
 
-| Slice | Owner boundary | Delivers |
+| Slice | Delivered | Receipt |
 | --- | --- | --- |
-| T1 keyboard and chrome | `composition-safe-keys`, CanvasChrome, PointTalkComposer, Escape owners, MaterialFiles rename | IME-safe Enter/Escape across engines, one Escape per layer, Ask Matter survives detach and breakpoint changes, audible answers, quiet inquiry unavailability |
-| T2 voice and presence | admission driver/reducer, browser voice, local transcription, AdmissionFeedback, Point Talk presentation | no silent drop on retry, warm-up timeout, or vanished parent; a kept transcript on stale target; presence exits with minimum dwell; pointer-idle recovery |
-| T3 history and storage | tree history, history recovery, matter database v6, document repository, persistence controller | bounded undo, per-entry journal records, constant-cost recovery with use-time validation, material-before-history under quota |
-| T4 durability surface | persistence controller, MaterialFiles footer, MatterApp archive copy, generation channel | truthful docked save state, dirty-only `beforeunload`, cross-tab generation broadcast, superseded schema, storage-full import path, bounded `persist()` |
-| T5 AI turns | text-swap driver, fixed-expand turn, label driver, store turn commit, material ingress | no redo loss from late turns, no pre-submit invalidation by visibility, locale relocalization waits for turns, Elastic failure is announced and parked delivery is bounded, a valid AI answer survives lexical post-processing, pen-active palm rejection |
-| W1 Wiki evidence semantics | `features/matter/wiki` policy, evidence, runtime core | quarter-unit ledgers with V7 migration, comparable-opportunity aging, bounded admission queue, scanned-only partial batches, explicit producer precedence |
-| W2 occurrence attribution | material lexical port, material ingress receipt, Wiki occurrence owner | opaque per-edit occurrence tokens in committed coordinates, bounded in-memory occurrence lifecycle, one settlement per occurrence |
-| W3 disclosure and takeover | render edge, Custom Highlight, local takeover popover | heard-to-canonical settle, quiet unsettled mark, Keep / heard form / Wiki takeover, revert as a material command |
-| W4 informed acceptance | Wiki learning policy and runtime | perceived precondition, settlement triggers, integer weights, retention-only reinforcement, two-strike reversion |
-| W5 mixed-script routing | Wiki fitting locale routing | Latin-script spans inside CJK turns reach the English fitting producer under corpus qualification |
-| D documents | product, principles, material, architecture, protocol, surfaces, references, changes, this plan | one truthful contract set; historical plan sections archived |
+| T6 server | admission refusal is `RATE_LIMITED`; rejected receipts name their declared rule | `bb214b8` |
+| T5 AI turns | delivered results keep the replayable redo future; an unprovable canonicalization is withheld, not refused; unchanged Elastic ends are said once; a parked result has Discard | `db65d37` |
+| T1 keyboard and chrome | IME-safe Enter/Escape; one Escape owner; Escape never cancels a submitted request; Ask Matter carries a question in flight and offers Cancel; one canvas gesture owner with palm rejection (moved here from T5) | `e55477c` |
+| W1 Wiki evidence | record V7 quarter units, comparable-opportunity aging, informed-acceptance policy, two-strike reversion | `f781cb7` |
+| T2 voice and presence | held words on every failed commit; presence timings; released rewrites said once; a stalled worker is retired | `75cc8b5` |
+| D0 documents | truthful surfaces; plan and release receipts moved to `archive/` | `5e19a78` |
+| T3 + T4 persistence | bounded per-step undo at database v6; durability line; cross-tab generation channel; terminal superseded state; material-idle adoption gate; bounded `persist()` | `00fc30a`, browser fixes `16b3be0` |
+| W5 script routing | Latin spans of CJK turns reach the `en-US` ledger | `7e4b247` |
+| W2–W4 addressable Wiki | occurrence attribution, disclosure and takeover, informed acceptance at runtime | `a792d33` |
+| Round-1 fixes | durability and history (`bc49b9b`); Wiki and server (`cd07573`); client interaction (`3aca868`) | merged |
+| B bundle budget | lazy-load boundaries back under the artifact budget | in progress |
+| D1 documents | one truthful contract set | this change |
 
 Release gate: every slice verified; three whole-diff verifier rounds pass with
 their findings fixed; `npm run check` and `npm run test:e2e` pass locally and in
@@ -81,209 +85,58 @@ CI; the owner walks localhost; the pull request merges to `main`; Production
 reads back Preview.64. The prerelease tag stays withheld until #104 and the
 strict pool probe pass.
 
-## Active correction — invisible local Wiki
+## Active correction — addressable local Wiki
 
-State: lexeme-first domain, persistence, neutral patch-based lexical port,
-separate human-observation capability, Wiki adapter, material-ingress foundation,
-canonical-word settings surface, strict export, cross-tab admission rederivation,
-negative-capacity learning latch, bounded automatic term collection, a
-runtime-qualified internal-Latin-edit producer, offline-qualified
-English/Mandarin pronunciation research producers, and corrupt-row recovery
-implemented; high-ambiguity pronunciation projection, error-local attribution,
-and recognizer-time bias remain gated.
-The settings projection now includes a reversible voice/generated-text scope,
-with V2/V3 migration to `both`, scope-aware disposable caches, and no deletion
-of disabled-channel lineage. Locale is inferred rather than exposed as another
-configuration burden. The offline pronunciation qualification compiler uses
-pinned `double-metaphone` and `pinyin-pro` resources. The product's lazy Wiki
-runtime ships neither resource; it does not claim acoustic confidence or feed
-lexical context to a recognizer.
+State: implemented at record V7. The lexeme-first domain, strict persistence,
+neutral patch-based lexical port, settings surface with reversible scope and
+export, two local permission actions, bounded automatic term collection, and
+one release-qualified internal-Latin-edit producer run by default. Latin words
+inside Chinese and Japanese turns reach that producer by script routing. Every
+applied change is disclosed once and marked until its occurrence settles; the
+takeover at the word offers Keep, the heard form, or Wiki…; informed silence
+settles as retention-only approval; two reverts end an automatic relation. The
+contract is [`../docs/reference/wiki.md`](../docs/reference/wiki.md). The
+invisible-Wiki text this section replaced, including its superseded “no mark”
+rule and whole-observation units, is trace in
+[`../archive/plans-0.2-history.md`](../archive/plans-0.2-history.md).
 
 ```text
-Outcome:    repeated recognition and wording mistakes disappear without asking
-            a person to operate or approve a dictionary
-Boundary:   one origin-local locale × channel authority; deterministic evidence
-            capability after proven human admission; one composition-owned Wiki
-            adapter behind a neutral captured lexical port; one browser-side
-            MaterialIngress facade before an existing tree command; one
-            error-local correction escape hatch
-Invariants: in this release, no Wiki value enters a model, wire request, archive, public action,
-            or material history; generated and repaired output contributes zero
-            evidence; old trees are not rescanned without authorship provenance;
-            normal hits have no UI; human correction takes over one canonical
-            lexeme and every hidden alias; removal cannot be undone by automatic
-            relearning; an exceptional configuration path permits explicit
-            add/edit/remove/export; a corrupt row can be explicitly reset
-            only while it remains corrupt; Wiki failure becomes identity or
-            last-good basis and never blocks material; pronunciation work
-            compiles bounded aliases on authority change and leaves the
-            synchronous material hot path exact-only
-Proof:      strict state codec and bounds; locale-isolation and ambiguity tests;
-            immutable compiled matcher and operation budget; IndexedDB CAS;
-            raw-before-lexical and final-after-lexical validation at every text
-            ingress; architecture proof that server, protocol, API, and store
-            cannot reach concrete Wiki
-Non-goals:  memory, RAG, embeddings, prompt vocabulary in this release, model-managed learning,
+Outcome:    repeated recognition and wording mistakes disappear, and every
+            change Wiki makes is perceivable once and addressable at the word,
+            without asking a person to operate or approve a dictionary
+Boundary:   one origin-local locale × channel authority with script routing;
+            one composition-owned adapter behind the neutral lexical port; one
+            occurrence driver from disclosure to settlement; the settings
+            surface as the configuration path
+Invariants: no Wiki value enters a model, wire request, archive, public action,
+            or material history; generated and repaired text contributes no
+            admission evidence; old trees are not rescanned; informed
+            acceptance only retains a rule and never creates, activates, or
+            confirms one; Wiki never observes Material Undo; a suggestion that
+            would break a valid result is withheld; Wiki failure becomes
+            identity or last-good basis and never blocks material
+Non-goals:  memory, RAG, embeddings, prompt vocabulary, model-managed learning,
             a review queue, permanent dictionary chrome, historical tree mining,
-            cross-account sync, dynamic plugins, bulk editing, runtime fuzzy
-            phonetic distance, or enabling pronunciation without corpus proof
+            cross-account sync, runtime fuzzy phonetic distance, or enabling
+            pronunciation without corpus proof
 ```
 
-Automatic provisional rules stay release-gated by representative corpora that
-prove precision, ambiguity rejection, locale isolation, generated-output
-exclusion, capacity, and performance. The exceptional correction surface must
-retain only a short-lived,
-content-minimal attribution token for the exact applied rule; it must not infer
-responsibility later from a changed basis or from a whole-text diff. Applying a
-rule does not add an icon or hover action; attribution is disclosed only after
-the person invokes correction on the erroneous word.
+Still open, in the order they would be taken up:
 
-Maintainer clarification, 2026-09-25: the candidate-local 32-turn quiet horizon
-is only a far-horizon aging cadence; it is not a user-intent window. The
-production `recent-material` producers receive only a bounded successful human
-admission and must not infer intent from generic deletion, Material Undo or
-Redo, repetition within one turn, or later whole-text edits. Settings
-create/rename/scope/remove decisions are direct human authority and bypass
-scoring. Confirm/reject/replace remain the exact domain outlet for a later
-error-local correction, but the composition-owned one-shot token and its UI must
-land together; no generic decision port is added in advance. The token binds the
-applied basis/rule to one visible occurrence and current document/interaction
-epoch, carries no surrounding passage, and expires rather than being rebuilt
-from a later diff.
-
-Maintainer freeze, 2026-09-26: automatic collection and alias fitting use two
-separate bounded ledgers. Canonical recurrence may decide that a word is worth
-listing, but it can never prove that one observed form should rewrite to that
-canonical word. Alias authority therefore accepts only relation-specific
-producer evidence or one addressed human decision. This separation replaces
-the mixed `historical + recent + machine` score before either automatic
-capability becomes release-default behavior.
-
-Maintainer correction, 2026-09-27: one successful admission may yield both a
-broad term event and a more specific fitting event. If exactly one released
-internal-edit relation targets an eligible existing canonical, the broad event
-for that same source is omitted for that admission; multiple candidate targets
-omit nothing and abstain. This is batch arbitration, not shared scoring. It
-prevents two-turn term collection from making the four-turn relation
-unreachable while keeping every existing canonical a hard no-op veto.
-
-The local learner is a deterministic state machine, not online reinforcement
-learning. One successful human admission is one logical environment tick;
-generated, repaired, transformed, imported, undone, or rescanned text produces
-no tick reward and no evidence. Within one tick, an identical candidate counts
-at most once. The first three or four independent turns provide the useful
-information. Each candidate owns a bounded quiet counter; there is no global
-cohort edge. Term evidence uses one saturating integer support value:
-
-```text
-support'   = min(255, support + one bounded observation)
-observed  = support', quiet = 0
-not observed for 32 successful human admissions:
-            support = floor(support / 2), quiet = 0
-
-candidate -> collected when support >= 2
-collected -> candidate only when support = 0
-```
-
-Two independent human turns therefore surface a name at any position in the
-product lifetime; no global boundary can erase the second vote. The one-count
-retention band prevents a collected term from flickering out at the first quiet
-far-horizon aging; without new evidence it sinks on the next aging, while
-repeatedly reinforced support can survive proportionally longer. A fully
-decayed machine-only candidate with no authority, alias evidence, or tombstone
-may be evicted without creating negative authority. Human-owned terms, product
-seeds, and tombstones never participate in automatic eviction.
-
-Alias evidence is relation-specific and carries one versioned producer id. Its
-bounded support decays by half only after that candidate has been absent from
-32 successful human admissions. A candidate
-may rise only when its producer is release-qualified, the weighted winner meets
-the activation threshold, and its lead over the runner-up meets an ambiguity
-margin. Exact-pronunciation evidence has integer weight `3`; restricted
-near-sound and internal-orthographic evidence has weight `2`. The shared
-activation score is `8`, so an unopposed exact relation may rise on its third
-independent turn and a restricted relation on its fourth. Activation margin `4`
-blocks exact `3 versus 2` and near `4 versus 3` contests, while accepting exact
-`3 versus 1` and near `4 versus 2`. An active alias uses retention score `5`
-and margin `3`, but a challenger must always clear the higher activation gate.
-A resource or classifier change changes the producer or fitting version rather
-than silently reinterpreting old votes. Disablement removes provisional aliases
-from the compiled basis without deleting their evidence. Confirmed human and
-product rules remain exact authority.
-
-Counter-evidence is narrow and attributable. A competing canonical for the same
-locale/channel/form reduces the winner margin after every successful admission
-and may make the resolver abstain immediately, without waiting for aging. One
-addressed human reject, replacement, or removal bypasses scoring and becomes
-confirmed authority or a tombstone. Passive use may become weak positive
-evidence, but only after one exact applied occurrence survives one
-foreground-visible, corpus-calibrated horizon. It settles once; a later
-reapplication is a new occurrence rather than another reward tier for the first.
-Material Undo and Redo remain a completely separate tree-history system. Wiki
-neither listens to nor interprets them. If the visible address disappears, the
-transient occurrence expires without a Wiki event. A future Wiki reversal, if
-needed, owns an independent implementation, explicit decision, and persistence
-lifecycle; only strict contract principles may be shared with material history,
-never its command types, state, stack, or framework.
-
-Environment, reward, and evaluation stay outside production authority. A pure
-trace-replay harness treats `(Wiki state, logical tick)` as the environment and
-the deterministic collect, activate, demote, evict, or abstain transition as
-the action. Its evaluation is lexicographic rather than a runtime scalar:
-false rewrites and protected/generated rewrites must remain zero, then misses
-are minimized before correct applications, activation latency, demotion latency,
-or churn may improve. Corpus receipts also hold state bytes, compile and match
-latency, and cross-tab CAS retries. Runtime
-weights remain versioned integers frozen from those receipts; they never adapt
-from live user material. A second fixed interaction corpus labels expected
-accept, reject, or unknown outcomes and observes exactly one explicit decision,
-survived horizon, or censored terminal state per occurrence.
-It reports denominated reject and censor rates plus raw survived exposure,
-unsafe-attribution, and false implicit-positive counts instead of inventing live
-reward weights. Censored exposure never becomes a failed survival. Generated
-output contributes no implicit evidence; an explicit addressed human decision
-may still become authority. Censoring is neutral.
-
-The implementation order remains explicit:
-
-1. complete: pure integer policy and replay proof;
-2. complete: separate term and alias ledgers with strict migration;
-3. complete: manifest-owned corpora, raw-artifact hashes, and controlled
-   qualification receipts;
-4. complete: versioned local term and fitting producers in the offline
-   qualification catalog;
-5. deferred: one-shot occurrence owner and addressed correction command;
-6. complete: truthful runtime release identities plus independent local
-   permissions; and
-7. complete for automatic collection and bounded internal-edit fitting:
-   default-on local automation after positive, adversarial, ambiguity,
-   protected, generated, cross-tab, capacity, and performance gates; exact
-   homophone and Mandarin pronunciation producers remain offline-only.
-
-The existing Wiki list remains the end-to-end surface. V6 adds only two quiet,
-default-on local permission actions in its lower-right footer: automatic term
-collection and phonetic fitting. They persist separately from Wiki data and
-Material history, and can only restrict a capability that has independently
-passed the release gate; they cannot promote an inactive producer. Hidden candidates do not appear there. Collected terms
-appear under `Automatically added`; a person edit promotes one to confirmed
-authority, and removal creates a tombstone. Routine learning, matching,
-survival, and decay remain invisible, so a person can benefit without ever
-opening Wiki. Only an obvious error that the person elects to correct exposes
-the narrow local takeover. A later UI must derive `exact-only`,
-`pronunciation`, `full-auto`, or `paused` from the published runtime capability,
-never from an environment variable, starter row, or optimistic preference. The
-local actions express permission, not availability. The surface adds no score,
-confidence, language picker, review queue, alias table, or confirmation workload.
-
-The bounded product release uses one conservative internal ASCII edit. Exact
-Mandarin pinyin identity, the `an`/`ang`, `en`/`eng`, and `in`/`ing` final pairs,
-and exact Double Metaphone identity remain reproducible qualification-only
-candidates rather than runtime rewrite authority. Single-character polyphones,
-unknown names, candidate collisions, cross-locale matches, and protected
-literals abstain. Compiled resource versions participate in disposable cache
-identity, never durable human authority. Homophone projection, broader phoneme
-distance, ASR phrase bias, and acoustic alternatives remain gated behind a
-future concrete recognition adapter.
+1. rejecting or replacing the responsible mapping from the word (reserved;
+   the Wiki surface can still edit or remove the canonical word);
+2. an own-locale rule whose Latin form sits against Han with no space, such as
+   `我喜欢P to Q的设计`, does not match; that is a separate matcher change;
+3. a Wiki row written by a newer Matter reports `PERSISTENCE_UNAVAILABLE`
+   (non-destructive, and it refuses reset); a superseded state with truthful
+   settings copy would match material persistence;
+4. every weight and memory remains a calibration candidate; a real name one
+   internal edit from a canonical (`Engelhart` beside `Engelbart`) can be
+   learned after four turns, and its remedies are making it canonical or two
+   reverts;
+5. English homophone and Mandarin pronunciation producers stay offline, and
+   recognizer-time phrase bias stays gated behind a future recognition
+   adapter.
 
 ## Active correction — user-supplied material model surfaces
 
@@ -773,7 +626,7 @@ section carries; everything else it describes is done or superseded.
 
 | Section | State when moved | Still open |
 | --- | --- | --- |
-| Active delivery — Preview.58 material and mobile interaction correction | review candidate; shipped as Preview.58 | physical iPhone/iPad Safari Voice and multi-touch receipt |
+| Active delivery — Preview.58 material and mobile interaction correction | review candidate; merged to `main`, but no Preview.58 Production receipt was recorded (Preview.63 is the current readback) | physical iPhone/iPad Safari Voice and multi-touch receipt |
 | Active correction — Pan reports its canonical camera scale | Proven | — |
 | Active correction — Label evidence is precommitted before spend | implemented and verified locally | no paid run or quality promotion is authorized |
 | Historical correction — bounded localhost AI demonstration | historical receipt | — |
@@ -784,12 +637,12 @@ section carries; everything else it describes is done or superseded.
 | Active correction — system seed follows the five-locale interface | implemented; proof complete | — |
 | Active correction — desktop corner optical clearance | implemented and proven | — |
 | Active correction — native leaf media across quiet corner Chrome | implemented; proof complete | — |
-| Active correction — one local language interaction | implemented; later Elastic entries in `docs/changes.md` refine it | — |
+| Active correction — one local language interaction | implemented; its own source and browser proof was never closed as a separate receipt; later Elastic entries in `docs/changes.md` refine it | none of its own; later Elastic releases, through the Preview.53 receipt, carry and refine the behavior |
 | Active correction — the material index keeps one local structural grammar | released in Preview.45 | — |
 | Active correction — index navigation lands at the visual-attention centre | implemented; proof complete | — |
 | Active correction — one bounded Control Fog surface | implemented; proof complete | — |
 | Active sub-slice — selected language owns one interstitial lane | closed by the Preview.37 receipt | — |
-| Active correction — selected material keeps one address through Elastic | deployed as Preview.53; tag withheld | — |
+| Active correction — selected material keeps one address through Elastic | deployed as Preview.53; tag withheld | per-row capsule shape, radius, and step rhythm: a deliberately deferred calibration |
 | Deferred freeze — Text Swap / text-swap/1 | deferred; superseded by `text-swap/2` Point and Talk | — |
 | Active freeze — Elastic Language 2 / transform/2 | implemented and proven; the contract lives in `docs/protocol.md` | — |
 | Historical phase — Preview.39 release convergence, with its eleven subsections | historical | its 2026-08-28 corrupt-history recovery risk is taken up by the campaign's bounded-undo decision and slice T3 |
@@ -801,3 +654,4 @@ section carries; everything else it describes is done or superseded.
 | ↳ Public discovery boundary (from Phase 4) | Proven | — |
 | Current risks: maintainer corrections, Preview.55 and Preview.56 publication records and audits, the synthetic speech receipt, and the original risk list | implemented and verified, or historical | the synthetic speech receipt stays capability-gated |
 | Active freeze — label gate attribution conclusion | concluded from the A4 run | a repeat ≥ 3 run before any Label repair is promoted |
+| Active correction — invisible local Wiki (moved later on 2026-09-29) | superseded by the addressable Wiki campaign | the open items now listed under “Active correction — addressable local Wiki” |
