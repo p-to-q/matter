@@ -48,8 +48,10 @@ contract.
 
 - no keyboard is required for the primary path;
 - no permanent prompt box, chat transcript, or assistant panel; the paper may
-  expose one secondary, non-persistent Matter inquiry bubble under its bounded
-  visible-lineage contract;
+  expose one secondary Matter inquiry bubble under its bounded visible-lineage
+  contract. It keeps a scrollable record of the current opening's turns, and
+  completed exchanges may persist in a bounded per-tree local record that is
+  never material, history, archive content, or model context;
 - raw voice may admit human material; generative voice belongs to a node or
   selected segment, never to the application;
 - AI output reaches the screen only as one perceivable change to material;
