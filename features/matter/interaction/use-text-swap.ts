@@ -3,6 +3,7 @@
 import {
   useCallback,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -67,11 +68,15 @@ export type TextSwapController = Readonly<{
   detachPresentation: () => boolean;
 }>;
 
-/** React binds current material to the focused driver; it owns no second state machine. */
+/**
+ * React binds current material to the focused driver; it owns no second state
+ * machine. The returned controller is stable between driver snapshots, so a
+ * surface bound to it (and every callback derived from it) is not rebuilt by
+ * an unrelated render.
+ */
 export function useTextSwap<TCommitted>(
   input: UseTextSwapInput<TCommitted>,
 ): TextSwapController {
-  const { documentEpoch, locale, selection, tree } = input;
   const [driver] = useState(() => new TextSwapDriver<TCommitted>({
     createVoice: createBrowserVoicePort,
     transcribe: requestTranscription,
@@ -92,7 +97,11 @@ export function useTextSwap<TCommitted>(
   const getParked = useCallback(() => driver.isDeliveryParked(), [driver]);
   const deliveryParked = useSyncExternalStore(subscribe, getParked, getParked);
 
+  // `enter` reads the material current at the gesture, not at the render
+  // that created the controller.
+  const inputRef = useRef(input);
   useLayoutEffect(() => {
+    inputRef.current = input;
     driver.updateBindings(toDriverBindings(input));
     driver.updateScope(toScope(input, state.phase === "idle" ? null : state.basis));
   }, [driver, input, state]);
@@ -127,28 +136,31 @@ export function useTextSwap<TCommitted>(
   // Escape reaches `detachPresentation` through the Point and Talk surface's
   // layer in the composition's single Escape owner, never a listener here.
 
-  return {
-    state,
-    deliveryParked,
-    enter: () => {
-      if (!input.enabled) return false;
-      const basis = createTextSwapBasis({
-        tree,
-        documentEpoch,
-        selection,
-        locale,
-      });
-      return basis !== null && driver.enter(basis);
-    },
+  const enter = useCallback(() => {
+    const current = inputRef.current;
+    if (!current.enabled) return false;
+    const basis = createTextSwapBasis({
+      tree: current.tree,
+      documentEpoch: current.documentEpoch,
+      selection: current.selection,
+      locale: current.locale,
+    });
+    return basis !== null && driver.enter(basis);
+  }, [driver]);
+  const actions = useMemo(() => Object.freeze({
     startRecording: () => driver.startRecording(),
     stopRecording: () => driver.stopRecording(),
-    acceptDirection: (text) => driver.acceptDirection(text),
+    acceptDirection: (text: string) => driver.acceptDirection(text),
     submit: () => driver.submit(),
     retry: () => driver.retry(),
     dismiss: () => driver.dismiss(),
     cancel: () => driver.cancel(),
     detachPresentation: () => driver.detachPresentation(),
-  };
+  }), [driver]);
+  return useMemo(
+    (): TextSwapController => ({ state, deliveryParked, enter, ...actions }),
+    [actions, deliveryParked, enter, state],
+  );
 }
 
 function toDriverBindings<TCommitted>(input: UseTextSwapInput<TCommitted>) {

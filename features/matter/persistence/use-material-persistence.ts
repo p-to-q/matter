@@ -13,7 +13,7 @@ import type { RecoveredHistory } from "./history-recovery";
 import { resolveHydrationDecision } from "./hydration-decision";
 import type { ConflictOrigin, StoredCandidate } from "./persistence-controller";
 import { createDeferredPersistenceController } from "./deferred-persistence-controller";
-import { holdsUnsavedPersonMaterial } from "./persistence-status";
+import { holdsUnsavedPersonMaterial, type StoredReloadOutcome } from "./persistence-status";
 import {
   createStoredGenerationWatch,
   type StoredGenerationWatch,
@@ -39,9 +39,16 @@ export function useMaterialPersistence(
   switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt,
   /**
    * Nothing the person started is in progress: no admission, AI turn, draft,
-   * question, or name editor. Replacing the document instance waits for it.
+   * question, or name editor. Replacing the document instance waits for it,
+   * whether the replacement is another tab's row, an imported archive, or the
+   * Archive's explicit reload.
    */
   materialIdle: boolean,
+  /**
+   * Spoken words the person submitted that no material holds yet: in flight
+   * after Stop, or held after a failed commit. Leaving the page loses them.
+   */
+  unplacedSpokenWords: boolean,
 ) {
   // The generation channel is an external resource, so the effect that listens
   // on it creates and closes it; the controller announces every committed row
@@ -74,11 +81,14 @@ export function useMaterialPersistence(
   const [initialReconciliationComplete, setInitialReconciliationComplete] = useState(false);
   const startPromiseRef = useRef<ReturnType<typeof controller.start> | null>(null);
   const lifecycleRef = useRef(0);
+  // Read at each replacement's synchronous switch, never captured at render.
+  const [replacementGate] = useState(() => new ReplacementGate(materialIdle));
   const importCoordinator = useMemo(() => createDocumentImportCoordinator(
     controller,
     switchDocument,
     () => documentBasisOwner.read(),
-  ), [controller, documentBasisOwner, switchDocument]);
+    () => replacementGate.idle(),
+  ), [controller, documentBasisOwner, replacementGate, switchDocument]);
 
   /**
    * Replaces the document by a stored row, only over the tree the store is
@@ -150,15 +160,14 @@ export function useMaterialPersistence(
   }, [controller, history, tree, untouchedTree]);
 
   const applyCandidateRef = useRef(applyCandidate);
-  const materialIdleRef = useRef(materialIdle);
   const watchRef = useRef<StoredGenerationWatch | null>(null);
   useLayoutEffect(() => {
     applyCandidateRef.current = applyCandidate;
   }, [applyCandidate]);
   useLayoutEffect(() => {
-    materialIdleRef.current = materialIdle;
+    replacementGate.publish(materialIdle);
     watchRef.current?.setMaterialIdle(materialIdle);
-  }, [materialIdle]);
+  }, [materialIdle, replacementGate]);
   useEffect(() => {
     const channel = createDocumentGenerationChannel();
     announcer.attach(channel);
@@ -174,7 +183,7 @@ export function useMaterialPersistence(
       },
     });
     watchRef.current = watch;
-    watch.setMaterialIdle(materialIdleRef.current);
+    watch.setMaterialIdle(replacementGate.idle());
     const unsubscribe = channel.subscribe((generation) => watch.receive(generation));
     return () => {
       unsubscribe();
@@ -183,7 +192,7 @@ export function useMaterialPersistence(
       announcer.detach(channel);
       channel.close();
     };
-  }, [announcer, controller]);
+  }, [announcer, controller, replacementGate]);
 
   const status = useSyncExternalStore(controller.subscribe, controller.getStatus, controller.getStatus);
   const unsavedPersonMaterial = holdsUnsavedPersonMaterial(
@@ -206,8 +215,12 @@ export function useMaterialPersistence(
     };
   }, []);
   useEffect(() => {
-    unloadGuardRef.current?.update({ phase: status.phase, unsavedPersonMaterial });
-  }, [status.phase, unsavedPersonMaterial]);
+    unloadGuardRef.current?.update({
+      phase: status.phase,
+      unsavedPersonMaterial,
+      unplacedSpokenWords,
+    });
+  }, [status.phase, unplacedSpokenWords, unsavedPersonMaterial]);
 
   const supersededReloadRef = useRef<SupersededReload | null>(null);
   useEffect(() => {
@@ -231,14 +244,21 @@ export function useMaterialPersistence(
     });
   }, [materialIdle, status.errorCode, unsavedPersonMaterial]);
 
-  const resolveConflict = useCallback(async () => {
+  const resolveConflict = useCallback(async (): Promise<StoredReloadOutcome> => {
+    // Reloading replaces the document instance, which would end held spoken
+    // words or a turn: the person finishes or discards those first.
+    if (!replacementGate.idle()) return "busy";
     const candidate = await controller.resolveConflict();
+    if (candidate === null || candidate.replaces === null) return "unchanged";
+    if (!replacementGate.idle()) return "busy";
     // The store must still hold exactly the material this reload replaces. A
     // refusal keeps the conflict where it came from.
-    if (candidate !== null && candidate.replaces !== null) {
-      applyCandidate(candidate, candidate.replaces.tree, controller.getStatus().conflictOrigin ?? "another-tab");
-    }
-  }, [applyCandidate, controller]);
+    return applyCandidate(
+      candidate,
+      candidate.replaces.tree,
+      controller.getStatus().conflictOrigin ?? "another-tab",
+    ) ? "reloaded" : "unchanged";
+  }, [applyCandidate, controller, replacementGate]);
 
   // A plain object: the memo keeps its identity stable across renders.
   return useMemo(() => ({
@@ -277,6 +297,27 @@ class GenerationAnnouncer {
 
   publish(generation: DocumentGeneration): void {
     this.#channel?.publish(generation);
+  }
+}
+
+/**
+ * Render-independent answer to "may the document instance be replaced now":
+ * the latest committed material-idle signal, read synchronously by every
+ * replacement (another tab's row, an import, the Archive's reload).
+ */
+class ReplacementGate {
+  #idle: boolean;
+
+  constructor(idle: boolean) {
+    this.#idle = idle;
+  }
+
+  publish(idle: boolean): void {
+    this.#idle = idle;
+  }
+
+  idle(): boolean {
+    return this.#idle;
   }
 }
 

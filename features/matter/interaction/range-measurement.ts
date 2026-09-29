@@ -179,10 +179,22 @@ function isValidRange(address: LogicalTextRange, textLength: number): boolean {
   );
 }
 
+/**
+ * Validates only the two addressed boundaries. `containing` asks the platform
+ * break iterator about one offset of the whole text, so the answer is exact
+ * (regional-indicator parity and long combining runs included) while the cost
+ * stays local; segmenting the complete passage on every call made each mark
+ * sync scale with passage length times mark count.
+ */
 function hasGraphemeBoundaries(text: string, start: number, end: number): boolean {
-  const boundaries = new Set<number>([0, text.length]);
-  for (const part of GRAPHEME_SEGMENTER.segment(text)) boundaries.add(part.index);
-  return boundaries.has(start) && boundaries.has(end);
+  const segments = GRAPHEME_SEGMENTER.segment(text);
+  return isGraphemeBoundary(segments, text.length, start) &&
+    isGraphemeBoundary(segments, text.length, end);
+}
+
+function isGraphemeBoundary(segments: Intl.Segments, length: number, offset: number): boolean {
+  if (offset === 0 || offset === length) return true;
+  return segments.containing(offset)?.index === offset;
 }
 
 function failure(code: RangeMeasurementErrorCode): RangeMeasurementResult {

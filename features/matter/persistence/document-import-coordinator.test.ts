@@ -32,7 +32,7 @@ describe("document import coordinator", () => {
       return { operation: "switch-document", status: "switched", treeId: tree.id, revision: tree.revision } as const;
     });
 
-    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => basis);
+    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => basis, () => true);
     await expect(coordinator.importValidatedTree(tree, basis)).resolves.toEqual({
       status: "switched",
       treeId: tree.id,
@@ -49,7 +49,7 @@ describe("document import coordinator", () => {
       discardImportedDocument: vi.fn(async () => null),
     } satisfies Pick<PersistenceController, "prepareImportedTree" | "activateImportedDocument" | "discardImportedDocument">;
     const basis = { treeId: tree.id, revision: tree.revision, documentEpoch: 2 };
-    const coordinator = createDocumentImportCoordinator(persistence, vi.fn(), () => basis);
+    const coordinator = createDocumentImportCoordinator(persistence, vi.fn(), () => basis, () => true);
 
     await expect(coordinator.importValidatedTree(tree, basis, { replaceUnsaved: true })).resolves.toEqual({
       status: "rejected",
@@ -68,7 +68,7 @@ describe("document import coordinator", () => {
     const switchDocument = vi.fn();
     const basis = { treeId: tree.id, revision: tree.revision, documentEpoch: 2 };
 
-    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => basis);
+    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => basis, () => true);
     await expect(coordinator.importValidatedTree(tree, basis)).resolves.toEqual({
       status: "rejected",
       errorCode: "IMPORT_CONFLICT",
@@ -88,7 +88,7 @@ describe("document import coordinator", () => {
     } satisfies Pick<PersistenceController, "prepareImportedTree" | "activateImportedDocument" | "discardImportedDocument">;
     const switchDocument = vi.fn();
 
-    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => basis);
+    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => basis, () => true);
     await expect(coordinator.importValidatedTree(foreign, basis)).resolves.toEqual({
       status: "rejected",
       errorCode: "IMPORT_FOREIGN_DOCUMENT",
@@ -121,7 +121,7 @@ describe("document import coordinator", () => {
       errorCode: "TREE_INVARIANT_VIOLATION",
     } as const));
 
-    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => basis);
+    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => basis, () => true);
     await expect(coordinator.importValidatedTree(tree, basis)).resolves.toEqual({
       status: "rejected",
       errorCode: "IMPORT_INVALID_TREE",
@@ -151,7 +151,7 @@ describe("document import coordinator", () => {
       discardImportedDocument: vi.fn(async () => null),
     } satisfies Pick<PersistenceController, "prepareImportedTree" | "activateImportedDocument" | "discardImportedDocument">;
     const switchDocument = vi.fn();
-    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => current);
+    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => current, () => true);
 
     const importing = coordinator.importValidatedTree(prepared.tree, basis);
     current = { ...basis, revision: basis.revision + 1 };
@@ -160,6 +160,52 @@ describe("document import coordinator", () => {
     await expect(importing).resolves.toEqual({ status: "rejected", errorCode: "IMPORT_STALE" });
     expect(persistence.discardImportedDocument).toHaveBeenCalledWith(prepared);
     expect(switchDocument).not.toHaveBeenCalled();
+  });
+
+  it("refuses while the person's work is in progress, before and after storage accepts", async () => {
+    const tree = createSeededDocument().tree;
+    const basis = { treeId: tree.id, revision: tree.revision, documentEpoch: 2 };
+    let settle!: (value: ImportedDocumentPreparation) => void;
+    const prepared: ImportedDocumentPreparation = {
+      ok: true,
+      attemptId: 9,
+      createdSnapshot: false,
+      tree,
+      writeGeneration: 2,
+      reservation: reservation(tree, 2),
+    };
+    const persistence = {
+      prepareImportedTree: vi.fn(() => new Promise<ImportedDocumentPreparation>((resolve) => {
+        settle = resolve;
+      })),
+      activateImportedDocument: vi.fn(),
+      discardImportedDocument: vi.fn(async () => null),
+    } satisfies Pick<PersistenceController, "prepareImportedTree" | "activateImportedDocument" | "discardImportedDocument">;
+    const switchDocument = vi.fn();
+    const idle = { current: false };
+    const coordinator = createDocumentImportCoordinator(
+      persistence,
+      switchDocument,
+      () => basis,
+      () => idle.current,
+    );
+
+    // Held spoken words (or any turn) refuse before storage is touched.
+    await expect(coordinator.importValidatedTree(tree, basis)).resolves.toEqual({
+      status: "rejected",
+      errorCode: "IMPORT_BUSY",
+    });
+    expect(persistence.prepareImportedTree).not.toHaveBeenCalled();
+
+    // Work that starts while storage accepts the candidate still wins.
+    idle.current = true;
+    const importing = coordinator.importValidatedTree(tree, basis);
+    idle.current = false;
+    settle(prepared);
+    await expect(importing).resolves.toEqual({ status: "rejected", errorCode: "IMPORT_BUSY" });
+    expect(persistence.discardImportedDocument).toHaveBeenCalledWith(prepared);
+    expect(switchDocument).not.toHaveBeenCalled();
+    expect(persistence.activateImportedDocument).not.toHaveBeenCalled();
   });
 
   it("keeps one import owner while preparation is in flight", async () => {
@@ -187,7 +233,7 @@ describe("document import coordinator", () => {
       treeId: tree.id,
       revision: tree.revision,
     } as const));
-    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => basis);
+    const coordinator = createDocumentImportCoordinator(persistence, switchDocument, () => basis, () => true);
 
     const first = coordinator.importValidatedTree(tree, basis);
     await expect(coordinator.importValidatedTree(tree, basis)).resolves.toEqual({

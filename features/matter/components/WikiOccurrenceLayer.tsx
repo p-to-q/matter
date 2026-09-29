@@ -4,7 +4,6 @@
 import "./WikiOccurrenceLayer.css";
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -24,7 +23,6 @@ import type {
   WikiOccurrenceDriver,
   WikiOccurrenceView,
 } from "../interaction/wiki-occurrence-driver";
-import { outsidePressDismissal } from "../runtime/canvas-pointer-arbitration";
 import type { ThoughtTree } from "../tree/model";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { useEscapeLayer } from "./escape-layers";
@@ -34,7 +32,7 @@ import {
   type PointTalkPlacement,
 } from "./point-talk-placement";
 import type { PresenceClose } from "./presence";
-import { deferUntilTouchCommits } from "./touch-commitment";
+import { useOutsidePressDismissal } from "./touch-commitment";
 import { usePresence } from "./use-presence";
 import {
   createWikiDisclosureController,
@@ -166,15 +164,21 @@ function WikiOccurrenceTakeover({
   // as a censored word or a covering surface, is a preemption.
   const [closing, setClosing] = useState<Readonly<{ identity: string; close: PresenceClose }> | null>(null);
   const [placement, setPlacement] = useState<PointTalkPlacement | null>(null);
-  const content = useMemo<TakeoverContent | null>(() => view === null ? null : Object.freeze({
-    occurrenceId: view.id,
-    nodeId: view.nodeId,
-    start: view.start,
-    end: view.end,
-    heard: view.sourceText,
-    canonical: view.canonicalText,
-    termLocale: view.locale,
-  }), [view]);
+  // Keyed on the fields the takeover shows and addresses, so another word
+  // settling (or this one's bookkeeping changing) never rebuilds it.
+  const occurrenceId = view?.id ?? null;
+  const nodeId = view?.nodeId ?? null;
+  const start = view?.start ?? null;
+  const end = view?.end ?? null;
+  const heard = view?.sourceText ?? null;
+  const canonical = view?.canonicalText ?? null;
+  const termLocale = view?.locale ?? null;
+  const content = useMemo<TakeoverContent | null>(() =>
+    occurrenceId === null || nodeId === null || start === null || end === null ||
+      heard === null || canonical === null || termLocale === null
+      ? null
+      : Object.freeze({ occurrenceId, nodeId, start, end, heard, canonical, termLocale }),
+  [canonical, end, heard, nodeId, occurrenceId, start, termLocale]);
   const live = useMemo(
     () => !surfaceAvailable || content === null
       ? null
@@ -263,12 +267,22 @@ function WikiOccurrenceTakeover({
         readableSinceRef.current?.id === shown.occurrenceId) return;
     readableSinceRef.current = Object.freeze({ id: shown.occurrenceId, atMs: performance.now() });
   }, [placed, present, shown]);
+  // Focus lands once per opened word: on the first placed, visible frame. A
+  // later render of the same word (another word settling, a remapped offset)
+  // must never pull focus back to Keep from wherever the person moved it.
+  const focusedIdRef = useRef<string | null>(null);
+  const shownId = shown?.occurrenceId ?? null;
+  useLayoutEffect(() => {
+    if (content === null) focusedIdRef.current = null;
+  }, [content]);
   useLayoutEffect(() => {
     // A hidden surface cannot take focus; the first placed frame can.
-    if (!present || !placed || shown === null ||
+    if (!present || !placed || shownId === null ||
+        focusedIdRef.current === shownId ||
         document.visibilityState !== "visible") return;
+    focusedIdRef.current = shownId;
     keepRef.current?.focus({ preventScroll: true });
-  }, [placed, present, shown]);
+  }, [placed, present, shownId]);
 
   const returnFocus = useCallback((nodeId: string) => {
     const active = document.activeElement;
@@ -298,36 +312,19 @@ function WikiOccurrenceTakeover({
     return true;
   });
 
-  useEffect(() => {
-    if (content === null) return;
-    let pendingTouch: (() => void) | null = null;
-    const onPointerDown = (event: PointerEvent) => {
-      if (event.target instanceof Node && bubbleRef.current?.contains(event.target)) return;
+  // The press already addresses something else, so focus follows it. A palm
+  // beside a pen is not a tap; a touch dismisses once it commits, even if the
+  // takeover re-renders meanwhile.
+  useOutsidePressDismissal(content?.occurrenceId ?? null, {
+    resolve: (event) => {
+      if (content === null ||
+          (event.target instanceof Node && bubbleRef.current?.contains(event.target))) return null;
       const onWord = driver.hitTest(content.nodeId, event.clientX, event.clientY) ===
         content.occurrenceId;
-      // The press already addresses something else, so focus follows it. A
-      // palm beside a pen is not a tap; a touch dismisses once it commits.
-      switch (outsidePressDismissal(event.pointerType, penActive(event.timeStamp))) {
-        case "now":
-          dismiss(false, onWord);
-          return;
-        case "when-touch-commits":
-          pendingTouch?.();
-          pendingTouch = deferUntilTouchCommits(
-            { pointerId: event.pointerId, clientX: event.clientX, clientY: event.clientY },
-            () => dismiss(false, onWord),
-          );
-          return;
-        case "never":
-          return;
-      }
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      pendingTouch?.();
-    };
-  }, [content, dismiss, driver, penActive]);
+      return () => dismiss(false, onWord);
+    },
+    penActive,
+  });
 
   const personCloses = (occurrenceId: string) =>
     setClosing(Object.freeze({ identity: occurrenceId, close: "person" }));

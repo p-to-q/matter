@@ -271,6 +271,75 @@ test("outcomes that end together are each said, one per next action", async ({ p
   expect(errors.filter((error) => !error.includes("status of 503"))).toEqual([]);
 });
 
+test("another word arriving leaves the open takeover and its focus alone", async ({ page }) => {
+  const errors = collectBrowserErrors(page);
+  const passage = await admitWikiPassage(page, VIEWPORTS[0]);
+  await expectMarkCount(page, 1);
+
+  // The next admission's transcript waits until the takeover is open.
+  let releaseTranscript!: () => void;
+  const transcriptBarrier = new Promise<void>((resolve) => {
+    releaseTranscript = resolve;
+  });
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
+    await transcriptBarrier;
+    await route.fallback();
+  });
+  const count = await page.locator("[data-thought-id]").count();
+  await page.getByRole("button", {
+    name: fixtureUiCopy.voiceTool.recordTopLevelThought,
+    exact: true,
+  }).click({ timeout: 30_000 });
+  const stop = page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
+    .getByRole("button", { name: fixtureUiCopy.voiceTool.stopRecording, exact: true });
+  await expect(stop).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(MIN_SYNTHETIC_CAPTURE_MS);
+  await stop.click();
+
+  await tapWord(page, passage, CANONICAL);
+  const takeover = page.getByRole("group", { name: TAKEOVER.changed(HEARD, CANONICAL) });
+  const keep = takeover.getByRole("button", { name: TAKEOVER.keepLabel(CANONICAL) });
+  const restore = takeover.getByRole("button", { name: TAKEOVER.restoreLabel(HEARD) });
+  await expect(keep).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(restore).toBeFocused();
+
+  // A second Wiki word commits and publishes while the person rests on Restore.
+  releaseTranscript();
+  await expect(page.locator("[data-thought-id]")).toHaveCount(count + 1, { timeout: 15_000 });
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+  await expect(takeover).toBeVisible();
+  await expect(restore).toBeFocused();
+
+  // Enter records the choice the person is on, not the one focus was pulled to.
+  await page.keyboard.press("Enter");
+  await expect(passage.locator(".spatial-thought__text")).toHaveText(REVERTED);
+  expect(errors).toEqual([]);
+});
+
+test("while its disclosure cannot load, Wiki applies nothing and speech is admitted as heard", async ({ page }) => {
+  const errors = collectBrowserErrors(page);
+  // Every request for the disclosure layer fails, as offline or after a
+  // deployment moved on. (Recovery once it loads again is proven against the
+  // retry owner; the development runtime keeps a failed chunk failed.)
+  await page.route(/WikiOccurrenceLayer/u, (route) => route.abort("internetdisconnected"));
+  // The first correction lands before anything could know disclosure fails.
+  const passage = await admitWikiPassage(page, VIEWPORTS[0]);
+  await expectPlainText(passage, ADMITTED);
+
+  // From then on nothing Wiki changes could be disclosed, so it changes nothing.
+  await admitVoice(page, (await page.locator("[data-thought-id]").count()) + 1);
+  const heard = page.locator("[data-thought-id]").filter({ hasText: REVERTED });
+  await expect(heard).toHaveCount(1);
+  await admitVoice(page, (await page.locator("[data-thought-id]").count()) + 1);
+  await expect(heard).toHaveCount(2);
+  await expect(page.locator("[data-thought-id]").filter({ hasText: ADMITTED })).toHaveCount(1);
+  expect(errors.filter((error) => !/WikiOccurrenceLayer|Failed to load|CSS chunk|ChunkLoad/u.test(error)))
+    .toEqual([]);
+});
+
 test("informed silence settles after two further admissions", async ({ page }) => {
   const errors = collectBrowserErrors(page);
   const passage = await admitWikiPassage(page, VIEWPORTS[0]);
@@ -343,6 +412,33 @@ test("reduced motion discloses with the static mark only", async ({ page }) => {
   expect(await page.evaluate(() =>
     (window as Window & { __wikiSweeps?: number }).__wikiSweeps ?? 0)).toBe(0);
   await expectPlainText(passage, ADMITTED);
+});
+
+test("a settle cut off early twice discloses with the static mark instead", async ({ page }) => {
+  const errors = collectBrowserErrors(page);
+  // A web font finishing mid-settle ends it before the change is readable. Two
+  // such cuts exhaust the retry; the word must still become reviewable.
+  await page.addInitScript(() => {
+    let cuts = 0;
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof HTMLElement) || !node.classList.contains("wiki-lexeme-morph")) continue;
+          if (cuts >= 2) continue;
+          cuts += 1;
+          queueMicrotask(() => document.fonts.dispatchEvent(new Event("loadingdone")));
+        }
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+  const passage = await admitWikiPassage(page, VIEWPORTS[0]);
+  await expectMarkCount(page, 1);
+  expect(await readMorphs(page)).toHaveLength(2);
+  await expect(page.locator(".wiki-lexeme-morph")).toHaveCount(0);
+  await tapWord(page, passage, CANONICAL);
+  await expect(page.getByRole("group", { name: TAKEOVER.changed(HEARD, CANONICAL) })).toBeVisible();
+  await expectPlainText(passage, ADMITTED);
+  expect(errors).toEqual([]);
 });
 
 test("without Custom Highlight the word discloses with an underline sweep", async ({ page }) => {

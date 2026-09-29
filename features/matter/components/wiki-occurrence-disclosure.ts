@@ -3,6 +3,7 @@ import {
   normalizeClientRects,
   type ClientTextRect,
 } from "../interaction/range-measurement";
+import { trackPressedPointers } from "../interaction/pressed-pointers";
 import type { WikiOccurrenceView } from "../interaction/wiki-occurrence-driver";
 import {
   findMaterialTextElement,
@@ -51,7 +52,8 @@ export const WIKI_DISCLOSURE_GEOMETRY = Object.freeze({
  * An interrupted settle counts as disclosure only once the person could have
  * read the change: after the crossfade, or after an underline finished its
  * draw. An earlier interruption leaves the word undisclosed and is retried
- * this many times before the word waits without a settle.
+ * this many times; after that the word discloses with the static mark alone,
+ * as under reduced motion, so its takeover stays reachable.
  */
 export const WIKI_DISCLOSURE_RETRIES = 1;
 
@@ -82,13 +84,20 @@ export function planWikiDisclosure(
   capabilities: WikiDisclosureCapabilities,
   shape: Readonly<{ fragments: number; complexScript: boolean }>,
 ): WikiDisclosurePlan {
-  if (capabilities.reducedMotion || capabilities.forcedColors) {
-    return capabilities.highlights ? "mark" : "none";
+  if (capabilities.reducedMotion || capabilities.forcedColors || !capabilities.animations) {
+    return staticWikiDisclosure(capabilities);
   }
-  if (!capabilities.animations) return capabilities.highlights ? "mark" : "none";
   if (!capabilities.highlights || !capabilities.userSelectNone) return "sweep";
   if (shape.complexScript || shape.fragments !== 1) return "sweep";
   return "morph";
+}
+
+/**
+ * The disclosure without motion: the quiet mark itself. Without Custom
+ * Highlight there is no static form, so the word cannot be disclosed at all.
+ */
+export function staticWikiDisclosure(capabilities: WikiDisclosureCapabilities): WikiDisclosurePlan {
+  return capabilities.highlights ? "mark" : "none";
 }
 
 // Joining and conjunct-forming scripts reshape across a range edge, so a
@@ -182,24 +191,18 @@ export function createWikiDisclosureController(
   let context: WikiDisclosureContext = Object.freeze({ readText: () => undefined, blocked: true });
   const running = new Map<string, RunningDisclosure>();
   const veiled = new Map<string, Range>();
-  // A word this platform cannot disclose, or whose settles kept being cut off
-  // early, is not retried and so is never perceived.
+  // A word this platform cannot disclose is not retried and so is never
+  // perceived. One whose settles kept being cut off early discloses statically.
   const undisclosable = new Set<string>();
   const interruptions = new Map<string, number>();
-  const pressed = new Set<number>();
+  const settleExhausted = new Set<string>();
+  // Shared with delivery, including recovery from a release never delivered.
+  const pressed = trackPressedPointers(window);
   let schedule: number | null = null;
   let markObserver: MutationObserver | null = null;
   let observedList: Element | null = null;
   let markFrame: number | null = null;
   let disposed = false;
-
-  const onPointerDown = (event: PointerEvent) => pressed.add(event.pointerId);
-  const onPointerEnd = (event: PointerEvent) => pressed.delete(event.pointerId);
-  const onBlur = () => pressed.clear();
-  window.addEventListener("pointerdown", onPointerDown, true);
-  window.addEventListener("pointerup", onPointerEnd, true);
-  window.addEventListener("pointercancel", onPointerEnd, true);
-  window.addEventListener("blur", onBlur);
 
   const syncVeil = () => {
     if (!capabilities.highlights) return;
@@ -261,6 +264,9 @@ export function createWikiDisclosureController(
     disclosure.stop();
     if (disclosed && !disposed) onDisclosed(occurrenceId);
     requestMarkSync();
+    // A cut settle left its word waiting; nothing else may re-arm the check
+    // until the views change, so the retry would otherwise never come.
+    if (!disclosed) arm();
   };
 
   /** Ends a running settle early; it discloses only if it was readable. */
@@ -274,13 +280,13 @@ export function createWikiDisclosureController(
     if (!readable) {
       const count = (interruptions.get(occurrenceId) ?? 0) + 1;
       interruptions.set(occurrenceId, count);
-      if (count > WIKI_DISCLOSURE_RETRIES) undisclosable.add(occurrenceId);
+      if (count > WIKI_DISCLOSURE_RETRIES) settleExhausted.add(occurrenceId);
     }
     finish(occurrenceId, readable);
   };
 
   const eligible = (view: WikiOccurrenceView, nowMs: number): boolean => {
-    if (context.blocked || pressed.size > 0 || document.visibilityState !== "visible") return false;
+    if (context.blocked || pressed.isPressed() || document.visibilityState !== "visible") return false;
     if (nowMs - view.admittedAtMs < WIKI_DISCLOSURE_ARRIVAL_MS) return false;
     const element = findMaterialTextElement(view.nodeId);
     const text = context.readText(view.nodeId);
@@ -302,13 +308,15 @@ export function createWikiDisclosureController(
     const range = createMaterialTextRange(element, text, view.start, view.end);
     if (range === null) return;
     const fragments = normalizeClientRects(range.getClientRects());
-    const plan = planWikiDisclosure(capabilities, {
-      fragments: fragments.length,
-      complexScript: requiresUnderlineOnly(
-        text.slice(Math.max(0, view.start - 1), view.end + 1),
-        view.sourceText,
-      ),
-    });
+    const plan = settleExhausted.has(view.id)
+      ? staticWikiDisclosure(capabilities)
+      : planWikiDisclosure(capabilities, {
+          fragments: fragments.length,
+          complexScript: requiresUnderlineOnly(
+            text.slice(Math.max(0, view.start - 1), view.end + 1),
+            view.sourceText,
+          ),
+        });
     if (plan === "none") {
       undisclosable.add(view.id);
       return;
@@ -411,6 +419,9 @@ export function createWikiDisclosureController(
       for (const occurrenceId of interruptions.keys()) {
         if (!live.has(occurrenceId)) interruptions.delete(occurrenceId);
       }
+      for (const occurrenceId of settleExhausted) {
+        if (!live.has(occurrenceId)) settleExhausted.delete(occurrenceId);
+      }
       if (nextContext.blocked) abort();
       requestMarkSync();
       arm();
@@ -423,6 +434,7 @@ export function createWikiDisclosureController(
       running.clear();
       veiled.clear();
       interruptions.clear();
+      settleExhausted.clear();
       if (schedule !== null) window.clearTimeout(schedule);
       schedule = null;
       if (markFrame !== null) window.cancelAnimationFrame(markFrame);
@@ -431,11 +443,7 @@ export function createWikiDisclosureController(
       markObserver = null;
       observedList = null;
       undisclosable.clear();
-      pressed.clear();
-      window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("pointerup", onPointerEnd, true);
-      window.removeEventListener("pointercancel", onPointerEnd, true);
-      window.removeEventListener("blur", onBlur);
+      pressed.dispose();
       if (capabilities.highlights) {
         CSS.highlights.delete(WIKI_LEXEME_VEIL);
         CSS.highlights.delete(WIKI_APPLIED_MARK);

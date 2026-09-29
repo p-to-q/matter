@@ -282,6 +282,33 @@ describe("Wiki occurrence driver", () => {
     expect(harness.settled).toEqual([["occ_a", "accepted-implicit"]]);
   });
 
+  it("keeps an open takeover's view identity when another word discloses or settles", () => {
+    const harness = createHarness();
+    harness.driver.admit(publication([["occ_a", FIRST], ["occ_b", SECOND]]));
+    harness.driver.markDisclosed("occ_a");
+    expect(harness.driver.openTakeover("occ_a")).toBe(true);
+    const opened = harness.driver.getSnapshot().find((view) => view.takeover)!;
+
+    // Another word's disclosure is published while the takeover stays open.
+    harness.driver.markDisclosed("occ_b");
+    const afterDisclosure = harness.driver.getSnapshot();
+    expect(afterDisclosure.find((view) => view.takeover)).toBe(opened);
+    expect(afterDisclosure.find((view) => view.id === "occ_b")).toMatchObject({ disclosed: true });
+
+    // And it settles by informed silence: the open word is still the same view.
+    harness.advance(1_500);
+    harness.advance(61_000);
+    expect(harness.settled).toEqual([["occ_b", "accepted-implicit"]]);
+    expect(harness.driver.getSnapshot()).toEqual([opened]);
+    expect(harness.driver.getSnapshot()[0]).toBe(opened);
+
+    // A publication that changes nothing keeps the snapshot itself.
+    const snapshot = harness.driver.getSnapshot();
+    harness.driver.markDisclosed("occ_a");
+    harness.driver.reconcile();
+    expect(harness.driver.getSnapshot()).toBe(snapshot);
+  });
+
   it("hit-tests only disclosed words of the addressed passage", () => {
     const harness = createHarness();
     harness.driver.admit(publication([["occ_a", FIRST], ["occ_b", SECOND]]));

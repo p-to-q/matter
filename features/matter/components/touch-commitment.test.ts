@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PEN_TAKEOVER_WINDOW_MS } from "../runtime/canvas-pointer-arbitration";
-import { deferUntilTouchCommits } from "./touch-commitment";
+import {
+  deferUntilTouchCommits,
+  subscribeOutsidePressDismissal,
+  type OutsidePressBinding,
+} from "./touch-commitment";
 
 const PALM = 7;
 const ORIGIN = { pointerId: PALM, clientX: 100, clientY: 100 };
@@ -74,5 +78,93 @@ describe("deferUntilTouchCommits", () => {
     dispatch("pointerup", { pointerId: PALM });
     vi.advanceTimersByTime(PEN_TAKEOVER_WINDOW_MS);
     expect(discarded).not.toHaveBeenCalled();
+  });
+});
+
+describe("subscribeOutsidePressDismissal", () => {
+  let page: EventTarget;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    target = new EventTarget();
+    page = new EventTarget();
+    vi.stubGlobal("window", Object.assign(target, {
+      setTimeout: globalThis.setTimeout,
+      clearTimeout: globalThis.clearTimeout,
+    }));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  function press(pointerType: string) {
+    page.dispatchEvent(Object.assign(new Event("pointerdown"), {
+      pointerId: PALM,
+      pointerType,
+      clientX: 100,
+      clientY: 100,
+    }));
+  }
+
+  function subscribe(binding: { current: OutsidePressBinding }) {
+    return subscribeOutsidePressDismissal(page as Document, () => binding.current);
+  }
+
+  it("dismisses a mouse press at once and ignores a press the surface keeps", () => {
+    const dismissed = vi.fn();
+    const inside = { current: false };
+    const dispose = subscribe({ current: {
+      resolve: () => inside.current ? null : dismissed,
+      penActive: () => false,
+    } });
+    inside.current = true;
+    press("mouse");
+    expect(dismissed).not.toHaveBeenCalled();
+    inside.current = false;
+    press("mouse");
+    expect(dismissed).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it("keeps a touch still deciding when the surface hands in fresh callbacks", () => {
+    const first = vi.fn();
+    const second = vi.fn();
+    const binding = {
+      current: { resolve: () => first, penActive: () => false } as OutsidePressBinding,
+    };
+    const dispose = subscribe(binding);
+    press("touch");
+    // A re-render replaces every closure while the touch has not committed.
+    binding.current = { resolve: () => second, penActive: () => true };
+    dispatch("pointerup", { pointerId: PALM });
+    // The press dismisses with what it addressed when it landed, exactly once.
+    expect(first).toHaveBeenCalledTimes(1);
+    expect(second).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(PEN_TAKEOVER_WINDOW_MS);
+    expect(first).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it("never dismisses for a palm beside a pen, and disposal drops a pending touch", () => {
+    const dismissed = vi.fn();
+    const pen = { current: true };
+    const dispose = subscribe({ current: {
+      resolve: () => dismissed,
+      penActive: () => pen.current,
+    } });
+    press("touch");
+    dispatch("pointerup", { pointerId: PALM });
+    expect(dismissed).not.toHaveBeenCalled();
+
+    pen.current = false;
+    press("touch");
+    dispose();
+    dispose();
+    dispatch("pointerup", { pointerId: PALM });
+    vi.advanceTimersByTime(PEN_TAKEOVER_WINDOW_MS);
+    press("mouse");
+    expect(dismissed).not.toHaveBeenCalled();
   });
 });

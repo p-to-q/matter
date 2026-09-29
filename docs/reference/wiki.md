@@ -176,8 +176,12 @@ own revert of a sibling word in the same node. The driver attaches its page
 listeners, 250 ms perception clock, and IntersectionObserver only while an
 occurrence is live, and releases them idempotently. The driver, its lifecycle,
 and the Wiki policy it consults load as one lazy chunk with the first committed
-occurrence; until then an eager stand-in buffers at most 16 publications and
-answers every question with the empty set.
+occurrence, together with the render-edge disclosure layer; until then an eager
+stand-in buffers at most 16 publications and answers every question with the
+empty set. A failed load keeps those publications and is retried with bounded
+backoff, when the network returns or the page becomes visible, and at the next
+human admission. While disclosure cannot load, Wiki applies nothing: a change
+that could not be disclosed would be hidden, so material commits as heard.
 
 - Perceived means the disclosure was shown (the settle, or the static mark
   where motion is off or unavailable) and then at least 50% of the word's
@@ -186,7 +190,7 @@ answers every question with the empty set.
   constants in `WIKI_OCCURRENCE_PERCEPTION`. A settle cut off before the
   change was readable (before its crossfade ends, or before an underline
   finished drawing) is not disclosure; it is retried once, and a word whose
-  settle keeps being cut off waits unperceived until it is censored.
+  settle keeps being cut off then discloses with the static mark alone.
 - Only after perception do informed facts accumulate: further successful human
   admissions (the one that carried the occurrence never counts), foreground
   time on the uncovered paper, a Material Files copy of the passage or a native

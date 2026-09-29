@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useSyncExternalStore, type ComponentType } from "react";
+import {
+  createChunkRecovery,
+  type ChunkRecoveryHost,
+} from "../interaction/chunk-recovery";
 import { preloadNow, type Preload } from "../interaction/idle-preload";
 
 /**
@@ -11,7 +15,9 @@ import { preloadNow, type Preload } from "../interaction/idle-preload";
  * suspends on its first mount even when the chunk is cached, and React
  * throttles the reveal of a just-committed fallback by about 300 ms. Until its
  * chunk arrives this renders nothing, like a null fallback, and a failed load
- * is retried by the next mount or preload rather than thrown into the tree.
+ * is never thrown into the tree: the next mount or preload retries it, and
+ * while a mounted instance still waits, `chunk-recovery` retries it with
+ * backoff and again when the network returns or the page becomes visible.
  */
 export type PreloadableComponent<P> = ComponentType<P> & Readonly<{ preload: Preload }>;
 
@@ -24,29 +30,39 @@ export type ComponentCell<P> = Readonly<{
 /** The module-lifetime load state behind one preloadable component. */
 export function createComponentCell<P>(
   load: () => Promise<ComponentType<P>>,
+  recoveryHost?: ChunkRecoveryHost | null,
 ): ComponentCell<P> {
   let loaded: ComponentType<P> | null = null;
   let pending: Promise<ComponentType<P>> | null = null;
   const listeners = new Set<() => void>();
+  // Mounted instances are the demand: recovery runs only while one waits.
+  const recovery = createChunkRecovery(() => {
+    if (loaded === null && listeners.size > 0) preloadNow(preload);
+  }, recoveryHost);
+  function preload(): Promise<ComponentType<P>> {
+    if (loaded !== null) return Promise.resolve(loaded);
+    if (pending !== null) return pending;
+    const attempt = load().then((component) => {
+      loaded = component;
+      recovery.succeeded();
+      for (const listener of [...listeners]) listener();
+      return component;
+    }, (error: unknown) => {
+      if (pending === attempt) pending = null;
+      if (listeners.size > 0) recovery.failed();
+      throw error;
+    });
+    pending = attempt;
+    return attempt;
+  }
   return Object.freeze({
-    preload() {
-      if (pending !== null) return pending;
-      const attempt = load().then((component) => {
-        loaded = component;
-        for (const listener of [...listeners]) listener();
-        return component;
-      }, (error: unknown) => {
-        if (pending === attempt) pending = null;
-        throw error;
-      });
-      pending = attempt;
-      return attempt;
-    },
+    preload,
     read: () => loaded,
     subscribe(listener: () => void) {
       listeners.add(listener);
       return () => {
         listeners.delete(listener);
+        if (listeners.size === 0) recovery.release();
       };
     },
   });

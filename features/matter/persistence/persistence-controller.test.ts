@@ -1069,7 +1069,7 @@ describe("persistence controller", () => {
     const basis = { treeId: current.id, revision: current.revision, documentEpoch: 4 };
     let currentBasis = basis;
     const switchDocument = vi.fn();
-    const coordinator = createDocumentImportCoordinator(controller, switchDocument, () => currentBasis);
+    const coordinator = createDocumentImportCoordinator(controller, switchDocument, () => currentBasis, () => true);
 
     const importing = coordinator.importValidatedTree(imported, basis);
     await waitFor(() => reserveImportedSnapshot.mock.calls.length === 1);

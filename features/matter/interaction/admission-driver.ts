@@ -302,7 +302,14 @@ export class AdmissionDriver {
     this.deliverLateRepairsIfReady();
   }
 
-  exit(): void {
+  /**
+   * The page is leaving. A page kept in the back-forward cache may return with
+   * its memory intact, and suspension has already ended raw capture, so words
+   * the person submitted (in flight or held) stay for that return instead of
+   * vanishing. Only a page that is really unloading releases them.
+   */
+  exit(exit: Readonly<{ persisted: boolean }> = { persisted: false }): void {
+    if (exit.persisted) return;
     this.send({ type: "unmount" });
     this.pendingLocales.clear();
     this.interactionLocales.clear();

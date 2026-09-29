@@ -5,6 +5,7 @@ import {
   interruptedDisclosureCounts,
   planWikiDisclosure,
   requiresUnderlineOnly,
+  staticWikiDisclosure,
   toWorldRect,
   WIKI_DISCLOSURE_RETRIES,
   WIKI_MORPH_TIMELINE,
@@ -41,6 +42,13 @@ describe("Wiki occurrence disclosure policy", () => {
     // Nothing can be shown, so nothing is disclosed and silence stays uninformed.
     expect(planWikiDisclosure({ ...FULL, reducedMotion: true, highlights: false }, ONE_LINE))
       .toBe("none");
+  });
+
+  it("yields an exhausted settle to the static mark wherever a mark can be painted", () => {
+    expect(staticWikiDisclosure(FULL)).toBe("mark");
+    expect(staticWikiDisclosure({ ...FULL, highlights: false })).toBe("none");
+    expect(staticWikiDisclosure({ ...FULL, reducedMotion: true }))
+      .toBe(planWikiDisclosure({ ...FULL, reducedMotion: true }, ONE_LINE));
   });
 
   it("recognizes joining and conjunct scripts around the word", () => {

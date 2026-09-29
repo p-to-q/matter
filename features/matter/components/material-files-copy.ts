@@ -35,6 +35,8 @@ export type MaterialFilesCopy = Readonly<{
   archiveConfirmOlder: string;
   archiveConfirmReplaceUnsaved: string;
   archiveErrorAction: string;
+  /** Replacing would end work in progress: held spoken words, a turn, a question, a name. */
+  archiveErrorBusy: string;
   archiveErrorCleared: string;
   archiveErrorConflict: string;
   archiveErrorCorrupt: string;
@@ -138,6 +140,7 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   archiveConfirmOlder: "Changes made after this archive will be lost.",
   archiveConfirmReplaceUnsaved: "Replace unsaved material with this archive? Undo history will be cleared.",
   archiveErrorAction: "Archive action could not finish.",
+  archiveErrorBusy: "Something you started is still in progress. Finish or discard it, then try again.",
   archiveErrorCleared: "Local storage for Matter was cleared. Export a copy, then reload.",
   archiveErrorConflict: "A different copy of this material is already stored here.",
   archiveErrorCorrupt: "Stored material must be repaired before importing.",
@@ -244,6 +247,7 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveConfirmOlder: "这份归档之后做出的更改将会丢失。",
   archiveConfirmReplaceUnsaved: "用这份归档替换尚未保存的材料吗？撤销历史将被清除。",
   archiveErrorAction: "归档操作未能完成。",
+  archiveErrorBusy: "你开始的操作仍在进行中。请先完成或放弃它，再重试。",
   archiveErrorCleared: "Matter 的本地存储已被清除。请先导出副本，再重新载入。",
   archiveErrorConflict: "这里已存有这份材料的另一个副本。",
   archiveErrorCorrupt: "导入前需要先修复已存材料。",
@@ -347,6 +351,7 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveConfirmOlder: "這份封存之後做出的變更將會遺失。",
   archiveConfirmReplaceUnsaved: "要用這份封存替換尚未儲存的材料嗎？復原記錄將被清除。",
   archiveErrorAction: "封存操作未能完成。",
+  archiveErrorBusy: "你開始的操作仍在進行中。請先完成或放棄它，再試一次。",
   archiveErrorCleared: "Matter 的本機儲存已被清除。請先匯出副本，再重新載入。",
   archiveErrorConflict: "這裡已存有這份材料的另一個副本。",
   archiveErrorCorrupt: "匯入前需要先修復已存材料。",
@@ -450,6 +455,7 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   archiveConfirmOlder: "このアーカイブ以降の変更は失われます。",
   archiveConfirmReplaceUnsaved: "保存されていない素材をこのアーカイブで置き換えますか？取り消し履歴は消去されます。",
   archiveErrorAction: "アーカイブの操作を完了できませんでした。",
+  archiveErrorBusy: "始めた操作がまだ進行中です。完了するか破棄してから、もう一度お試しください。",
   archiveErrorCleared: "Matter の端末内ストレージが消去されました。コピーを書き出してから再読み込みしてください。",
   archiveErrorConflict: "この素材の別のコピーがすでに保存されています。",
   archiveErrorCorrupt: "読み込む前に保存済みの素材を修復する必要があります。",
@@ -553,6 +559,7 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   archiveConfirmOlder: "Änderungen nach diesem Archiv gehen verloren.",
   archiveConfirmReplaceUnsaved: "Nicht gespeichertes Material durch dieses Archiv ersetzen? Der Rückgängig-Verlauf wird gelöscht.",
   archiveErrorAction: "Die Archivaktion konnte nicht abgeschlossen werden.",
+  archiveErrorBusy: "Etwas, das Sie begonnen haben, läuft noch. Schließen Sie es ab oder verwerfen Sie es, dann versuchen Sie es erneut.",
   archiveErrorCleared: "Der lokale Speicher von Matter wurde gelöscht. Exportieren Sie eine Kopie und laden Sie dann neu.",
   archiveErrorConflict: "Hier ist bereits eine andere Kopie dieses Materials gespeichert.",
   archiveErrorCorrupt: "Gespeichertes Material muss vor dem Import repariert werden.",

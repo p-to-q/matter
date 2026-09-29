@@ -5,6 +5,8 @@ import type {
   WikiOccurrenceDriverInput,
   WikiOccurrenceView,
 } from "./wiki-occurrence-driver";
+import { CHUNK_RECOVERY } from "./chunk-recovery";
+import { createTestRecoveryHost } from "./chunk-recovery-test-host";
 import { createLazyWikiOccurrenceDriver } from "./wiki-occurrence-handle";
 
 describe("lazy Wiki occurrence driver", () => {
@@ -52,19 +54,82 @@ describe("lazy Wiki occurrence driver", () => {
     expect(handle.getSnapshot()).toEqual([]);
   });
 
-  it("drops waiting commits when the chunk fails and retries with the next one", async () => {
+  it("keeps waiting commits across a failed load and retries after backoff", async () => {
+    const clock = createTestRecoveryHost();
     const loader = deferredLoader();
-    const handle = createLazyWikiOccurrenceDriver(INPUT, loader.load);
+    const handle = createLazyWikiOccurrenceDriver(INPUT, loader.load, clock.host);
+    expect(handle.disclosureAvailable()).toBe(true);
     handle.admit(publication("occ_a"));
     loader.reject();
     await flush();
     expect(handle.getSnapshot()).toEqual([]);
+    // Disclosure cannot load: the composition withholds Wiki meanwhile.
+    expect(handle.disclosureAvailable()).toBe(false);
 
+    // A commit inside the backoff waits with the first; nothing is refetched.
     handle.admit(publication("occ_b"));
+    expect(loader.calls).toBe(1);
+    clock.advance(CHUNK_RECOVERY.initialDelayMs);
     expect(loader.calls).toBe(2);
     const fake = loader.resolve();
     await flush();
-    expect(fake.admitted).toEqual(["occ_b"]);
+    expect(fake.admitted).toEqual(["occ_a", "occ_b"]);
+    expect(handle.disclosureAvailable()).toBe(true);
+    expect(clock.timers).toBe(0);
+    expect(clock.listening).toBe(false);
+  });
+
+  it("retries when the network returns and on the next human admission", async () => {
+    const clock = createTestRecoveryHost();
+    const loader = deferredLoader();
+    const handle = createLazyWikiOccurrenceDriver(INPUT, loader.load, clock.host);
+    handle.admit(publication("occ_a"));
+    loader.reject();
+    await flush();
+
+    // Back online: tried at once, without waiting out the backoff.
+    clock.signal();
+    expect(loader.calls).toBe(2);
+    loader.reject();
+    await flush();
+    expect(handle.disclosureAvailable()).toBe(false);
+
+    // Timed retries are bounded; past them only a signal or a demand retries.
+    let timedRetries = 0;
+    while (clock.timers > 0) {
+      clock.advance(CHUNK_RECOVERY.maxDelayMs);
+      loader.reject();
+      await flush();
+      timedRetries += 1;
+    }
+    // The first failure's timed retry was replaced by the signal's attempt.
+    expect(timedRetries).toBe(CHUNK_RECOVERY.maxTimedRetries - 1);
+    const calls = loader.calls;
+    expect(clock.timers).toBe(0);
+    clock.advance(CHUNK_RECOVERY.maxDelayMs * 10);
+    expect(loader.calls).toBe(calls);
+
+    // Wiki applies nothing meanwhile, so the next human admission is the demand.
+    handle.noteHumanAdmission();
+    expect(loader.calls).toBe(calls + 1);
+    const fake = loader.resolve();
+    await flush();
+    expect(fake.admitted).toEqual(["occ_a"]);
+    expect(handle.disclosureAvailable()).toBe(true);
+    expect(clock.listening).toBe(false);
+  });
+
+  it("bounds the commits that wait for disclosure", async () => {
+    const clock = createTestRecoveryHost();
+    const loader = deferredLoader();
+    const handle = createLazyWikiOccurrenceDriver(INPUT, loader.load, clock.host);
+    for (let index = 0; index < 20; index += 1) handle.admit(publication(`occ_${index}`));
+    loader.reject();
+    await flush();
+    clock.advance(CHUNK_RECOVERY.initialDelayMs);
+    const fake = loader.resolve();
+    await flush();
+    expect(fake.admitted).toEqual(Array.from({ length: 16 }, (_, index) => `occ_${index + 4}`));
   });
 
   it("never loads after disposal", async () => {

@@ -7,6 +7,7 @@ import {
   EMPTY_MATTER_DOCUMENT_TITLE,
   normalizeMatterInitialDocument,
 } from "../config/initial-document";
+import { gateMaterialLexicalPort } from "../application/material-lexical-port";
 import {
   createWikiMaterialLexicalObservationPort,
   createWikiMaterialLexicalPort,
@@ -22,13 +23,17 @@ import {
   settleMatterWikiOccurrence,
 } from "../persistence/wiki-runtime-bridge";
 import type { WikiOccurrenceDriver } from "../interaction/wiki-occurrence-driver";
-import { createLazyWikiOccurrenceDriver } from "../interaction/wiki-occurrence-handle";
+import {
+  createLazyWikiOccurrenceDriver,
+  type LazyWikiOccurrenceDriver,
+} from "../interaction/wiki-occurrence-handle";
 import { readAdmissionRepairAdjudicator } from "../interaction/transcript-repair-runtime";
 import type { MaterialView } from "../interaction/wiki-occurrence-lifecycle";
 import {
   createMatterStore,
   type MatterStoreViewState,
 } from "../store/matter-store";
+import { WikiOccurrenceLayer } from "./wiki-occurrence-layer-chunk";
 
 const singletonInitialDocument = normalizeMatterInitialDocument(
   process.env.NEXT_PUBLIC_MATTER_INITIAL_DOCUMENT,
@@ -41,9 +46,10 @@ const readMaterial = (): MaterialView => {
 
 // The occurrence driver and the store are composed side by side: the store
 // publishes committed occurrences through a neutral port and never learns
-// that Wiki, the driver, or its browser resources exist. The driver itself
-// loads with the first committed occurrence.
-const wikiOccurrences: WikiOccurrenceDriver = createLazyWikiOccurrenceDriver({
+// that Wiki, the driver, or its browser resources exist. The driver and the
+// render-edge layer load together, as one disclosure, with the first
+// committed occurrence.
+const wikiOccurrences: LazyWikiOccurrenceDriver = createLazyWikiOccurrenceDriver({
   readMaterial,
   settle: settleMatterWikiOccurrence,
   renew: renewMatterWikiOccurrence,
@@ -53,18 +59,26 @@ const wikiOccurrences: WikiOccurrenceDriver = createLazyWikiOccurrenceDriver({
     createdAt: new Date().toISOString(),
     expectedDocumentEpoch: request.documentEpoch,
   }).status === "committed",
-}, () => import("../interaction/wiki-occurrence-browser")
-  .then((module) => module.createBrowserWikiOccurrenceDriver));
+}, () => Promise.all([
+  import("../interaction/wiki-occurrence-browser"),
+  WikiOccurrenceLayer.preload(),
+]).then(([module]) => module.createBrowserWikiOccurrenceDriver));
 
 const matterStore = createMatterStore(singletonInitialDocument, {
   documentRoot: true,
-  materialLexical: createWikiMaterialLexicalPort(
-    readMatterWikiBasis,
-    readMatterWikiInterpreter,
-    {
-      phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
-      mintOccurrence: mintMatterWikiOccurrence,
-    },
+  // A Wiki change is disclosed once, never hidden. While its disclosure cannot
+  // load (a failed chunk, until a retry succeeds), Wiki applies nothing and
+  // material commits as heard; the check is one synchronous read per turn.
+  materialLexical: gateMaterialLexicalPort(
+    createWikiMaterialLexicalPort(
+      readMatterWikiBasis,
+      readMatterWikiInterpreter,
+      {
+        phoneticFittingEnabled: isMatterWikiPhoneticFittingEnabled,
+        mintOccurrence: mintMatterWikiOccurrence,
+      },
+    ),
+    () => wikiOccurrences.disclosureAvailable(),
   ),
   humanAdmissionObservation: createWikiMaterialLexicalObservationPort((observation) => {
     wikiOccurrences.noteHumanAdmission();

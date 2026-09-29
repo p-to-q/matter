@@ -103,7 +103,7 @@ export function useAdmission({
     isAvailable: () => presentationAvailableRef.current,
     onChange: (open) => driver.setDeliveryWindowOpen(open),
     onSuspend: () => driver.suspendCapture(),
-    onExit: () => driver.exit(),
+    onExit: (exit) => driver.exit(exit),
   }, driver);
   const setPresentationAvailable = useCallback((available: boolean) => {
     presentationAvailableRef.current = available;

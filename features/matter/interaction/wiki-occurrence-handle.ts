@@ -1,4 +1,5 @@
 import type { MaterialLexicalOccurrencePublication } from "../application/material-lexical-occurrence-port";
+import { createChunkRecovery, type ChunkRecoveryHost } from "./chunk-recovery";
 import type {
   WikiOccurrenceDriver,
   WikiOccurrenceDriverInput,
@@ -7,23 +8,39 @@ import type {
 
 type DriverFactory = (input: WikiOccurrenceDriverInput) => WikiOccurrenceDriver;
 
-/** Publications held while the driver loads; later ones replace the oldest. */
+/**
+ * Publications held while the disclosure loads, or waits to be retried after
+ * a failed load; later ones replace the oldest.
+ */
 const MAX_WAITING_PUBLICATIONS = 16;
 const EMPTY_VIEWS: readonly WikiOccurrenceView[] = Object.freeze([]);
 
+export type LazyWikiOccurrenceDriver = WikiOccurrenceDriver & Readonly<{
+  /**
+   * False once loading the disclosure failed, until a retry succeeds. A
+   * change that could not be disclosed would be hidden, so the composition
+   * withholds Wiki's suggestions meanwhile.
+   */
+  disclosureAvailable: () => boolean;
+}>;
+
 /**
  * The eager stand-in for the occurrence driver. Material commits publish into
- * it synchronously; the lifecycle, its browser resources, and Wiki's policy
- * load only when the first committed occurrence arrives. Until then nothing is
- * live, so every question it is asked has the empty answer.
+ * it synchronously; the lifecycle, its browser resources, Wiki's policy, and
+ * the render-edge disclosure load only when the first committed occurrence
+ * arrives. Until then nothing is live, so every question it is asked has the
+ * empty answer. A failed load keeps its waiting publications (bounded) and is
+ * retried by `chunk-recovery`, and by the next human admission.
  */
 export function createLazyWikiOccurrenceDriver(
   input: WikiOccurrenceDriverInput,
   load: () => Promise<DriverFactory>,
-): WikiOccurrenceDriver {
+  recoveryHost?: ChunkRecoveryHost | null,
+): LazyWikiOccurrenceDriver {
   let driver: WikiOccurrenceDriver | null = null;
   let loading: Promise<void> | null = null;
   let disposed = false;
+  let failed = false;
   let surfaceAvailable = true;
   const waiting: MaterialLexicalOccurrencePublication[] = [];
   const listeners = new Set<() => void>();
@@ -38,12 +55,15 @@ export function createLazyWikiOccurrenceDriver(
     }
   };
 
-  const ensureLoaded = () => {
+  const attempt = (force: boolean) => {
     if (driver !== null || loading !== null || disposed) return;
+    if (!force && !recovery.mayAttempt()) return;
     loading = load().then(
       (create) => {
         loading = null;
         if (disposed) return;
+        failed = false;
+        recovery.succeeded();
         const loaded = create(input);
         loaded.setSurfaceAvailable(surfaceAvailable);
         loaded.subscribe(() => notify(listeners));
@@ -55,12 +75,17 @@ export function createLazyWikiOccurrenceDriver(
         loaded.reconcile();
       },
       () => {
-        // A failed chunk costs these occurrences only; the next one retries.
+        // The waiting commits stay (bounded) for the retry; they are admitted
+        // against the material current then, so a changed passage just drops.
         loading = null;
-        waiting.length = 0;
+        if (disposed) return;
+        failed = true;
+        recovery.failed();
       },
     );
   };
+  const recovery = createChunkRecovery(() => attempt(true), recoveryHost);
+  const ensureLoaded = () => attempt(false);
 
   return Object.freeze({
     admit(publication) {
@@ -74,7 +99,15 @@ export function createLazyWikiOccurrenceDriver(
       ensureLoaded();
     },
     reconcile: () => driver?.reconcile(),
-    noteHumanAdmission: () => driver?.noteHumanAdmission(),
+    noteHumanAdmission() {
+      if (driver !== null) {
+        driver.noteHumanAdmission();
+        return;
+      }
+      // While disclosure is unavailable Wiki applies nothing, so no commit
+      // publishes; each admission is the demand that tries again.
+      if (failed) ensureLoaded();
+    },
     noteMaterialCopied: (nodeIds) => driver?.noteMaterialCopied(nodeIds),
     noteExported: () => driver?.noteExported(),
     setSurfaceAvailable(available) {
@@ -100,9 +133,11 @@ export function createLazyWikiOccurrenceDriver(
       };
     },
     getSnapshot: () => driver?.getSnapshot() ?? EMPTY_VIEWS,
+    disclosureAvailable: () => !failed,
     dispose() {
       if (disposed) return;
       disposed = true;
+      recovery.release();
       waiting.length = 0;
       driver?.dispose();
       driver = null;

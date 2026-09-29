@@ -142,6 +142,26 @@ type Record = {
 
 const EMPTY_VIEWS: readonly WikiOccurrenceView[] = Object.freeze([]);
 
+// The record type forces every view field to be named, so a new field is
+// compared without another list to keep in step. Every field is a primitive.
+const VIEW_FIELDS = Object.freeze(Object.keys({
+  id: true,
+  nodeId: true,
+  nodeUpdatedAt: true,
+  start: true,
+  end: true,
+  canonicalText: true,
+  sourceText: true,
+  locale: true,
+  disclosed: true,
+  takeover: true,
+  admittedAtMs: true,
+} satisfies { [Field in keyof WikiOccurrenceView]: true }) as (keyof WikiOccurrenceView)[]);
+
+function sameView(left: WikiOccurrenceView, right: WikiOccurrenceView): boolean {
+  return VIEW_FIELDS.every((field) => left[field] === right[field]);
+}
+
 /**
  * The one browser owner of committed Wiki occurrences. It holds every timer,
  * observer, and page listener the lifecycle needs, attaches them only while an
@@ -263,22 +283,36 @@ export function createWikiOccurrenceDriver(input: WikiOccurrenceDriverInput & Re
     );
   };
 
+  /**
+   * Publishes structurally shared views: an occurrence whose view did not
+   * change keeps its object identity, so a presentation bound to one word (an
+   * open takeover holding focus, a pending touch dismissal) is not rebuilt
+   * because another word settled.
+   */
   const publish = () => {
-    snapshot = live.size === 0
+    const previous = new Map(snapshot.map((view) => [view.id, view]));
+    const next = live.size === 0
       ? EMPTY_VIEWS
-      : Object.freeze([...live.values()].map(({ occurrence, locale }) => Object.freeze({
-          id: occurrence.id,
-          nodeId: occurrence.address.nodeId,
-          nodeUpdatedAt: occurrence.address.nodeUpdatedAt,
-          start: occurrence.address.start,
-          end: occurrence.address.end,
-          canonicalText: occurrence.address.canonicalText,
-          sourceText: occurrence.sourceText,
-          locale,
-          disclosed: occurrence.progress.disclosed,
-          takeover: occurrence.id === takeoverId,
-          admittedAtMs: occurrence.admittedAtMs,
-        })));
+      : [...live.values()].map(({ occurrence, locale }) => {
+          const view: WikiOccurrenceView = {
+            id: occurrence.id,
+            nodeId: occurrence.address.nodeId,
+            nodeUpdatedAt: occurrence.address.nodeUpdatedAt,
+            start: occurrence.address.start,
+            end: occurrence.address.end,
+            canonicalText: occurrence.address.canonicalText,
+            sourceText: occurrence.sourceText,
+            locale,
+            disclosed: occurrence.progress.disclosed,
+            takeover: occurrence.id === takeoverId,
+            admittedAtMs: occurrence.admittedAtMs,
+          };
+          const kept = previous.get(occurrence.id);
+          return kept !== undefined && sameView(kept, view) ? kept : Object.freeze(view);
+        });
+    if (next.length !== snapshot.length || next.some((view, index) => view !== snapshot[index])) {
+      snapshot = Object.freeze(next);
+    }
     for (const listener of [...listeners]) {
       try {
         listener();

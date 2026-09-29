@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { RootedMaterial } from "./RootedMaterial";
 import { useMatterStore, useWikiOccurrences } from "./use-matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
+import { admissionHoldsSubmittedWords } from "../runtime/admission-interaction";
 import { useAdmission } from "../interaction/use-admission";
 import { useMaterialPersistence } from "../persistence/use-material-persistence";
 import { useCanvasPreferences } from "./use-canvas-preferences";
@@ -89,6 +90,7 @@ export function MatterApp() {
     hydrateSnapshot,
     switchDocument,
     materialIsIdle(materialTurns),
+    admissionHoldsSubmittedWords(admission.state),
   );
   const storagePersistence = useStoragePersistence();
   const requestStoragePersistence = storagePersistence.request;
@@ -385,6 +387,8 @@ function archiveMessage(code: string, copy: MaterialFilesCopy): string {
   switch (code) {
     case "IMPORT_STALE":
       return copy.archiveErrorStale;
+    case "IMPORT_BUSY":
+      return copy.archiveErrorBusy;
     case "IMPORT_CONFLICT":
       return copy.archiveErrorConflict;
     case "IMPORT_DIRTY":
