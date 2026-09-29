@@ -288,8 +288,13 @@ layout; the repository executes it.
   replaced row is the one this tab's basis described; otherwise the next save
   meets the newer row as a conflict. Later saves compact every other epoch.
   Corrupt-row replacement is different: nothing can roll it back and the damaged
-  row's journal is never trusted, so it writes its whole journal into the next
-  epoch and deletes every other epoch's records in the same transaction.
+  row's journal is never trusted, so it writes the journal it retains into the
+  next epoch and deletes every other epoch's records in the same transaction.
+  It sheds under storage pressure exactly as a save does. A replacement storage
+  still refuses leaves the damaged row, its exported basis, and the corrupt
+  status in place, so Replace can be tried again; Retry and archive
+  replacement stay closed, because both would compare against a row this tab
+  never read.
 - **Material before history.** When storage refuses a save, the controller
   retries the same transaction with half the durable undo bytes, then none, then
   no redo, and records the release; only a snapshot that cannot fit alone

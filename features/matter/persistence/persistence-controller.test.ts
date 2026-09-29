@@ -1117,6 +1117,87 @@ describe("persistence controller", () => {
     });
   });
 
+  it("sheds undo to replace a corrupt row under storage pressure and keeps Replace open when it cannot", async () => {
+    const tree = createSeededDocument().tree;
+    const history = historyOfBytes([40, 30, 20, 10]);
+    const basis = { treeId: tree.id, serialized: "{\"damaged\":true}" };
+    const replacedBasis = { writeGeneration: 6, journal: emptyHistoryJournal(1) };
+    const replaceCorrupt = vi.fn<DocumentRepository["replaceCorrupt"]>(async () =>
+      storageFull() as RepositoryResult<SnapshotBasis>);
+    // The damaged row still holds generation 5: a save against no row meets it.
+    const save = vi.fn<DocumentRepository["save"]>(async () => ({
+      ok: false,
+      error: { code: "PERSISTENCE_CONFLICT", message: "row exists" },
+    }));
+    const reserveImportedSnapshot = vi.fn(inertPort().reserveImportedSnapshot);
+    const controller = createPersistenceController({
+      ...inertPort(),
+      load: async () => ({ ok: false, error: { code: "PERSISTENCE_CORRUPT", message: "damaged" } }),
+      save,
+      exportCorrupt: async () => ({
+        ok: true,
+        value: { basis, bytes: new TextEncoder().encode(basis.serialized) },
+      }),
+      replaceCorrupt,
+      reserveImportedSnapshot,
+      close: () => undefined,
+    });
+    const seen: string[] = [];
+    controller.subscribe(() => seen.push(`${controller.getStatus().errorCode}/${controller.getStatus().conflictOrigin}`));
+    await startAccepted(controller, tree, history);
+    const edited = { ...tree, revision: tree.revision + 1 };
+    controller.publish(edited, history, true);
+    await controller.exportCorruptRecovery();
+
+    // Storage refuses every retention, material alone included.
+    await expect(controller.replaceCorrupt()).resolves.toEqual({ ok: false, errorCode: "PERSISTENCE_STORAGE_FULL" });
+    expect(replaceCorrupt.mock.calls.map(([write]) => write.retention)).toEqual([
+      FULL_HISTORY_RETENTION,
+      { maxUndoBytes: 50, keepRedo: true },
+      { maxUndoBytes: 0, keepRedo: true },
+    ]);
+    // Still a damaged row: nothing may save or import against a generation
+    // this tab never read, and the recovery basis is kept for another Replace.
+    expect(controller.getStatus()).toMatchObject({
+      phase: "error",
+      errorCode: "PERSISTENCE_CORRUPT",
+      unsaved: true,
+      replaceableByImport: false,
+    });
+    controller.retry();
+    await Promise.resolve();
+    expect(save).not.toHaveBeenCalled();
+    await expect(controller.prepareImportedTree(tree, { replaceUnsaved: true })).resolves.toEqual({
+      ok: false,
+      errorCode: "PERSISTENCE_CORRUPT",
+    });
+    expect(reserveImportedSnapshot).not.toHaveBeenCalled();
+
+    // Some space came back: the second Replace keeps half the undo bytes.
+    replaceCorrupt.mockClear();
+    replaceCorrupt
+      .mockResolvedValueOnce(storageFull() as RepositoryResult<SnapshotBasis>)
+      .mockResolvedValueOnce({ ok: true, value: replacedBasis });
+    await expect(controller.replaceCorrupt()).resolves.toEqual({ ok: true });
+    expect(replaceCorrupt.mock.calls.map(([write]) => write.retention)).toEqual([
+      FULL_HISTORY_RETENTION,
+      { maxUndoBytes: 50, keepRedo: true },
+    ]);
+    expect(replaceCorrupt.mock.calls[1]?.[1]).toBe(basis);
+    expect(controller.getStatus()).toMatchObject({
+      phase: "saved",
+      persistedRevision: edited.revision,
+      errorCode: null,
+      historyNotice: "released",
+      unsaved: false,
+    });
+    // The next save continues from the replaced row with the shed retention.
+    controller.publish({ ...tree, revision: tree.revision + 2 }, history);
+    await waitFor(() => save.mock.calls.length === 1);
+    expect(save.mock.calls[0]?.[0]).toMatchObject({ basis: replacedBasis, retention: { maxUndoBytes: 50, keepRedo: true } });
+    expect(seen.some((entry) => entry.includes("another-tab"))).toBe(false);
+  });
+
   it("invalidates a corrupt export when newer local material arrives", async () => {
     const tree = createSeededDocument().tree;
     let settleExport!: (result: RepositoryResult<CorruptSnapshotExport>) => void;

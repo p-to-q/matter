@@ -300,38 +300,46 @@ export function createPersistenceController(
   };
 
   /**
-   * Material before history: when storage refuses the write, the same
+   * Material before history: when storage refuses a write, the same
    * transaction is retried once after reclaiming recomputable caches, then
    * with fewer durable undo steps. Only a snapshot that cannot fit alone is
-   * reported as storage-full.
+   * reported as storage-full. Every write of material and its journal (an
+   * ordinary save and a corrupt-row replacement) goes through this one loop.
    */
-  const saveShedding = async (
-    document: PendingDocument,
-    bundle: SnapshotBundle,
-    saveEpoch: number,
+  const writeShedding = async (
+    history: TreeHistory,
+    write: (attempt: HistoryRetention) => Promise<RepositoryResult<SnapshotBasis>>,
+    stillCurrent: () => boolean,
   ): Promise<Readonly<{ saved: RepositoryResult<SnapshotBasis>; retention: HistoryRetention }>> => {
     let attempt = retention;
     let reclaimed = false;
     for (;;) {
-      const saved = await repository.save({
+      const saved = await write(attempt);
+      if (saved.ok || saved.error.code !== "PERSISTENCE_STORAGE_FULL") return { saved, retention: attempt };
+      if (!stillCurrent()) return { saved, retention: attempt };
+      if (!reclaimed) {
+        reclaimed = true;
+        if (await repository.reclaimDerivedStorage()) continue;
+      }
+      const next = shedHistoryRetention(history, attempt);
+      if (next === null) return { saved, retention: attempt };
+      attempt = next;
+    }
+  };
+
+  const saveShedding = (document: PendingDocument, bundle: SnapshotBundle, saveEpoch: number) =>
+    writeShedding(
+      document.history,
+      (attempt) => repository.save({
         treeId: document.tree.id,
         treeRevision: document.tree.revision,
         bundle,
         basis,
         history: document.history,
         retention: attempt,
-      });
-      if (saved.ok || saved.error.code !== "PERSISTENCE_STORAGE_FULL") return { saved, retention: attempt };
-      if (!active || saveEpoch !== documentEpoch) return { saved, retention: attempt };
-      if (!reclaimed) {
-        reclaimed = true;
-        if (await repository.reclaimDerivedStorage()) continue;
-      }
-      const next = shedHistoryRetention(document.history, attempt);
-      if (next === null) return { saved, retention: attempt };
-      attempt = next;
-    }
-  };
+      }),
+      () => active && saveEpoch === documentEpoch,
+    );
 
   const drain = async () => {
     if (!active || writing || !ready || pending === null || activeImportAttempt !== null || terminal !== null) return;
@@ -718,18 +726,34 @@ export function createPersistenceController(
       } catch {
         return Object.freeze({ ok: false, errorCode: "PERSISTENCE_WRITE_FAILED" });
       }
-      const replaced = await repository.replaceCorrupt({
-        treeId: replacement.tree.id,
-        treeRevision: replacement.tree.revision,
-        bundle,
-        history: replacement.history,
-        retention,
-      }, recovery.basis);
+      const { saved: replaced, retention: replacedRetention } = await writeShedding(
+        replacement.history,
+        (attempt) => repository.replaceCorrupt({
+          treeId: replacement.tree.id,
+          treeRevision: replacement.tree.revision,
+          bundle,
+          history: replacement.history,
+          retention: attempt,
+        }, recovery.basis),
+        () => active && recovery.documentEpoch === documentEpoch && corruptRecovery === recovery,
+      );
       if (!replaced.ok) {
-        corruptRecovery = null;
-        enterTerminal(replaced.error.code);
-        update({ ...status, errorCode: replaced.error.code });
-        return Object.freeze({ ok: false, errorCode: replaced.error.code });
+        const errorCode = replaced.error.code;
+        if (enterTerminal(errorCode)) return Object.freeze({ ok: false, errorCode });
+        if (!active || recovery.documentEpoch !== documentEpoch || corruptRecovery !== recovery) {
+          return Object.freeze({ ok: false, errorCode });
+        }
+        if (errorCode === "PERSISTENCE_CONFLICT") {
+          // The stored row is no longer the one the person exported.
+          corruptRecovery = null;
+          update({ ...status, errorCode });
+        }
+        // Storage refused the replacement (full even without history, or a
+        // failed write): the damaged row is still exactly the exported one.
+        // The recovery basis and the corrupt status stay, so Replace can be
+        // tried again, while Retry and archive replacement, which would
+        // compare against a generation this tab never read, stay closed.
+        return Object.freeze({ ok: false, errorCode });
       }
       corruptRecovery = null;
       if (!active || recovery.documentEpoch !== documentEpoch || replacement.tree.id !== activeTreeId) {
@@ -737,6 +761,8 @@ export function createPersistenceController(
       }
       basis = replaced.value;
       persistedHistory = replacement.history;
+      const shed = replacedRetention !== retention;
+      retention = replacedRetention;
       announce(replacement.tree.id, replaced.value.writeGeneration);
       if (pending === replacement) pending = null;
       const queued = pending;
@@ -746,6 +772,7 @@ export function createPersistenceController(
         persistedRevision: replacement.tree.revision,
         dirtyRevision: queued?.tree.revision ?? null,
         errorCode: null,
+        historyNotice: nextHistoryNotice(status.historyNotice, shed, replacedRetention),
       });
       if (queued !== null) void drain();
       return Object.freeze({ ok: true });
