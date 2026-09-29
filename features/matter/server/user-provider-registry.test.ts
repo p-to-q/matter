@@ -569,6 +569,13 @@ describe("user-provider registry", () => {
       "https://mirror.vendor.ai/v1",
     ))!;
     expect(compatible.transport!.serialize(call, 24, compatible.model)).not.toHaveProperty("store");
+    // A vLLM mirror names the stop token it ended on; the official wire never does.
+    const vllmStop = {
+      choices: [{ finish_reason: "stop", stop_reason: 128_009, message: { content: "answer" } }],
+    };
+    expect(compatible.transport!.parseCompletion(vllmStop))
+      .toEqual({ content: "answer", disposition: "complete" });
+    expect(openai.transport!.parseCompletion(vllmStop).disposition).toBe("unknown-terminator");
 
     const deepseek = createUserPoolCandidate(credential(
       "deepseek-current",
