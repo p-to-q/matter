@@ -50,8 +50,13 @@ describe("transcript repair runtime", () => {
   });
 
   it("rejects a repair whose runtime cannot load and fetches it again next time", async () => {
+    // vitest 5 caches the failed mock:… module entry and skips it on
+    // vi.resetModules(), so replacing vi.doMock mid-test does not work.  Use a
+    // single factory that controls success vs. failure via a flag instead.
+    let shouldFail = true;
     vi.doMock("./transcript-repair-port", () => {
-      throw new Error("chunk load failed");
+      if (shouldFail) throw new Error("chunk load failed");
+      return workingPortModule();
     });
     const runtime = await import("./transcript-repair-runtime");
     const repairPort = runtime.createLazyTranscriptRepairPort();
@@ -59,7 +64,7 @@ describe("transcript repair runtime", () => {
     await expect(repairPort.repair(INPUT)).rejects.toThrow();
     expect(runtime.readAdmissionRepairAdjudicator()).toBeNull();
 
-    vi.doMock("./transcript-repair-port", workingPortModule);
+    shouldFail = false;
     await expect(repairPort.repair(INPUT)).resolves.toMatchObject({ source: "rules" });
     expect(runtime.readAdmissionRepairAdjudicator()).toBeTypeOf("function");
   });
