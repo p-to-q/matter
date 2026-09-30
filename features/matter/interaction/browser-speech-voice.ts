@@ -8,6 +8,25 @@ import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 export const SPEECH_START_TIMEOUT_MS = 8_000;
 
+// Only Latin, Cyrillic, Greek, and decimal digits are spaced-script word
+// characters. CJK, kana, and hangul run adjacent characters without breaks.
+const SPACED_SCRIPT_WORD_END = /[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Greek}\d]$/u;
+const SPACED_SCRIPT_WORD_START = /^[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Greek}\d]/u;
+
+/**
+ * Joins two partial transcripts, inserting exactly one space between them when
+ * both ends are word characters of a spaced script. CJK, kana, and hangul are
+ * never separated; existing whitespace at the boundary is never doubled.
+ */
+export function joinTranscript(before: string, after: string): string {
+  if (before.length === 0) return after;
+  if (after.length === 0) return before;
+  if (SPACED_SCRIPT_WORD_END.test(before) && SPACED_SCRIPT_WORD_START.test(after)) {
+    return `${before} ${after}`;
+  }
+  return `${before}${after}`;
+}
+
 type SpeechAlternative = { readonly transcript: string };
 type SpeechResult = ArrayLike<SpeechAlternative> & { readonly isFinal: boolean };
 type SpeechEvent = { readonly resultIndex: number; readonly results: ArrayLike<SpeechResult> };
@@ -157,9 +176,9 @@ export class BrowserSpeechVoicePort implements VoicePort {
         const text = result?.[0]?.transcript ?? "";
         if (result?.isFinal) finalText += text; else interimText += text;
       }
-      if (finalText) this.finalTranscript += finalText;
+      if (finalText) this.finalTranscript = joinTranscript(this.finalTranscript, finalText);
       this.interimTranscript = interimText;
-      const preview = `${this.finalTranscript} ${this.interimTranscript}`.trim();
+      const preview = joinTranscript(this.finalTranscript, this.interimTranscript).trim();
       if (!isWellFormedUnicodeText(preview) || hasPresentedEmoji(preview)) {
         this.fail(new VoiceError("RECORDING_FAILED"));
         return;
@@ -195,7 +214,7 @@ export class BrowserSpeechVoicePort implements VoicePort {
       }
       const operationValue = this.operation!;
       const transcript = normalizeSpokenTranscript({
-        text: `${this.finalTranscript} ${this.interimTranscript}`.trim(),
+        text: joinTranscript(this.finalTranscript, this.interimTranscript).trim(),
         locale: this.locale,
         maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
         maxOutputCodePoints: this.maxTranscriptCodePoints,
