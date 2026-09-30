@@ -204,6 +204,36 @@ describe("Wiki material lexical adapter", () => {
     }
   });
 
+  it("withholds a provisional edit when the occurrence registry is full", () => {
+    const provisionalBasis = provisionalRuleBasis("Codex", 1);
+    const port = createWikiMaterialLexicalPort(
+      () => provisionalBasis,
+      () => canonicalizeWikiText,
+      { mintOccurrence: () => null }, // registry defined but full
+    );
+    // A provisional rule with no available occurrence token must be withheld.
+    expect(canonicalizeMaterialText(port.capture(), {
+      locale: "en-US",
+      channel: "spoken",
+      text: "code x helps",
+    })).toMatchObject({ status: "unchanged", text: "code x helps" });
+  });
+
+  it("applies a confirmed edit unmarked when the occurrence registry is full", () => {
+    const port = createWikiMaterialLexicalPort(
+      () => basis("Codex", 1),
+      () => canonicalizeWikiText,
+      { mintOccurrence: () => null }, // registry defined but full
+    );
+    // A confirmed rule is applied without an occurrence token — human authority
+    // does not depend on the registry.
+    expect(canonicalizeMaterialText(port.capture(), {
+      locale: "en-US",
+      channel: "spoken",
+      text: "code x helps",
+    })).toMatchObject({ status: "changed", text: "Codex helps" });
+  });
+
   it("attributes a routed Latin match to its own ledger and keeps the written heard form", () => {
     const minted: { rule: { locale: string; form: string } }[] = [];
     const port = createWikiMaterialLexicalPort(() => basis("Codex", 3), () => canonicalizeWikiText, {
@@ -253,6 +283,26 @@ describe("Wiki material lexical adapter", () => {
     expect(origins).toEqual(["generated"]);
   });
 });
+
+function provisionalRuleBasis(canonical: string, generation: number): WikiBasis {
+  const compiled = compileWikiRules([{
+    locale: "en-US",
+    channel: "spoken",
+    boundary: "word",
+    form: "code x",
+    canonical,
+    authority: "provisional",
+    provenance: "aggregate-evidence",
+    score: 1,
+  }], generation);
+  if (!compiled.ok) throw new Error(compiled.issues[0]?.message);
+  return Object.freeze({
+    ...EMPTY_WIKI_BASIS,
+    stateRevision: 1,
+    snapshot: compiled.snapshot,
+    confirmedSnapshot: EMPTY_WIKI_BASIS.confirmedSnapshot,
+  });
+}
 
 function basis(canonical: string, generation: number): WikiBasis {
   const transitioned = applyWikiEvent(createEmptyWikiState(), {

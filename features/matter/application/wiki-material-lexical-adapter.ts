@@ -67,7 +67,7 @@ export function createWikiMaterialLexicalPort(
           if (result.status !== "changed") {
             return Object.freeze({ status: "unchanged" });
           }
-          const patches = result.edits.map((edit) => {
+          const patches = result.edits.flatMap((edit) => {
             const rule = snapshot.rules[edit.ruleIndex];
             const occurrence = mintOccurrence(policy, Object.freeze({
               rule: Object.freeze({
@@ -80,12 +80,20 @@ export function createWikiMaterialLexicalPort(
               }),
               origin: occurrenceOrigin(request.channel),
             }));
-            return Object.freeze({
+            // Registry full: the occurrence registry exists but cannot mint a
+            // token. Provisional edits are withheld so they can only settle
+            // after a future attributed occurrence confirms them. Confirmed edits
+            // proceed unmarked — human authority does not depend on attribution.
+            if (occurrence === null && policy.mintOccurrence !== undefined &&
+              rule.authority === "provisional") {
+              return [];
+            }
+            return [Object.freeze({
               start: edit.start,
               end: edit.end,
               replacement: rule.canonical,
               ...(occurrence === null ? {} : { occurrence }),
-            });
+            })];
           });
           return Object.freeze({
             status: "changed",
