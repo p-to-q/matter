@@ -14,8 +14,126 @@ completed, historical, reverted, and superseded sections are trace in
 [`../archive/plans-0.2-history.md`](../archive/plans-0.2-history.md); the index
 at the end of this plan lists them.
 
-## Active campaign — nothing a person does is silently lost; Wiki becomes addressable
+## Active campaign — Wiki made whole, on trustworthy ground (Preview.65–66)
 
+State: frozen 2026-09-30 after Preview.64 shipped (`7383783`). The research
+this round covered code and asset loading, dictation products (闪电说,
+Superwhisper, Typeless, Wispr Flow and others), open-source recognition
+pipelines, IME dictionary engineering, and licences. An adversarial review then
+checked the plan, and each of its blockers was verified in code. The maintainer
+plan and its decision log are in the Preview.65 handoff once it is written.
+
+Owner decisions of 2026-09-30 that reopen earlier freezes:
+
+1. **Ordinary use is evidence, and activation may be aggressive.**
+   - Dwell, not deleting, not undoing, copying, ordinary silence, and leaving
+     the page count as informed acceptance.
+   - Rules may activate early because correction at the word and in Wiki is
+     cheap.
+   - Audits, including Codex's, are advisory.
+2. **Correct… at the word is added.** A small field at a selected word takes a
+   typed spelling or a short voice input. The result commits one human,
+   undoable edit and teaches Wiki the pair. This is a secondary keyboard path.
+   It is accepted and documented as a tension with principle 5, and its voice
+   input keeps it keyboard-optional.
+3. **No review queue, and no wrong→right rows.** The word list may filter
+   auto-added canonical words.
+4. **Near-sound ships,** for Chinese and English, with multi-word names,
+   import from the person's own dictionaries, recognizer hints once measured,
+   and a Wiki data panel. No neural model enters the Wiki path.
+5. **Loading follows the person's path.** The core carries only first paint
+   and the first gesture. Every enhancement is declared, budgeted,
+   preloaded one step before it is needed, and removable.
+6. **Development and Production release come first.** The voice lab that
+   measures Chrome recognition follows.
+
+Facts verified in code that shape the slices:
+- Material has no free-text editing surface, and a node records no origin.
+- Han characters are word constituents, so a Han rule must be segment-aligned:
+  a literal 才料→材料 would rewrite 刚才料到.
+- A locale-less second normalization drops attribution but still commits the
+  canonical text (`material-ingress.ts:225-235`).
+- The qualification digest hashes the Wiki policy files, so Wiki slices build
+  in one serialized lane.
+- `pinyin-pro`'s data is not licence-clean. Readings come from Unicode
+  Unihan.
+
+```text
+Outcome:    Wiki corrects a person's own names and terms from the first
+            hearing, in Chinese and English, including multi-word names, and
+            every rewrite is attributed, disclosed by maturity, and refusable
+            at the word; a person can correct any misheard word where it
+            stands; the person's own dictionaries import; loading follows the
+            person's path under build-proven budgets
+Boundary:   normalization ownership at admission, material lexical ingress,
+            Wiki evidence/activation/settlement policy, the Wiki matcher's
+            boundaries, pronunciation producers and their Unihan asset, the
+            takeover layer, Wiki settings (filter, panel, import), the
+            capability manifest and runtime artifact checks, and the documents
+            that state these contracts
+Invariants: only the tree engine commits material; Wiki never enters a model
+            prompt, wire request, archive, or history; Wiki never observes
+            Material Undo; a provisional rewrite that cannot be attributed is
+            withheld; ambiguity abstains; generated text never teaches; every
+            enhancement is removable; the initial runtime budget is not raised
+Proof:      per-slice focused tests and a Sonnet verifier; qualify:wiki
+            --check; in-context matcher corpora; Chromium e2e per changed
+            journey at laptop and narrow widths; npm run check; npm run
+            test:e2e; three whole-diff verifier rounds per release
+Non-goals:  neural models or LLM correction in the Wiki path, similarity-score
+            fuzzy matching, CC-CEDICT or pinyin-pro data, Traditional/
+            Simplified folding, `.scel`/`.dat` import, a service worker,
+            voice-model tiering, RootedMaterial decomposition, and the #104
+            key ring
+```
+
+Preview.65 slices, in dependency order. The Wiki lane is serialized;
+the loading and voice slices run beside it.
+
+| Slice | Frozen contract (outcome · boundary · key invariants) |
+| --- | --- |
+| C0 cleanup | See the table after this one. |
+| Q0 qualification tooling | `qualify:wiki -- --check` fails on drift and names the changed identity fields. `--print-update` rewrites the `wiki-qualified-*` constants. The updater refuses while any manifest expectation fails, and a second run is a no-op. |
+| F0 attribution | A measured list of initial-graph modules and their import chains. This is input to F1c. It changes no code. |
+| N1 normalization owner | The admission driver owns one locale-bound normalization, and `runtime/admission.ts` stops re-normalizing as `"und"`. Wiki withholds any provisional edit it cannot attribute, and only confirmed rules may ever apply unmarked. Web Speech final results and `onend` restarts join with one space only where two word characters of a spaced script would touch: never for CJK, and never doubling a space. A malformed Whisper chunk drops only its own gap; this is a recorded contract change to `transcript-punctuation.md`. Near-silent audio is not transcribed on the local path, and held words still hold. |
+| W0 Wiki record V8 | Producer family joins the comparable-opportunity key, and channel joins term aging. Both are computed per turn, not stored. Stored: provenance `manual \| imported \| learned \| collected \| starter`, import batch id, `establishedAt`, preferences (near-sound per language, accents, hints), and effectful outcome counters; censored outcomes are counted in memory only. Relation cycles and shadowing are rejected at write time. A newer row becomes a truthful `superseded` state. Load never writes V8; the first real write does, so a rollback to Preview.64 keeps working for anyone who only read. The byte allowance is proven. One in-memory diagnostics receipt owns every panel number. |
+| W1 graded authority | Pronunciation and near-spelling targets are `manual`, `imported`, `starter`, and shape-specific lexemes; collected terms are never targets. A heard form that `Intl.Segmenter` yields as one word-like segment, or that is a Wiki lexeme, is a real word: it never applies on first hearing and needs repeated evidence. A `manual` target applies **at admission on first hearing** when exactly one exact producer key matches and the boundary holds. It is provisional and disclosed with the full morph, and settlement creates the relation. `imported` targets activate on the second observation. While a strike exists, early activation is closed, and the first revert or reject of an early-activated rule tombstones it. Established means three kept settlements without a revert, recorded in `establishedAt`. Provisional rules show morph and mark; established rules show the mark only. The takeover adds **Don't change this** (`explicit-reject`: restore the heard form as one undoable edit, zero the rule, tombstone it). A rename during Wiki… consult settles `inspected-kept`, and after the dialog releases rewrites that word as one undoable edit. A remove settles `explicit-reject`. The word list filters All / Added / Imported / Auto-added, showing canonical words only. |
+| W3a boundaries | A new `segment` boundary: both edges of a match sit on `Intl.Segmenter` word edges of the surrounding text. Han↔Latin script transitions are boundaries, so `我喜欢P to Q的设计` matches. Qualification gains in-context matcher cases: straddling, adjacency, and punctuation. |
+| W7 panel and capability line | **Details** in Wiki settings renders the W0 receipt as numbers only. One truthful capability line: exact-only / near-sound [languages] / full-auto / paused, plus saturated or degraded. Toggles expose `aria-pressed`. |
+| W8 hardening | Export refreshes first and records generation and revision. A strict `matter-wiki.json` import round-trips its own export, and replacing newer state asks for confirmation. Seeded property and state-machine tests cover permutation, same-tick dedupe, language isolation, saturation, migration, concurrent CAS with failing storage, and cross-tab burst. Storage and producer budgets. |
+| F1a honest loaders | No lazy loader swallows a failure silently: each resolves to its documented degraded behaviour plus a content-free receipt. The persistence engine keeps its documented retry contract and shares only the online/visible listener. |
+| F1b capability manifest | `runtime/capability-manifest.ts` holds only build-checkable facts: `id`, `sentinel`, `tier` (`core \| gesture \| on-use \| background \| asset`), and `budgetGzip`. Triggers stay in their owning code. The runtime-artifact check proves each sentinel sits in exactly one chunk, that the chunk is initial only for `core`, and that it is within budget; a planted violation must fail. Every dynamic `import()` targets a manifest module. `deploymentId` is set. A stale-version line ("Matter was updated — reload when ready") appears only on a health-version mismatch and only while material is idle. |
+| D1a principle 7 | Two or three sentences on evidence, early activation, and owning our semantics, plus the product sentence. `changes.md` supersessions are written in the same merge as the code they describe. |
+
+C0 cleanup, owner-approved:
+
+| Area | Action |
+| --- | --- |
+| Dependencies | Merge #109 and #110 to `main`. #111 ships inside the Preview.65 pull request with a worker receipt. |
+| Issues | Close #12, #49, and #68. Re-audit #82, then close it and split any live items. Rewrite #63 and relabel #8. Add current-truth notes to #104, #52, and #34. |
+| Branches and worktrees | Delete merged local and remote branches. Remove finished agent worktrees and merged `tmp/` worktrees. Keep the film branches. |
+| Settings | Auto-delete merged branches. `main` requires `check`. Enable secret scanning and push protection. |
+
+Preview.66 slices, frozen when Preview.65 ships:
+- W2 Chinese near-sound: a Unihan `kMandarin` table of about 32 KB gzip.
+  Polyphones abstain. Tone-exact keys; nasal pairs on by default for manual
+  targets; opt-in accent toggles.
+- W3b: `en-metaphone-v2`, with the sentinel swap recorded, and multi-word
+  names.
+- W6 import: phrases as terms; IME pinyin codes as readings; pairs only from
+  plain text; import batches removable as a whole.
+- W4 Correct…, with its voice input.
+- F1c: an initial-graph diet. The Ask Matter composer moves to the gesture
+  tier.
+- D1b: the system principle and the Capability tiers section.
+- D2: research notes.
+
+After that come the voice lab (L0), recognizer hints (W5: on-device only,
+opt-in, measured), and voice text shape (Preview.67).
+
+## Completed campaign — nothing a person does is silently lost; Wiki becomes addressable
+
+Shipped as Preview.64 (`7383783`, 2026-09-30).
 Handoff: [`../docs/handoff-preview-64.md`](../docs/handoff-preview-64.md).
 
 State: frozen 2026-09-29 after a nine-part audit of `c6027c8` and five external
@@ -123,22 +241,19 @@ Non-goals:  memory, RAG, embeddings, prompt vocabulary, model-managed learning,
             pronunciation without corpus proof
 ```
 
-Still open, in the order they would be taken up:
+Still open. Each item is now owned by a slice of the active campaign above:
 
-1. rejecting or replacing the responsible mapping from the word (reserved;
-   the Wiki surface can still edit or remove the canonical word);
-2. an own-locale rule whose Latin form sits against Han with no space, such as
-   `我喜欢P to Q的设计`, does not match; that is a separate matcher change;
-3. a Wiki row written by a newer Matter reports `PERSISTENCE_UNAVAILABLE`
-   (non-destructive, and it refuses reset); a superseded state with truthful
-   settings copy would match material persistence;
-4. every weight and memory remains a calibration candidate; a real name one
-   internal edit from a canonical (`Engelhart` beside `Engelbart`) can be
-   learned after four turns, and its remedies are making it canonical or two
-   reverts;
-5. English homophone and Mandarin pronunciation producers stay offline, and
-   recognizer-time phrase bias stays gated behind a future recognition
-   adapter.
+1. Rejecting or replacing the responsible mapping from the word → W1.
+2. `我喜欢P to Q的设计` does not match → W3a.
+3. A newer Matter's row reports `PERSISTENCE_UNAVAILABLE` → W0's `superseded`
+   state.
+4. Every weight and memory remains a calibration candidate. Under W1, a real
+   name one internal edit from a manual canonical (`Engelhart` beside
+   `Engelbart`) may be rewritten once on first hearing. It is disclosed with
+   the morph, and one Don't change tombstones it.
+5. Pronunciation producers → W2 and W3b, which ship in Preview.66.
+   Recognizer-time phrase bias → W5, after the voice lab, on-device and
+   opt-in only.
 
 ## Active correction — user-supplied material model surfaces
 
