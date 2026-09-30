@@ -1,4 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// Intercept admissionToTreeCommand so the fail-safe test can force the second
+// call to return a command whose stored text differs from canonical.text.
+type AdmitFn = typeof import("../runtime/admission").admissionToTreeCommand;
+const admitMock = vi.hoisted(() => ({
+  fn: vi.fn(),
+  real: null as null | AdmitFn,
+}));
+
+vi.mock("../runtime/admission", async (importOriginal) => {
+  const real = await importOriginal() as typeof import("../runtime/admission");
+  admitMock.real = real.admissionToTreeCommand;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (admitMock.fn as any).mockImplementation(real.admissionToTreeCommand);
+  return { ...real, admissionToTreeCommand: admitMock.fn as unknown as AdmitFn };
+});
 import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import type { MatterLocale } from "../config/locales";
 import {
@@ -215,6 +231,87 @@ describe("MaterialIngress admission preparation", () => {
       },
       lexicalOccurrences: null,
     });
+  });
+});
+
+describe("MaterialIngress admission fail-safe (follow-up 2)", () => {
+  afterEach(() => {
+    // Restore the real implementation after any per-test override.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if (admitMock.real) (admitMock.fn as any).mockImplementation(admitMock.real);
+  });
+
+  it("commits heard text with withheld receipt when admitted text diverges from canonical", () => {
+    // This branch is unreachable through the normal API (Task N1 invariant).
+    // Force it by making the second admissionToTreeCommand call store a text
+    // that differs from canonical.text — simulating a future divergence.
+    const tree = createEmptyTree("tree_ingress");
+    const navigation = createNavigationState();
+    const anchored = createAdmissionAnchor(tree, navigation);
+    if (!anchored.ok) throw new Error(anchored.error.code);
+
+    const real = admitMock.real!;
+    let callIndex = 0;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (admitMock.fn as any).mockImplementation((...args: Parameters<AdmitFn>) => {
+      const [t, nav, anchor, vals] = args;
+      callIndex++;
+      if (callIndex === 2) {
+        // Return a command whose stored text ("DIVERGED") != canonical.text ("Codex."),
+        // triggering the fail-safe without poisoning rawAdmittedText.
+        return {
+          ok: true,
+          command: {
+            id: vals.commandId,
+            source: "human" as const,
+            interactionId: vals.interactionId,
+            expectedTreeId: t.id,
+            expectedRevision: t.revision,
+            createdAt: vals.createdAt,
+            mutation: {
+              type: "initialize-root" as const,
+              root: {
+                id: vals.nodeId,
+                text: "DIVERGED",
+                parentId: null,
+                children: [],
+                createdAt: vals.createdAt,
+                updatedAt: vals.createdAt,
+              },
+            },
+          },
+        };
+      }
+      return real(t, nav, anchor, vals);
+    });
+
+    // Session maps "code x" → "Codex"; after normalization the raw text is "code x."
+    const session = confirmedSession("spoken", "code x", "Codex", 5);
+    const result = prepareAdmissionIngress({
+      tree,
+      navigation,
+      anchor: anchored.anchor,
+      values: admissionValues("code x"),
+      locale: "en-US",
+      lexicalSession: session,
+    });
+
+    // Fail-safe: raw.command (heard text) committed; withheld receipt; no occurrences.
+    expect(result).toMatchObject({
+      ok: true,
+      admittedText: "code x.",
+      receipt: {
+        stage: "admission",
+        canonicalizationWithheld: true,
+        editCount: 0,
+      },
+      lexicalOccurrences: null,
+    });
+    if (result.ok) {
+      const mutation = result.command.mutation;
+      // mutation carries the heard/raw normalized text, not the diverged "DIVERGED" text
+      expect(mutation.type === "initialize-root" && mutation.root.text).toBe("code x.");
+    }
   });
 });
 

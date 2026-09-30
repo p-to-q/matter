@@ -91,6 +91,28 @@ describe("joinTranscript", () => {
     // after starts with space: not a word char, no space inserted
     expect(joinTranscript("hello", " world")).toBe("hello world");
   });
+
+  it("inserts a space after sentence punctuation before a spaced-script word", () => {
+    // coordinator-mandated cases (follow-up 1)
+    expect(joinTranscript("hello.", "world")).toBe("hello. world");
+    expect(joinTranscript("Yes,", "maybe")).toBe("Yes, maybe");
+  });
+
+  it("does not insert a space for decimal continuation (digit+period/comma before digit)", () => {
+    // coordinator-mandated case (follow-up 1)
+    expect(joinTranscript("3.", "5")).toBe("3.5");
+    expect(joinTranscript("3,", "4")).toBe("3,4");
+  });
+
+  it("never inserts a space after CJK sentence-ending punctuation", () => {
+    // coordinator-mandated case (follow-up 1) — CJK fast path via WORD_START
+    expect(joinTranscript("你好。", "世界")).toBe("你好。世界");
+  });
+
+  it("inserts a space after a closing bracket following a spaced-script word", () => {
+    // coordinator-mandated case (follow-up 1)
+    expect(joinTranscript("end)", "next")).toBe("end) next");
+  });
 });
 
 describe("BrowserSpeechVoicePort", () => {

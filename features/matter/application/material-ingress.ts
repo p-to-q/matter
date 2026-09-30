@@ -231,14 +231,18 @@ export function prepareAdmissionIngress(
     });
   }
 
-  // Safety net: admission-driver is the sole locale-bound normalization owner
-  // (Task N1). Under normal operation admittedText === canonical.text always.
-  // If a future normalization divergence re-emerges, all provisional wiki edits
-  // are withheld (occurrences stays null) so unattributable automatic edits
-  // cannot silently commit. The canonical text is still admitted.
-  const occurrences = admittedText === canonical.text
-    ? attributeOccurrences("spoken", input.locale, admittedText, canonical, 0)
-    : null;
+  // Invariant: under Task N1, admittedText === canonical.text always holds;
+  // this branch guards against future normalization divergence re-emerging.
+  if (admittedText !== canonical.text) {
+    return Object.freeze({
+      ok: true,
+      command: raw.command,
+      admittedText: rawAdmittedText,
+      receipt: withheldReceipt("admission", input.lexicalSession),
+      lexicalOccurrences: null,
+    });
+  }
+  const occurrences = attributeOccurrences("spoken", input.locale, admittedText, canonical, 0);
   return Object.freeze({
     ok: true,
     command: translated.command,
