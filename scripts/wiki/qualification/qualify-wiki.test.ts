@@ -27,6 +27,8 @@ import type { WikiQualifiedLearningPolicyRelease } from
   "../../../features/matter/wiki/wiki-qualified-learning-policy";
 import { MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES } from
   "../../../features/matter/wiki/wiki-qualified-producer-releases";
+import { MATTER_WIKI_RUNTIME_PRODUCER_RELEASES } from
+  "../../../features/matter/wiki/wiki-runtime-producer-releases";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 
@@ -248,6 +250,76 @@ describe("applyProducerReleasesUpdate", () => {
       const updated = applyProducerReleasesUpdate(
         source,
         MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES,
+      );
+      expect(updated).toBe(source);
+    });
+});
+
+// ── applyProducerReleasesUpdate on the runtime file ──────────────────────
+
+describe("applyProducerReleasesUpdate (runtime file)", () => {
+  it("replaces digests for each runtime release() call", () => {
+    // Minimal source that mimics the file format for latin-internal-edit-v2.
+    const source = [
+      "export const MATTER_WIKI_RUNTIME_PRODUCER_RELEASES = Object.freeze([",
+      "  release(",
+      "    \"latin-internal-edit-v2\",",
+      "    \"2.2.0\",",
+      "    \"sha256:" + "a".repeat(64) + "\",",
+      "    \"ascii-latin\",",
+      "    \"1.2.0\",",
+      "    \"sha256:" + "b".repeat(64) + "\",",
+      "    \"latin-internal-edit-corpus/3\",",
+      "    \"sha256:" + "c".repeat(64) + "\",",
+      "  ),",
+      "]) satisfies readonly WikiQualifiedProducerRelease[];",
+    ].join("\n");
+
+    const updatedReleases = MATTER_WIKI_RUNTIME_PRODUCER_RELEASES.map((r) =>
+      r.identity.producerId === "latin-internal-edit-v2"
+        ? {
+            ...r,
+            identity: {
+              ...r.identity,
+              producerDigest: "sha256:" + "1".repeat(64),
+              resourceDigest: "sha256:" + "2".repeat(64),
+            },
+            corpus: { ...r.corpus, corpusDigest: "sha256:" + "3".repeat(64) },
+          }
+        : r,
+    );
+
+    const updated = applyProducerReleasesUpdate(source, updatedReleases);
+    expect(updated).toContain(`"sha256:${"1".repeat(64)}"`);
+    expect(updated).toContain(`"sha256:${"2".repeat(64)}"`);
+    expect(updated).toContain(`"sha256:${"3".repeat(64)}"`);
+    expect(updated).not.toContain(`"sha256:${"a".repeat(64)}"`);
+    expect(updated).not.toContain(`"sha256:${"b".repeat(64)}"`);
+    expect(updated).not.toContain(`"sha256:${"c".repeat(64)}"`);
+  });
+
+  it("does not touch qualified-only producers when applied to the runtime file", async () => {
+    const path = resolve(ROOT, "features/matter/wiki/wiki-runtime-producer-releases.ts");
+    const source = await readFile(path, "utf8");
+
+    // en-metaphone-v1 lives in wiki-qualified-producer-releases.ts, not here.
+    // Applying its release record to the runtime file must leave the source unchanged.
+    const before = source.match(/en-metaphone-v1/g)?.length ?? 0;
+    const updated = applyProducerReleasesUpdate(
+      source,
+      MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES,
+    );
+    const after = updated.match(/en-metaphone-v1/g)?.length ?? 0;
+    expect(after).toBe(before);
+  });
+
+  it("is idempotent: applying the committed runtime releases to the runtime file is a no-op",
+    async () => {
+      const path = resolve(ROOT, "features/matter/wiki/wiki-runtime-producer-releases.ts");
+      const source = await readFile(path, "utf8");
+      const updated = applyProducerReleasesUpdate(
+        source,
+        MATTER_WIKI_RUNTIME_PRODUCER_RELEASES,
       );
       expect(updated).toBe(source);
     });

@@ -6,8 +6,11 @@
  *
  * `updateWikiQualification` re-runs the same computation, refuses to write
  * if any manifest scenario or producer decision fails (no laundering of
- * regressions), and then rewrites the digest constants in
- * `features/matter/wiki/wiki-qualified-*.ts` in place, preserving formatting.
+ * regressions), and then rewrites the digest constants in all three
+ * constants files in place, preserving formatting:
+ *   - `features/matter/wiki/wiki-qualified-learning-policy.ts`
+ *   - `features/matter/wiki/wiki-qualified-producer-releases.ts`
+ *   - `features/matter/wiki/wiki-runtime-producer-releases.ts`
  *
  * Both pure helper functions (`applyLearningPolicyUpdate`,
  * `applyProducerReleasesUpdate`) are exported for deterministic unit tests
@@ -37,6 +40,8 @@ const LEARNING_POLICY_FILE =
   "features/matter/wiki/wiki-qualified-learning-policy.ts";
 const PRODUCER_RELEASES_FILE =
   "features/matter/wiki/wiki-qualified-producer-releases.ts";
+const RUNTIME_PRODUCER_RELEASES_FILE =
+  "features/matter/wiki/wiki-runtime-producer-releases.ts";
 
 // ---------------------------------------------------------------------------
 // Diff types
@@ -276,10 +281,14 @@ export function assertQualificationPassed(
 }
 
 /**
- * Re-runs both qualifications and rewrites the digest constants in
- * `features/matter/wiki/wiki-qualified-*.ts`. Throws with the failing
- * scenario or producer IDs if any check fails, refusing to launder a
- * behaviour regression into new digests.
+ * Re-runs both qualifications and rewrites the digest constants in all three
+ * constants files. Throws with the failing scenario or producer IDs if any
+ * check fails, refusing to launder a behaviour regression into new digests.
+ *
+ * Files written:
+ *   - `wiki-qualified-learning-policy.ts`
+ *   - `wiki-qualified-producer-releases.ts`
+ *   - `wiki-runtime-producer-releases.ts`
  */
 export async function updateWikiQualification(): Promise<void> {
   const [policyRun, producerRun] = await Promise.all([
@@ -298,6 +307,15 @@ export async function updateWikiQualification(): Promise<void> {
     })(),
     (async () => {
       const path = resolve(ROOT, PRODUCER_RELEASES_FILE);
+      const source = await readFile(path, "utf8");
+      const updated = applyProducerReleasesUpdate(
+        source,
+        producerRun.qualification.qualifiedProducers,
+      );
+      await writeFile(path, updated, "utf8");
+    })(),
+    (async () => {
+      const path = resolve(ROOT, RUNTIME_PRODUCER_RELEASES_FILE);
       const source = await readFile(path, "utf8");
       const updated = applyProducerReleasesUpdate(
         source,
