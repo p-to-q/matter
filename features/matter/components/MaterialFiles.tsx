@@ -1,5 +1,7 @@
 "use client";
 
+// Loads with this lazy chunk; nothing in the initial graph renders these classes.
+import "./MaterialFiles.css";
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
@@ -25,6 +27,7 @@ import type { ThoughtTree } from "../tree/model";
 import type { MaterialFileRow } from "../material/material-files";
 import { ChevronIcon, CopyIcon, MinusIcon, PlusIcon, SearchIcon, SidebarIcon } from "./icons";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
+import type { StoredReloadOutcome } from "../persistence/persistence-status";
 import { allocateSnapshotPath } from "../persistence/snapshot-paths";
 import { projectMaterialFilesSurface } from "./material-files-surface";
 import {
@@ -32,8 +35,14 @@ import {
   projectMaterialFileWindow,
   scrollTopForMaterialFileIndex,
 } from "./material-file-window";
-import { isCancelEscape, isCommitEnter } from "./composition-safe-keys";
+import { isCancelEscape, isCommitEnter, isImeKeydown } from "./composition-safe-keys";
+import { useEscapeLayer } from "./escape-layers";
 import { materialFilesCopy, type MaterialFilesCopy } from "./material-files-copy";
+import {
+  isTerminalDurability,
+  projectArchiveNote,
+  projectDurabilityLine,
+} from "./durability-line";
 import { projectMaterialFileGuideEdges, projectMaterialFileGuideSegments } from "./material-file-guides";
 import { projectMaterialFileTerminalMarkerIds } from "./material-file-terminal-markers";
 import {
@@ -64,8 +73,12 @@ export type MaterialFilesProps = Readonly<{
   locale: MatterLocale;
   navigation: NavigationState;
   onFocusNode: (nodeId: string) => void;
+  /** Reports which passages reached the clipboard; ids only, never text. */
+  onMaterialCopied?: (nodeIds: ReadonlySet<string>) => void;
   /** Reports only the transient narrow disclosure; docked presentation is false. */
   onOverlayChange?: (open: boolean) => void;
+  /** A thought name or the canvas title is being typed; a document switch would drop it. */
+  onEditingChange?: (editing: boolean) => void;
   /** Returns transient canvas tools before the narrow overlay takes focus. */
   onOpenOverlay?: () => void;
   /** Restores a held search result without unexpectedly narrowing full view. */
@@ -93,7 +106,12 @@ export type MaterialFilesProps = Readonly<{
   persistence: Readonly<{
     status: PersistenceStatus;
     retry: () => void;
-    resolveConflict: () => void;
+    /** Reloads stored material over a conflict; refused while work is in progress. */
+    resolveConflict: () => Promise<StoredReloadOutcome> | void;
+    /** Opening Archive, where recovery lives, is where the notice is read. */
+    acknowledgeHistoryNotice?: () => void;
+    /** Whether the browser keeps this origin's storage out of eviction. */
+    storagePersisted?: boolean | null;
   }>;
 }>;
 
@@ -112,6 +130,8 @@ export type MaterialArchiveActionResult =
       ok: true;
       /** Present only after a corrupt row has been exported by this action. */
       repairCorrupt?: () => Promise<MaterialArchiveActionResult>;
+      /** A validated archive older than the current material. */
+      olderThanCurrent?: boolean;
     }>
   | Readonly<{ ok: false; message: string }>;
 
@@ -119,12 +139,21 @@ export type MaterialArchiveActionResult =
  * `validateImport` must not mutate the current document. `replaceImport` is
  * called only after the person confirms replacement and must perform the
  * persistence CAS and runtime document switch as one operation.
+ * `replaceUnsaved` is set only when the person confirmed replacing material
+ * storage refused.
  */
 export type MaterialArchiveActions = Readonly<{
+  /** Opening Archive is the intent signal: its actions' code loads before a press. */
+  prepare?: () => void;
   exportCopy: () => Promise<MaterialArchiveActionResult>;
   validateImport: (file: File) => Promise<MaterialArchiveActionResult>;
-  replaceImport: (file: File) => Promise<MaterialArchiveActionResult>;
+  replaceImport: (
+    file: File,
+    options: Readonly<{ replaceUnsaved: boolean }>,
+  ) => Promise<MaterialArchiveActionResult>;
 }>;
+
+type PreparedImport = Readonly<{ file: File; olderThanCurrent: boolean }>;
 
 export function MaterialFiles(props: MaterialFilesProps) {
   const copy = materialFilesCopy(props.locale);
@@ -145,7 +174,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const [showSaving, setShowSaving] = useState(false);
   const [archivePhase, setArchivePhase] = useState<ArchivePhase>("idle");
   const [archiveError, setArchiveError] = useState<string | null>(null);
-  const [preparedImport, setPreparedImport] = useState<File | null>(null);
+  const [preparedImport, setPreparedImport] = useState<PreparedImport | null>(null);
+  // Opening Archive acknowledges a history notice; its note stays readable
+  // for as long as the panel that explains it is open.
+  const [archiveHistoryNotice, setArchiveHistoryNotice] =
+    useState<PersistenceStatus["historyNotice"]>(null);
   const [corruptRepair, setCorruptRepair] = useState<(() => Promise<MaterialArchiveActionResult>) | null>(null);
   const [scrollMetrics, setScrollMetrics] = useState({ top: 0, height: 0 });
   const [rowHeight, setRowHeight] = useState(40);
@@ -169,6 +202,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const renameCommitRef = useRef<string | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
+  const asideRef = useRef<HTMLElement>(null);
   const searchTriggerRef = useRef<HTMLButtonElement>(null);
   const rowRefs = useRef(new Map<string, HTMLLIElement>());
   const pendingRowFocusRef = useRef<string | null>(null);
@@ -483,6 +517,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
   // What they typed, when the editor was reopened because the write failed.
   const activeRenameDraft = activeRename === null ? undefined : renaming?.draft;
   const renameEnabled = props.onRenameNode !== undefined && props.onResetNodeName !== undefined;
+  const reportEditing = props.onEditingChange;
+  const editing = activeRename !== null || renamingDocument;
+  useEffect(() => {
+    reportEditing?.(editing);
+  }, [editing, reportEditing]);
+  useEffect(() => () => reportEditing?.(false), [reportEditing]);
 
   const beginRename = (nodeId: string) => {
     // A stale projection blocks actions that depend on *which* rows are shown.
@@ -516,20 +556,23 @@ export function MaterialFiles(props: MaterialFilesProps) {
     const mutation = trimmed.length === 0
       ? props.onResetNodeName?.(nodeId)
       : props.onRenameNode?.(nodeId, trimmed);
+    // A name that did not reach disk is not a name they have. Returning the row
+    // to its editor, with what they typed still in it and a described reason,
+    // says what an empty field after a reload used to say silently, while
+    // there is still something to do about it. The epoch is read live: the
+    // document may have been replaced while the write was settling.
+    const reopenWithDraft = () => {
+      if (liveDocumentEpochRef.current !== epochAtCommit) return;
+      // Never replace a name the person has since started typing elsewhere.
+      setRenaming((current) => current === null
+        ? { epoch: epochAtCommit, nodeId, draft: trimmed }
+        : current);
+    };
     void Promise.resolve(mutation).then(
       (receipt) => {
-        // A name that did not reach disk is not a name they have. Returning the
-        // row to its editor, with what they typed still in it, is the whole
-        // signal: it says the same thing an empty field after a reload used to
-        // say silently, while there is still something to do about it.
-        if (
-          receipt !== undefined && receipt !== null && receipt.ok === false &&
-          props.documentEpoch === epochAtCommit
-        ) {
-          setRenaming({ epoch: epochAtCommit, nodeId, draft: trimmed });
-        }
+        if (receipt !== undefined && receipt !== null && receipt.ok === false) reopenWithDraft();
       },
-      () => undefined,
+      reopenWithDraft,
     ).finally(() => {
       if (renameCommitRef.current === mutationKey) renameCommitRef.current = null;
     });
@@ -611,9 +654,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
     [props.documentEpoch, props.tree.nodes, selectionState],
   );
   const selectedCount = currentSelectedIds.size;
-  const persistenceFailed = props.persistence.status.phase === "error";
-  const storageFull = props.persistence.status.errorCode === "PERSISTENCE_STORAGE_FULL";
-  const corrupt = props.persistence.status.errorCode === "PERSISTENCE_CORRUPT";
+  const persistenceStatus = props.persistence.status;
+  const storageFull = persistenceStatus.errorCode === "PERSISTENCE_STORAGE_FULL";
+  const corrupt = persistenceStatus.errorCode === "PERSISTENCE_CORRUPT";
+  const durability = projectDurabilityLine(persistenceStatus, showSaving, copy);
+  const terminalDurability = isTerminalDurability(persistenceStatus);
   const activeLineageIds = useMemo(() => {
     const lineage = new Set<string>();
     let current = activeNodeId === null ? null : props.tree.nodes[activeNodeId]?.parentId ?? null;
@@ -644,12 +689,6 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setMode("browse");
   };
 
-  const closeOverlay = () => {
-    if (docked || archiveBusy) return;
-    setOpen(false);
-    requestAnimationFrame(() => toggleRef.current?.focus());
-  };
-
   const focusRowAt = (index: number) => {
     const file = files[index];
     const body = bodyRef.current;
@@ -677,7 +716,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     heldAside: boolean,
   ) => {
     if (
-      event.target !== event.currentTarget || event.nativeEvent.isComposing ||
+      event.target !== event.currentTarget || isImeKeydown(event.nativeEvent) ||
       surface.rowInteractionDisabled
     ) return;
     if (event.key === "F2" && mode === "browse") {
@@ -736,6 +775,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     try {
       await navigator.clipboard.writeText(result.text);
       settleCopyState("copied", copyResetRef, setCopyState);
+      props.onMaterialCopied?.(new Set(currentSelectedIds));
     } catch {
       settleCopyState("failed", copyResetRef, setCopyState);
     }
@@ -744,12 +784,38 @@ export function MaterialFiles(props: MaterialFilesProps) {
   // A document boundary must not race a live voice/lasso operation. The panel
   // stays visible, but replacement waits until the current interaction settles.
   const archiveBusy = archivePhase !== "idle" || props.interactionPending;
+
+  // The overlay drawer is a panel above the paper; the docked index is not.
+  // While busy it stays open, and it still owns the key: Escape must not fall
+  // through to a paper surface beneath the drawer the person sees on top.
+  useEscapeLayer(!docked && open, "panel", () => {
+    if (archiveBusy) return true;
+    // Keyboard authority returns to the external handle only when the drawer
+    // held it; Escape from the paper must not pull focus into the corner.
+    const active = document.activeElement;
+    const drawerHeldFocus = active === null || active === document.body ||
+      asideRef.current?.contains(active) === true;
+    setOpen(false);
+    if (drawerHeldFocus) requestAnimationFrame(() => toggleRef.current?.focus());
+    return true;
+  });
+
   const closeArchive = () => {
     if (archiveBusy) return;
     setArchiveError(null);
     setPreparedImport(null);
     setCorruptRepair(null);
+    setArchiveHistoryNotice(null);
     setMode("browse");
+  };
+  const openArchive = () => {
+    setCopyState("idle");
+    setArchiveError(null);
+    setPreparedImport(null);
+    setArchiveHistoryNotice(persistenceStatus.historyNotice);
+    props.archive?.prepare?.();
+    setMode("archive");
+    props.persistence.acknowledgeHistoryNotice?.();
   };
 
   const exportArchive = async () => {
@@ -767,9 +833,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
           setCorruptRepair(() => repair);
         }
       }
-    } catch (error) {
+    } catch {
       if (liveDocumentEpochRef.current === documentEpoch) {
-        setArchiveError(actionErrorMessage(error));
+        setArchiveError(actionErrorMessage(copy));
       }
     } finally {
       if (liveDocumentEpochRef.current === documentEpoch) setArchivePhase("idle");
@@ -794,9 +860,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
       } else {
         setArchiveError(result.message);
       }
-    } catch (error) {
+    } catch {
       if (liveDocumentEpochRef.current === documentEpoch) {
-        setArchiveError(actionErrorMessage(error));
+        setArchiveError(actionErrorMessage(copy));
       }
     } finally {
       if (liveDocumentEpochRef.current === documentEpoch) setArchivePhase("idle");
@@ -812,14 +878,29 @@ export function MaterialFiles(props: MaterialFilesProps) {
     try {
       const result = await props.archive.validateImport(file);
       if (liveDocumentEpochRef.current !== documentEpoch) return;
-      if (result.ok) setPreparedImport(file);
+      if (result.ok) setPreparedImport({ file, olderThanCurrent: result.olderThanCurrent === true });
       else setArchiveError(result.message);
-    } catch (error) {
+    } catch {
       if (liveDocumentEpochRef.current === documentEpoch) {
-        setArchiveError(actionErrorMessage(error));
+        setArchiveError(actionErrorMessage(copy));
       }
     } finally {
       if (liveDocumentEpochRef.current === documentEpoch) setArchivePhase("idle");
+    }
+  };
+
+  const reloadStoredMaterial = async () => {
+    if (archiveBusy) return;
+    const documentEpoch = props.documentEpoch;
+    setArchiveError(null);
+    try {
+      const outcome = await props.persistence.resolveConflict();
+      if (liveDocumentEpochRef.current !== documentEpoch) return;
+      if (outcome === "busy") setArchiveError(copy.archiveErrorBusy);
+    } catch {
+      if (liveDocumentEpochRef.current === documentEpoch) {
+        setArchiveError(actionErrorMessage(copy));
+      }
     }
   };
 
@@ -829,7 +910,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setArchiveError(null);
     setArchivePhase("replacing");
     try {
-      const result = await props.archive.replaceImport(preparedImport);
+      const result = await props.archive.replaceImport(preparedImport.file, {
+        replaceUnsaved: persistenceStatus.replaceableByImport,
+      });
       if (liveDocumentEpochRef.current !== documentEpoch) return;
       if (result.ok) {
         setPreparedImport(null);
@@ -837,9 +920,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
       } else {
         setArchiveError(result.message);
       }
-    } catch (error) {
+    } catch {
       if (liveDocumentEpochRef.current === documentEpoch) {
-        setArchiveError(actionErrorMessage(error));
+        setArchiveError(actionErrorMessage(copy));
       }
     } finally {
       if (liveDocumentEpochRef.current === documentEpoch) setArchivePhase("idle");
@@ -854,12 +937,13 @@ export function MaterialFiles(props: MaterialFilesProps) {
           aria-expanded={open}
           aria-label={open
             ? copy.hideMaterialFiles
-            : persistenceFailed
+            : durability.tone === "risk"
               ? copy.showMaterialFilesSavingNeedsAttention
               : copy.showMaterialFiles}
           className="material-files-toggle"
           data-canvas-interactive
-          data-persistence-error={persistenceFailed || undefined}
+          data-durability={durability.tone === "quiet" ? undefined : durability.tone}
+          data-persistence-error={durability.tone === "risk" || undefined}
           onClick={() => {
             if (!open) props.onOpenOverlay?.();
             setOpen((value) => !value);
@@ -868,6 +952,11 @@ export function MaterialFiles(props: MaterialFilesProps) {
           type="button"
         >
           <SidebarIcon />
+          {/* A closed index still shows that its line needs reading; static,
+              never a badge count or a pulse. */}
+          {durability.tone === "quiet" ? null : (
+            <span aria-hidden="true" className="material-files-toggle__dot" />
+          )}
         </button>
       )}
       <div className="material-files__clip" data-open={open || undefined}>
@@ -883,15 +972,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
         data-query-projection-stale={surface.queryProjectionStale || undefined}
         id="material-files"
         inert={!open || surface.projectionStale}
-        onKeyDown={(event) => {
-          if (
-            event.defaultPrevented ||
-            !isCancelEscape({ key: event.key, isComposing: event.nativeEvent.isComposing })
-          ) return;
-          event.preventDefault();
-          closeOverlay();
-        }}
         onPointerDown={stopPointerPropagation}
+        ref={asideRef}
         onWheel={stopWheelPropagation}
       >
         <header className="material-files__context" data-node-id={rootId ?? undefined}>
@@ -909,12 +991,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
               onKeyDown={(event) => {
                 // The canvas title is durable material: blurring here commits
                 // it, so an IME composition must never reach either branch.
-                const composing = event.nativeEvent.isComposing;
-                if (isCancelEscape({ key: event.key, isComposing: composing })) {
+                if (isCancelEscape(event.nativeEvent)) {
                   event.preventDefault();
                   setDocumentTitleDraft(documentTitle);
                   setRenamingDocument(false);
-                } else if (isCommitEnter({ key: event.key, isComposing: composing })) {
+                } else if (isCommitEnter(event.nativeEvent)) {
+                  event.preventDefault();
                   event.currentTarget.blur();
                 }
               }}
@@ -957,11 +1039,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
                 autoFocus
                 onChange={(event) => setQuery(event.currentTarget.value)}
                 onKeyDown={(event) => {
-                  const composing = event.nativeEvent.isComposing;
-                  if (isCancelEscape({ key: event.key, isComposing: composing })) {
+                  if (isCancelEscape(event.nativeEvent)) {
                     event.preventDefault();
                     closeSearch();
-                  } else if (!composing && event.key === "ArrowDown" && files.length > 0) {
+                  } else if (
+                    !isImeKeydown(event.nativeEvent) && event.key === "ArrowDown" && files.length > 0
+                  ) {
                     event.preventDefault();
                     focusRowAt(0);
                   }
@@ -1008,12 +1091,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
               {props.archive !== undefined ? (
                 <button
                   className="material-files__mode-action material-files__mode-action--archive"
-                  onClick={() => {
-                    setCopyState("idle");
-                    setArchiveError(null);
-                    setPreparedImport(null);
-                    setMode("archive");
-                  }}
+                  data-attention={durability.tone === "quiet" ? undefined : durability.tone}
+                  onClick={openArchive}
                   type="button"
                 >
                   {copy.archive}
@@ -1036,17 +1115,29 @@ export function MaterialFiles(props: MaterialFilesProps) {
             inputRef={archiveInputRef}
             phase={archivePhase}
             preparedImport={preparedImport}
+            replacesUnsaved={persistenceStatus.replaceableByImport && persistenceStatus.unsaved}
+            note={projectArchiveNote(
+              persistenceStatus,
+              archiveHistoryNotice,
+              props.persistence.storagePersisted ?? null,
+              copy,
+            )}
             corrupt={corrupt}
             corruptExported={corruptRepair !== null}
-            conflict={props.persistence.status.errorCode === "PERSISTENCE_CONFLICT"}
-            saveFailed={persistenceFailed && !storageFull && !corrupt && props.persistence.status.errorCode !== "PERSISTENCE_CONFLICT"}
-            storageFull={storageFull}
+            conflict={persistenceStatus.errorCode === "PERSISTENCE_CONFLICT"}
+            retryable={
+              storageFull ||
+              persistenceStatus.errorCode === "PERSISTENCE_WRITE_FAILED" ||
+              persistenceStatus.errorCode === "PERSISTENCE_UNAVAILABLE" ||
+              persistenceStatus.errorCode === "PERSISTENCE_ENGINE_UNAVAILABLE"
+            }
+            terminal={terminalDurability}
             onClose={closeArchive}
             onExport={() => void exportArchive()}
             onPickImport={() => archiveInputRef.current?.click()}
             onReplace={() => void replaceArchiveImport()}
             onRepairCorrupt={() => void repairCorruptStorage()}
-            onReloadStored={props.persistence.resolveConflict}
+            onReloadStored={() => void reloadStoredMaterial()}
             onRetrySave={props.persistence.retry}
             onSelectImport={(file) => void validateArchiveImport(file)}
           />
@@ -1238,37 +1329,45 @@ export function MaterialFiles(props: MaterialFilesProps) {
                         <span className="material-file__title" dir="auto">{title}</span>
                       </label>
                     ) : activeRename === file.nodeId ? (
-                      <input
-                        aria-label={copy.nameFor(title)}
-                        autoFocus
-                        className="material-file__rename"
-                        defaultValue={activeRenameDraft ?? title}
-                        dir="auto"
-                        maxLength={MAX_ROW_NAME_CODE_UNITS}
-                        onBlur={(event) => {
-                          // The pointer sequence that opened this editor can
-                          // still be delivering events; a blur before the field
-                          // has ever held focus is that, not a person leaving.
-                          if (!renameFocusedRef.current) return;
-                          commitRename(file.nodeId, event.currentTarget.value);
-                        }}
-                        onFocus={() => {
-                          renameFocusedRef.current = true;
-                        }}
-                        onKeyDown={(event) => {
-                          const composing = event.nativeEvent.isComposing;
-                          if (isCommitEnter({ key: event.key, isComposing: composing })) {
-                            event.preventDefault();
-                            commitRename(file.nodeId, event.currentTarget.value, true);
-                          } else if (isCancelEscape({ key: event.key, isComposing: composing })) {
-                            event.preventDefault();
-                            setRenaming(null);
-                            returnFocusToRow(file.nodeId);
-                          }
-                        }}
-                        spellCheck={false}
-                        type="text"
-                      />
+                      <>
+                        <input
+                          aria-describedby={activeRenameDraft === undefined ? undefined : `${file.nodeId}-name-not-saved`}
+                          aria-invalid={activeRenameDraft === undefined ? undefined : true}
+                          aria-label={copy.nameFor(title)}
+                          autoFocus
+                          className="material-file__rename"
+                          defaultValue={activeRenameDraft ?? title}
+                          dir="auto"
+                          maxLength={MAX_ROW_NAME_CODE_UNITS}
+                          onBlur={(event) => {
+                            // The pointer sequence that opened this editor can
+                            // still be delivering events; a blur before the field
+                            // has ever held focus is that, not a person leaving.
+                            if (!renameFocusedRef.current) return;
+                            commitRename(file.nodeId, event.currentTarget.value);
+                          }}
+                          onFocus={() => {
+                            renameFocusedRef.current = true;
+                          }}
+                          onKeyDown={(event) => {
+                            if (isCommitEnter(event.nativeEvent)) {
+                              event.preventDefault();
+                              commitRename(file.nodeId, event.currentTarget.value, true);
+                            } else if (isCancelEscape(event.nativeEvent)) {
+                              event.preventDefault();
+                              setRenaming(null);
+                              returnFocusToRow(file.nodeId);
+                            }
+                          }}
+                          spellCheck={false}
+                          type="text"
+                        />
+                        {activeRenameDraft === undefined ? null : (
+                          <span className="visually-hidden" id={`${file.nodeId}-name-not-saved`}>
+                            {copy.nameNotSaved}
+                          </span>
+                        )}
+                      </>
                     ) : (
                       <button
                         aria-current={active ? "page" : undefined}
@@ -1287,7 +1386,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
                         }}
                         onDoubleClick={() => beginRename(file.nodeId)}
                         onKeyDown={(event) => {
-                          if (event.key !== "F2" || event.nativeEvent.isComposing) return;
+                          if (event.key !== "F2" || isImeKeydown(event.nativeEvent)) return;
                           event.preventDefault();
                           beginRename(file.nodeId);
                         }}
@@ -1366,28 +1465,49 @@ export function MaterialFiles(props: MaterialFilesProps) {
             </button>
           </footer>
         ) : null}
-        {/* Local identity stays a quiet, non-account presentation. Persistence
-            recovery belongs to the explicit Archive surface, not this footer. */}
+        {/* Local identity stays a quiet, non-account presentation. Its one
+            line tells the truth about this tab's material until resolved; a
+            line that needs attention only opens Archive, where every recovery
+            control lives. It is never a banner, toast, or modal. */}
         <footer className="material-files__identity">
-          <div className="material-files__profile">
+          <div className="material-files__profile" data-state={durability.tone === "risk" ? "error" : undefined}>
             <PixelIdenticon />
             <span className="material-files__profile-copy">
               <span className="material-files__profile-name">{copy.identityName}</span>
-              <span className="material-files__profile-meta">
-                {showSaving && !persistenceFailed ? copy.saving : copy.localOnly}
-                {showSaving && !persistenceFailed ? (
-                  <span
-                    aria-hidden="true"
-                    className="material-files__status-dot"
-                    data-saving="true"
-                  />
-                ) : null}
+              <span className="material-files__profile-meta" data-tone={durability.tone}>
+                {durability.tone !== "quiet" && props.archive !== undefined ? (
+                  <button
+                    className="material-files__durability"
+                    disabled={mode === "archive"}
+                    onClick={openArchive}
+                    type="button"
+                  >
+                    <span>{durability.text}</span>
+                    <span aria-hidden="true" className="material-files__status-dot" />
+                  </button>
+                ) : (
+                  <>
+                    {durability.text}
+                    {durability.tone !== "quiet" || (persistenceStatus.phase === "saving" && showSaving) ? (
+                      <span
+                        aria-hidden="true"
+                        className="material-files__status-dot"
+                        data-saving={durability.tone === "quiet" || undefined}
+                      />
+                    ) : null}
+                  </>
+                )}
               </span>
             </span>
           </div>
         </footer>
       </aside>
       </div>
+      {/* Outside the aside: a closed index is aria-hidden and inert, and the
+          durability line must still be announced when it changes. */}
+      <span aria-atomic="true" aria-live="polite" className="visually-hidden" data-durability-announcer>
+        {durability.tone === "quiet" ? "" : durability.text}
+      </span>
     </>
   );
 }
@@ -1495,13 +1615,15 @@ function ArchivePanel({
   copy,
   error,
   inputRef,
+  note,
   phase,
   preparedImport,
+  replacesUnsaved,
   corrupt,
   corruptExported,
   conflict,
-  saveFailed,
-  storageFull,
+  retryable,
+  terminal,
   onClose,
   onExport,
   onPickImport,
@@ -1515,13 +1637,17 @@ function ArchivePanel({
   copy: MaterialFilesCopy;
   error: string | null;
   inputRef: RefObject<HTMLInputElement | null>;
+  note: string;
   phase: ArchivePhase;
-  preparedImport: File | null;
+  preparedImport: PreparedImport | null;
+  /** Replacing refused material says so, and says what an older copy loses. */
+  replacesUnsaved: boolean;
   corrupt: boolean;
   corruptExported: boolean;
   conflict: boolean;
-  saveFailed: boolean;
-  storageFull: boolean;
+  retryable: boolean;
+  /** A newer schema or cleared storage leaves only Export and a page reload. */
+  terminal: boolean;
   onClose: () => void;
   onExport: () => void;
   onPickImport: () => void;
@@ -1542,24 +1668,20 @@ function ArchivePanel({
         : null;
   return (
     <section aria-busy={busy || undefined} aria-label={copy.archivePanel} className="material-files__archive">
-      <p className="material-files__archive-note">
-        {corrupt
-          ? copy.archiveNoteCorrupt
-          : conflict
-          ? copy.archiveNoteConflict
-          : storageFull
-          ? copy.archiveNoteStorageFull
-          : saveFailed
-          ? copy.archiveNoteSaveFailed
-          : copy.archiveNoteDefault}
-      </p>
+      <p className="material-files__archive-note">{note}</p>
       <div className="material-files__archive-actions">
         <button disabled={busy} onClick={onExport} type="button">
           {copy.archiveExportCopy}
         </button>
-        <button disabled={busy} onClick={onPickImport} type="button">
-          {copy.archiveImportCopy}
-        </button>
+        {terminal ? (
+          <button disabled={busy} onClick={() => window.location.reload()} type="button">
+            {copy.archiveReloadPage}
+          </button>
+        ) : (
+          <button disabled={busy} onClick={onPickImport} type="button">
+            {copy.archiveImportCopy}
+          </button>
+        )}
       </div>
       {corrupt && corruptExported ? (
         <button
@@ -1581,7 +1703,7 @@ function ArchivePanel({
           {copy.archiveReloadStoredMaterial}
         </button>
       ) : null}
-      {storageFull || saveFailed ? (
+      {retryable ? (
         <button
           className="material-files__archive-retry"
           disabled={busy}
@@ -1603,16 +1725,14 @@ function ArchivePanel({
         ref={inputRef}
         type="file"
       />
-      {phaseLabel !== null ? (
-        <p aria-live="polite" className="material-files__archive-status">{phaseLabel}</p>
-      ) : null}
-      {error !== null ? (
-        <p aria-live="polite" className="material-files__archive-error">{error}</p>
-      ) : null}
+      {/* Live regions mount before they speak, or their first line may be silent. */}
+      <p aria-live="polite" className="material-files__archive-status">{phaseLabel}</p>
+      <p aria-live="polite" className="material-files__archive-error">{error}</p>
       {preparedImport !== null ? (
         <div className="material-files__archive-confirm">
           <p>
-            {copy.archiveConfirmReplace}
+            {replacesUnsaved ? copy.archiveConfirmReplaceUnsaved : copy.archiveConfirmReplace}
+            {preparedImport.olderThanCurrent ? ` ${copy.archiveConfirmOlder}` : ""}
           </p>
           <div>
             <button disabled={busy} onClick={onClose} type="button">{copy.archiveKeepCurrent}</button>
@@ -1624,10 +1744,9 @@ function ArchivePanel({
   );
 }
 
-function actionErrorMessage(error: unknown): string {
-  return error instanceof Error && error.message.trim().length > 0
-    ? error.message
-    : "Archive action could not finish.";
+/** An exception's own text is engineering detail, never archive copy. */
+function actionErrorMessage(copy: MaterialFilesCopy): string {
+  return copy.archiveErrorAction;
 }
 
 function stopPointerPropagation(event: ReactPointerEvent<HTMLElement>) {

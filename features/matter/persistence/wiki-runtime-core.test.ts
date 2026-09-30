@@ -2,8 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { WikiObserveEvidenceEvent } from "../wiki/wiki-model";
 
 type StubProducerResult = Readonly<{
-  status: "ok" | "censored";
+  status: "ok" | "partial" | "censored";
   events: readonly WikiObserveEvidenceEvent[];
+  scannedScripts: readonly "latin"[];
 }>;
 type FitStub = (
   snapshot: unknown,
@@ -37,14 +38,21 @@ const stubs = vi.hoisted(() => {
   return {
     coordinator,
     generationChannel,
+    // What the coordinator is constructed with, and what the lexical adapter
+    // could read at that moment.
+    coordinatorPublisher: undefined as unknown,
+    interpreterAtConstruction: undefined as unknown,
+    readInterpreter: undefined as undefined | (() => unknown),
     refresh: undefined as undefined | (() => Promise<unknown>),
     fit: vi.fn<FitStub>().mockReturnValue({
       status: "ok",
       events: Object.freeze([]),
+      scannedScripts: Object.freeze(["latin" as const]),
     }),
     collect: vi.fn<CollectionStub>().mockReturnValue({
       status: "ok",
       events: Object.freeze([]),
+      scannedScripts: Object.freeze(["latin" as const]),
     }),
     automaticCollection: true,
     phoneticFitting: true,
@@ -52,7 +60,11 @@ const stubs = vi.hoisted(() => {
 });
 
 vi.mock("./wiki-coordinator", () => ({
-  createWikiCoordinator: () => stubs.coordinator,
+  createWikiCoordinator: (_repository: unknown, publisher: unknown) => {
+    stubs.coordinatorPublisher = publisher;
+    stubs.interpreterAtConstruction = stubs.readInterpreter?.();
+    return stubs.coordinator;
+  },
 }));
 vi.mock("./wiki-generation-channel", () => ({
   createWikiGenerationChannel: () => stubs.generationChannel,
@@ -84,6 +96,12 @@ vi.mock("./wiki-capability-preferences-reader", () => ({
 }));
 
 const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime");
+const PUBLICATION_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v6");
+const ENGLISH_OPPORTUNITY = Object.freeze({
+  locale: "en-US",
+  channel: "spoken",
+  scripts: ["latin"],
+});
 const LEGACY_RUNTIME_KEYS = Object.freeze([
   Symbol.for("ptoq.matter.wiki-runtime.v7"),
   Symbol.for("ptoq.matter.wiki-runtime.v8"),
@@ -111,12 +129,18 @@ afterEach(() => {
   stubs.fit.mockReset().mockReturnValue({
     status: "ok",
     events: Object.freeze([]),
+    scannedScripts: Object.freeze(["latin" as const]),
   });
   stubs.collect.mockReset().mockReturnValue({
     status: "ok",
     events: Object.freeze([]),
+    scannedScripts: Object.freeze(["latin" as const]),
   });
   stubs.refresh = undefined;
+  stubs.coordinatorPublisher = undefined;
+  stubs.interpreterAtConstruction = undefined;
+  stubs.readInterpreter = undefined;
+  delete host[PUBLICATION_KEY];
   stubs.automaticCollection = true;
   stubs.phoneticFitting = true;
   vi.resetModules();
@@ -134,6 +158,24 @@ describe("Wiki runtime ownership", () => {
     ]);
   });
 
+  it("binds the canonicalizer before its coordinator can publish any rule", async () => {
+    delete host[PUBLICATION_KEY];
+    const bridge = await import("./wiki-runtime-bridge");
+    stubs.readInterpreter = bridge.readMatterWikiInterpreter;
+    expect(bridge.readMatterWikiInterpreter()).toBeNull();
+
+    await import("./wiki-runtime-core");
+    const { canonicalizeWikiText } = await import("../wiki/canonicalize-wiki-text");
+
+    // The coordinator is the runtime's only publisher, and it receives a port
+    // whose creation already made the interpreter readable.
+    expect(stubs.interpreterAtConstruction).toBe(canonicalizeWikiText);
+    expect(stubs.coordinatorPublisher).toMatchObject({
+      read: bridge.readMatterWikiBasis,
+      publishCompiled: expect.any(Function),
+    });
+  });
+
   it.each(LEGACY_RUNTIME_KEYS)(
     "closes legacy runtime %s before installing the stable ABI slot",
     async (legacyRuntimeKey) => {
@@ -149,18 +191,18 @@ describe("Wiki runtime ownership", () => {
       expect(close).toHaveBeenCalledOnce();
       expect(dispose).toHaveBeenCalledOnce();
       expect(host[legacyRuntimeKey]).toBeUndefined();
-      expect(host[RUNTIME_KEY]).toMatchObject({ abi: 12 });
+      expect(host[RUNTIME_KEY]).toMatchObject({ abi: 15 });
     },
   );
 
   it("disposes a mismatched stable ABI before replacement", async () => {
     const dispose = vi.fn();
-    host[RUNTIME_KEY] = { abi: 11, runtime: { dispose } };
+    host[RUNTIME_KEY] = { abi: 14, runtime: { dispose } };
 
     await import("./wiki-runtime-core");
 
     expect(dispose).toHaveBeenCalledOnce();
-    expect(host[RUNTIME_KEY]).toMatchObject({ abi: 12 });
+    expect(host[RUNTIME_KEY]).toMatchObject({ abi: 15 });
   });
 
   it("announces each successfully hydrated generation only once", async () => {
@@ -253,10 +295,12 @@ describe("Wiki runtime ownership", () => {
     stubs.collect.mockReturnValueOnce({
       status: "ok",
       events: Object.freeze([termEvent]),
+      scannedScripts: Object.freeze(["latin" as const]),
     });
     stubs.fit.mockReturnValueOnce({
       status: "ok",
       events: Object.freeze([fittingEvent]),
+      scannedScripts: Object.freeze(["latin" as const]),
     });
     const runtime = await import("./wiki-runtime-core");
 
@@ -278,7 +322,10 @@ describe("Wiki runtime ownership", () => {
       );
       expect(stubs.coordinator.observe).toHaveBeenCalledWith(
         [fittingEvent],
-        { term: "quiet", alias: "observed" },
+        {
+          term: { disposition: "quiet", opportunity: ENGLISH_OPPORTUNITY },
+          alias: { disposition: "observed", opportunity: ENGLISH_OPPORTUNITY },
+        },
         { generation: 0, stateRevision: 0 },
       );
     });
@@ -331,13 +378,19 @@ describe("Wiki runtime ownership", () => {
     stubs.collect.mockReturnValue({
       status: "ok",
       events: Object.freeze([termEvent]),
+      scannedScripts: Object.freeze(["latin" as const]),
     });
     stubs.fit
       .mockReturnValueOnce({
         status: "ok",
         events: Object.freeze([fittingEvent]),
+        scannedScripts: Object.freeze(["latin" as const]),
       })
-      .mockReturnValueOnce({ status: "ok", events: Object.freeze([]) });
+      .mockReturnValueOnce({
+        status: "ok",
+        events: Object.freeze([]),
+        scannedScripts: Object.freeze(["latin" as const]),
+      });
     stubs.coordinator.start.mockResolvedValue({
       phase: "ready",
       generation: 3,
@@ -377,6 +430,48 @@ describe("Wiki runtime ownership", () => {
     expect(stubs.coordinator.observe.mock.calls.map((call) => call[2])).toEqual([
       { generation: 0, stateRevision: 0 },
       { generation: 4, stateRevision: 3 },
+    ]);
+  });
+
+  it("bounds waiting admissions and drops the oldest while hydration is blocked", async () => {
+    let resolveStart: ((status: {
+      phase: "ready";
+      generation: number;
+      stateRevision: number;
+    }) => void) | undefined;
+    stubs.coordinator.start.mockReturnValue(new Promise((resolve) => {
+      resolveStart = resolve;
+    }));
+    stubs.coordinator.observe.mockResolvedValue({
+      ok: true,
+      changed: false,
+      generation: 3,
+      stateRevision: 2,
+    });
+    const runtime = await import("./wiki-runtime-core");
+
+    for (let turn = 0; turn < 40; turn += 1) {
+      runtime.observeMatterWikiCommittedMaterial({
+        observed: { locale: "en-US", channel: "spoken", text: `turn ${turn}` },
+        committed: { locale: "en-US", channel: "spoken", text: `turn ${turn}` },
+      });
+    }
+    await Promise.resolve();
+    // One turn is in progress (awaiting hydration); sixteen wait behind it.
+    expect(runtime.readMatterWikiAdmissionReceipt()).toMatchObject({
+      waitingTurns: 16,
+      droppedTurns: 23,
+      completedTurns: 0,
+    });
+    expect(JSON.stringify(runtime.readMatterWikiAdmissionReceipt())).not.toContain("turn");
+
+    resolveStart?.({ phase: "ready", generation: 3, stateRevision: 2 });
+    await vi.waitFor(() => expect(runtime.readMatterWikiAdmissionReceipt())
+      .toMatchObject({ waitingTurns: 0, completedTurns: 17 }));
+    expect(stubs.collect.mock.calls.map(([request]) =>
+      (request as { text: string }).text)).toEqual([
+      "turn 0",
+      ...Array.from({ length: 16 }, (_, index) => `turn ${index + 24}`),
     ]);
   });
 

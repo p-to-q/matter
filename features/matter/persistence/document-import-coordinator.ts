@@ -1,13 +1,17 @@
 import type { ThoughtTree } from "../tree/model";
 import type { DocumentSwitchReceipt } from "../store/matter-store";
 import type { RepositoryErrorCode } from "./document-repository";
-import type { ImportedDocumentPreparation, PersistenceController } from "./persistence-controller";
+import type { ImportedDocumentPreparation, ImportOptions, PersistenceController } from "./persistence-controller";
 
 export type DocumentImportErrorCode =
   | "IMPORT_INVALID_TREE"
   | "IMPORT_CONFLICT"
+  | "IMPORT_DIRTY"
+  | "IMPORT_SAVING"
   | "IMPORT_FOREIGN_DOCUMENT"
   | "IMPORT_STALE"
+  /** Something the person started is in progress; replacing would end it. */
+  | "IMPORT_BUSY"
   | Exclude<RepositoryErrorCode, "PERSISTENCE_CONFLICT">;
 
 export type DocumentImportReceipt =
@@ -15,7 +19,11 @@ export type DocumentImportReceipt =
   | Readonly<{ status: "rejected"; errorCode: DocumentImportErrorCode }>;
 
 export type DocumentImportCoordinator = Readonly<{
-  importValidatedTree(tree: ThoughtTree, basis: DocumentImportBasis): Promise<DocumentImportReceipt>;
+  importValidatedTree(
+    tree: ThoughtTree,
+    basis: DocumentImportBasis,
+    options?: ImportOptions,
+  ): Promise<DocumentImportReceipt>;
 }>;
 
 export type DocumentImportBasis = Readonly<{
@@ -29,6 +37,11 @@ type DocumentSwitch = (tree: ThoughtTree) => DocumentSwitchReceipt;
 /**
  * Owns the one-way archive handoff: storage must accept the complete candidate
  * before runtime state may move to it. Archive decoding belongs outside this seam.
+ *
+ * Replacing the document instance revokes everything bound to it, so an import
+ * refuses while `materialIdle` is false: held or in-flight spoken words, a
+ * material turn, a question held in Ask Matter, or a name being typed. The
+ * person finishes or discards that first; nothing is dropped behind them.
  */
 export function createDocumentImportCoordinator(
   persistence: Pick<
@@ -37,10 +50,11 @@ export function createDocumentImportCoordinator(
   >,
   switchDocument: DocumentSwitch,
   currentBasis: () => DocumentImportBasis,
+  materialIdle: () => boolean,
 ): DocumentImportCoordinator {
   let importing = false;
   return Object.freeze({
-    async importValidatedTree(tree, basis) {
+    async importValidatedTree(tree, basis, options = {}) {
       if (importing) return Object.freeze({ status: "rejected", errorCode: "IMPORT_CONFLICT" });
       importing = true;
       let prepared: ImportedDocumentPreparation | null = null;
@@ -49,27 +63,33 @@ export function createDocumentImportCoordinator(
         if (!sameBasis(currentBasis(), basis)) {
           return Object.freeze({ status: "rejected", errorCode: "IMPORT_STALE" });
         }
+        if (!materialIdle()) {
+          return Object.freeze({ status: "rejected", errorCode: "IMPORT_BUSY" });
+        }
         // The first release has no durable active-document pointer. Accepting a
         // different tree id would claim a successful switch that reload cannot
         // restore, so only a copy of the current document may cross this seam.
         if (tree.id !== basis.treeId) {
           return Object.freeze({ status: "rejected", errorCode: "IMPORT_FOREIGN_DOCUMENT" });
         }
-        const result = await persistence.prepareImportedTree(tree);
+        const result = await persistence.prepareImportedTree(tree, options);
         if (!result.ok) {
           return Object.freeze({ status: "rejected", errorCode: result.errorCode });
         }
         prepared = result;
 
         // The comparison and named store switch are synchronous on one browser
-        // task. No late archive may replace material that moved while IndexedDB
-        // was accepting its candidate.
-        if (!sameBasis(currentBasis(), basis)) {
+        // task. No late archive may replace material that moved, or work that
+        // started, while IndexedDB was accepting its candidate.
+        const lateRefusal: DocumentImportErrorCode | null = !sameBasis(currentBasis(), basis)
+          ? "IMPORT_STALE"
+          : !materialIdle() ? "IMPORT_BUSY" : null;
+        if (lateRefusal !== null) {
           const cleanupError = await persistence.discardImportedDocument(prepared);
           prepared = null;
           return Object.freeze({
             status: "rejected",
-            errorCode: cleanupError === null ? "IMPORT_STALE" : importError(cleanupError),
+            errorCode: cleanupError === null ? lateRefusal : importError(cleanupError),
           });
         }
         const switchReceipt = switchDocument(prepared.tree);

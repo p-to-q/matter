@@ -42,18 +42,25 @@ Read only what the change needs:
 9. `docs/workflow.md` when delegating or handing off.
 
 `archive/` is trace, not current instruction. `docs/reference/` is context, not
-contract.
+contract, with one exception: where `product.md`, `principles.md`,
+`material.md`, `architecture.md`, or `protocol.md` hands an exact rule to a
+reference note by link, that rule binds as part of the contract. Those notes are
+marked **binding** in `docs/reference/index.md`; the rest of each note stays
+context.
 
 ## Product invariants
 
 - no keyboard is required for the primary path;
 - no permanent prompt box, chat transcript, or assistant panel; the paper may
-  expose one secondary, non-persistent Matter inquiry bubble under its bounded
-  visible-lineage contract;
+  expose one secondary Matter inquiry bubble under its bounded visible-lineage
+  contract. It keeps a scrollable record of the current opening's turns, and
+  completed exchanges may persist in a bounded per-tree local record that is
+  never material, history, archive content, or model context;
 - raw voice may admit human material; generative voice belongs to a node or
   selected segment, never to the application;
 - AI output reaches the screen only as one perceivable change to material;
-- every committed generative change is pointer-undoable;
+- every committed generative change is pointer-undoable within the bounded
+  history (1,000 steps, 32 MiB); an exported archive is long-term recovery;
 - growth runs downward from a single root; structure determines presentation;
 - the model receives the selected lasso passages or bounded virtual-tree context,
   with no hidden retrieval;

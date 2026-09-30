@@ -1,11 +1,12 @@
 "use client";
 
-import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useId, useLayoutEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from "react";
 import { flushSync } from "react-dom";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { NavigationState } from "../runtime/navigation";
+import { admissionTargetExists } from "../runtime/admission";
 import type { TextSwapInteractionState } from "../runtime/text-swap-interaction";
 import { layoutColumnarTree } from "../layout/columnar-layout";
 import type { ColumnarLayout, LayoutNode } from "../layout/model";
@@ -34,6 +35,7 @@ import {
 import type { AdmissionController } from "../interaction/use-admission";
 import {
   admissionCaptureIsActive,
+  admissionHoldsTranscript,
   type AdmissionAnchor as InteractionAdmissionAnchor,
 } from "../runtime/admission-interaction";
 import { useLasso } from "../interaction/use-lasso";
@@ -93,11 +95,17 @@ import type { MaterialArchiveActions } from "./MaterialFiles";
 import { AmbientWorkbench } from "./AmbientWorkbench";
 import {
   localizeCanvasGuidance,
+  localizeOutcome,
+  localizeParkedRelease,
+  outcomeGuidanceId,
   projectCanvasGuidance,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
+  type CanvasTurnGuidanceState,
 } from "./canvas-guidance";
+import { useOutcomeAcknowledgement, useOutcomeLine } from "./use-outcome-line";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
+import type { StoredReloadOutcome } from "../persistence/persistence-status";
 import {
   createLayoutProjectionInput,
   layoutProjectionKey,
@@ -112,9 +120,13 @@ import {
 import {
   CanvasChrome,
   canvasOverlayOwnsSurface,
+  preloadWikiSettings,
   type CanvasChromeHandle,
   type CanvasChromeOverlay,
 } from "./CanvasChrome";
+import { preloadableComponent } from "./preloadable-component";
+import { WikiOccurrenceLayer } from "./wiki-occurrence-layer-chunk";
+import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
 import { CanvasRuling } from "./CanvasRuling";
 import {
   MaterialAddressLayer,
@@ -157,8 +169,13 @@ import { useInquiryRecord } from "../interaction/use-inquiry-record";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import { MAX_REPLACEMENT_TEXT_CODE_UNITS } from "../tree/invariants";
-import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
+import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import { useFixedExpandTurn } from "./use-fixed-expand-turn";
+import {
+  IDLE_PAPER_ACTIVITY,
+  samePaperActivity,
+  type PaperActivity,
+} from "./material-turn-activity";
 import {
   isTransformPresentationCurrent,
   useTransformPresentation,
@@ -174,29 +191,78 @@ import { TransformingMaterialText } from "./TransformingMaterialText";
 import {
   admissionFeedbackActions,
   admissionFeedbackMessage,
+  admissionPhaseMessage,
+  admissionPlacementLabel,
+  admissionWithdrawLabel,
 } from "./admission-feedback-copy";
+import {
+  createPresenceHandoff,
+  PRESENCE_TIMING,
+  presenceReservesSpace,
+  type PresenceClose,
+  type PresenceFrame,
+  type PresenceLive,
+} from "./presence";
+import type { PointTalkSurfaceView } from "./PointTalkComposer";
+import type { PointTalkOrigin } from "./point-talk-placement";
+import type { PointTalkReleasedOutcome } from "./PointTalkTurn";
+import { pointTalkPresenceClose, type PointTalkCloseReason } from "./point-talk-close";
+import { usePresence, useSettledStatus } from "./use-presence";
 import { lassoAccessibilityCopy } from "./lasso-accessibility-copy";
 import { voiceToolCopy } from "./voice-tool-copy";
 import type { TypographyHeightAuthority } from "./typography-height-authority";
+import { isCancelEscape, isImeKeydown } from "./composition-safe-keys";
+import { canvasRegionCopy } from "./canvas-region-copy";
+import {
+  canvasPressDismissal,
+  createCanvasPointerArbiter,
+  isPalmPress,
+  type ArbitratedPointer,
+} from "../runtime/canvas-pointer-arbitration";
+import { deferUntilTouchCommits } from "./touch-commitment";
+import { useEscapeLayer } from "./escape-layers";
+import type {
+  WikiOccurrenceDriver,
+  WikiOccurrenceView,
+} from "../interaction/wiki-occurrence-driver";
+import type { NodeActionWikiReview } from "./NodeActionLens";
+import { wikiOccurrenceDescription } from "./wiki-occurrence-description-copy";
 
-const PointTalkTurn = dynamic(
+// Point and Talk, the node action lens, and the Wiki occurrence layer mount
+// on a gesture. Their chunks load after first paint, or at the first pointer
+// or focus on the paper if sooner, and a loaded one renders in the gesture's
+// own commit, so the gesture never waits on a fetch.
+const PointTalkTurn = preloadableComponent(
   () => import("./PointTalkTurn").then((module) => module.PointTalkTurn),
-  { ssr: false },
 );
-const NodeActionLens = dynamic(
+const PointTalkExit = preloadableComponent(
+  () => import("./PointTalkComposer").then((module) => module.PointTalkExit),
+);
+const NodeActionLens = preloadableComponent(
   () => import("./NodeActionLens").then((module) => module.NodeActionLens),
-  { ssr: false },
 );
 const MaterialFilesWithLabels = dynamic(
   () => import("./MaterialFilesWithLabels").then((module) => module.MaterialFilesWithLabels),
   { ssr: false },
 );
+// The settle, the mark, and the takeover mount with the first live occurrence;
+// the occurrence driver loads the same cell as part of one disclosure.
+const PAPER_GESTURE_CHUNKS = Object.freeze([
+  PointTalkTurn.preload,
+  PointTalkExit.preload,
+  NodeActionLens.preload,
+  WikiOccurrenceLayer.preload,
+]);
 // Keep the complete grapheme and candidate policy behind the lazy turn. This
 // cheap bound admits every ordinary passage the exact policy can safely size;
 // the turn still owns the authoritative validation before it exposes input.
 const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
 const EMPTY_NODE_IDS: ReadonlySet<string> = new Set<string>();
 const ACTIVE_LAYOUT_NODE_SELECTOR = "[data-layout-node-id][data-thought-id]";
+// The CSS fade of every leaving surface lasts exactly as long as its unmount.
+const PRESENCE_EXIT_STYLE = Object.freeze({
+  "--presence-exit-duration": `${PRESENCE_TIMING.exitMs}ms`,
+}) as CSSProperties;
 
 export type RootedMaterialProps = {
   admission: AdmissionController;
@@ -221,19 +287,23 @@ export type RootedMaterialProps = {
     envelope: TransformEnvelope,
     plan: TransformPlan,
     expectedDocumentEpoch: number,
-  ) => TransformCommittedChange | null;
+  ) => MaterialTurnCommitResult<TransformCommittedChange>;
+  /** Reports what the paper holds (its turns, Ask Matter, a name editor) to the product root. */
+  onPaperActivityChange?: (activity: PaperActivity) => void;
   onTextSwapCommit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
     expectedDocumentEpoch: number,
-  ) => TextSwapCommitResult<TextSwapCommittedChange>;
+  ) => MaterialTurnCommitResult<TextSwapCommittedChange>;
   onUndo: () => void;
   onRedo: () => void;
   tree: ThoughtTree;
   persistence: Readonly<{
     status: PersistenceStatus;
     retry: () => void;
-    resolveConflict: () => void;
+    resolveConflict: () => Promise<StoredReloadOutcome> | void;
+    acknowledgeHistoryNotice?: () => void;
+    storagePersisted?: boolean | null;
   }>;
   /** Fixture-only timing marks expose the cold canvas path without changing it. */
   performanceMarking?: boolean;
@@ -242,6 +312,8 @@ export type RootedMaterialProps = {
     batchSize: 32;
     source: "viewport-research";
   }>;
+  /** Committed Wiki occurrences: disclosure, takeover, and informed silence. */
+  wikiOccurrences?: WikiOccurrenceDriver;
 };
 
 type PublishedGeometry = {
@@ -399,11 +471,57 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const [pointTalkOwner, setPointTalkOwner] = useState<PointTalkOwner | null>(null);
   const [pointTalkPresented, setPointTalkPresented] = useState(false);
   const [pointTalkOpeningId, setPointTalkOpeningId] = useState(0);
+  // Where the person summoned the current opening; its entrance grows there.
+  const [pointTalkOrigin, setPointTalkOrigin] = useState<PointTalkOrigin | null>(null);
   useEffect(() => subscribePageSuspension(
     () => setPagePresentationAvailable(false),
     () => setPagePresentationAvailable(true),
   ), []);
+  const wikiOccurrences = props.wikiOccurrences;
+  const wikiViews = useSyncExternalStore(
+    wikiOccurrences?.subscribe ?? subscribeNothing,
+    wikiOccurrences?.getSnapshot ?? noWikiViews,
+    noWikiViews,
+  );
+  // The word's takeover owns the passage while open; its lens would compete.
+  const wikiTakeoverOpen = wikiViews.some((view) => view.takeover);
+  // A takeover can open the Wiki dialog on its word; that is its intent signal.
+  useEffect(() => {
+    if (wikiTakeoverOpen) preloadWikiSettings();
+  }, [wikiTakeoverOpen]);
+  // Once loaded for a live occurrence, the layer stays for the session.
+  const [wikiLayerMounted, setWikiLayerMounted] = useState(false);
+  if (!wikiLayerMounted && wikiViews.length > 0) setWikiLayerMounted(true);
+  const wikiReviews = useMemo(() => projectWikiReviews(wikiViews), [wikiViews]);
+  // Keyed by content, so the measured list re-renders only when a count moves.
+  const wikiDescriptionKey = wikiDescriptionCountsKey(wikiViews);
+  const wikiDescriptionCounts = useMemo(
+    () => parseWikiDescriptionCounts(wikiDescriptionKey),
+    [wikiDescriptionKey],
+  );
+  // The press that dismissed a takeover, so its release never reopens that word.
+  const wikiDismissingPressRef = useRef<Readonly<{ pointerId: number; occurrenceId: string }> | null>(null);
+  const outcomeLine = useOutcomeLine(props.documentEpoch);
+  const reportOutcome = outcomeLine.report;
+  useEffect(() => wikiOccurrences?.subscribeUnsaved(() => {
+    reportOutcome({ owner: "wiki", reason: "unsaved" });
+  }), [reportOutcome, wikiOccurrences]);
+  useEffect(() => {
+    // A modal that owns the paper hides every word from perception.
+    wikiOccurrences?.setSurfaceAvailable(materialPresentationAvailable);
+  }, [materialPresentationAvailable, wikiOccurrences]);
   const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
+  const [pointTalkExitHandoff] = useState(() => createPresenceHandoff<PointTalkSurfaceView>());
+  const reportPointTalkOutcome = useCallback((reason: PointTalkReleasedOutcome) => {
+    reportOutcome({ owner: "rewrite", reason });
+  }, [reportOutcome]);
+  const reportWikiRestoreRefused = useCallback(() => {
+    reportOutcome({ owner: "wiki", reason: "passage-changed" });
+  }, [reportOutcome]);
+  const [releaseParkedPointTalk, setReleaseParkedPointTalk] = useState<(() => void) | null>(null);
+  const reportPointTalkParked = useCallback((release: (() => void) | null) => {
+    setReleaseParkedPointTalk(() => release);
+  }, []);
   const [pointTalkVoiceCommand, setPointTalkVoiceCommand] = useState<Readonly<{
     id: number;
     type: "start" | "stop";
@@ -506,6 +624,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
     onSelectNode(nodeId);
   }, [documentEpoch, onSelectNode, tree]);
   const shellRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const cancelIdle = preloadWhenIdle(PAPER_GESTURE_CHUNKS);
+    const shell = shellRef.current;
+    const onIntent = () => {
+      for (const load of PAPER_GESTURE_CHUNKS) preloadNow(load);
+    };
+    shell?.addEventListener("pointerover", onIntent, { capture: true, once: true });
+    shell?.addEventListener("focusin", onIntent, { capture: true, once: true });
+    return () => {
+      cancelIdle();
+      shell?.removeEventListener("pointerover", onIntent, { capture: true });
+      shell?.removeEventListener("focusin", onIntent, { capture: true });
+    };
+  }, []);
   const documentRef = useRef<HTMLElement>(null);
   const materialPlaneRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
@@ -558,7 +690,6 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const [languagePresentationDamage, setLanguagePresentationDamage] = useState<PresentationDamage | null>(null);
   const languagePresentationDamageRef = useRef<PresentationDamage | null>(null);
   const [admissionFeedbackHeight, setAdmissionFeedbackHeight] = useState(0);
-  const admissionAnchor = props.admission.state.phase === "idle" ? null : props.admission.state.anchor;
   const [canvasNavigationState, setCanvasNavigationState] = useState(
     () => createCanvasNavigationSession(props.documentEpoch),
   );
@@ -603,6 +734,23 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const pointerOriginNodeRef = useRef<string | null>(null);
   const lassoClickOriginNodeRef = useRef<string | null>(null);
   const nodeDragRef = useRef<NodeDragGesture | null>(null);
+  // One gesture owner and pen-active palm rejection; see the module contract.
+  const [pointerArbiter] = useState(createCanvasPointerArbiter);
+  // Work-dismissing effects of a touch that may still be a palm; see
+  // `touchCommitment`. Mouse and pen founders act at once.
+  const pendingTouchEffectsRef = useRef<Readonly<{
+    pointerId: number;
+    effects: (() => void)[];
+    discard: () => void;
+  }> | null>(null);
+  const settleTouchFounderEffects = useCallback((run: boolean) => {
+    const pending = pendingTouchEffectsRef.current;
+    if (pending === null) return;
+    pendingTouchEffectsRef.current = null;
+    pending.discard();
+    if (run) for (const effect of pending.effects) effect();
+  }, []);
+  useEffect(() => () => settleTouchFounderEffects(false), [settleTouchFounderEffects]);
   const clearNodeDrag = useCallback(() => {
     const gesture = nodeDragRef.current;
     if (gesture?.targetElement) delete gesture.targetElement.dataset.dragOver;
@@ -870,20 +1018,40 @@ export function RootedMaterial(props: RootedMaterialProps) {
       layout,
     );
   }, []);
-  const admissionParentBox = useMemo(
+  const admissionActiveState = props.admission.state.phase === "idle" ? null : props.admission.state;
+  const admissionActiveAnchor = admissionActiveState?.anchor ?? null;
+  const admissionActiveBox = useMemo(
     () => findAdmissionFeedbackParentBox(
-      admissionAnchor,
+      admissionActiveAnchor,
       activeLayout?.boxes ?? null,
       navigation.selectedNodeId,
     ),
-    [activeLayout?.boxes, admissionAnchor, navigation.selectedNodeId],
+    [activeLayout?.boxes, admissionActiveAnchor, navigation.selectedNodeId],
   );
+  const admissionLive = useMemo<PresenceLive<AdmissionFeedbackView>>(
+    () => admissionActiveState === null || !outcomePresentationAvailable
+      ? null
+      : {
+          identity: admissionActiveState.token,
+          view: { state: admissionActiveState, box: admissionActiveBox },
+        },
+    [admissionActiveBox, admissionActiveState, outcomePresentationAvailable],
+  );
+  const admissionFrame = usePresence(
+    admissionLive,
+    admissionPresenceClose(outcomePresentationAvailable, props.admission.settlement),
+  );
+  // A leaving box owns its lane only as the presence rules allow; work still in
+  // flight behind modal chrome keeps its lane so nothing reflows underneath.
+  const admissionReservedNodeId = presenceReservesSpace(admissionFrame)
+    ? admissionFrame?.view.box?.nodeId ?? null
+    : admissionActiveBox?.nodeId ?? null;
   const admissionPresentationDamage = useMemo<PresentationDamage | null>(
     () => projectAdmissionFeedbackPresentation(
-      admissionParentBox?.nodeId ?? null,
+      admissionReservedNodeId,
       admissionFeedbackHeight,
     ),
-    [admissionFeedbackHeight, admissionParentBox?.nodeId],
+    [admissionFeedbackHeight, admissionReservedNodeId],
   );
   // Voice admission and selected-language work are mutually exclusive. Giving
   // admission precedence still makes the rendering boundary deterministic if
@@ -932,28 +1100,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
     }
     setCanvasMode("material");
   }, [clearLassoSelection, deactivateLasso, setCanvasMode]);
-  useEffect(() => {
-    const exitLassoFromKeyboard = (event: KeyboardEvent) => {
-      if (
-        event.key !== "Escape" || event.defaultPrevented || event.isComposing ||
-        !lasso.active || isEditableEventTarget(event.target)
-      ) return;
-      event.preventDefault();
-      exitLasso();
-    };
-    window.addEventListener("keydown", exitLassoFromKeyboard);
-    return () => window.removeEventListener("keydown", exitLassoFromKeyboard);
-  }, [exitLasso, lasso.active]);
-  useEffect(() => {
-    const cancelMoveFromKeyboard = (event: KeyboardEvent) => {
-      const gesture = nodeDragRef.current;
-      if (event.key !== "Escape" || gesture === null) return;
-      event.preventDefault();
-      cancelNodeDragOwnership();
-    };
-    window.addEventListener("keydown", cancelMoveFromKeyboard);
-    return () => window.removeEventListener("keydown", cancelMoveFromKeyboard);
-  }, [cancelNodeDragOwnership]);
+  // Lasso is a mode: every surface opened above it closes first.
+  useEscapeLayer(lasso.active, "mode", () => {
+    // A field with no Escape of its own is still the person's current text.
+    if (isEditableEventTarget(document.activeElement)) return false;
+    exitLasso();
+    return true;
+  });
+  // Node drag is armed from pointer-down, before any React state changes, so
+  // this gesture layer stays registered and reads the live gesture owner.
+  useEscapeLayer(true, "gesture", () => {
+    if (nodeDragRef.current === null) return false;
+    cancelNodeDragOwnership();
+    return true;
+  });
   useEffect(
     () => () => cancelNodeDragOwnership(),
     [cancelNodeDragOwnership, props.documentEpoch, navigation.mode, tree.revision],
@@ -1187,14 +1347,38 @@ export function RootedMaterial(props: RootedMaterialProps) {
   );
   const activePointTalkNodeId = pointTalkPresented ? pointTalkHostNodeId : null;
   const pointTalkSelectionCurrent = pointTalkHostNodeId !== null;
+  // One opening of the field, owned by the turn's target so it outlives that
+  // target: a vanished passage still names the field that must leave.
+  const pointTalkPresenceIdentity = pointTalkOwner === null
+    ? null
+    : `${pointTalkOwner.documentEpoch}:${pointTalkOwner.nodeId}:${pointTalkOpeningId}`;
+  /**
+   * The one way the Point and Talk field leaves. Every close names one of the
+   * reasons in `point-talk-close.ts`, and that reason alone decides how the
+   * field is painted as it goes. Submitted work continues through any close.
+   */
+  const closePointTalk = useCallback((reason: PointTalkCloseReason) => {
+    const close = pointTalkPresenceClose(reason);
+    if (close === "preempted") pointTalkExitHandoff.preempt();
+    else if (pointTalkPresented && pointTalkPresenceIdentity !== null) {
+      pointTalkExitHandoff.intend(pointTalkPresenceIdentity, close);
+    }
+    setPointTalkPresented(false);
+    setPointTalkVoiceCommand(null);
+  }, [pointTalkExitHandoff, pointTalkPresenceIdentity, pointTalkPresented]);
   if (pointTalkOwner !== null && pointTalkHostNodeId === null) {
     // Reconcile before a removed, replaced, or held target can later return
     // under an obsolete local-turn owner. The derived target already keeps
-    // this render fail-closed.
+    // this render fail-closed. A passage that vanished from this document is
+    // said once; a document switch belongs to the new document and cuts.
+    const sameDocument = pointTalkOwner.documentEpoch === props.documentEpoch &&
+      pointTalkOwner.treeId === tree.id;
+    if (sameDocument && (
+      pointTalkPresented || pointTalkPhase === "pending" || pointTalkPhase === "transcribing"
+    )) reportOutcome({ owner: "rewrite", reason: "stale" });
+    closePointTalk(sameDocument ? "target-changed" : "cut");
     setPointTalkOwner(null);
-    setPointTalkPresented(false);
     if (pointTalkPhase !== "idle") setPointTalkPhase("idle");
-    if (pointTalkVoiceCommand !== null) setPointTalkVoiceCommand(null);
   }
   const stretchSelection = eligibleStretchSelection({
     candidate: lasso.selections.length === 1 && lasso.selection?.type === "segment-range"
@@ -1244,8 +1428,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
   }, [cancelPointTalkFocusRestore]);
   const publishPointTalkChange = useCallback((change: TextSwapCommittedChange) => {
     publishMaterialTextChange(change);
+    // The rewritten passage is the ending: the field fades over it.
+    closePointTalk("result");
     setPointTalkOwner(null);
-    setPointTalkPresented(false);
     setPointTalkPhase("idle");
     setPointTalkVoiceCommand(null);
     cancelPointTalkFocusRestore();
@@ -1279,22 +1464,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
     pointTalkFocusFrameRef.current = Object.freeze({ basis, frameId });
   }, [
     cancelPointTalkFocusRestore,
+    closePointTalk,
     props.documentEpoch,
     publishMaterialTextChange,
     tree,
   ]);
+  const admissionLifecycleState = props.admission.state;
+  const setAdmissionDeliveryTarget = props.admission.setDeliveryTarget;
   useLayoutEffect(() => {
-    const state = props.admission.state;
-    if (state.phase === "idle" || state.phase === "error") {
-      props.admission.setDeliveryTargetVisible(true);
-      return;
-    }
-    const anchor = state.anchor;
-    const targetExists = anchor.kind === "root"
-      ? tree.rootId === null && Object.keys(tree.nodes).length === 0
-      : tree.nodes[anchor.parentNodeId] !== undefined;
-    if (!targetExists) {
-      props.admission.cancel();
+    if (admissionLifecycleState.phase === "idle") return;
+    // Undo and Delete stay live after Stop. A vanished parent is reported, not
+    // cancelled: the driver keeps submitted words as a visible conflict.
+    const anchor = admissionLifecycleState.anchor;
+    if (!admissionTargetExists(tree, anchor)) {
+      setAdmissionDeliveryTarget(anchor, "missing");
       return;
     }
     const targetVisible = navigation.mode === "full" && activeLayout !== null && (
@@ -1302,8 +1485,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
       anchor.parentNodeId === tree.rootId ||
       visiblyLaidOutNodeIds.has(anchor.parentNodeId)
     );
-    props.admission.setDeliveryTargetVisible(targetVisible);
-  }, [activeLayout, navigation.mode, props.admission, tree, visiblyLaidOutNodeIds]);
+    setAdmissionDeliveryTarget(anchor, targetVisible ? "visible" : "hidden");
+  }, [
+    activeLayout,
+    admissionLifecycleState,
+    navigation.mode,
+    setAdmissionDeliveryTarget,
+    tree,
+    visiblyLaidOutNodeIds,
+  ]);
   const stretchRecoveryRef = useRef<() => void>(() => undefined);
   const admissionCapturePending = admissionCaptureIsActive(props.admission.state);
   const elasticSelection = persistenceLoading || admissionCapturePending
@@ -1319,12 +1509,37 @@ export function RootedMaterial(props: RootedMaterialProps) {
     deliveryVisibleNodeIds: visiblyLaidOutNodeIds,
     commit: props.onTransformCommit,
     onCommitted: publishMaterialTextChange,
+    onOutcome: (reason) => reportOutcome({ owner: "expansion", reason }),
     onUnavailable: () => stretchRecoveryRef.current(),
   });
   const {
+    cancel: cancelTransform,
     start: startTransform,
     state: transformState,
   } = transform;
+  const reportPaperActivity = props.onPaperActivityChange;
+  const reportedPaperActivityRef = useRef(IDLE_PAPER_ACTIVITY);
+  // Ask Matter and the index's name editors report what they hold so the root
+  // never replaces the document instance underneath them.
+  const [inquiryHeld, setInquiryHeld] = useState(false);
+  const [editingHeld, setEditingHeld] = useState(false);
+  useLayoutEffect(() => {
+    const activity: PaperActivity = Object.freeze({
+      elastic: transformState.phase,
+      textSwap: pointTalkPhase,
+      inquiryHeld,
+      editingHeld,
+    });
+    if (samePaperActivity(reportedPaperActivityRef.current, activity)) return;
+    reportedPaperActivityRef.current = activity;
+    reportPaperActivity?.(activity);
+  }, [editingHeld, inquiryHeld, pointTalkPhase, reportPaperActivity, transformState.phase]);
+  useLayoutEffect(() => () => {
+    // Unmounting the paper releases what it held, so the root must not keep
+    // waiting on activity nobody will report again.
+    reportedPaperActivityRef.current = IDLE_PAPER_ACTIVITY;
+    reportPaperActivity?.(IDLE_PAPER_ACTIVITY);
+  }, [reportPaperActivity]);
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
     canvasChromeRef.current?.closeInquiry();
     startTransform(basis);
@@ -1366,13 +1581,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
       setAdmissionPresentationAvailable(true);
     }
   }, [materialPresentationAvailable, setAdmissionPresentationAvailable]);
-  const closePointTalk = useCallback(() => {
-    setPointTalkPresented(false);
-    setPointTalkVoiceCommand(null);
-  }, []);
   const releasePointTalkJob = useCallback(() => {
+    // The field already left through `closePointTalk`; this only frees the
+    // turn's owner, so it never closes anything by itself.
     setPointTalkOwner(null);
-    setPointTalkPresented(false);
     setPointTalkPhase("idle");
     setPointTalkVoiceCommand(null);
   }, []);
@@ -1383,25 +1595,52 @@ export function RootedMaterial(props: RootedMaterialProps) {
       type,
     }));
   }, []);
-  const elasticLanguageActive = stretch.dragging || stretch.amount > 0 ||
-    transformState.phase !== "idle";
-  const beginStretchAdjustment = useCallback(() => {
-    canvasChromeRef.current?.closeInquiry();
-  }, []);
+  // Elastic presentation follows the degree on the paper, not the request. A
+  // submitted turn may lose its presented degree to Escape or another slot
+  // owner and still deliver; its address then stays painted in the neutral
+  // armed shape with both grips at zero instead of an expand projection that
+  // no longer has a degree or grip to project from.
+  const elasticLanguageActive = stretch.dragging || stretch.amount > 0;
   const abortElasticExpansion = useCallback(() => {
     // Presentation can close while an immutable submitted turn keeps owning
     // its exact material basis. Conflict/page-exit handling lives in the turn.
     stretchKeyDown("Escape");
   }, [stretchKeyDown]);
-  const abortFixedExpansion = useCallback(() => {
-    closePointTalk();
+  // Dismissing a presentation and yielding the paper's one presentation slot
+  // are different closes. Submitted work continues through either; only the
+  // way a leaving Point Talk field is painted differs.
+  /** The person acted elsewhere: presentations leave as the person's close. */
+  const dismissPaperPresentations = useCallback(() => {
+    closePointTalk("person");
     abortElasticExpansion();
   }, [abortElasticExpansion, closePointTalk]);
+  /** Another owner takes the paper's slot: a Point Talk field fades quickly. */
+  const yieldPaperPresentations = useCallback(() => {
+    closePointTalk("slot");
+    abortElasticExpansion();
+  }, [abortElasticExpansion, closePointTalk]);
+  // A document switch owns the paper outright, so nothing of the old one fades.
+  useLayoutEffect(() => () => pointTalkExitHandoff.preempt(), [
+    pointTalkExitHandoff,
+    props.documentEpoch,
+  ]);
+  const beginStretchAdjustment = useCallback(() => {
+    // A grip adjustment takes the slot from Inquiry and any Point Talk field;
+    // the adjustment itself is what now owns Elastic presentation.
+    canvasChromeRef.current?.closeInquiry();
+    closePointTalk("slot");
+  }, [closePointTalk]);
+  const stretchReopen = stretch.reopen;
+  const discardParkedExpansion = useCallback(() => {
+    // An explicit release of a result whose passage is not shown. Only a
+    // degree still committed to it reopens; other material stays untouched.
+    cancelTransform();
+    stretchReopen();
+  }, [cancelTransform, stretchReopen]);
   const selectionPreviewMode: SelectionPreviewMode = elasticSelection !== null && elasticLanguageActive
     ? "expand"
     : "neutral";
-  const visibleAddressMode: SelectionPreviewMode = stretch.amount > 0 ||
-    transformState.phase !== "idle"
+  const visibleAddressMode: SelectionPreviewMode = stretch.amount > 0
     ? "expand"
     : "neutral";
   const renderedElasticPreviewSource = useMemo(() => {
@@ -1446,14 +1685,18 @@ export function RootedMaterial(props: RootedMaterialProps) {
     visibleAddressMode === "expand" && paintableElasticPreviewSource !== null
       ? "expand"
       : "neutral";
-  useLayoutEffect(() => {
-    if (transformState.phase !== "requesting") return;
-    const clearCommittedDegree = (event: KeyboardEvent) => {
-      if (event.key === "Escape") stretchKeyDown("Escape");
-    };
-    window.addEventListener("keydown", clearCommittedDegree);
-    return () => window.removeEventListener("keydown", clearCommittedDegree);
-  }, [stretchKeyDown, transformState.phase]);
+  // An unfinished grip drag rolls back to its prior degree.
+  useEscapeLayer(true, "gesture", () => stretch.cancelActiveDrag() !== null);
+  // Escape after an Elastic submit only removes the committed degree from the
+  // paper. The submitted request keeps its immutable basis and may still
+  // deliver; dismissing a presentation is never cancellation after submit.
+  // The degree is a paper surface: a menu, dialog, Ask Matter, or the overlay
+  // index above it outranks it and closes first.
+  useEscapeLayer(transformState.phase === "requesting", "paper", () => {
+    if (stretch.mode !== "committed") return false;
+    stretchKeyDown("Escape");
+    return true;
+  });
   const currentTransformChange = isTransformPresentationCurrent(
     transformPresentation.change,
     { treeId: tree.id, documentEpoch: props.documentEpoch },
@@ -1722,14 +1965,38 @@ export function RootedMaterial(props: RootedMaterialProps) {
     tree.id,
     viewportRenderer,
   ]);
-  const selectNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  const selectNodeDismissingPresentations = useCallback((nodeId: string) => {
+    dismissPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = null;
     onSelectNode(nodeId);
-  }, [abortFixedExpansion, interruptIndexCameraMotion, onSelectNode]);
-  const focusIndexNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  }, [dismissPaperPresentations, interruptIndexCameraMotion, onSelectNode]);
+  /**
+   * A settled tap on a marked Wiki word opens its takeover instead of selecting
+   * the passage; it never starts Point and Talk or a passage selection.
+   */
+  const openWikiTakeoverAt = (
+    nodeId: string | null,
+    clientX: number,
+    clientY: number,
+    pointerId: number,
+  ): boolean => {
+    const dismissing = wikiDismissingPressRef.current;
+    wikiDismissingPressRef.current = null;
+    if (wikiOccurrences === undefined || nodeId === null || lasso.active) return false;
+    const occurrenceId = wikiOccurrences.hitTest(nodeId, clientX, clientY);
+    // The second press of a double-click closed this word's takeover; it
+    // selects the passage like any press instead of reopening the word.
+    if (
+      occurrenceId === null ||
+      (dismissing?.pointerId === pointerId && dismissing.occurrenceId === occurrenceId) ||
+      !wikiOccurrences.openTakeover(occurrenceId)
+    ) return false;
+    yieldPaperPresentations();
+    return true;
+  };
+  const focusIndexNode = useCallback((nodeId: string) => {
+    yieldPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -1739,9 +2006,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     focusWorkingNode(nodeId);
-  }, [abortFixedExpansion, documentEpoch, focusWorkingNode, interruptIndexCameraMotion]);
-  const restoreIndexNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  }, [documentEpoch, focusWorkingNode, interruptIndexCameraMotion, yieldPaperPresentations]);
+  const restoreIndexNode = useCallback((nodeId: string) => {
+    yieldPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -1751,9 +2018,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     restoreWorkingNode(nodeId);
-  }, [abortFixedExpansion, documentEpoch, interruptIndexCameraMotion, restoreWorkingNode]);
-  const selectIndexNodeAfterAbort = useCallback((nodeId: string) => {
-    abortFixedExpansion();
+  }, [documentEpoch, interruptIndexCameraMotion, yieldPaperPresentations, restoreWorkingNode]);
+  const selectIndexNode = useCallback((nodeId: string) => {
+    yieldPaperPresentations();
     interruptIndexCameraMotion();
     indexCenterRequestRef.current = Object.freeze({
       afterLayoutEpoch: layoutEpochRef.current,
@@ -1763,29 +2030,29 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     requestMeasurement();
     onSelectNode(nodeId);
-  }, [abortFixedExpansion, documentEpoch, interruptIndexCameraMotion, onSelectNode]);
-  const archiveAfterAbort = useMemo<MaterialArchiveActions | undefined>(() => {
+  }, [documentEpoch, interruptIndexCameraMotion, onSelectNode, yieldPaperPresentations]);
+  const indexArchive = useMemo<MaterialArchiveActions | undefined>(() => {
     if (props.archive === undefined) return undefined;
     return Object.freeze({
       exportCopy: () => {
-        abortFixedExpansion();
+        dismissPaperPresentations();
         return props.archive!.exportCopy();
       },
       validateImport: (file: File) => {
-        abortFixedExpansion();
+        dismissPaperPresentations();
         return props.archive!.validateImport(file);
       },
-      replaceImport: (file: File) => {
-        abortFixedExpansion();
-        return props.archive!.replaceImport(file);
+      replaceImport: (file: File, options: Readonly<{ replaceUnsaved: boolean }>) => {
+        dismissPaperPresentations();
+        return props.archive!.replaceImport(file, options);
       },
     });
-  }, [abortFixedExpansion, props.archive]);
+  }, [dismissPaperPresentations, props.archive]);
   useEffect(() => {
     const removeSelected = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
-        event.isComposing ||
+        isImeKeydown(event) ||
         (event.key !== "Delete" && event.key !== "Backspace") ||
         interactionPending ||
         lasso.active ||
@@ -1797,17 +2064,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
         hasNativeTextSelection()
       ) return;
       event.preventDefault();
-      abortFixedExpansion();
+      dismissPaperPresentations();
       onRemoveSelected();
     };
     window.addEventListener("keydown", removeSelected);
     return () => window.removeEventListener("keydown", removeSelected);
-  }, [abortFixedExpansion, interactionPending, lasso.active, lasso.drawing, navigation.mode, navigation.selectedNodeId, onRemoveSelected, tree.rootId]);
+  }, [dismissPaperPresentations, interactionPending, lasso.active, lasso.drawing, navigation.mode, navigation.selectedNodeId, onRemoveSelected, tree.rootId]);
   useEffect(() => {
     const undoFromKeyboard = (event: KeyboardEvent) => {
       if (
         event.defaultPrevented ||
-        event.isComposing ||
+        isImeKeydown(event) ||
         event.altKey ||
         event.shiftKey ||
         (!event.metaKey && !event.ctrlKey) ||
@@ -1818,28 +2085,28 @@ export function RootedMaterial(props: RootedMaterialProps) {
         hasNativeTextSelection()
       ) return;
       event.preventDefault();
-      abortFixedExpansion();
+      dismissPaperPresentations();
       onUndo();
     };
     window.addEventListener("keydown", undoFromKeyboard);
     return () => window.removeEventListener("keydown", undoFromKeyboard);
-  }, [abortFixedExpansion, canUndo, interactionPending, onUndo]);
+  }, [dismissPaperPresentations, canUndo, interactionPending, onUndo]);
   useEffect(() => {
     const redoFromKeyboard = (event: KeyboardEvent) => {
       if (
-        event.defaultPrevented || event.isComposing || event.altKey ||
+        event.defaultPrevented || isImeKeydown(event) || event.altKey ||
         (!event.metaKey && !event.ctrlKey) || !canRedo || interactionPending ||
         isEditableEventTarget(event.target) || hasNativeTextSelection()
       ) return;
       const key = event.key.toLowerCase();
       if ((key !== "z" || !event.shiftKey) && key !== "y") return;
       event.preventDefault();
-      abortFixedExpansion();
+      dismissPaperPresentations();
       onRedo();
     };
     window.addEventListener("keydown", redoFromKeyboard);
     return () => window.removeEventListener("keydown", redoFromKeyboard);
-  }, [abortFixedExpansion, canRedo, interactionPending, onRedo]);
+  }, [dismissPaperPresentations, canRedo, interactionPending, onRedo]);
   useLayoutEffect(() => {
     stretchInvalidationRef.current = stretch.layoutInvalidated;
   }, [stretch.layoutInvalidated]);
@@ -2110,7 +2377,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
       cancelAdmissionFocusRestore();
     };
   }, [cancelAdmissionFocusRestore]);
-  const restoreVoiceToolFocus = useCallback((basis: AdmissionFocusRestorationBasis | null) => {
+  const restoreVoiceToolFocus = useCallback((
+    basis: AdmissionFocusRestorationBasis | null,
+    focusWasInside: boolean,
+  ) => {
     cancelAdmissionFocusRestore();
     if (basis === null) return;
     if (!admissionFocusRestorationIsCurrent(
@@ -2119,6 +2389,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
       props.documentEpoch,
       document.visibilityState === "visible",
     )) return;
+    const voiceTool = shellRef.current?.querySelector<HTMLButtonElement>('[data-tool-id="voice"]');
+    if (focusWasInside && voiceTool !== null && voiceTool !== undefined) {
+      // The leaving feedback is about to become inert. Move focus in this
+      // commit so it follows the live phase instead of falling to the body.
+      voiceTool.focus({ preventScroll: true });
+      if (document.activeElement === voiceTool) return;
+    }
     const frameId = requestAnimationFrame(() => {
       const pending = admissionFocusFrameRef.current;
       if (pending === null || pending.frameId !== frameId) return;
@@ -2200,17 +2477,42 @@ export function RootedMaterial(props: RootedMaterialProps) {
   } else {
     languageGuidance = { kind: "none" };
   }
+  // Parking is shown only against a settled layout: a relayout briefly
+  // empties the laid-out set without the passage having left the paper.
+  const expansionGuidance: CanvasTurnGuidanceState =
+    transformState.phase === "requesting" && transformState.parked && activeLayout !== null
+      ? { kind: "parked" }
+      : { kind: "none" };
+  const rewriteGuidance: CanvasTurnGuidanceState =
+    releaseParkedPointTalk !== null && activeLayout !== null
+      ? { kind: "parked" }
+      : { kind: "none" };
   const guidance = localizeCanvasGuidance(
     projectCanvasGuidance({
       admission: props.admission.state,
       camera: !lasso.active && canvasMode === "pan"
         ? { kind: "pan", zoom: viewport.zoom }
         : { kind: "none" },
+      expansion: expansionGuidance,
+      rewrite: rewriteGuidance,
+      outcome: outcomeLine.current,
       language: languageGuidance,
       material: materialGuidance,
     }),
     canvasPreferences.preferences.language,
   );
+  // An outcome counts as shown only while the line says it on a paper the
+  // person can see; only then may their next action retire it.
+  const shownOutcome = outcomeLine.current !== null && outcomePresentationAvailable &&
+      guidance.id === outcomeGuidanceId(outcomeLine.current)
+    ? outcomeLine.current
+    : null;
+  useOutcomeAcknowledgement(shownOutcome, outcomeLine.acknowledge);
+  const parkedRelease = guidance.id === "expansion-parked"
+    ? discardParkedExpansion
+    : guidance.id === "text-swap-parked"
+      ? releaseParkedPointTalk
+      : null;
   const lassoSelectedNodeIds = useMemo(
     () => new Set(lasso.selections.map((selection) => selection.nodeId)),
     [lasso.selections],
@@ -2798,6 +3100,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     stretch.amount === 0 &&
     transformState.phase === "idle" &&
     pointTalkHostNodeId === null &&
+    !wikiTakeoverOpen &&
     !wheelMotionActive &&
     viewport.gesture?.dragging !== true;
 
@@ -2810,16 +3113,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
   }, [interruptIndexCameraMotion, setViewport]);
 
+  const cancelLassoPointer = lasso.pointerCancel;
+  const cancelLassoStroke = lasso.cancelActiveStroke;
   const cancelCanvasPointerOwnership = useCallback(() => {
+    pointerArbiter.reset();
+    settleTouchFounderEffects(false);
     const touchPointerIds = Array.from(canvasTouchContactsRef.current.keys());
     canvasTouchContactsRef.current.clear();
     multiTouchNavigationRef.current = false;
     const shell = shellRef.current;
     for (const pointerId of touchPointerIds) {
-      lasso.pointerCancel(pointerId);
+      cancelLassoPointer(pointerId);
       if (shell?.hasPointerCapture(pointerId)) shell.releasePointerCapture(pointerId);
     }
-    const lassoPointerId = lasso.cancelActiveStroke();
+    const lassoPointerId = cancelLassoStroke();
     if (lassoPointerId !== null && shell?.hasPointerCapture(lassoPointerId)) {
       shell.releasePointerCapture(lassoPointerId);
     }
@@ -2827,25 +3134,89 @@ export function RootedMaterial(props: RootedMaterialProps) {
     pointerOriginNodeRef.current = null;
     cancelNodeDragOwnership();
     updateViewport({ type: "gesture-cancel" });
-  }, [cancelNodeDragOwnership, lasso, updateViewport]);
+  }, [
+    cancelLassoPointer,
+    cancelLassoStroke,
+    cancelNodeDragOwnership,
+    pointerArbiter,
+    settleTouchFounderEffects,
+    updateViewport,
+  ]);
+
+  // A pen that lands anywhere just after a palm revokes it: the palm's lasso
+  // stroke restores its prior selection, its pan returns the camera to where it
+  // began, and its node drag and tap never settle.
+  const revokeTouchesForPen = useCallback((pointerIds: readonly number[]) => {
+    // The palm never committed, so nothing it would have dismissed is lost.
+    settleTouchFounderEffects(false);
+    const shell = shellRef.current;
+    for (const pointerId of pointerIds) {
+      canvasTouchContactsRef.current.delete(pointerId);
+      if (cancelLassoPointer(pointerId)) lassoClickOriginNodeRef.current = null;
+      if (nodeDragRef.current?.pointerId === pointerId) cancelNodeDragOwnership();
+      updateViewport({ type: "pointer-revert", pointerId });
+      if (shell?.hasPointerCapture(pointerId)) shell.releasePointerCapture(pointerId);
+    }
+    multiTouchNavigationRef.current = false;
+    pointerOriginNodeRef.current = null;
+  }, [cancelLassoPointer, cancelNodeDragOwnership, settleTouchFounderEffects, updateViewport]);
+
+  // The window listeners below live as long as the paper. They reach the
+  // current owners through refs, so a render or a camera change never
+  // detaches and re-attaches them mid-gesture.
+  const revokeTouchesForPenRef = useRef(revokeTouchesForPen);
+  const cancelCanvasPointerOwnershipRef = useRef(cancelCanvasPointerOwnership);
+  useLayoutEffect(() => {
+    revokeTouchesForPenRef.current = revokeTouchesForPen;
+    cancelCanvasPointerOwnershipRef.current = cancelCanvasPointerOwnership;
+  });
 
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState !== "visible") cancelCanvasPointerOwnership();
+    // Capture phase: a control that stops propagation must not strand a pen
+    // "in contact" or a canvas owner. The arbiter keeps an ended pointer's
+    // disposition until the next contact, so the canvas handlers that run
+    // after this still recognise it.
+    const noteDown = (event: PointerEvent) => {
+      // Seen before the takeover's own capture listener dismisses it.
+      const takeover = wikiOccurrences?.getSnapshot().find((view) => view.takeover);
+      wikiDismissingPressRef.current = takeover === undefined
+        ? null
+        : Object.freeze({ pointerId: event.pointerId, occurrenceId: takeover.id });
+      const revoked = pointerArbiter.notePointerDown(arbitratedPointer(event));
+      if (revoked.length > 0) revokeTouchesForPenRef.current(revoked);
     };
-    window.addEventListener("blur", cancelCanvasPointerOwnership);
-    window.addEventListener("pagehide", cancelCanvasPointerOwnership);
-    window.addEventListener("orientationchange", cancelCanvasPointerOwnership);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.screen.orientation?.addEventListener?.("change", cancelCanvasPointerOwnership);
+    const noteMove = (event: PointerEvent) => pointerArbiter.notePointerMove(arbitratedPointer(event));
+    const noteEnd = (event: PointerEvent) => pointerArbiter.notePointerEnd(arbitratedPointer(event));
+    window.addEventListener("pointerdown", noteDown, true);
+    window.addEventListener("pointermove", noteMove, true);
+    window.addEventListener("pointerup", noteEnd, true);
+    window.addEventListener("pointercancel", noteEnd, true);
     return () => {
-      window.removeEventListener("blur", cancelCanvasPointerOwnership);
-      window.removeEventListener("pagehide", cancelCanvasPointerOwnership);
-      window.removeEventListener("orientationchange", cancelCanvasPointerOwnership);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.screen.orientation?.removeEventListener?.("change", cancelCanvasPointerOwnership);
+      window.removeEventListener("pointerdown", noteDown, true);
+      window.removeEventListener("pointermove", noteMove, true);
+      window.removeEventListener("pointerup", noteEnd, true);
+      window.removeEventListener("pointercancel", noteEnd, true);
     };
-  }, [cancelCanvasPointerOwnership]);
+  }, [pointerArbiter, wikiOccurrences]);
+
+  useEffect(() => {
+    const cancelOwnership = () => cancelCanvasPointerOwnershipRef.current();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") cancelOwnership();
+    };
+    window.addEventListener("blur", cancelOwnership);
+    window.addEventListener("pagehide", cancelOwnership);
+    window.addEventListener("orientationchange", cancelOwnership);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.screen.orientation?.addEventListener?.("change", cancelOwnership);
+    return () => {
+      window.removeEventListener("blur", cancelOwnership);
+      window.removeEventListener("pagehide", cancelOwnership);
+      window.removeEventListener("orientationchange", cancelOwnership);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.screen.orientation?.removeEventListener?.("change", cancelOwnership);
+    };
+  }, []);
 
   const cancelViewportGesture = () => {
     // A tool transfer ends the old camera owner and its browser capture as one
@@ -2910,6 +3281,24 @@ export function RootedMaterial(props: RootedMaterialProps) {
     return () => shell.removeEventListener("wheel", handleWheel);
   }, [cancelKeyboardFocusReveal, canvasMode, interruptIndexCameraMotion, lasso.active, setViewport, setWheelMotionActive]);
 
+  // One stable status object per pending turn keeps memoized rows from
+  // re-rendering on every paper render while a request is outstanding.
+  const transformStatusNodeId = transformState.phase === "idle"
+    ? null
+    : transformState.basis?.selection.nodeId ?? null;
+  const transformStatusPhase = transformState.phase;
+  const transformStatus = useMemo(
+    () => transformStatusNodeId === null || transformStatusPhase === "idle"
+      ? null
+      : Object.freeze({
+          nodeId: transformStatusNodeId,
+          phase: transformStatusPhase,
+          text: stretchStatusText(props.locale),
+          announce: !lassoHasSelectionGeometry,
+        }),
+    [lassoHasSelectionGeometry, props.locale, transformStatusNodeId, transformStatusPhase],
+  );
+
   return (
     <main
       className="matter-shell"
@@ -2932,7 +3321,17 @@ export function RootedMaterial(props: RootedMaterialProps) {
       data-viewport-y={viewport.y}
       data-viewport-zoom={viewport.zoom}
       ref={shellRef}
+      style={PRESENCE_EXIT_STYLE}
       onClickCapture={(event) => {
+        const clickPointerId = (event.nativeEvent as Partial<PointerEvent>).pointerId;
+        if (
+          clickPointerId !== undefined &&
+          pointerArbiter.consumeRejectedClick(clickPointerId, event.timeStamp)
+        ) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
         if (!suppressClickRef.current) return;
         suppressClickRef.current = false;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive]")) return;
@@ -2940,6 +3339,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         event.stopPropagation();
       }}
       onLostPointerCapture={(event) => {
+        if (pointerArbiter.isRejected(event.pointerId)) return;
         const trackedTouch = canvasTouchContactsRef.current.has(event.pointerId);
         if (trackedTouch) canvasTouchContactsRef.current.delete(event.pointerId);
         if (trackedTouch && multiTouchNavigationRef.current) {
@@ -2958,6 +3358,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
         updateViewport({ type: "lost-pointer-capture", pointerId: event.pointerId });
       }}
       onPointerCancel={(event) => {
+        // A palm's cancel beside a pen would otherwise clear the pen's origin.
+        if (pointerArbiter.ignoresCancel(arbitratedPointer(event))) return;
         const trackedTouch = canvasTouchContactsRef.current.has(event.pointerId);
         if (trackedTouch) canvasTouchContactsRef.current.delete(event.pointerId);
         if (trackedTouch && multiTouchNavigationRef.current) {
@@ -2979,8 +3381,37 @@ export function RootedMaterial(props: RootedMaterialProps) {
         cancelKeyboardFocusReveal();
         if (interactionPending) return;
         if ((event.target as HTMLElement).closest("[data-canvas-interactive], a")) return;
+        // Only a primary-button contact can start a canvas gesture, so no other
+        // button may become the gesture owner or be refused by it.
+        const claim = event.pointerType === "touch" || event.button === 0
+          ? pointerArbiter.claim(arbitratedPointer(event))
+          : null;
+        if (claim?.kind === "reject") {
+          // Before the contact registry, capture, Lasso, drag, or camera.
+          event.preventDefault();
+          return;
+        }
+        // Interrupting camera motion loses nothing and stays immediate.
         const pointerViewport = interruptIndexCameraMotion();
-        abortFixedExpansion();
+        if (canvasPressDismissal(event.pointerType, claim) === "when-touch-commits") {
+          // A resting palm must not close Point and Talk or drop a committed
+          // degree before the pen that follows it can take over.
+          settleTouchFounderEffects(false);
+          const effects: (() => void)[] = [dismissPaperPresentations];
+          const pointerId = event.pointerId;
+          pendingTouchEffectsRef.current = {
+            pointerId,
+            effects,
+            discard: deferUntilTouchCommits(
+              { pointerId, clientX: event.clientX, clientY: event.clientY },
+              () => {
+                if (pendingTouchEffectsRef.current?.pointerId === pointerId) settleTouchFounderEffects(true);
+              },
+            ),
+          };
+        } else {
+          dismissPaperPresentations();
+        }
         if (event.pointerType === "touch") {
           const contact = projectCanvasTouchContact(
             event.pointerId,
@@ -2990,6 +3421,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
           );
           if (contact !== null) canvasTouchContactsRef.current.set(event.pointerId, contact);
           if (canvasTouchContactsRef.current.size >= 2) {
+            // A second finger makes it a pinch: a real gesture, not a palm.
+            settleTouchFounderEffects(true);
             for (const pointerId of canvasTouchContactsRef.current.keys()) {
               if (lasso.pointerCancel(pointerId)) lassoClickOriginNodeRef.current = null;
             }
@@ -3018,7 +3451,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
           lassoClickOriginNodeRef.current = originNodeId !== null && workingContext.activeNodeIds.has(originNodeId)
             ? originNodeId
             : null;
-          props.admission.clearRepairPresentations();
+          const pendingTouchEffects = pendingTouchEffectsRef.current;
+          if (pendingTouchEffects?.pointerId === event.pointerId) {
+            pendingTouchEffects.effects.push(props.admission.clearRepairPresentations);
+          } else {
+            props.admission.clearRepairPresentations();
+          }
           event.preventDefault();
           try {
             event.currentTarget.setPointerCapture(event.pointerId);
@@ -3029,7 +3467,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
           }
           return;
         }
-        if (!event.isPrimary || (event.pointerType !== "touch" && event.button !== 0)) return;
+        // One gesture owner replaces the per-type `isPrimary` test: a touch
+        // that joined an existing touch owner belongs to its pinch, never to a
+        // second drag or pan.
+        if (claim === null || (claim.kind === "accept" && !claim.founder)) return;
         const pointerCandidateId =
           (event.target as HTMLElement).closest<HTMLElement>("[data-thought-id]")?.dataset
             .thoughtId ?? null;
@@ -3104,6 +3545,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }
       }}
       onPointerMove={(event) => {
+        if (pointerArbiter.isRejected(event.pointerId)) return;
         let touchContact: CanvasTouchContact | null = null;
         if (canvasTouchContactsRef.current.has(event.pointerId)) {
           touchContact = projectCanvasTouchContact(
@@ -3204,6 +3646,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         });
       }}
       onPointerUp={(event) => {
+        if (pointerArbiter.isRejected(event.pointerId)) return;
         const trackedTouch = canvasTouchContactsRef.current.get(event.pointerId) ?? null;
         const finalTrackedTouch = trackedTouch === null
           ? null
@@ -3251,9 +3694,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
             const nodeId = lassoClickOriginNodeRef.current;
             exitLasso();
             if (nodeId !== null && workingContext.activeNodeIds.has(nodeId)) {
-              selectNodeAfterAbort(nodeId);
+              selectNodeDismissingPresentations(nodeId);
             } else {
-              abortFixedExpansion();
+              dismissPaperPresentations();
               props.onClearSelection();
             }
           }
@@ -3274,13 +3717,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
           suppressClickRef.current = true;
           if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
           if (shouldMove && nodeDrag.sourceId !== null) {
-            abortFixedExpansion();
+            dismissPaperPresentations();
             props.onMoveNode(nodeDrag.sourceId, targetId, targetIndex ?? undefined);
           }
           else if (!nodeDrag.dragging) {
-            if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) selectNodeAfterAbort(nodeDrag.originNodeId);
+            if (openWikiTakeoverAt(nodeDrag.originNodeId, event.clientX, event.clientY, event.pointerId)) return;
+            if (nodeDrag.originNodeId !== null && tree.nodes[nodeDrag.originNodeId] !== undefined) selectNodeDismissingPresentations(nodeDrag.originNodeId);
             else {
-              abortFixedExpansion();
+              dismissPaperPresentations();
               props.onClearSelection();
             }
           }
@@ -3299,12 +3743,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
         pointerOriginNodeRef.current = null;
         // Pointer capture keeps dragging reliable over text, but retargets the
         // browser click. Resolve a sub-threshold gesture here as node selection.
-        if (!dragged) {
+        if (!dragged && !openWikiTakeoverAt(originNodeId, releaseX, releaseY, event.pointerId)) {
           setCanvasMode("material");
           if (originNodeId !== null && tree.nodes[originNodeId] !== undefined) {
-            selectNodeAfterAbort(originNodeId);
+            selectNodeDismissingPresentations(originNodeId);
           } else {
-            abortFixedExpansion();
+            dismissPaperPresentations();
             props.onClearSelection();
           }
         }
@@ -3323,6 +3767,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
           {materialTextSuccessAnnouncement(currentTransformChange.motionHint, props.locale)}
         </span>
       )}
+      {/* Mounted empty first, so assistive technology observes each insertion.
+          The explicit politeness matches every other outcome region, since not
+          every screen reader derives it from the status role alone. */}
+      <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
+        {shownOutcome !== null ? (
+          <span key={`outcome_${shownOutcome.id}`}>{localizeOutcome(shownOutcome, props.locale)}</span>
+        ) : guidance.id === "expansion-parked" || guidance.id === "text-swap-parked" ? (
+          <span key={guidance.id}>{guidance.text}</span>
+        ) : null}
+      </span>
       <PaperTexture />
       <header className="matter-header" data-canvas-interactive>
         <a className="matter-brand" href="https://www.ptoq.io/" aria-label="p to q — Matter">
@@ -3339,7 +3793,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         <span className="matter-brand__product">matter</span>
       </header>
       <MaterialFilesWithLabels
-        archive={archiveAfterAbort}
+        archive={indexArchive}
         documentEpoch={props.documentEpoch}
         interactionPending={interactionPending || lasso.active}
         lassoSelectedNodeIds={lassoSelectedNodeIds}
@@ -3349,25 +3803,27 @@ export function RootedMaterial(props: RootedMaterialProps) {
         heldAsideNodeIds={workingContext.heldAsideNodeIds}
         heldAsideRootIds={heldAsideRootIds}
         onFocusNode={(nodeId) => {
-          focusIndexNodeAfterAbort(nodeId);
+          focusIndexNode(nodeId);
         }}
+        onMaterialCopied={props.wikiOccurrences?.noteMaterialCopied}
         onOpenOverlay={() => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           indexCenterRequestRef.current = null;
           interruptIndexCameraMotion();
           if (lasso.active) exitLasso();
         }}
+        onEditingChange={setEditingHeld}
         onOverlayChange={setIndexOverlayOpen}
         onRenameDocument={(title) => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           props.onRenameDocument(title);
         }}
         onRestoreNode={(nodeId) => {
-          restoreIndexNodeAfterAbort(nodeId);
+          restoreIndexNode(nodeId);
         }}
-        onSelectNode={selectIndexNodeAfterAbort}
+        onSelectNode={selectIndexNode}
         onToggleHeldAside={(nodeId) => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           toggleHeldAside(nodeId);
         }}
         persistence={props.persistence}
@@ -3379,7 +3835,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         lassoAvailable={lassoEligibleNodeIds.size > 0 && (lasso.active || activeLayout !== null)}
         locale={props.locale}
         onLasso={() => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           cancelNodeDragOwnership();
           if (lasso.active) {
             exitLasso();
@@ -3399,7 +3855,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           }
         }}
         onMove={() => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           cancelNodeDragOwnership();
           if (canvasMode === "pan" && !lasso.active) {
             cancelViewportGesture();
@@ -3410,7 +3866,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           setCanvasMode("pan");
         }}
         onIntent={(intent) => {
-          abortFixedExpansion();
+          dismissPaperPresentations();
           dispatchToolIntent(intent, props);
         }}
         onVoice={() => {
@@ -3427,6 +3883,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             props.admission.clearRepairPresentations();
             setPointTalkPhase("idle");
             setPointTalkOpeningId((current) => current + 1);
+            setPointTalkOrigin(null);
             setPointTalkOwner(createPointTalkOwner(
               props.documentEpoch,
               tree.id,
@@ -3436,7 +3893,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             issuePointTalkVoiceCommand("start");
             return;
           }
-          abortFixedExpansion();
+          dismissPaperPresentations();
           if (props.admission.state.phase === "recording") {
             props.admission.stop();
           } else if (props.admissionAnchor !== null) {
@@ -3470,7 +3927,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         })}
       />
       <section
-        aria-label="Thought material"
+        aria-label={canvasRegionCopy(props.locale).material}
         className="matter-document"
         data-canvas-theme={canvasPreferences.resolvedAppearance}
         data-canvas-theme-preference={canvasPreferences.preferences.appearance}
@@ -3502,7 +3959,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         />
         {projection.length === 0 ? (
           navigation.mode === "focus" ? (
-            <p className="matter-document__empty">This focus is no longer available.</p>
+            <p className="matter-document__empty">{canvasRegionCopy(props.locale).focusUnavailable}</p>
           ) : null
         ) : (
           <div
@@ -3539,7 +3996,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
               selectionPreviewMode={visibleSplitPreviewMode}
               navigation={navigation}
               onKeyboardFocus={revealKeyboardFocusedMaterial}
-              onSelectNode={selectNodeAfterAbort}
+              onSelectNode={selectNodeDismissingPresentations}
               onSelectLassoSegment={lasso.selectKeyboardSegment}
               activeNodeIds={workingContext.activeNodeIds}
               heldAsideRootIds={heldAsideRootIds}
@@ -3548,20 +4005,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
               repairPresentations={props.admission.repairPresentations}
               splitProjectionRef={splitProjectionRef}
               transformChange={currentTransformChange}
-              transformStatus={transformState.phase !== "idle" && transformState.basis !== null
-                ? {
-                    nodeId: transformState.basis.selection.nodeId,
-                    phase: transformState.phase,
-                    text: stretchStatusText(props.locale),
-                    announce: !lassoHasSelectionGeometry,
-                  }
-                : null}
+              transformStatus={transformStatus}
               tree={tree}
+              wikiDescriptionCounts={wikiDescriptionCounts}
             />
             )}
             <AdmissionFeedback
-              anchor={admissionAnchor}
-              parentBox={admissionParentBox}
+              frame={admissionFrame}
               controller={props.admission}
               locale={props.locale}
               onDismiss={() => {
@@ -3569,7 +4019,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
               }}
               onReturnFocus={restoreVoiceToolFocus}
               onHeightChange={setAdmissionFeedbackHeight}
+              placeAnchor={props.admissionAnchor}
               presented={outcomePresentationAvailable}
+              rootId={tree.rootId}
             />
           </div>
           </div>
@@ -3586,7 +4038,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             key={`${props.documentEpoch}:${tree.revision}:${workingContextState.epoch}:${navigation.mode}`}
             locale={props.locale}
             navigation={navigation}
-            onOpenPointTalk={(nodeId) => {
+            onOpenPointTalk={(nodeId, origin) => {
               if (pointTalkHostNodeId !== null) return;
               canvasChromeRef.current?.closeInquiry();
               abortElasticExpansion();
@@ -3594,22 +4046,28 @@ export function RootedMaterial(props: RootedMaterialProps) {
               setPointTalkPhase("idle");
               setPointTalkVoiceCommand(null);
               setPointTalkOpeningId((current) => current + 1);
+              setPointTalkOrigin(origin);
               setPointTalkOwner(createPointTalkOwner(props.documentEpoch, tree.id, nodeId));
               setPointTalkPresented(true);
             }}
+            onOpenWikiReview={wikiOccurrences === undefined ? undefined : (occurrenceId) => {
+              if (wikiOccurrences.openTakeover(occurrenceId)) yieldPaperPresentations();
+            }}
             onToggleHeldAside={(nodeId) => {
-              abortFixedExpansion();
+              dismissPaperPresentations();
               toggleHeldAside(nodeId);
             }}
             pointTalkEligibleNodeIds={pointTalkEligibleNodeIds}
             positioningRef={materialPlaneRef}
             tree={tree}
+            wikiReviews={wikiReviews}
           />
         ) : null}
         <footer
-          aria-label="Matter guidance"
+          aria-label={canvasRegionCopy(props.locale).guidance}
           className="matter-guidance"
           data-canvas-interactive
+          data-guidance-action={parkedRelease === null ? undefined : true}
           data-guidance-kind={guidance.kind}
           data-guidance-state={guidance.id}
           data-optical-clearance="guidance"
@@ -3623,6 +4081,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
           >
             {guidance.text}
           </p>
+          {parkedRelease === null ? null : (
+            <button
+              className="matter-guidance__action"
+              onClick={parkedRelease}
+              type="button"
+            >
+              {localizeParkedRelease(canvasPreferences.preferences.language)}
+            </button>
+          )}
         </footer>
         </div>
         <CanvasChrome
@@ -3630,7 +4097,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
           inquiryContext={projectInquiryPayload}
           inquiryOwner={inquiryOwner}
           inquiryRecord={inquiryRecord}
-          onInquiryOpen={abortFixedExpansion}
+          onInquiryOpen={yieldPaperPresentations}
+          onInquiryHoldChange={setInquiryHeld}
           onOverlayChange={changeCanvasOverlay}
           overlay={canvasOverlay}
           ref={canvasChromeRef}
@@ -3656,7 +4124,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             variant="actionable"
           />
         )}
-        {pointTalkHostNodeId === null ? null : (
+        {pointTalkHostNodeId === null || pointTalkPresenceIdentity === null ? null : (
           <PointTalkTurn
             boundaryRef={documentRef}
             canvasRef={canvasRef}
@@ -3665,14 +4133,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
             documentEpoch={props.documentEpoch}
             enabled={pointTalkSelectionCurrent && !persistenceLoading}
             geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}:${materialPresentationAvailable ? "surface" : "occluded"}`}
+            exitHandoff={pointTalkExitHandoff}
             interactionScopeKey={`${navigationKey}:${workingContextState.epoch}:point-talk`}
             key={`${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`}
             locale={props.locale}
             nodeId={pointTalkHostNodeId}
             onClose={closePointTalk}
             onCommitted={publishPointTalkChange}
+            onDeliveryParkedChange={reportPointTalkParked}
             onPhaseChange={setPointTalkPhase}
             onReleased={releasePointTalkJob}
+            onReleasedOutcome={reportPointTalkOutcome}
+            origin={pointTalkOrigin}
+            penActive={pointerArbiter.penActive}
+            presenceIdentity={pointTalkPresenceIdentity}
             presented={pointTalkPresented}
             positioningRef={materialPlaneRef}
             surfaceAvailable={outcomePresentationAvailable}
@@ -3681,6 +4155,29 @@ export function RootedMaterial(props: RootedMaterialProps) {
             deliveryVisibleNodeIds={visiblyLaidOutNodeIds}
             voiceCommand={pointTalkVoiceCommand}
             voiceAvailable={voiceReadiness.status === "ready"}
+          />
+        )}
+        {wikiOccurrences === undefined || !wikiLayerMounted ? null : (
+          <WikiOccurrenceLayer
+            blocked={lasso.active || stretch.dragging || interactionPending ||
+              activePointTalkNodeId !== null || indexOverlayOpen || !outcomePresentationAvailable}
+            boundaryRef={documentRef}
+            driver={wikiOccurrences}
+            geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}`}
+            locale={props.locale}
+            onOpenWiki={(term, trigger) => canvasChromeRef.current?.openWiki(term, trigger)}
+            onRestoreRefused={reportWikiRestoreRefused}
+            penActive={pointerArbiter.penActive}
+            positioningRef={materialPlaneRef}
+            surfaceAvailable={outcomePresentationAvailable}
+            tree={tree}
+          />
+        )}
+        {pointTalkOpeningId === 0 ? null : (
+          <PointTalkExit
+            available={outcomePresentationAvailable}
+            handoff={pointTalkExitHandoff}
+            locale={props.locale}
           />
         )}
         <LassoOverlay
@@ -3703,6 +4200,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
           onFocusRestored={finishStretchFocusRestore}
           onPreciseGesture={props.admission.clearRepairPresentations}
           onRequestFocusRestore={requestStretchFocusRestore}
+          penActive={pointerArbiter.penActive}
           restoreFocusHandle={stretchFocusRestoreHandle}
           status={transformState.phase}
           stretchVisible={materialPresentationAvailable && elasticSelection !== null}
@@ -3756,6 +4254,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
   transformChange,
   transformStatus,
   tree,
+  wikiDescriptionCounts,
 }: {
   activeProjection: readonly LayoutProjectionItem[];
   documentEpoch: number;
@@ -3786,9 +4285,13 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
     announce: boolean;
   }> | null;
   tree: ThoughtTree;
+  /** Disclosed Wiki changes per passage, described to assistive technology. */
+  wikiDescriptionCounts: ReadonlyMap<string, number>;
 }) {
   const repairPresentationScope = { treeId: tree.id, documentEpoch };
   const lassoKeyboardDescriptionId = useId();
+  const wikiDescriptionId = useId();
+  const wikiDescribedCounts = new Set(wikiDescriptionCounts.values());
   const activeProjectionById = new Map(activeProjection.map((item) => [item.node.id, item]));
   const handleThoughtClick = useCallback((event: ReactMouseEvent<HTMLOListElement>) => {
     if (interactionPending) return;
@@ -3814,6 +4317,13 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
         {lassoAccessibilityCopy(locale).keyboardSelectionHint}
       </span>
     ) : null}
+    {/* One description per count, shared by every passage with that many
+        changes; the words themselves are never wrapped. */}
+    {[...wikiDescribedCounts].map((count) => (
+      <span className="visually-hidden" id={`${wikiDescriptionId}-${count}`} key={count}>
+        {wikiOccurrenceDescription(locale, count)}
+      </span>
+    ))}
     <ol className="spatial-thoughts" onClick={handleThoughtClick}>
       {projection.map(({ node, parentId }) => {
         const activeProjectionItem = activeProjectionById.get(node.id);
@@ -3825,6 +4335,11 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
         const isProjected = lassoSelection?.nodeId === node.id && lassoSourceText === node.text;
         const isLassoSelected = lassoSelection?.nodeId === node.id;
         const isLassoKeyboardEligible = lassoActive && lassoEligibleNodeIds.has(node.id);
+        const wikiCount = wikiDescriptionCounts.get(node.id);
+        const describedBy = [
+          isLassoKeyboardEligible ? lassoKeyboardDescriptionId : null,
+          wikiCount === undefined ? null : `${wikiDescriptionId}-${wikiCount}`,
+        ].filter((id) => id !== null).join(" ");
         const repairChange = repairPresentations.get(node.id);
         const isRepairSettling = repairPresentations.size > 0 &&
           isRepairPresentationCurrent(repairChange, repairPresentationScope, tree);
@@ -3861,7 +4376,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
             key={node.id}
           >
             <button
-              aria-describedby={isLassoKeyboardEligible ? lassoKeyboardDescriptionId : undefined}
+              aria-describedby={describedBy === "" ? undefined : describedBy}
               aria-pressed={isSelected}
               aria-keyshortcuts={isHeldAside
                 ? isHeldAsideRoot ? "ArrowRight" : undefined
@@ -3881,8 +4396,8 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
                   node.id,
                   event.key === "ArrowRight" ? "next" : "previous",
                 )) return;
+                // preventDefault is the claim; no keydown stops propagation.
                 event.preventDefault();
-                event.stopPropagation();
               }}
               tabIndex={isHeldAside && !isHeldAsideRoot ? -1 : undefined}
               type="button"
@@ -4087,6 +4602,7 @@ function LassoOverlay({
   onFocusRestored,
   onPreciseGesture,
   onRequestFocusRestore,
+  penActive,
   restoreFocusHandle,
   status,
   stretchVisible,
@@ -4111,6 +4627,7 @@ function LassoOverlay({
   onFocusRestored: (handle: StretchHandle) => void;
   onPreciseGesture: () => void;
   onRequestFocusRestore: (handle: StretchHandle) => void;
+  penActive: (timeStamp: number) => boolean;
   restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
   stretchVisible: boolean;
@@ -4229,6 +4746,7 @@ function LassoOverlay({
               onFocusRestored={onFocusRestored}
               onPreciseGesture={onPreciseGesture}
               onRequestFocusRestore={onRequestFocusRestore}
+              penActive={penActive}
               restoreFocusHandle={restoreFocusHandle}
               status={status}
               stretch={stretch}
@@ -4241,6 +4759,7 @@ function LassoOverlay({
               onFocusRestored={onFocusRestored}
               onPreciseGesture={onPreciseGesture}
               onRequestFocusRestore={onRequestFocusRestore}
+              penActive={penActive}
               restoreFocusHandle={restoreFocusHandle}
               status={status}
               stretch={stretch}
@@ -4332,6 +4851,7 @@ function StretchHandleButton({
   onFocusRestored,
   onPreciseGesture,
   onRequestFocusRestore,
+  penActive,
   restoreFocusHandle,
   status,
   stretch,
@@ -4343,6 +4863,7 @@ function StretchHandleButton({
   onFocusRestored: (handle: StretchHandle) => void;
   onPreciseGesture: () => void;
   onRequestFocusRestore: (handle: StretchHandle) => void;
+  penActive: (timeStamp: number) => boolean;
   restoreFocusHandle: StretchHandle | null;
   status: "idle" | "requesting";
   stretch: ReturnType<typeof useStretch>;
@@ -4386,6 +4907,9 @@ function StretchHandleButton({
       onPointerDown={(event) => {
         event.stopPropagation();
         if (status === "requesting") return;
+        // The grips sit outside the canvas owner, so they apply the same palm
+        // rule themselves: a touch while a pen writes is not a stretch.
+        if (isPalmPress(event.pointerType, penActive(event.timeStamp))) return;
         onFocusRestored(handle);
         if (stretch.pointerDown(handle, event)) {
           onBeginAdjustment();
@@ -4412,16 +4936,18 @@ function StretchHandleButton({
           onFocusRestored(handle);
           return;
         }
-        if (!isStretchInteractionKey(event.key)) return;
+        if (!isStretchInteractionKey(event.key) || isImeKeydown(event.nativeEvent)) return;
+        const cancel = isCancelEscape(event.nativeEvent);
+        // The focused grip owns this key; the document Escape stack honours it.
         event.preventDefault();
-        if (status === "requesting" && event.key !== "Escape") return;
+        if (status === "requesting" && !cancel) return;
         onBeginAdjustment();
-        if (event.key !== "Escape" && event.key !== "Enter" && event.key !== " ") {
-          onRequestFocusRestore(handle);
-        } else if (event.key === "Escape") {
+        if (cancel) {
           onFocusRestored(handle);
+        } else if (event.key !== "Enter" && event.key !== " ") {
+          onRequestFocusRestore(handle);
         }
-        if (status !== "idle" && event.key !== "Escape") stretch.reopen();
+        if (status !== "idle" && !cancel) stretch.reopen();
         stretch.keyDown(event.key, handle);
         onPreciseGesture();
       }}
@@ -4430,6 +4956,17 @@ function StretchHandleButton({
       type="button"
     />
   );
+}
+
+function arbitratedPointer(
+  event: Pick<PointerEvent, "buttons" | "pointerId" | "pointerType" | "timeStamp">,
+): ArbitratedPointer {
+  return {
+    pointerId: event.pointerId,
+    pointerType: event.pointerType,
+    buttons: event.buttons,
+    timeStamp: event.timeStamp,
+  };
 }
 
 function isEditableEventTarget(target: EventTarget | null): boolean {
@@ -4614,7 +5151,10 @@ function normalizePointerType(value: string): CanvasPointerType {
 
 function documentFocusIsOwned(): boolean {
   const active = document.activeElement;
-  return active instanceof HTMLElement && active !== document.body && active.isConnected;
+  // A browser may keep reporting focus inside a subtree that just became
+  // inert, such as a leaving transient surface; nobody can act on it there.
+  return active instanceof HTMLElement && active !== document.body && active.isConnected &&
+    active.closest("[inert]") === null;
 }
 
 function projectCanvasTouchContact(
@@ -4639,100 +5179,179 @@ function projectCanvasTouchContact(
   });
 }
 
+type AdmissionFeedbackView = Readonly<{
+  state: Exclude<AdmissionController["state"], { readonly phase: "idle" }>;
+  /** The material lane the surface sits under while it is live. */
+  box: Readonly<{ nodeId: string; x: number; y: number; height: number }> | null;
+}>;
+
+function admissionPresenceClose(
+  presented: boolean,
+  settlement: AdmissionController["settlement"],
+): PresenceClose {
+  if (!presented) return "preempted";
+  switch (settlement?.outcome) {
+    case "committed": return "finished";
+    case "withdrawn": return "person";
+    default: return "preempted";
+  }
+}
+
+/**
+ * Recording feedback under one material lane. Focus, announcements, and
+ * height measurement follow the live phase; once the frame leaves `present`
+ * the surface renders its frozen last content without handlers, owns no live
+ * region, and becomes inert only after any focus inside it has been returned.
+ */
 function AdmissionFeedback({
-  anchor,
-  parentBox,
   controller,
+  frame,
   locale,
   onDismiss,
   onReturnFocus,
   onHeightChange,
+  placeAnchor,
   presented,
+  rootId,
 }: {
-  anchor: InteractionAdmissionAnchor | null;
-  parentBox: Readonly<{ nodeId: string; x: number; y: number; width: number; height: number }> | null;
   controller: AdmissionController;
+  frame: PresenceFrame<AdmissionFeedbackView>;
   locale: CanvasLanguage;
   onDismiss: () => void;
-  onReturnFocus: (basis: AdmissionFocusRestorationBasis | null) => void;
+  onReturnFocus: (basis: AdmissionFocusRestorationBasis | null, focusWasInside: boolean) => void;
   onHeightChange: (height: number) => void;
+  /** Where a new admission would go now; held words may be placed only here. */
+  placeAnchor: InteractionAdmissionAnchor | null;
   presented: boolean;
+  rootId: string | null;
 }) {
   const feedbackRef = useRef<HTMLDivElement>(null);
   const retryFocusRef = useRef(false);
-  const phase = controller.state.phase;
-  const previousStateRef = useRef(controller.state);
+  const liveState = controller.state;
+  const previousLiveStateRef = useRef(liveState);
+  const present = frame?.stage === "present";
+  const view = frame?.view.state ?? null;
+  const shownPhase = useSettledStatus<AdmissionController["state"]["phase"]>({
+    scope: frame?.identity ?? null,
+    value: view?.phase ?? null,
+    // Capture starting or ending and every error are shown at once; waiting
+    // for permission, transcription, or placement settles first.
+    urgent: view?.phase === "recording" || view?.phase === "stopping" || view?.phase === "error",
+    lingers: view?.phase !== "error",
+  }, !present);
+  // Modal chrome cuts the box while its work stays in flight; the lane keeps
+  // the last measured height so a tall box does not reflow twice.
+  const laneOwned = frame !== null || liveState.phase !== "idle";
+
   useLayoutEffect(() => {
+    // Only a present surface is measured. A leaving one keeps its last height
+    // until the reservation it belongs to is released.
+    if (!present) return;
     const element = feedbackRef.current;
-    if (element === null) {
-      onHeightChange(0);
-      return;
-    }
+    if (element === null) return;
     const publishHeight = () => onHeightChange(Math.ceil(element.getBoundingClientRect().height));
     publishHeight();
-    if (typeof ResizeObserver === "undefined") return () => onHeightChange(0);
+    if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(publishHeight);
     observer.observe(element);
-    return () => {
-      observer.disconnect();
-      onHeightChange(0);
-    };
-  }, [anchor, onHeightChange, phase, presented]);
+    return () => observer.disconnect();
+  }, [frame?.identity, onHeightChange, present]);
   useLayoutEffect(() => {
-    const previousState = previousStateRef.current;
-    previousStateRef.current = controller.state;
+    if (!laneOwned) return;
+    return () => onHeightChange(0);
+  }, [laneOwned, onHeightChange]);
+  useLayoutEffect(() => {
+    const previousLiveState = previousLiveStateRef.current;
+    previousLiveStateRef.current = liveState;
     if (!presented || document.visibilityState !== "visible") return;
-    if (phase === "error") {
+    const firstButton = () => feedbackRef.current?.querySelector<HTMLButtonElement>("button");
+    if (liveState.phase === "error") {
       retryFocusRef.current = false;
-      feedbackRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+      firstButton()?.focus({ preventScroll: true });
       return;
     }
-    if (phase === "recording" && retryFocusRef.current) {
-      feedbackRef.current?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true });
+    if (liveState.phase === "recording" && retryFocusRef.current) {
+      firstButton()?.focus({ preventScroll: true });
       retryFocusRef.current = false;
     }
-    if (phase === "idle") {
+    if (liveState.phase === "idle") {
       retryFocusRef.current = false;
-      if (previousState.phase !== "idle") onReturnFocus(controller.settlement);
+      if (previousLiveState.phase !== "idle") {
+        const active = document.activeElement;
+        onReturnFocus(
+          controller.settlement,
+          active !== null && feedbackRef.current?.contains(active) === true,
+        );
+      }
     }
-  }, [controller.settlement, controller.state, onReturnFocus, phase, presented]);
-  if (!presented || controller.state.phase === "idle" || anchor === null) return null;
+  }, [controller.settlement, liveState, onReturnFocus, presented]);
+  useLayoutEffect(() => {
+    // Declared after the focus effect: focus leaves before the surface
+    // becomes inert, so it is returned rather than dropped to the body.
+    const element = feedbackRef.current;
+    if (element !== null) element.inert = !present;
+  }, [frame?.identity, present]);
+
+  const retry = () => {
+    retryFocusRef.current = true;
+    controller.retry();
+  };
+
+  if (frame === null || view === null) return null;
+  const box = frame.view.box;
   const style = {
-    transform: `translate3d(${parentBox?.x ?? 0}px, ${(parentBox?.y ?? 0) + (parentBox?.height ?? 0) + 18}px, 0)`,
+    transform: `translate3d(${box?.x ?? 0}px, ${(box?.y ?? 0) + (box?.height ?? 0) + 18}px, 0)`,
   } as CSSProperties;
-  const copy = admissionFeedbackMessage(locale, controller.state);
+  const label = shownPhase === null
+    ? ""
+    : shownPhase === "error" || shownPhase === "idle"
+      ? admissionFeedbackMessage(locale, view)
+      : admissionPhaseMessage(locale, shownPhase);
   const actions = admissionFeedbackActions(locale);
+  const preview = view.phase === "recording" || view.phase === "error" ? view.transcript : undefined;
+  const liveRegion = present
+    ? view.phase === "error"
+      ? { role: "alert" as const }
+      : { role: "status" as const, "aria-live": "polite" as const }
+    : {};
   return (
     <div
-      aria-live={phase === "error" ? undefined : "polite"}
       className="admission-feedback"
-      data-admission-anchor-node-id={parentBox?.nodeId}
-      data-canvas-interactive
-      data-phase={phase}
+      data-admission-anchor-node-id={box?.nodeId}
+      data-canvas-interactive={present || undefined}
+      data-phase={view.phase}
+      data-presence={frame.stage}
+      data-presence-close={frame.close ?? undefined}
+      key={frame.identity}
       ref={feedbackRef}
-      role={phase === "error" ? "alert" : "status"}
       style={style}
     >
       <span aria-hidden="true" className="admission-feedback__signal" />
-      <span>{copy}</span>
-      {phase === "recording" &&
-      "transcript" in controller.state &&
-      controller.state.transcript ? (
-        <span className="admission-feedback__preview" dir="auto">{controller.state.transcript}</span>
+      <span aria-atomic="true" className="admission-feedback__label" {...liveRegion}>{label}</span>
+      {preview ? (
+        <span className="admission-feedback__preview" dir="auto">{preview}</span>
       ) : null}
-      {phase === "recording" ? (
-        <button onClick={controller.stop} type="button">{actions.stop}</button>
-      ) : phase === "error" ? (
+      {view.phase === "recording" ? (
+        <button onClick={present ? controller.stop : undefined} type="button">{actions.stop}</button>
+      ) : view.phase === "error" && admissionHoldsTranscript(view) ? (
         <>
-          <button onClick={() => {
-            retryFocusRef.current = true;
-            controller.retry();
-          }} type="button">{actions.retry}</button>
-          <button onClick={onDismiss} type="button">{actions.dismiss}</button>
+          {placeAnchor === null ? null : (
+            <button onClick={present ? () => controller.place(placeAnchor) : undefined} type="button">
+              {admissionPlacementLabel(locale, placeAnchor, rootId)}
+            </button>
+          )}
+          <button onClick={present ? onDismiss : undefined} type="button">{actions.discard}</button>
+        </>
+      ) : view.phase === "error" ? (
+        <>
+          {view.errorCode === "STALE_TARGET" ? null : (
+            <button onClick={present ? retry : undefined} type="button">{actions.retry}</button>
+          )}
+          <button onClick={present ? onDismiss : undefined} type="button">{actions.dismiss}</button>
         </>
       ) : (
-        <button onClick={controller.cancel} type="button">
-          {phase === "transcribing" ? actions.cancelTranscription : actions.cancel}
+        <button onClick={present ? controller.cancel : undefined} type="button">
+          {admissionWithdrawLabel(locale, view.phase)}
         </button>
       )}
     </div>
@@ -4868,6 +5487,42 @@ export function voiceToolLabel(input: Readonly<{
   if (input.isVoiceChecking) return copy.preparingVoiceInput;
   if (!input.isPreviewReady) return copy.unavailableInPreview;
   return copy.unavailableOutsideFullView;
+}
+
+const NO_WIKI_VIEWS: readonly WikiOccurrenceView[] = Object.freeze([]);
+
+function noWikiViews(): readonly WikiOccurrenceView[] {
+  return NO_WIKI_VIEWS;
+}
+
+/** Disclosed changes a passage's lens offers for review, outside an open takeover. */
+function projectWikiReviews(
+  views: readonly WikiOccurrenceView[],
+): ReadonlyMap<string, readonly NodeActionWikiReview[]> {
+  const reviews = new Map<string, NodeActionWikiReview[]>();
+  for (const view of views) {
+    if (!view.disclosed || view.takeover) continue;
+    const list = reviews.get(view.nodeId) ?? [];
+    list.push(Object.freeze({ id: view.id, heard: view.sourceText, canonical: view.canonicalText }));
+    reviews.set(view.nodeId, list);
+  }
+  return reviews;
+}
+
+function wikiDescriptionCountsKey(views: readonly WikiOccurrenceView[]): string {
+  const counts = new Map<string, number>();
+  for (const view of views) {
+    if (view.disclosed) counts.set(view.nodeId, (counts.get(view.nodeId) ?? 0) + 1);
+  }
+  return JSON.stringify([...counts]);
+}
+
+function parseWikiDescriptionCounts(key: string): ReadonlyMap<string, number> {
+  return new Map(JSON.parse(key) as [string, number][]);
+}
+
+function subscribeNothing(): () => void {
+  return () => undefined;
 }
 
 function voiceAdmissionIsEnabled(): boolean {

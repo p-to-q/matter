@@ -1,11 +1,19 @@
 import type { MatterLocale } from "../config/locales";
-import type { WikiChannel, WikiObserveEvidenceEvent } from "./wiki-model";
+import type {
+  WikiChannel,
+  WikiLedgerTick,
+  WikiObservationTick,
+  WikiObserveEvidenceEvent,
+} from "./wiki-model";
 import type { WikiEligibleRange } from "./canonicalize-wiki-text";
 import {
   findProtectedWikiSpans,
   normalizeWikiEligibleRanges,
   wikiRangeOverlapsProtected,
 } from "./canonicalize-wiki-text";
+import { wikiAliasProducerClaimsCollectionSource } from "./wiki-learning-policy";
+import type { WikiScriptClass } from "./wiki-script";
+import { wikiLatinRouteLocale } from "./wiki-script-routing";
 
 /** Ephemeral human-material envelope; it is never stored or exported. */
 export type WikiAdmissionObservation = Readonly<{
@@ -22,10 +30,35 @@ export type WikiAdmissionTurn = Readonly<{
 }>;
 
 /**
+ * One producer's content-free result for one ledger of one human turn.
+ * `scannedScripts` names the scripts of the eligible, unprotected words the
+ * producer actually scanned; it is the comparable opportunity that turn
+ * offered, never a record of what was said. `routedScripts` names the scripts
+ * of the scanned words that routed to the turn's Latin ledger (see
+ * wiki-script-routing); it is empty when the turn's locale routes nothing.
+ */
+export type WikiAdmissionProducerResult = Readonly<{
+  status: "ok" | "partial" | "censored";
+  events: readonly WikiObserveEvidenceEvent[];
+  scannedScripts: readonly WikiScriptClass[];
+  routedScripts?: readonly WikiScriptClass[];
+}>;
+
+export type WikiAdmissionBatch = Readonly<{
+  events: readonly WikiObserveEvidenceEvent[];
+  tick: WikiObservationTick;
+}>;
+
+const PAUSED_TICK: WikiLedgerTick = Object.freeze({ disposition: "paused" });
+const CENSORED_TICK: WikiLedgerTick = Object.freeze({ disposition: "censored" });
+const PARTIAL_TICK: WikiLedgerTick = Object.freeze({ disposition: "partial" });
+
+/**
  * Keeps collection and fitting ledgers independent without teaching a known
- * bounded Latin fitting source back as a canonical in the same admission.
- * Only one unique relation may suppress collection; competing fitting targets
- * remain ambiguous and therefore do not own the source.
+ * relation source back as a canonical in the same admission. Only a unique
+ * relation from a producer whose precedence entry claims its collection
+ * source may suppress collection; competing targets remain ambiguous and
+ * therefore do not own the source.
  */
 export function combineWikiAdmissionEvidence(
   termEvents: readonly WikiObserveEvidenceEvent[],
@@ -34,7 +67,7 @@ export function combineWikiAdmissionEvidence(
   const targetsBySource = new Map<string, Set<string>>();
   for (const event of fittingEvents) {
     if (event.source !== "machine-inference" ||
-        event.producer !== "latin-internal-edit-v2") continue;
+        !wikiAliasProducerClaimsCollectionSource(event.producer)) continue;
     const key = admissionLexicalKey(event.locale, event.form);
     const targets = targetsBySource.get(key) ?? new Set<string>();
     targets.add(event.canonical);
@@ -48,6 +81,40 @@ export function combineWikiAdmissionEvidence(
       !uniqueFittingSources.has(admissionLexicalKey(event.locale, event.canonical))),
     ...fittingEvents,
   ]);
+}
+
+/**
+ * Turns one successful human admission into one bounded batch and its tick.
+ * A ledger whose producer did not run is paused; a turn without eligible
+ * content, or a producer that could not scan, is censored and neutral; a
+ * partial scan scores what it saw and ages nothing; a complete scan offers
+ * its locale, channel, and scanned scripts as the comparable opportunity and,
+ * when Latin words routed out of a Chinese or Japanese turn, the routed
+ * ledger's opportunity as well, so that ledger ages only on turns with Latin.
+ */
+export function planWikiAdmissionBatch(
+  turn: WikiAdmissionTurn,
+  term: WikiAdmissionProducerResult | null,
+  fitting: WikiAdmissionProducerResult | null,
+): WikiAdmissionBatch {
+  const events = combineWikiAdmissionEvidence(term?.events ?? [], fitting?.events ?? []);
+  return Object.freeze({
+    events,
+    tick: Object.freeze({
+      term: ledgerTick(
+        term,
+        turn.committed,
+        "evidence",
+        events.some((event) => event.source === "recent-material"),
+      ),
+      alias: ledgerTick(
+        fitting,
+        turn.observed,
+        "matching",
+        events.some((event) => event.source === "machine-inference"),
+      ),
+    }),
+  });
 }
 
 /** A protected or generated-only turn is censored, not negative evidence. */
@@ -66,6 +133,39 @@ export function hasWikiAdmissionContent(
     }
   }
   return false;
+}
+
+function ledgerTick(
+  result: WikiAdmissionProducerResult | null,
+  observation: WikiAdmissionObservation,
+  protection: "matching" | "evidence",
+  observed: boolean,
+): WikiLedgerTick {
+  if (result === null) return PAUSED_TICK;
+  if (result.status === "censored" || !hasWikiAdmissionContent(observation, protection)) {
+    return CENSORED_TICK;
+  }
+  if (result.status === "partial") return PARTIAL_TICK;
+  const disposition = observed ? "observed" : "quiet";
+  const opportunity = Object.freeze({
+    locale: observation.locale,
+    channel: observation.channel,
+    scripts: result.scannedScripts,
+  });
+  const routedLocale = wikiLatinRouteLocale(observation.locale);
+  const routedScripts = result.routedScripts ?? [];
+  if (routedLocale === null || routedScripts.length === 0) {
+    return Object.freeze({ disposition, opportunity });
+  }
+  return Object.freeze({
+    disposition,
+    opportunity,
+    routedOpportunity: Object.freeze({
+      locale: routedLocale,
+      channel: observation.channel,
+      scripts: routedScripts,
+    }),
+  });
 }
 
 function admissionLexicalKey(locale: MatterLocale, value: string): string {

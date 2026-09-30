@@ -102,9 +102,12 @@ type Copy = Readonly<{
 
 export function WikiSettingsSection({
   active,
+  focusTerm = null,
   language,
 }: Readonly<{
   active: boolean;
+  /** One canonical term an error-local takeover asked to show; each request once. */
+  focusTerm?: Readonly<{ canonical: string; locale: CanvasLanguage; requestId: number }> | null;
   language: CanvasLanguage;
 }>) {
   const copy = COPY[language];
@@ -132,10 +135,47 @@ export function WikiSettingsSection({
   const noticeTimerRef = useRef<number | null>(null);
   const restoreFocusRuleRef = useRef<string | null>(null);
   const ruleButtonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const handledFocusRequestRef = useRef<number | null>(null);
+  const focusTargetRef = useRef<Readonly<{ requestId: number; ruleId: string }> | null>(null);
 
   useEffect(() => {
     if (active) void matterWikiConfiguration.start();
   }, [active]);
+
+  useEffect(() => {
+    if (!active || focusTerm === null || snapshot.stateRevision === null) return;
+    if (handledFocusRequestRef.current !== focusTerm.requestId) {
+      handledFocusRequestRef.current = focusTerm.requestId;
+      const matches = snapshot.rules.filter((rule) => rule.canonical === focusTerm.canonical);
+      const rule = matches.find((entry) => entry.locale === focusTerm.locale) ?? matches[0];
+      setEditor(null);
+      setRemoveRule(null);
+      setFilter("all");
+      setVisibleCount(LOAD_STEP);
+      setQuery(focusTerm.canonical);
+      focusTargetRef.current = rule === undefined
+        ? null
+        : Object.freeze({ requestId: focusTerm.requestId, ruleId: rule.id });
+    }
+    const target = focusTargetRef.current;
+    if (target === null || target.requestId !== focusTerm.requestId) return;
+    // The dialog focuses its first control on open; the term takes focus once
+    // the filtered list has rendered it. A cancelled attempt is retried by the
+    // next run until it lands.
+    let attempts = 0;
+    let frame = window.requestAnimationFrame(function focusRule() {
+      const button = ruleButtonRefs.current.get(target.ruleId);
+      if (button !== undefined) {
+        focusTargetRef.current = null;
+        button.focus({ preventScroll: true });
+        button.scrollIntoView({ block: "nearest" });
+        return;
+      }
+      attempts += 1;
+      if (attempts < 12) frame = window.requestAnimationFrame(focusRule);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [active, focusTerm, snapshot.rules, snapshot.stateRevision]);
 
   useEffect(() => {
     if (removeRule !== null) removeConfirmRef.current?.focus();
@@ -744,8 +784,9 @@ const ENGLISH: Copy = Object.freeze({
   count: (visible, total) => `${visible}/${total}`,
 });
 
+// No table spreads another: a spread would let a missing key silently fall
+// back to a different language instead of failing the type check.
 const SIMPLIFIED_CHINESE: Copy = Object.freeze({
-  ...ENGLISH,
   title: "词典 WIKI",
   footerNote: "词典只保存在这台设备上，不会发送给模型。只有已验证并发布的本地规则可以改写材料。",
   filterLabel: "词条来源",
@@ -796,9 +837,9 @@ const SIMPLIFIED_CHINESE: Copy = Object.freeze({
 });
 
 const TRADITIONAL_CHINESE: Copy = Object.freeze({
-  ...SIMPLIFIED_CHINESE,
   title: "詞典 WIKI",
   footerNote: "詞典只儲存在這台裝置上，不會傳送給模型。只有已驗證並發佈的本機規則可以改寫材料。",
+  filterLabel: "詞條來源",
   add: "新增詞",
   export: "匯出詞典",
   search: "搜尋詞典",
@@ -825,23 +866,30 @@ const TRADITIONAL_CHINESE: Copy = Object.freeze({
   enableAutomaticCollection: "開啟收詞",
   disablePhoneticFitting: "關閉近音",
   enablePhoneticFitting: "開啟近音",
+  removeQuestion: "從詞典中移除這個詞？",
+  confirm: "確認",
   loadMore: "載入更多",
   loading: "正在載入本機詞典…",
+  retry: "重試",
   unavailable: "本機詞典暫時無法使用。",
   damaged: "儲存的詞典已損壞。",
+  recover: "復原",
+  recoverQuestion: "用初始詞典取代損壞的資料？",
   saved: "已儲存在本機。",
+  failed: "沒有儲存。材料仍可正常使用，請稍後重試。",
   stale: "詞典已在另一視窗更新，請重新確認這個詞。",
   duplicate: "這個詞已在詞典中，或與另一詞條衝突。",
   bounded: "本機詞典已達安全容量上限。",
   invalid: "請輸入一個有效的詞語或名稱。",
   exported: "下載已開始",
   total: (count) => `${count} 個詞`,
+  count: (visible, total) => `${visible}/${total}`,
 });
 
 const JAPANESE: Copy = Object.freeze({
-  ...ENGLISH,
   title: "辞書 WIKI",
   footerNote: "語はこのデバイスにのみ保存され、モデルには送信されません。検証・公開済みのローカルルールだけが素材を変更できます。",
+  filterLabel: "追加元",
   add: "新しい語",
   export: "書き出す",
   search: "辞書を検索",
@@ -889,9 +937,9 @@ const JAPANESE: Copy = Object.freeze({
 });
 
 const GERMAN: Copy = Object.freeze({
-  ...ENGLISH,
   title: "WÖRTERBUCH WIKI",
   footerNote: "Wörter bleiben auf diesem Gerät und werden nie an ein Modell gesendet. Nur geprüfte, lokal veröffentlichte Regeln dürfen Material ändern.",
+  filterLabel: "Herkunft der Wörter",
   add: "Neues Wort",
   export: "Exportieren",
   search: "Wörter suchen",

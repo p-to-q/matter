@@ -48,7 +48,7 @@ test("synthetic recorded speech reaches local Whisper, punctuation, and expressi
   const modelTraffic: string[] = [];
   const browserErrors: string[] = [];
   page.on("request", (request) => {
-    if (request.method() === "POST" && request.url().endsWith("/api/transcribe")) {
+    if (request.method() === "POST" && new URL(request.url()).pathname.endsWith("/api/transcribe")) {
       serverTranscriptions.push(request.url());
     }
   });

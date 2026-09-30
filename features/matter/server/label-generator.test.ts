@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("server-only", () => ({}));
 import { SEMANTIC_LABEL_PROMPT_VERSION } from "../material/semantic-label";
 import { PROTOCOL_VERSION } from "../tree/model";
 import type { LabelRequest } from "../protocol/label-contract";
@@ -176,6 +177,35 @@ describe("generateLabel", () => {
     expect(observation.providerSignal?.aborted).toBe(false);
   });
 
+  it("caches a finished answer even when every caller left before it arrived", async () => {
+    let resolveProvider!: (value: { text: string }) => void;
+    let calls = 0;
+    const adapter: ScenarioAdapter = async () => {
+      calls += 1;
+      return new Promise<{ text: string }>((resolve) => {
+        resolveProvider = resolve;
+      });
+    };
+    const departed = new AbortController();
+    const first = generateLabel(labelRequest({ operationId: "a" }), departed.signal, adapter);
+    await vi.waitFor(() => expect(calls).toBe(1));
+    departed.abort();
+    await expect(first).rejects.toMatchObject({ name: "AbortError" });
+
+    resolveProvider({ text: "想象的生活" });
+    // Let the abandoned flight settle completely, so the next caller cannot
+    // simply join it.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const later = await generateLabel(
+      labelRequest({ operationId: "b" }),
+      new AbortController().signal,
+      adapter,
+    );
+    expect(later).toMatchObject({ source: "model", label: "想象的生活" });
+    expect(calls).toBe(1);
+  });
+
   it("serves a repeated question from cache without calling the provider", async () => {
     let calls = 0;
     const adapter: ScenarioAdapter = async () => {
@@ -214,6 +244,20 @@ describe("generateLabel", () => {
       Date.now,
       "credential-b",
     );
+    expect(calls).toBe(2);
+  });
+
+  it.each([
+    ["reference context", { reference: { siblingLabels: ["别的名字"] } }],
+    ["prompt version", { promptVersion: "thought-label/next" }],
+  ] as const)("keys a different %s as a different question", async (_name, change) => {
+    let calls = 0;
+    const adapter: ScenarioAdapter = async () => {
+      calls += 1;
+      return { text: "想象的生活" };
+    };
+    await generateLabel(labelRequest(), new AbortController().signal, adapter);
+    await generateLabel(labelRequest({ operationId: "second", ...change }), new AbortController().signal, adapter);
     expect(calls).toBe(2);
   });
 

@@ -1,87 +1,141 @@
 import {
-  applyTreeCommand,
-} from "../tree/engine";
-import {
+  boundTreeHistory,
   createTreeHistory,
-  undoTreeHistory,
+  verifyHistoryTops,
   type TreeHistory,
+  type TreeHistoryEntry,
   type TreeHistoryLimits,
 } from "../tree/history";
-import type { ThoughtTree } from "../tree/model";
+import type { ThoughtTree, TreeCommand, TreeMutation } from "../tree/model";
+import { isNonNegativeSafeInteger, isPlainRecord } from "./stored-value";
 
 /**
- * Owns the storage boundary for reversible history. A malformed journal never
- * corrupts material: it is discarded as a recoverable local convenience while
- * the independently validated tree remains available.
+ * A journal parsed at the storage boundary. `released` records that stored
+ * steps existed but could not be recovered; policy bounds never set it.
  */
-export function recoverPersistedHistory(
+export type RecoveredHistory = Readonly<{
+  history: TreeHistory;
+  released: boolean;
+}>;
+
+const COMMAND_SOURCES: ReadonlySet<unknown> = new Set<TreeCommand["source"]>([
+  "human",
+  "repair",
+  "agent",
+  "fixture",
+]);
+
+const MUTATION_TYPES: ReadonlySet<unknown> = new Set<TreeMutation["type"]>([
+  "initialize-root",
+  "clear-root",
+  "insert-node",
+  "remove-subtree",
+  "restore-subtree",
+  "replace-text",
+  "replace-title",
+  "move-node",
+]);
+
+/**
+ * Attaches a recovered journal to the tree it will reverse. Recovery stays
+ * constant-cost in the journal length: the bounds are applied, then only the
+ * next Undo and Redo are dry-run. Every deeper entry is validated by the tree
+ * engine at use, which refuses any memento that no longer matches, so a stale
+ * entry can release history but can never change material inexactly.
+ */
+export function attachRecoveredHistory(
   tree: ThoughtTree,
-  candidate: unknown,
+  candidate: RecoveredHistory | null | undefined,
   limits: TreeHistoryLimits,
-): TreeHistory {
-  if (!isHistoryShape(candidate, limits)) return createTreeHistory();
-  // Snapshots from before redo existed remain valid documents. Normalize that
-  // journal at the persistence boundary so the running state has one shape.
-  const stored = candidate as TreeHistory;
-  const history: TreeHistory = {
-    entries: stored.entries,
-    redoEntries: stored.redoEntries ?? [],
-    retainedInverseBytes: stored.retainedInverseBytes,
+): RecoveredHistory {
+  if (candidate === null || candidate === undefined) {
+    return Object.freeze({ history: createTreeHistory(), released: false });
+  }
+  const verified = verifyHistoryTops(tree, boundTreeHistory(candidate.history, limits));
+  return Object.freeze({
+    history: verified.history,
+    released: candidate.released || verified.released,
+  });
+}
+
+/**
+ * The cheap shape check a stored inverse must pass before it may wait in a
+ * stack: the envelope and a known mutation kind, never the memento payload.
+ */
+export function parseHistoryEntry(
+  value: unknown,
+  treeId: string,
+  limits: TreeHistoryLimits,
+): TreeHistoryEntry | null {
+  if (!isPlainRecord(value)) return null;
+  const { commandId, source, inverse, retainedInverseBytes } = value;
+  if (
+    typeof commandId !== "string" || commandId.length === 0 ||
+    !COMMAND_SOURCES.has(source) ||
+    !isNonNegativeSafeInteger(retainedInverseBytes) ||
+    retainedInverseBytes > limits.maxRetainedInverseBytes ||
+    !isPlainRecord(inverse) ||
+    typeof inverse.id !== "string" || inverse.id.length === 0 ||
+    inverse.source !== source ||
+    inverse.expectedTreeId !== treeId ||
+    !isNonNegativeSafeInteger(inverse.expectedRevision) ||
+    typeof inverse.createdAt !== "string" ||
+    !isPlainRecord(inverse.mutation) ||
+    !MUTATION_TYPES.has(inverse.mutation.type)
+  ) return null;
+  // Left unfrozen: the store deep-freezes history it publishes, and a frozen
+  // entry would stop that walk before its memento.
+  return {
+    commandId,
+    source: source as TreeCommand["source"],
+    inverse: inverse as unknown as TreeCommand,
+    retainedInverseBytes,
+    bytesUnverified: true,
   };
-  let cursorTree = tree;
-  let cursorHistory = history;
-  while (cursorHistory.entries.length > 0) {
-    const undone = undoTreeHistory(cursorTree, cursorHistory);
-    if (!undone.ok) return createTreeHistory();
-    cursorTree = undone.tree;
-    cursorHistory = undone.history;
-  }
-
-  // Redo entries are ordered as a stack: the last undone command must be the
-  // first one that can be reapplied. Check that sequence too, otherwise a
-  // malformed cache could look reversible until a person uses the shortcut.
-  cursorTree = tree;
-  const redoEntries = history.redoEntries ?? [];
-  for (let index = redoEntries.length - 1; index >= 0; index -= 1) {
-    const entry = redoEntries[index];
-    if (entry === undefined) return createTreeHistory();
-    const redone = applyTreeCommand(cursorTree, {
-      ...entry.inverse,
-      expectedRevision: cursorTree.revision,
-    });
-    if (!redone.ok) return createTreeHistory();
-    cursorTree = redone.tree;
-  }
-  return history;
 }
 
-function isHistoryShape(value: unknown, limits: TreeHistoryLimits): boolean {
-  if (!isPlainRecord(value) || !Array.isArray(value.entries) ||
-    (value.redoEntries !== undefined && !Array.isArray(value.redoEntries)) ||
-    !isNonNegativeSafeInteger(value.retainedInverseBytes) ||
-    value.entries.length > limits.maxEntries) return false;
-  const redoEntries = value.redoEntries ?? [];
-  if (redoEntries.length > limits.maxEntries) return false;
-  let total = 0;
-  for (const entry of [...value.entries, ...redoEntries]) {
-    if (!isPlainRecord(entry) ||
-      typeof entry.commandId !== "string" || entry.commandId.length === 0 ||
-      (entry.source !== "human" && entry.source !== "repair" && entry.source !== "agent" && entry.source !== "fixture") ||
-      !isPlainRecord(entry.inverse) ||
-      !isNonNegativeSafeInteger(entry.retainedInverseBytes)
-    ) return false;
-    total += entry.retainedInverseBytes;
-    if (!Number.isSafeInteger(total) || total > limits.maxRetainedInverseBytes) return false;
+/**
+ * Reads the inline journal written before v6. Each stack keeps the entries
+ * above its newest unreadable one, because those are exactly the steps that
+ * remain reachable. Only the newest `maxEntries` of a stack are examined: the
+ * bound would release anything older without a notice anyway.
+ */
+export function parseLegacyHistory(
+  value: unknown,
+  treeId: string,
+  limits: TreeHistoryLimits,
+): RecoveredHistory {
+  if (value === undefined || value === null) {
+    return Object.freeze({ history: createTreeHistory(), released: false });
   }
-  return total === value.retainedInverseBytes;
+  if (
+    !isPlainRecord(value) ||
+    !Array.isArray(value.entries) ||
+    (value.redoEntries !== undefined && !Array.isArray(value.redoEntries))
+  ) {
+    return Object.freeze({ history: createTreeHistory(), released: true });
+  }
+  const undo = readableTop(value.entries, treeId, limits);
+  const redo = readableTop((value.redoEntries as unknown[] | undefined) ?? [], treeId, limits);
+  return Object.freeze({
+    history: { entries: undo.entries, redoEntries: redo.entries },
+    released: undo.released || redo.released,
+  });
 }
 
-function isNonNegativeSafeInteger(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
+function readableTop(
+  stack: readonly unknown[],
+  treeId: string,
+  limits: TreeHistoryLimits,
+): Readonly<{ entries: TreeHistoryEntry[]; released: boolean }> {
+  const floor = Math.max(0, stack.length - limits.maxEntries);
+  const entries: TreeHistoryEntry[] = [];
+  for (let index = stack.length - 1; index >= floor; index -= 1) {
+    const entry = parseHistoryEntry(stack[index], treeId, limits);
+    if (entry === null) {
+      return Object.freeze({ entries: entries.reverse(), released: true });
+    }
+    entries.push(entry);
+  }
+  return Object.freeze({ entries: entries.reverse(), released: false });
 }

@@ -99,8 +99,9 @@ The request carries no transcript and no client-authored output target. The
 server derives the target from the validated selection, stretch amount, and
 UTF-16 capacity; it adjudicates one complete answer before constructing the
 plan. Provider or transport failure leaves the selected passage unchanged and
-returns the local control to its prior usable state without visible failure
-chrome. The browser never resubmits the action automatically; inside that one
+returns the local control to its prior usable state; the outcome line says once
+that nothing expanded, without provider detail. `Escape` after confirmation
+removes only the presented degree; the submitted request still lands. The browser never resubmits the action automatically; inside that one
 immutable action, an explicit surface may try the next bounded provider
 candidate after semantic rejection. The strict `transform/2` contract is
 implemented; the deleted Voice-direction
@@ -128,8 +129,8 @@ selected lineage   → LineageContext                lineage
        planToTreeCommand → tree engine → exact inverse
 ```
 
-Point and Talk is Text Swap's current passage-local UI owner. The hover/focus AI
-mark freezes the complete current node as its explicit reference and lazily opens
+Point and Talk is Text Swap's current passage-local UI owner. The AI mark of a
+hovered, focused, or selected passage freezes the complete current node as its explicit reference and lazily opens
 one viewport-fixed typed/Voice direction field aligned to that passage's upper-left
 glyph bounds; Lasso remains owned only by Elastic. The full driver, Voice, and
 request graph stays out of the initial canvas bundle until that explicit click.
@@ -156,7 +157,9 @@ document path.
 
 Its bounded direction remains local and transient.
 Provider or transport refusal restores that local field without visible error
-state; outside pointer, `Escape`, stale basis, mode exit, or commit clears it. The request carries
+state; outside pointer, `Escape`, stale basis, mode exit, or commit clears it.
+A submitted rewrite that goes stale, or fails after its field closed, is said
+once on the outcome line; the field never reopens by itself. The request carries
 normalized one-line direction but no audio, partial transcript, carrier, or
 client-authored output target. Success may commit only one complete range
 replacement; no token, draft, old copy, or candidate becomes material.
@@ -354,7 +357,8 @@ short question + lassoed passages, or bounded active-working projection when no 
   → answer text or a stated unavailable reason
   → paper-corner exchange; completed terminal pairs may enter the separate,
     bounded local inquiry record, never a tree command or model context;
-    reopening begins with a clean exchange
+    reopening carries only a question still in flight or unseen, never a
+    settled exchange
 ```
 
 The canvas root owns one transient AI-presentation slot, not one lifetime for
@@ -447,15 +451,20 @@ requires one config entry, UI copy, and focused server/client tests.
 The preview seed is a narrow composition exception, not a second locale owner.
 The initial graph contains the simplified-Chinese seed and five short Branch
 floors; the other visible seed copy and its journal migrator share one hashed
-post-mount loading path. After that path is ready, persistence hydration has settled,
-and admission is idle, the application may re-encode only product-owned seed
-passages whose tree id, durable node id, original timestamps, canonical copy,
-and untouched text history prove their provenance. The Store invokes the pure
-migrator against its current state, the tree engine applies the material
-change, and structural Undo/Redo mementos are rebased and replay-validated
-before tree and journal are published together. An edited seed, a Branch
-result, admitted speech, model output, or any other added material fails closed
-and remains byte-for-byte unchanged. No locale field, tag, or value is
+post-mount loading path. After that path is ready, persistence hydration has
+settled, and every material turn that read current passages has settled (an
+admission, a Point-and-Talk draft or request, an Elastic request or parked
+result), the application may re-encode only product-owned seed passages whose
+tree id, durable node id, original timestamps, and canonical copy prove their
+provenance. It runs once per language and document instance, never per save or
+settled turn. The Store invokes the pure migrator against its current state and
+the tree engine applies the material change. Untouched seed copy inside every
+Undo/Redo memento follows the language too, so an Undo restores a seed passage
+in the language being read; nothing is replayed, only the two stack tops are
+dry-run, and a stale top releases its stack with the ordinary history notice.
+Tree and journal publish together. An edited seed, a Branch result, admitted
+speech, model output, or any other added material fails closed and remains
+byte-for-byte unchanged. No locale field, tag, or value is
 persisted; the localized seed text is ordinary material and therefore appears
 in the tree, structural history mementos, and exports. The resulting revision
 also makes every pre-change layout, lasso, and turn address stale; segmentation
@@ -475,12 +484,12 @@ when the enhancement or another locale later arrives.
 | --- | --- |
 | Durable material | `ThoughtTree`; it may be empty before admission, and only the tree engine changes it. |
 | Durable local choice | any active-document identity or manual name promised across reload; explicit failure, never cache eviction. |
-| Durable local history | complete inverse journal paired atomically with the local snapshot; Undo is visible, while Redo remains a platform keyboard convention and is not exported. |
+| Durable local history | bounded inverse journal (1,000 steps, 32 MiB across both stacks), one IndexedDB record per step written in the snapshot's transaction; Undo is visible, while Redo remains a platform keyboard convention and is not exported. |
 | Navigation | focus and fold; derived view state, not history. |
 | Working context | held-aside branch ids and their pure active projection; transient, local, and never a second document model. |
 | Derived labels | one deterministic or model-assisted name per node; disposable, never exported, never undoable. |
-| Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, pending turn, inquiry draft/partials, and bounded per-node repair presentation hints. |
-| Durable local inquiry | bounded Ask Matter record per tree; it is never replayed, material, history, archive, or model context. |
+| Interaction | pointer phase, anchor, lasso, geometry, audio, transcript, held admission words, pending turn, inquiry draft/partials, outcome-line queue, live Wiki occurrences, and bounded per-node repair presentation hints. |
+| Durable local inquiry | bounded Ask Matter record per tree; no surface reads it back, and it is never material, history, archive, or model context. |
 | Persistence | base write generation, persisted/queued/dirty revision, and recoverable error. |
 
 Identifiers and units do not substitute for one another:
@@ -517,10 +526,24 @@ capture and closes material delivery; it does not discard finalized
 transcription or a submitted model request. Returning visible reopens delivery
 after global pointer-idle and exact target checks. `pagehide`, unmount, document
 owner replacement, explicit cancellation, or exact-basis conflict are terminal
-operation boundaries. Read-only Inquiry follows the same submitted-owner rule
-without a material commit.
+operation boundaries, except that a back-forward-cache `pagehide` only suspends
+Voice admission, a submitted Point-and-Talk, Elastic, or Ask Matter turn, and
+on-device transcription: their submitted or held work waits for the page's
+return. Read-only Inquiry follows the same submitted-owner rule without a
+material commit; a request the browser drops across that hide settles as an
+ordinary transport failure.
 Hooks adapt browser events to those owners through one narrow browser adapter;
 they do not each invent a partial copy of another lifecycle.
+
+A few cross-cutting owners are deliberately singular:
+
+| Owner | Rule |
+| --- | --- |
+| `components/escape-layers.ts` | the one document-level `Escape`: a bubble-phase window listener closes at most one registered layer, by tier (gesture, transient chrome, panel, paper surface, mode) then recency; focused fields only `preventDefault()` their own key. `components/composition-safe-keys.ts` decides that a keydown with `isComposing` or `keyCode` 229 belongs to the input method and never commits or cancels. |
+| `runtime/canvas-pointer-arbitration.ts` | the pure canvas gesture owner and palm policy: the first pointer owns, only a touch may join a touch owner, a touch is rejected while a pen is in contact and for 400 ms after, and a pen landing within 300 ms of a single finger takes over. Surfaces outside the canvas use its one press-dismissal policy. |
+| `interaction/use-delivery-window.ts` | the one visible, pointer-idle delivery window shared by admission, Point Talk, and Elastic; a pressed pointer is also released by evidence that its release was lost (capture lost or a move with no button held, window blur). |
+| `components/presence.ts` | appear, hold, and exit stages of every transient surface and status label, with one timer and frame; a frozen exit copy is inert. Motion itself is CSS. |
+| `components/outcome-line.ts`, `use-outcome-line.ts` | the guidance line's outcome queue: at most one entry per turn owner (expansion, rewrite, Wiki), shown in order and acknowledged by the person's next non-modifier action; held admission words take precedence. |
 
 A shared coordinator is justified only when current behavior proves that two
 lifecycles share one invariant that the rendering edge cannot safely enforce.
@@ -581,10 +604,14 @@ between fixture and live behavior for itself.
 
 Caches hold only reproducible work: derived segments may key on node text;
 measured ranges key on `layoutEpoch`; encoded snapshots key on tree revision;
-server label answers key on a non-cryptographic fingerprint of the complete
-normalized label input and prompt version, including its ordered reference
-context, and are re-validated on every read rather than trusted because they
-were written by this process.
+server label answers key on a SHA-256 digest of the credential scope and the
+complete label question (the normalized label input and prompt version,
+including its ordered reference context), so one scope's answer cannot serve
+another. Every hit runs the scenario's complete adjudication against the
+current question rather than being trusted because this process wrote it; a
+hit that fails is deleted, not shown. Concurrent identical requests join one
+in-flight provider call only on the exact scoped question, never its digest,
+because a joiner receives that answer without adjudicating it again.
 They are disposable and never authoritative. Raw audio, transcripts, repair or
 inquiry answers, transform responses, and lineage are not cached. A bounded diagnostic trace may record
 operation ids, state transitions, error codes, durations, and byte counts, but
@@ -594,8 +621,13 @@ A production model-scenario invocation with a non-null adapter emits at most one
 `matter.scenario-performance` scalar receipt through the harness observation
 seam. It carries only the closed scenario/outcome enums, a bounded numeric
 duration, anonymous candidate counts, and whether the shared pool actually
-reported those counts. Candidate observations are aggregated in memory into
-that terminal receipt; no per-candidate log or telemetry request is made. The
+reported those counts. A `rejected` outcome also carries `rejectionReason`: one
+code from the scenario's declared `rejectionCodes`, an exhaustive record of its
+adjudicator's reason type, or `UNDECLARED`. The logger admits only a short
+ASCII identifier there and records anything else as `UNDECLARED`, so no answer,
+material, provider, or free text can enter the field. Candidate observations
+are aggregated in memory into that terminal receipt; no per-candidate log or
+telemetry request is made. The
 logger rebuilds an allowlisted object, a failing sink cannot affect the scenario,
 and no cold/warm field exists because provider cache state is not provable inside
 Matter. Cache hits, missing adapters, and caller cancellations remain silent.
@@ -607,24 +639,57 @@ application persistence and cannot stand in for externally measured origin SLOs.
 Browser model and audio POSTs use no-store transport and reject redirects; the
 same is true between Matter and its configured model relay. These flags are a
 privacy and routing boundary, not an answer cache. The only shared in-process
-answer cache remains the bounded label cache: its key covers the complete
-normalized label input and prompt version, its value is only the adjudicated
-label, and the browser still revalidates current material and operation identity.
+answer cache remains the bounded label cache: its key is the SHA-256 digest of
+the credential scope and complete label question, its value is only the
+adjudicated label, and the browser still revalidates current material and
+operation identity.
 
-Recovery stays with the state owner: a validated inverse journal recovers local
-undo after reload; interaction cancel preserves its semantic address for pointer
-retry; persistence retains the latest dirty snapshot until a generation-checked
-save succeeds. An archive import starts a new journal, and a legacy snapshot
-that predates journal storage remains usable but begins with an empty history.
-The material-index footer projects only non-account local identity and an active
-save; it owns no error transition or recovery capability. The explicit Archive
-panel projects persistence failure and invokes the already-owned export, retry,
-reload, or corrupt-row repair operation.
+Recovery stays with the state owner. Journal recovery attaches the bounded
+per-step journal (`persistence/history-journal.ts`, database schema v6,
+`historyEntries`) at constant cost: a shape check plus a dry-run of only the
+next Undo and Redo, with every deeper step validated by the engine at use. A
+step that cannot be read or no longer applies releases its stack with one
+notice rather than an empty journal; a v5 inline journal migrates on its first
+save; storage pressure sheds durable undo steps before material. Interaction
+cancel preserves its semantic address for pointer retry; persistence retains
+the latest dirty snapshot until a generation-checked save succeeds. An archive
+import starts a new journal epoch.
+
+Every committed save, import, rollback, and repair is announced on the
+content-free `matter.document-generation.v1` BroadcastChannel. Adopting a newer
+stored row is two-step: the controller reads a candidate, the store hydrates it
+only by compare-and-swap against the tree it expects, and only then does the
+controller adopt its basis. Adoption waits until the material is idle (no
+admission, Elastic, or Point-and-Talk turn, nothing held in Ask Matter, no open
+name editor) and the pointer is released. A newer schema or row is terminal
+`PERSISTENCE_SUPERSEDED` and a deleted row `PERSISTENCE_CLEARED`; such a tab
+offers only an export from memory and a reload. `stored-generation-watch.ts`,
+`unload-guard.ts` (a `beforeunload` guard only while material the person made
+is at risk), and `superseded-reload.ts` own those browser lifecycles. The
+material-index footer projects one localized durability line while a problem is
+unresolved and owns no recovery transition; the explicit Archive panel invokes
+export, retry, reload, replace-refused-material, or corrupt-row repair, and only
+those gestures request `navigator.storage.persist()`. `npm run
+proof:persistence` checks repository, journal, and controller against real
+Chromium IndexedDB. The mechanics are in
+[`reference/virtual-file-system.md`](reference/virtual-file-system.md).
 No write-ahead log, event sourcing, service worker, or background sync belongs
 in the first release.
 The concrete HTTP, CDN, local-model, compiler-cache, cold-start, and production
 artifact budgets are recorded in
 [`reference/runtime-cache-and-delivery.md`](reference/runtime-cache-and-delivery.md).
+
+The initial runtime carries only what first paint and the first gesture need.
+Code a person reaches later — the storage engine behind a synchronous stand-in,
+archive transport, archive-error copy, the Model API form, the Ask Matter
+record store, the Wiki canonicalizer and fitting release table, late-repair
+adjudication, and lazy components' own stylesheets — loads after first paint.
+Chunks a gesture renders (Point and Talk, the node action lens, the Wiki
+occurrence layer) preload after first paint and on first intent, so no gesture
+waits on a fetch. Ordering is structural: a Wiki port can publish rules only
+after its canonicalizer is bound, and the store refuses a repair candidate it
+has no adjudicator for, leaving admitted words unchanged. The budget is not
+relaxed to admit new code; new first-paint weight must displace other weight.
 
 ## Target modules
 
@@ -645,7 +710,7 @@ app/
   api/label/route.ts               implemented label boundary; live adapter gated
   api/inquiry/route.ts             bounded non-mutating inquiry boundary and server-owned answer adapter
   api/turn/route.ts                implemented strict transform/2 boundary and fixture gate
-  api/text-swap/route.ts           strict text-swap/2 Point-and-Talk boundary; live gate off
+  api/text-swap/route.ts           strict text-swap/2 Point-and-Talk boundary; public surface, managed adapter off
   api/provider-session/route.ts    no-store persistent provider status, explicit test/save, and removal
 
 features/matter/
@@ -653,6 +718,9 @@ features/matter/
   server/prompt-spine.ts           the shape every Matter prompt has, and its fenced material
   server/*-harness.ts              one scenario each: repair, label, inquiry, transform, text swap
   server/model-pool.ts             shared managed/request-local execution, health, and fallback
+  server/openai-chat-completion.ts the one chat-completions response parser both lanes read
+  server/completion-outcome.ts     completion settlement (`completion-outcome/2`)
+  server/abort-boundary.ts         one request deadline and abort signal per route
   server/user-provider-registry.ts finite wire profiles and bounded model discovery
   server/public-provider-fetch.ts  closed DNS-checked, address-pinned HTTPS operations
   server/provider-session-*.ts     sealed fixed-lifetime credential and route boundary
@@ -660,17 +728,21 @@ features/matter/
   application/material-lexical-port.ts  neutral captured suggestion capability
   application/material-ingress.ts  pure final text preparation before one tree command
   application/wiki-material-lexical-adapter.ts  the only Wiki-to-ingress adapter
+  application/material-lexical-occurrence-port.ts  store → composition publication of committed Wiki edits
   tree/                            model, invariants, engine, history, lineage
   material/                        graphemes, segments, pure lasso rules
-  wiki/                            bounded local lexical authority and compiled matcher
+  wiki/                            bounded local lexical authority, compiled matcher, evidence
+                                   policy, occurrence registry and settlement, script routing
   material/inquiry-context.ts      bounded visible-lineage inquiry projection
   layout/                          visible traversal and focus/fold projection
   tools/                           pure capability projection and closed intents
   runtime/                         pure event reducer and effect descriptions
-  interaction/                     DOM geometry and pointer/voice adapters
-  persistence/                     codec, IndexedDB, archive transport
-  server/                          provider adapters, planner, transcription
-  components/
+  interaction/                     DOM geometry, pointer/voice adapters, delivery window,
+                                   Wiki occurrence driver
+  persistence/                     codec, IndexedDB, per-step history journal, generation
+                                   channel and watch, unload guard, archive transport
+  server/                          route handlers, provider adapters, transcription
+  components/                      React surfaces plus the Escape, presence, and outcome-line owners
   store/
 
 studio/
@@ -734,13 +806,33 @@ tree command. The lexical port cannot choose reference, direction, degree,
 lineage, command shape, persistence, history, or publication. A missing,
 throwing, or malformed adapter becomes identity; it cannot make material
 unavailable. A coherent changed suggestion that violates the final Matter
-contract is still rejected rather than published.
+contract is withheld: the already validated source becomes the command, and the
+content-free ingress receipt records `canonicalizationWithheld`. A spelling rule
+may refine a valid answer but never cost it; the one exception is a canonical
+candidate identical to current material, which keeps its ordinary no-op
+rejection. Elastic canonicalizes over the complete final node text restricted
+to proven generated gaps, and withholds rather than refuses when those gaps
+cannot be proven.
+
+Each applied edit may carry one opaque occurrence token held in a bounded
+in-memory Wiki registry (64 claimed occurrences plus 64 uncommitted
+candidates; 10 s before commit, 5 min after). After a
+successful commit the store calls one neutral port,
+`publishCommittedLexicalOccurrences`, and composition hands the publication to
+the lazy browser occurrence driver (`interaction/wiki-occurrence-driver.ts`),
+which owns each occurrence from disclosure to its one settlement; an eager
+stand-in buffers at most 16 publications until its chunk arrives. No heard form
+reaches store state, history, a receipt, persistence, an archive, a model, or a
+log. The Wiki takeover restores a heard form through the store's
+`restoreHumanTextRange`, an ordinary human `replace-text` command with no
+lexical port, and asks CanvasChrome's `openWiki` request to open settings on one
+term. Settlement semantics are in [`reference/wiki.md`](reference/wiki.md).
 
 Wiki capabilities remain deliberately separate. The hot path receives only a
 captured read session; the successful human-admission owner alone receives a
 bounded observation sink; repair, transform, text-swap, and recovery code cannot
-obtain that write capability. Exceptional correction receives only addressed
-lexeme decisions; the settings-owned Wiki surface receives a canonical-word configuration projection
+obtain that write capability. The occurrence driver receives only one-shot
+settlement of the occurrences it owns; the settings-owned Wiki surface receives a canonical-word configuration projection
 plus a reversible per-lexeme applicability scope and the one lossless
 `matter-wiki.json` export. Scope is an allow-list consumed by projection and
 cache compilation, not ownership of stored relations: aliases, evidence, and
@@ -771,17 +863,23 @@ generation and records its completion even when all rows already exist. It
 respects canonical identity, tombstones, and a saturated decision ledger;
 browser components never fabricate starter rows, and a person's removal is not
 replayed by a later load. Capacity or quota failure leaves the prior valid Wiki
-readable rather than labelling it corrupt. Record V6 stores canonical recurrence
-and alias-relation evidence in separate bounded ledgers and binds each automatic
-term row to the producer family that earned it. Strict V2/V3/V4/V5
-migration retains recurrence only for aggregate-owned lexemes, discards the
-redundant recurrence of human-owned lexemes, and maps old machine counts only to
-a zero-weight legacy producer, so loading an older record cannot activate
-collection or provisional authority. A valid V5 row advances its outer record
-marker and write generation in the same optional IndexedDB transaction, so the
-V6 split is durable after one load; quota or transaction failure leaves the
-older valid row readable. The global observation counter is removed;
-each candidate owns its bounded quiet clock. Record V4 also collapses the
+readable rather than labelling it corrupt. Record V7 stores canonical
+recurrence and alias-relation evidence in separate bounded ledgers of
+quarter-observation units, binds each automatic term row to the producer family
+that earned it, adds bounded kept evidence to every alias row, a bounded
+revert-strike ledger, and a 128-entry window of recently settled occurrence
+identities. Strict V2–V6 migration retains recurrence only for aggregate-owned
+lexemes, discards the redundant recurrence of human-owned lexemes, maps old
+machine counts only to a zero-weight legacy producer, and scales stored support
+by four, so loading an older record cannot activate collection or provisional
+authority. An older valid row advances its record marker and write generation
+in the same optional IndexedDB transaction, so the V7 form is durable after one
+load; quota or transaction failure leaves the older valid row readable. A row
+written by a newer Matter is not corrupt: this build reports Wiki storage
+unavailable, keeps its last basis, and refuses the corrupt-row reset. Each
+candidate owns its bounded quiet clock and ages only on comparable
+opportunities. An observation batch is validated once at its end and
+published whole or rejected whole. Record V4 also collapses the
 short-lived automatic `en-US` / `zh-CN` `[p → q]` duplicate only when the old
 row has the exact product-owned shape and no unknown relation; human-owned or
 ambiguous rows are never silently merged. On the current `zh-CN` speech path,
@@ -790,20 +888,21 @@ the same confirmed-rule path; a human-created homograph gains no relation. The
 aliases do not open a general phonetic, cross-locale, or
 prompt-based matching path.
 
-The recent evidence cohort is not an intent model. Explicit settings decisions
-commit directly and never compete with evidence scores. A future visible-error
-decision must arrive through a composition-owned, one-shot capability carrying
-an opaque attribution token captured at application time; the token is bound to
-one basis/rule, visible occurrence, document/interaction epoch, and expiry. It
-does not carry surrounding material. The capability and its token land only in
-the same slice as the correction UI; no empty port is exported in advance. A
-bounded foreground-visible survival horizon may later provide one weak terminal
-observation for that exact occurrence, never nested milestones or initial
-activation authority. Material Undo and Redo remain a separate tree-history
-system: Wiki does not observe, replay, or interpret them. Any future reversal of
-Wiki authority owns its own implementation, contract, and persistence
-lifecycle. It may reuse contract principles, but never the material-history
-framework, command types, stack, or state.
+Evidence is not an intent model. Explicit settings decisions commit directly
+and never compete with evidence scores. Each applied occurrence settles exactly
+once, through the pure policy in `wiki-learning-policy.ts` and the transition in
+`wiki-occurrence-settlement.ts`: informed implicit acceptance (the disclosure was
+perceivable, then two further human admissions, foreground dwell, copy, export,
+or leaving the page), an inspection of at least 500 ms, Keep, the heard form, or
+a neutral censor. Implicit acceptance and inspection add only retention
+(“kept”) evidence to the applied relation; they never create, activate,
+re-activate, or confirm one. Keep is human confirmation; two reverts of an
+automatic relation tombstone it. Material Undo and Redo remain a separate
+tree-history system: Wiki does not observe, replay, or interpret them, and an
+occurrence whose address stops holding its word is censored without a Wiki
+event. Aging lives in `wiki-evidence-aging.ts` and staged state transitions in
+`wiki-transition.ts`. The exact weights and memories are in
+[`reference/wiki.md`](reference/wiki.md#occurrence-outcomes).
 
 Producer qualification is another offline boundary. The manifest owns the
 labelled corpus and complete case inputs while the receipt carries outputs and
@@ -856,7 +955,12 @@ candidates but cannot observe, project, or rewrite product material. Locale,
 token boundaries, scope, protected literals, canonical no-op authority,
 ambiguity abstention, generated exclusion, and human tombstones remain hard
 gates. Approximate phoneme distance, cross-locale fallback, runtime network
-lookup, recognizer phrase bias, and model prompt bias remain excluded.
+lookup, recognizer phrase bias, and model prompt bias remain excluded. The
+matcher is partitioned by exact locale; a Chinese or Japanese turn then runs one
+additive routed pass in which all-Latin words match the `en-US` ledger on both
+channels, only where the turn's own rules left the text untouched
+(`wiki-script-routing.ts`). Full-width Latin folds for reading only; committed
+text is never width-normalized.
 
 Automatic collection is a separate pair of producers behind the same release
 identity boundary. Pinned `Intl.Segmenter` conformance fixtures guard locale word
@@ -879,10 +983,11 @@ collection reservoir and pronunciation indexes are independently bounded at 512
 targets; starter and recent human-confirmed authority is selected before
 aggregate authority. The smaller derived bound limits compilation and lookup
 work without deleting explicit dictionary data.
-At the 9 MiB plus 256 KiB persistence boundary, an automatic batch first retries only
+At the persistence boundary (9 MiB plus two proved migration allowances), an automatic batch first retries only
 already-known rows plus ledger aging; unseen allocations are discarded before
-known evidence or decay. The final 256 KiB is the proved maximum allowance for
-adding a producer identity to every V5 term row during V6 recovery. Explicit
+known evidence or decay. The allowances are 256 KiB for adding a producer
+identity to every V5 term row during V6 recovery and 160 KiB for the V6-to-V7
+kept, strike, and settled-occurrence fields. Explicit
 human decisions retain their separate hard capacity error instead of being
 silently dropped.
 
@@ -937,7 +1042,7 @@ Therefore `app/page.tsx` is the product page, `app/api/turn` resolves under
 
 `0.2` has no compatibility aliases because no `0.1` document was persisted.
 The two generative mutation routes are strict, versioned, and fixture-gated;
-their live providers remain independently gated. `/api/inquiry` exists
+their public product surfaces and managed adapters remain independently gated. `/api/inquiry` exists
 separately because it cannot construct a plan or mutate material; an old scene
 route is never renamed into place.
 

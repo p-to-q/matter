@@ -569,6 +569,13 @@ describe("user-provider registry", () => {
       "https://mirror.vendor.ai/v1",
     ))!;
     expect(compatible.transport!.serialize(call, 24, compatible.model)).not.toHaveProperty("store");
+    // A vLLM mirror names the stop token it ended on; the official wire never does.
+    const vllmStop = {
+      choices: [{ finish_reason: "stop", stop_reason: 128_009, message: { content: "answer" } }],
+    };
+    expect(compatible.transport!.parseCompletion(vllmStop))
+      .toEqual({ content: "answer", disposition: "complete" });
+    expect(openai.transport!.parseCompletion(vllmStop).disposition).toBe("unknown-terminator");
 
     const deepseek = createUserPoolCandidate(credential(
       "deepseek-current",
@@ -806,11 +813,38 @@ describe("user-provider registry", () => {
   });
 
   it.each([
+    "stop", "end_turn", "stop_sequence", "eos", "eos_token", "complete", "completed", " EOS ",
+    "length", "max_tokens", "max_output_tokens", "model_context_window_exceeded",
+    "blocked", "content_filter", "guardrail_intervened", "refusal", "safety",
+    "function_call", "pause_turn", "tool_calls", "tool_use",
+    "future_state", "",
+  ])("settles terminator %j identically on the managed and compatible user lanes", async (terminator) => {
+    const settle = async (lane: "managed" | "user") => {
+      resetPoolHealth();
+      const events: string[] = [];
+      const candidate = lane === "user"
+        ? createUserPoolCandidate(credential("openai-compatible", "gpt-4.1-mini", "https://mirror.vendor.ai/v1"))!
+        : { station: "managed", baseUrl: "https://managed.example/v1", apiKey: "managed-key", model: "managed-model" };
+      const adapter = createPoolAdapter([candidate], DEFAULT_POOL_LIMITS, Date.now, async () => json({
+        choices: [{ finish_reason: terminator, message: { content: "answer" } }],
+      }));
+      const text = await adapter({ ...call, observeCandidate: (event) => events.push(event) }, new AbortController().signal)
+        .then((result) => result.text, () => null);
+      return { text, events };
+    };
+    const [managed, user] = [await settle("managed"), await settle("user")];
+    expect(user).toEqual(managed);
+  });
+
+  it.each([
     [undefined],
     [null],
     ["future_state"],
     ["end_turn"],
     ["stop"],
+    ["eos"],
+    ["eos_token"],
+    ["completed"],
   ] as const)("requires an explicit compatible complete terminator (%s)", async (finishReason) => {
     const user = createUserPoolCandidate(credential(
       "openai-compatible",
@@ -841,7 +875,7 @@ describe("user-provider registry", () => {
       },
     );
     const result = await adapter(call, new AbortController().signal);
-    if (finishReason === "stop" || finishReason === "end_turn") {
+    if (typeof finishReason === "string" && finishReason !== "future_state") {
       expect(result).toEqual({ text: "user" });
       expect(tried).toEqual(["gpt-4.1-mini"]);
     } else {

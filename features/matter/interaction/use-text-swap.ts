@@ -2,8 +2,8 @@
 
 import {
   useCallback,
-  useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -25,14 +25,14 @@ import type {
 import type { ThoughtTree } from "../tree/model";
 import { selectLineage } from "../tree/selectors";
 import { createBrowserVoicePort } from "./browser-voice";
+import type { MaterialTurnCommitResult } from "./material-turn-result";
 import {
   TextSwapDriver,
-  type TextSwapCommitResult,
   type TextSwapScope,
 } from "./text-swap-driver";
 import { requestTextSwap } from "./text-swap-client";
 import { requestTranscription } from "./transcription-client";
-import { subscribePageExit, subscribePageSuspension } from "./page-suspension";
+import { useDeliveryWindow } from "./use-delivery-window";
 
 export type UseTextSwapInput<TCommitted> = Readonly<{
   tree: ThoughtTree;
@@ -44,16 +44,24 @@ export type UseTextSwapInput<TCommitted> = Readonly<{
   deliveryVisibleNodeIds?: ReadonlySet<string>;
   /** False pauses capture and durable delivery without aborting submitted work. */
   deliveryWindowAvailable?: boolean;
+  /**
+   * A resolved result reaches the material only once its request has been
+   * pending this long, so the surface that says it is pending is seen. Capture
+   * is untouched; zero (the default) delivers as soon as the window opens.
+   */
+  minimumPendingMs?: number;
   commit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
     expectedDocumentEpoch: number,
-  ) => TextSwapCommitResult<TCommitted>;
+  ) => MaterialTurnCommitResult<TCommitted>;
   onCommitted: (change: TCommitted) => void;
 }>;
 
 export type TextSwapController = Readonly<{
   state: TextSwapInteractionState;
+  /** A resolved result is held only because its passage is not laid out. */
+  deliveryParked: boolean;
   enter: () => boolean;
   startRecording: () => boolean;
   stopRecording: () => void;
@@ -66,11 +74,15 @@ export type TextSwapController = Readonly<{
   detachPresentation: () => boolean;
 }>;
 
-/** React binds current material to the focused driver; it owns no second state machine. */
+/**
+ * React binds current material to the focused driver; it owns no second state
+ * machine. The returned controller is stable between driver snapshots, so a
+ * surface bound to it (and every callback derived from it) is not rebuilt by
+ * an unrelated render.
+ */
 export function useTextSwap<TCommitted>(
   input: UseTextSwapInput<TCommitted>,
 ): TextSwapController {
-  const { documentEpoch, locale, selection, tree } = input;
   const [driver] = useState(() => new TextSwapDriver<TCommitted>({
     createVoice: createBrowserVoicePort,
     transcribe: requestTranscription,
@@ -80,8 +92,10 @@ export function useTextSwap<TCommitted>(
     createRequestId: () => createTextSwapId("request"),
     monotonicNow,
   }));
-  const activePointersRef = useRef(new Set<number>());
   const deliveryAvailableRef = useRef(input.deliveryWindowAvailable !== false);
+  const minimumPendingRef = useRef(input.minimumPendingMs ?? 0);
+  // When the current request began pending, on the monotonic clock.
+  const pendingSinceRef = useRef<Readonly<{ requestId: string; atMs: number }> | null>(null);
 
   const subscribe = useCallback(
     (listener: () => void) => driver.subscribe(listener),
@@ -89,11 +103,31 @@ export function useTextSwap<TCommitted>(
   );
   const getSnapshot = useCallback(() => driver.getState(), [driver]);
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const getParked = useCallback(() => driver.isDeliveryParked(), [driver]);
+  const deliveryParked = useSyncExternalStore(subscribe, getParked, getParked);
 
+  // `enter` reads the material current at the gesture, not at the render
+  // that created the controller.
+  const inputRef = useRef(input);
   useLayoutEffect(() => {
+    inputRef.current = input;
     driver.updateBindings(toDriverBindings(input));
     driver.updateScope(toScope(input, state.phase === "idle" ? null : state.basis));
   }, [driver, input, state]);
+
+  const refreshDeliveryWindow = useDeliveryWindow({
+    isAvailable: () => deliveryAvailableRef.current &&
+      pendingDwellRemainingMs(pendingSinceRef.current, minimumPendingRef.current, monotonicNow()) === 0,
+    onChange: (open) => driver.setDeliveryWindowOpen(open),
+    onSuspend: () => driver.suspendCapture(),
+    // A back-forward-cache hide only suspends: the page may be shown again
+    // with its memory intact, so submitted work keeps its immutable basis and
+    // delivers through the visible, pointer-idle window on return. Only a real
+    // unload ends it. Raw capture already stopped with the suspension.
+    onExit: (exit) => {
+      if (!exit.persisted) driver.cancel();
+    },
+  }, driver);
 
   useLayoutEffect(() => {
     deliveryAvailableRef.current = input.deliveryWindowAvailable !== false;
@@ -103,10 +137,25 @@ export function useTextSwap<TCommitted>(
       driver.suspendCapture();
       return;
     }
-    driver.setDeliveryWindowOpen(
-      document.visibilityState === "visible" && activePointersRef.current.size === 0,
-    );
-  }, [driver, input.deliveryWindowAvailable]);
+    refreshDeliveryWindow();
+  }, [driver, input.deliveryWindowAvailable, refreshDeliveryWindow]);
+
+  const pendingRequestId = state.phase === "pending" ? state.requestId : null;
+  const minimumPendingMs = input.minimumPendingMs ?? 0;
+  useLayoutEffect(() => {
+    minimumPendingRef.current = minimumPendingMs;
+    if (pendingRequestId === null) {
+      pendingSinceRef.current = null;
+    } else if (pendingSinceRef.current?.requestId !== pendingRequestId) {
+      pendingSinceRef.current = Object.freeze({ requestId: pendingRequestId, atMs: monotonicNow() });
+    }
+    // Close the window for the rest of the dwell, then re-evaluate once.
+    refreshDeliveryWindow();
+    const remainingMs = pendingDwellRemainingMs(pendingSinceRef.current, minimumPendingMs, monotonicNow());
+    if (remainingMs === 0) return;
+    const timer = window.setTimeout(refreshDeliveryWindow, remainingMs);
+    return () => window.clearTimeout(timer);
+  }, [minimumPendingMs, pendingRequestId, refreshDeliveryWindow]);
 
   useLayoutEffect(() => {
     // Retain in the commit phase. React's development replay performs the
@@ -117,71 +166,34 @@ export function useTextSwap<TCommitted>(
     return () => driver.release();
   }, [driver]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        !deliveryAvailableRef.current || event.key !== "Escape" ||
-        driver.getState().phase === "idle"
-      ) return;
-      event.preventDefault();
-      driver.detachPresentation();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    const openDeliveryIfUsable = () => driver.setDeliveryWindowOpen(
-      deliveryAvailableRef.current && document.visibilityState === "visible" &&
-        activePointersRef.current.size === 0,
-    );
-    const onPointerDown = (event: PointerEvent) => {
-      activePointersRef.current.add(event.pointerId);
-      driver.setDeliveryWindowOpen(false);
-    };
-    const onPointerDone = (event: PointerEvent) => {
-      activePointersRef.current.delete(event.pointerId);
-      openDeliveryIfUsable();
-    };
-    window.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("pointerup", onPointerDone, true);
-    window.addEventListener("pointercancel", onPointerDone, true);
-    const unsubscribePageSuspension = subscribePageSuspension(
-      () => {
-        activePointersRef.current.clear();
-        driver.suspendCapture();
-      },
-      openDeliveryIfUsable,
-    );
-    const unsubscribePageExit = subscribePageExit(() => driver.cancel());
-    openDeliveryIfUsable();
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("pointerup", onPointerDone, true);
-      window.removeEventListener("pointercancel", onPointerDone, true);
-      unsubscribePageSuspension();
-      unsubscribePageExit();
-    };
-  }, [driver]);
+  // Escape reaches `detachPresentation` through the Point and Talk surface's
+  // layer in the composition's single Escape owner, never a listener here.
 
-  return {
-    state,
-    enter: () => {
-      if (!input.enabled) return false;
-      const basis = createTextSwapBasis({
-        tree,
-        documentEpoch,
-        selection,
-        locale,
-      });
-      return basis !== null && driver.enter(basis);
-    },
+  const enter = useCallback(() => {
+    const current = inputRef.current;
+    if (!current.enabled) return false;
+    const basis = createTextSwapBasis({
+      tree: current.tree,
+      documentEpoch: current.documentEpoch,
+      selection: current.selection,
+      locale: current.locale,
+    });
+    return basis !== null && driver.enter(basis);
+  }, [driver]);
+  const actions = useMemo(() => Object.freeze({
     startRecording: () => driver.startRecording(),
     stopRecording: () => driver.stopRecording(),
-    acceptDirection: (text) => driver.acceptDirection(text),
+    acceptDirection: (text: string) => driver.acceptDirection(text),
     submit: () => driver.submit(),
     retry: () => driver.retry(),
     dismiss: () => driver.dismiss(),
     cancel: () => driver.cancel(),
     detachPresentation: () => driver.detachPresentation(),
-  };
+  }), [driver]);
+  return useMemo(
+    (): TextSwapController => ({ state, deliveryParked, enter, ...actions }),
+    [actions, deliveryParked, enter, state],
+  );
 }
 
 function toDriverBindings<TCommitted>(input: UseTextSwapInput<TCommitted>) {
@@ -272,6 +284,16 @@ export function createTextSwapEnvelope(input: Readonly<{
     },
   });
   return parsed.ok ? parsed.envelope : null;
+}
+
+/** How much longer a pending request must stay pending before it may deliver. */
+export function pendingDwellRemainingMs(
+  pendingSince: Readonly<{ atMs: number }> | null,
+  minimumPendingMs: number,
+  nowMs: number,
+): number {
+  if (pendingSince === null || !(minimumPendingMs > 0)) return 0;
+  return Math.max(0, pendingSince.atMs + minimumPendingMs - nowMs);
 }
 
 function toScope<TCommitted>(

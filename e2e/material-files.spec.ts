@@ -1178,6 +1178,57 @@ test("deleted local selection and disclosure do not return with Undo", async ({ 
   await expect(sidebar.locator(`[data-node-id="${leafId}"]`).getByRole("checkbox")).not.toBeChecked();
 });
 
+test("a busy overlay index keeps Escape rather than passing it to the paper beneath", async ({ page }) => {
+  // Holds an archive read open until the test releases it.
+  await page.addInitScript(() => {
+    const runtime = window as Window & { __releaseArchiveRead?: () => void };
+    const read = Blob.prototype.arrayBuffer;
+    Blob.prototype.arrayBuffer = function (this: Blob) {
+      return new Promise<void>((resolve) => {
+        runtime.__releaseArchiveRead = resolve;
+      }).then(() => read.call(this));
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const sidebar = page.locator("aside.material-files");
+  await page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles, exact: true }).click();
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }).click();
+  const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await archive.getByLabel(fixtureUiCopy.materialFiles.archiveChooseMaterialArchive).setInputFiles({
+    name: "held.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from("This is not a ZIP archive."),
+  });
+  await expect.poll(() => page.evaluate(() =>
+    typeof (window as Window & { __releaseArchiveRead?: () => void }).__releaseArchiveRead)).toBe("function");
+  // Observes, after the one Escape owner, whether any layer claimed the key.
+  await page.evaluate(() => {
+    const runtime = window as Window & { __escapeClaims?: boolean[] };
+    runtime.__escapeClaims = [];
+    window.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") runtime.__escapeClaims?.push(event.defaultPrevented);
+    });
+  });
+  const claims = () => page.evaluate(() =>
+    (window as Window & { __escapeClaims?: boolean[] }).__escapeClaims ?? []);
+
+  // While its archive work runs the drawer stays open, and it still owns the
+  // key: Escape must not fall through to anything beneath it.
+  await page.keyboard.press("Escape");
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+  expect(await claims()).toEqual([true]);
+
+  await page.evaluate(() =>
+    (window as Window & { __releaseArchiveRead?: () => void }).__releaseArchiveRead?.());
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveErrorInvalid);
+  await page.keyboard.press("Escape");
+  await expect(sidebar).not.toHaveAttribute("data-open", "true");
+  expect(await claims()).toEqual([true, true]);
+});
+
 test("storage exhaustion stays discoverable with the narrow material drawer closed", async ({ page }) => {
   await page.addInitScript(() => {
     const originalPut = IDBObjectStore.prototype.put;
@@ -1192,21 +1243,58 @@ test("storage exhaustion stays discoverable with the narrow material drawer clos
 
   const toggle = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFilesSavingNeedsAttention });
   await expect(toggle).toHaveAttribute("data-persistence-error", "true");
+  // One static dot on the closed toggle; no badge count, no pulse.
+  await expect(toggle).toHaveAttribute("data-durability", "risk");
+  await expect(toggle.locator(".material-files-toggle__dot")).toHaveCount(1);
+  await expect(page.locator("[data-durability-announcer]")).toHaveText(fixtureUiCopy.materialFiles.durabilityNotSaved);
   await toggle.click();
 
   const sidebar = page.locator("aside.material-files");
   await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
-  // Persistence recovery belongs to the explicit Archive surface. The quiet
-  // local identity must not turn into an error banner or acquire an action.
+  // The identity line tells the truth instead of claiming the material is
+  // kept; it stays one quiet line whose only action is opening Archive.
   const identity = sidebar.locator(".material-files__profile");
   await expect(identity).toContainText("采石者");
-  await expect(sidebar.locator(".material-files__profile-meta")).toHaveText("仅存于这台设备");
-  await expect(identity.getByRole("button")).toHaveCount(0);
-  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive }).click();
+  const line = identity.getByRole("button", { name: fixtureUiCopy.materialFiles.durabilityNotSaved });
+  await expect(identity.getByRole("button")).toHaveCount(1);
+  await line.click();
 
   const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
   await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveNoteStorageFull);
   await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveExportCopy })).toBeEnabled();
+  await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRetrySaving })).toBeEnabled();
+});
+
+test("a docked index at desk width shows refused storage on its identity line and Archive", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalPut = IDBObjectStore.prototype.put;
+    IDBObjectStore.prototype.put = function (...args: Parameters<IDBObjectStore["put"]>) {
+      if (this.name === "snapshots") throw new DOMException("storage full", "QuotaExceededError");
+      return originalPut.apply(this, args);
+    };
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  // Docked, there is no toggle to carry the cue; the open index must.
+  const sidebar = page.locator("aside.material-files");
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+  await expect(sidebar).toHaveAttribute("data-persistence-phase", "error");
+  await expect(sidebar.locator(".material-files__profile-meta")).toHaveText(
+    fixtureUiCopy.materialFiles.durabilityNotSaved,
+  );
+  await expect(sidebar.locator(".material-files__profile-meta")).toHaveAttribute("data-tone", "risk");
+  await expect(sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true }))
+    .toHaveAttribute("data-attention", "risk");
+  // The announcer lives outside the index, so a closed, inert index is still heard.
+  const announcer = page.locator("[data-durability-announcer]");
+  await expect(announcer).toHaveText(fixtureUiCopy.materialFiles.durabilityNotSaved);
+  expect(await announcer.evaluate((node) => node.closest("aside, [inert], [aria-hidden=true]") === null)).toBe(true);
+
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.durabilityNotSaved }).click();
+  const archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveNoteStorageFull);
   await expect(archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveRetrySaving })).toBeEnabled();
 });
 

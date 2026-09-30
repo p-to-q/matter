@@ -3,7 +3,7 @@ import {
   readWikiLearningPolicyQualificationBytes,
   runWikiLearningPolicyQualification,
   WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST,
-} from "../../../scripts/wiki/qualification/learning-policy-v3";
+} from "../../../scripts/wiki/qualification/learning-policy-v4";
 import { MATTER_WIKI_QUALIFIED_LEARNING_POLICY } from
   "./wiki-qualified-learning-policy";
 
@@ -18,14 +18,26 @@ describe("qualified Wiki learning policy", () => {
       "restricted-four-turn-activation",
       "competition-margin-abstention",
       "quiet-decay-retention",
+      "quarter-unit-gradual-decay",
       "broad-term-two-turn-collection",
+      "non-comparable-turns-do-not-age",
+      "routed-latin-ledger-ages-only-on-latin-turns",
+      "partial-scan-scores-only-what-it-saw",
+      "informed-acceptance-retains-a-used-rule",
+      "generated-implicit-acceptance-counts-by-policy",
+      "two-strike-reversion",
+      "revert-strike-memory-expires",
+      "confirmed-authority-stays-outside-scoring",
+      "same-epoch-reverts-strike-once",
+      "duplicate-delivery-settles-once",
+      "kept-evidence-never-reactivates",
       "non-human-zero-vote",
     ]);
     expect(run.release).toEqual(MATTER_WIKI_QUALIFIED_LEARNING_POLICY);
   }, 60_000);
 
   it("keeps the compact release separate from labelled scenarios", () => {
-    expect(WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST.scenarios).toHaveLength(6);
+    expect(WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST.scenarios).toHaveLength(18);
     expect(MATTER_WIKI_QUALIFIED_LEARNING_POLICY).not.toHaveProperty("scenarios");
     expect(MATTER_WIKI_QUALIFIED_LEARNING_POLICY).not.toHaveProperty("results");
     expect(Object.isFrozen(MATTER_WIKI_QUALIFIED_LEARNING_POLICY)).toBe(true);
@@ -38,8 +50,13 @@ describe("qualified Wiki learning policy", () => {
     for (const file of [
       "wiki-learning-policy.ts",
       "wiki-evidence.ts",
+      "wiki-evidence-aging.ts",
+      "wiki-occurrence-settlement.ts",
+      "wiki-transition.ts",
       "wiki-model.ts",
       "wiki-invariants.ts",
+      "wiki-script.ts",
+      "wiki-script-routing.ts",
       "wiki-producer-qualification.ts",
       "wiki-text-safety.ts",
       "config/locales.ts",

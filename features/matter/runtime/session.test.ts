@@ -86,7 +86,7 @@ describe("runtime session", () => {
     });
     expect(admitted.state.history.entries.at(-1)).toMatchObject({ source: "human" });
 
-    const undone = undoSession(admitted.state);
+    const undone = undoSession(admitted.state, LIMITS);
     expect(undone).toMatchObject({
       ok: true,
       state: { tree: { rootId: null, nodes: {}, revision: 2 } },
@@ -118,7 +118,7 @@ describe("runtime session", () => {
     });
 
     if (!admitted.ok) throw new Error(admitted.receipt.errorCode);
-    const undone = undoSession(admitted.state);
+    const undone = undoSession(admitted.state, LIMITS);
     expect(undone).toMatchObject({
       ok: true,
       state: {
@@ -265,7 +265,7 @@ describe("runtime session", () => {
     const capacity = commitHumanAdmission(state, anchored.anchor, values, {
       maxEntries: 1,
       maxRetainedInverseBytes: 0,
-    }, () => 1);
+    });
     expect(capacity).toMatchObject({ ok: false, receipt: { errorCode: "HISTORY_LIMIT_EXCEEDED" } });
     expect(capacity.state.tree).toBe(state.tree);
     expect(capacity.state.history).toBe(state.history);
@@ -331,7 +331,6 @@ describe("runtime session", () => {
         root: node("root", null),
       }),
       { maxEntries: 1, maxRetainedInverseBytes: 0 },
-      () => 1,
     );
 
     expect(result).toMatchObject({
@@ -359,7 +358,7 @@ describe("runtime session", () => {
 
   it("reports empty undo without changing material, history, or navigation", () => {
     const state = emptyState();
-    const result = undoSession(state);
+    const result = undoSession(state, LIMITS);
 
     expect(result).toMatchObject({
       ok: false,
@@ -396,7 +395,7 @@ describe("runtime session", () => {
     if (!focused.ok) throw new Error(focused.error.code);
     const state = { ...inserted.state, navigation: focused.navigation };
 
-    const undone = undoSession(state);
+    const undone = undoSession(state, LIMITS);
 
     expect(undone).toMatchObject({
       ok: true,
@@ -416,7 +415,7 @@ describe("runtime session", () => {
   });
 
   it("clears a previous error after the next successful material publication", () => {
-    const failed = undoSession(emptyState());
+    const failed = undoSession(emptyState(), LIMITS);
     if (failed.ok) throw new Error("expected empty undo");
 
     const committed = commitSessionCommand(

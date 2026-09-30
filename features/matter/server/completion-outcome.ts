@@ -1,5 +1,6 @@
 /** Human-readable identity for provider completion settlement. */
-export const COMPLETION_OUTCOME_POLICY_VERSION = "completion-outcome/1";
+// Version 2 accepts vLLM's integer stop-token id beside a `stop` finish.
+export const COMPLETION_OUTCOME_POLICY_VERSION = "completion-outcome/2";
 
 /** Closed provider-completion outcomes that can never become Matter text. */
 export type UnusableCompletionCode =
@@ -7,6 +8,93 @@ export type UnusableCompletionCode =
   | "blocked-or-refused"
   | "tool-or-continuation"
   | "unknown-terminator";
+
+/**
+ * How a relay says one completion stopped. `missing` means no stop field at
+ * all; its caller decides whether that compatibility path may return text.
+ */
+export type CompletionDisposition = "complete" | "missing" | UnusableCompletionCode;
+
+/**
+ * The one OpenAI-compatible chat-completions stop vocabulary. The managed pool
+ * and every compatible chat-completions user transport read relays of the same
+ * families, so a terminator that authorizes text on one lane must authorize it
+ * on the other; two lists had drifted until a mirror's `eos` answered on the
+ * managed lane and was refused on a person's own key.
+ *
+ * Every explicit stop reason is fail-closed. Only a known complete value may
+ * authorize text; truncation, block/refusal, tool continuation, conflict,
+ * malformed metadata, and unknown vocabulary all lose to the product floor.
+ * The official OpenAI and DeepSeek chat transports keep a narrower list.
+ * Anthropic Messages and the Responses API are different wires whose stop
+ * fields each transport reads with its own vocabulary, official or
+ * compatible. Gemini's official transport is OpenAI-compatible by design and
+ * uses this one.
+ */
+const TRUNCATED_TERMINATORS: ReadonlySet<string> = new Set([
+  "length",                        // OpenAI chat completions
+  "max_tokens",                    // Anthropic, and relays that forward it
+  "max_output_tokens",             // Responses-shaped relays
+  "model_context_window_exceeded", // Anthropic
+]);
+
+const COMPLETE_TERMINATORS: ReadonlySet<string> = new Set([
+  "stop", "end_turn", "stop_sequence", "eos", "eos_token", "complete", "completed",
+]);
+
+const BLOCKED_TERMINATORS: ReadonlySet<string> = new Set([
+  "blocked", "content_filter", "guardrail_intervened", "refusal", "safety",
+]);
+
+const TOOL_TERMINATORS: ReadonlySet<string> = new Set([
+  "function_call", "pause_turn", "tool_calls", "tool_use",
+]);
+
+/**
+ * Reads both common fields of one choice independently. An empty
+ * `finish_reason` cannot hide a non-empty `stop_reason`, a blank or otherwise
+ * malformed report is unknown, and two conflicting reports fail closed.
+ *
+ * One numeric form is known: vLLM's OpenAI-compatible server reports the id of
+ * the stop token that ended generation, such as Llama 3's end-of-turn token,
+ * as an integer `stop_reason` beside `finish_reason: "stop"`. That id only
+ * qualifies a `stop` finish. Any other number, or a token id without that
+ * finish, is unknown.
+ */
+export function classifyCompletionTerminators(
+  choice: Readonly<Record<string, unknown>>,
+): CompletionDisposition {
+  const reasons: string[] = [];
+  for (const key of ["finish_reason", "stop_reason"] as const) {
+    const reason = choice[key];
+    if (reason === undefined || reason === null) continue;
+    if (key === "stop_reason" && isStopTokenId(reason)) {
+      if (reasons.length !== 1 || reasons[0] !== "stop") return "unknown-terminator";
+      continue;
+    }
+    if (typeof reason !== "string") return "unknown-terminator";
+    const normalized = reason.trim().toLowerCase();
+    if (normalized.length === 0) return "unknown-terminator";
+    reasons.push(normalized);
+  }
+  if (reasons.length === 0) return "missing";
+  const kinds = reasons.map((reason) => {
+    if (COMPLETE_TERMINATORS.has(reason)) return "complete" as const;
+    if (TRUNCATED_TERMINATORS.has(reason)) return "truncated" as const;
+    if (BLOCKED_TERMINATORS.has(reason)) return "blocked-or-refused" as const;
+    if (TOOL_TERMINATORS.has(reason)) return "tool-or-continuation" as const;
+    return "unknown-terminator" as const;
+  });
+  if (kinds.every((kind) => kind === "complete")) return "complete";
+  if (kinds.includes("unknown-terminator")) return "unknown-terminator";
+  if (kinds.includes("blocked-or-refused")) return "blocked-or-refused";
+  if (kinds.includes("tool-or-continuation")) return "tool-or-continuation";
+  return "truncated";
+}
+
+function isStopTokenId(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
 
 /**
  * A provider-side settlement that should use the product floor without

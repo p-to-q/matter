@@ -6,17 +6,17 @@ import {
   WIKI_RECORD_SCHEMA_VERSION,
   type StoredWikiRecord,
 } from "./matter-database";
-import { parseWikiState, wikiStateStorageBytes } from "../wiki/wiki-codec";
+import {
+  maximumRawWikiStateBytes,
+  parseWikiState,
+  wikiStateStorageBytes,
+} from "../wiki/wiki-codec";
 import {
   createInitialWikiState,
   ensureWikiStarterLexemes,
 } from "../wiki/wiki-evidence";
 import type { WikiState } from "../wiki/wiki-model";
-import {
-  MAX_LEGACY_WIKI_STATE_BYTES,
-  MAX_WIKI_STATE_BYTES,
-  WIKI_SCHEMA_VERSION,
-} from "../wiki/wiki-model";
+import { MAX_WIKI_STATE_BYTES, WIKI_SCHEMA_VERSION } from "../wiki/wiki-model";
 
 export const MAX_STORED_WIKI_BYTES = MAX_WIKI_STATE_BYTES;
 
@@ -73,7 +73,9 @@ export function createIndexedDbWikiRepository(): WikiRepository {
         }
         const parsed = parseStoredWikiRecord(stored);
         if (parsed === null) {
-          return abort(transaction, "PERSISTENCE_CORRUPT", "The saved Wiki is invalid.");
+          return isNewerWikiRecord(stored)
+            ? abort(transaction, "PERSISTENCE_UNAVAILABLE", NEWER_WIKI_MESSAGE)
+            : abort(transaction, "PERSISTENCE_CORRUPT", "The saved Wiki is invalid.");
         }
         if (parsed.recordSchemaVersion === WIKI_RECORD_SCHEMA_VERSION) {
           await transaction.done;
@@ -124,11 +126,9 @@ export function createIndexedDbWikiRepository(): WikiRepository {
         const current: unknown = await transaction.store.get(WIKI_RECORD_KEY);
         const parsedCurrent = current === undefined ? null : parseStoredWikiRecord(current);
         if (current !== undefined && parsedCurrent === null) {
-          return abort(
-            transaction,
-            "PERSISTENCE_CORRUPT",
-            "The saved Wiki is invalid.",
-          );
+          return isNewerWikiRecord(current)
+            ? abort(transaction, "PERSISTENCE_UNAVAILABLE", NEWER_WIKI_MESSAGE)
+            : abort(transaction, "PERSISTENCE_CORRUPT", "The saved Wiki is invalid.");
         }
         const currentGeneration = parsedCurrent?.writeGeneration ?? null;
         if (currentGeneration !== expectedGeneration) {
@@ -180,7 +180,8 @@ export function createIndexedDbWikiRepository(): WikiRepository {
         const transaction = db.transaction("wiki", "readwrite");
         observeTransactionCompletion(transaction);
         const current: unknown = await transaction.store.get(WIKI_RECORD_KEY);
-        if (current === undefined || parseStoredWikiRecord(current) !== null) {
+        if (current === undefined || parseStoredWikiRecord(current) !== null ||
+            isNewerWikiRecord(current)) {
           return abort(
             transaction,
             "PERSISTENCE_CONFLICT",
@@ -225,11 +226,7 @@ function parseStoredWikiRecord(value: unknown): ParsedStoredWiki | null {
     "writeGeneration",
     "state",
   ])) return null;
-  const rawStateIsCurrent = isPlainObject(value.state) &&
-    value.state.schemaVersion === WIKI_SCHEMA_VERSION;
-  const maximumRawBytes = rawStateIsCurrent
-    ? MAX_STORED_WIKI_BYTES
-    : MAX_LEGACY_WIKI_STATE_BYTES;
+  const maximumRawBytes = maximumRawWikiStateBytes(value.state);
   if (
     value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
     !Number.isSafeInteger(value.recordSchemaVersion) ||
@@ -248,6 +245,24 @@ function parseStoredWikiRecord(value: unknown): ParsedStoredWiki | null {
         recordSchemaVersion: value.recordSchemaVersion as StoredWikiRecord["recordSchemaVersion"],
       })
     : null;
+}
+
+const NEWER_WIKI_MESSAGE = "A newer Matter owns the local Wiki.";
+
+/**
+ * A row written by a newer build is unreadable here but not corrupt, so this
+ * build must never offer to reset it. It reports storage as unavailable: the
+ * Wiki keeps its last basis and material continues. When the material
+ * repository exposes a terminal superseded code, this is where it maps.
+ */
+function isNewerWikiRecord(value: unknown): boolean {
+  if (!isPlainObject(value) || value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
+      value.key !== WIKI_RECORD_KEY) return false;
+  const recordVersion = value.recordSchemaVersion;
+  const stateVersion = isPlainObject(value.state) ? value.state.schemaVersion : undefined;
+  return (Number.isSafeInteger(recordVersion) &&
+      (recordVersion as number) > WIKI_RECORD_SCHEMA_VERSION) ||
+    (Number.isSafeInteger(stateVersion) && (stateVersion as number) > WIKI_SCHEMA_VERSION);
 }
 
 function toLoadedWiki(parsed: ParsedStoredWiki): LoadedWiki {

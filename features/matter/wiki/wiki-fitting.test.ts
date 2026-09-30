@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { applyWikiEvent, createEmptyWikiState } from "./wiki-evidence";
+import {
+  applyWikiEvent,
+  createEmptyWikiState,
+  createInitialWikiState,
+} from "./wiki-evidence";
 import {
   compileWikiFitSnapshot,
   fitCommittedWikiText,
@@ -294,7 +298,7 @@ describe("Wiki fitting", () => {
     ]);
   });
 
-  it("marks an oversized fitting admission censored instead of aging aliases", () => {
+  it("scores the words a partial fitting scan reached and stops before the bound", () => {
     const canonicals = Array.from({ length: 33 }, (_, index) =>
       `Engelbart${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`);
     const observed = canonicals.map((canonical) =>
@@ -304,7 +308,223 @@ describe("Wiki fitting", () => {
       { locale: "en-US", channel: "spoken", text: observed.join(" ") },
       new Set(["latin-internal-edit-v2"]),
     );
-    expect(result).toEqual({ status: "censored", events: [] });
+    expect(result.status).toBe("partial");
+    expect(result.events).toHaveLength(32);
+    expect(result.events.map((event) =>
+      event.source === "machine-inference" ? event.form : "")).toEqual(observed.slice(0, 32));
+    expect(result.scannedScripts).toEqual(["latin"]);
+  });
+
+  it("offers every scanned eligible script, not only fitted words", () => {
+    expect(fitCommittedWikiTextResult(
+      runtimeSnapshot(withLexemes("Engelbart")),
+      { locale: "en-US", channel: "spoken", text: "Englebart 材料" },
+      new Set(["latin-internal-edit-v2"]),
+    )).toMatchObject({ status: "ok", scannedScripts: ["latin", "han"] });
+    expect(fitCommittedWikiTextResult(
+      runtimeSnapshot(withLexemes("Engelbart")),
+      { locale: "en-US", channel: "written", text: "Englebart" },
+      new Set(["latin-internal-edit-v2"]),
+    )).toEqual({ status: "censored", events: [], scannedScripts: [] });
+  });
+});
+
+describe("script-routed Wiki fitting", () => {
+  const LATIN = new Set(["latin-internal-edit-v2"] as const);
+
+  function fit(
+    state: WikiState,
+    locale: "zh-CN" | "zh-TW" | "ja-JP" | "en-US" | "de-DE",
+    text: string,
+  ) {
+    return fitCommittedWikiTextResult(runtimeSnapshot(state), {
+      locale,
+      channel: "spoken",
+      text,
+    }, LATIN);
+  }
+
+  it("fits a Latin word inside Chinese and Japanese speech in the en-US ledger", () => {
+    const state = withLexemes("Engelbart", "Morphogenesis");
+
+    expect(fit(state, "zh-CN", "我读了Englebart的论文")).toEqual({
+      status: "ok",
+      events: [{
+        type: "observe-evidence",
+        locale: "en-US",
+        channel: "spoken",
+        boundary: "word",
+        form: "Englebart",
+        canonical: "Engelbart",
+        source: "machine-inference",
+        producer: "latin-internal-edit-v2",
+      }],
+      scannedScripts: ["latin", "han"],
+      routedScripts: ["latin"],
+    });
+    expect(fit(state, "zh-TW", "我讀了Morphogenasis的論文").events).toEqual([
+      expect.objectContaining({ locale: "en-US", canonical: "Morphogenesis" }),
+    ]);
+    expect(fit(state, "ja-JP", "Englebartの論文を読んだ").events).toEqual([
+      expect.objectContaining({ locale: "en-US", form: "Englebart" }),
+    ]);
+  });
+
+  it("extracts routed words across punctuation, spacing, and emoji", () => {
+    const state = withLexemes("Engelbart", "Morphogenesis");
+
+    expect(fit(state, "zh-CN", "Englebart，😀Morphogenasis！").events.map((event) =>
+      event.source === "machine-inference" ? event.form : "")).toEqual([
+      "Englebart",
+      "Morphogenasis",
+    ]);
+    expect(fit(state, "zh-CN", "我读了 Englebart 的论文").events).toHaveLength(1);
+  });
+
+  it("does not fit a word joined to digits, and never routes digits alone", () => {
+    const state = withLexemes("Engelbart");
+
+    // A word no relation could name neither votes nor counts as an absence.
+    expect(fit(state, "zh-CN", "Englebart2号")).toMatchObject({
+      events: [],
+      scannedScripts: ["han"],
+      routedScripts: [],
+    });
+    expect(fit(state, "zh-CN", "2026年的材料")).toMatchObject({
+      events: [],
+      scannedScripts: ["han"],
+      routedScripts: [],
+    });
+  });
+
+  it("folds full-width Latin to the form the matcher applies", () => {
+    expect(fit(withLexemes("Engelbart"), "zh-CN", "我读了Ｅｎｇｌｅｂａｒｔ的论文").events)
+      .toEqual([expect.objectContaining({ locale: "en-US", form: "Englebart" })]);
+  });
+
+  it("reads a full-width Latin word by script, not by ledger", () => {
+    const state = withLexemes("Engelbart");
+
+    // In an English turn it votes exactly as it does routed out of Chinese.
+    expect(fit(state, "en-US", "I read Ｅｎｇｌｅｂａｒｔ today")).toMatchObject({
+      events: [expect.objectContaining({ locale: "en-US", form: "Englebart" })],
+      scannedScripts: ["latin"],
+    });
+    // A German turn has no Latin producer, and its full-width words still
+    // never reach the en-US targets.
+    expect(fit(state, "de-DE", "Ｅｎｇｌｅｂａｒｔ").events).toEqual([]);
+  });
+
+  it("never counts a Latin word the producer cannot read as an absence", () => {
+    const state = withLexemes("Engelbart");
+    for (const text of ["Englebart2", "Ｅｎｇｌｅｂａｒｔ２", "Englebart's", "Café"]) {
+      expect(fit(state, "en-US", text)).toMatchObject({ events: [], scannedScripts: [] });
+    }
+    expect(fit(state, "en-US", "Café Englebart").scannedScripts).toEqual(["latin"]);
+  });
+
+  it("never fits protected or joined literals in routed spans", () => {
+    const state = withLexemes("Engelbart");
+    for (const text of [
+      "看https://example.com/Englebart的页面",
+      "邮箱Englebart@example.com",
+      "代码`Englebart`里",
+      "他说“Englebart”",
+      "路径src/Englebart/index.ts",
+      "@Englebart 你好",
+      "#Englebart#话题",
+      "Englebart-2.0版本",
+      "打开ＥｎｇｌｅＢａｒｔ模块",
+      "看ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ／Ｅｎｇｌｅｂａｒｔ的页面",
+      "邮箱englebart＠example.com",
+      "路径ｓｒｃ／Ｅｎｇｌｅｂａｒｔ／ｉｎｄｅｘ．ｔｓ",
+      "运行－－Ｅｎｇｌｅｂａｒｔ参数",
+      "＠Englebart 你好",
+      "＃Englebart＃话题",
+      "代码｀Englebart｀里",
+    ]) {
+      expect(fit(state, "zh-CN", text)).toMatchObject({ events: [], routedScripts: [] });
+    }
+  });
+
+  it("counts an English word only where its word rule could apply", () => {
+    const state = withLexemes("Engelbart");
+    for (const text of ["@Englebart said", "#Englebart", "Englebart-style", "Englebart_x"]) {
+      expect(fit(state, "en-US", text).events).toEqual([]);
+    }
+    expect(fit(state, "en-US", "(Englebart), later").events).toEqual([
+      expect.objectContaining({ form: "Englebart", canonical: "Engelbart" }),
+    ]);
+  });
+
+  it("never fits full-width literals or joiners in an English turn", () => {
+    const state = withLexemes("Engelbart");
+    for (const text of [
+      "＠Englebart said",
+      "＃Englebart＃",
+      "｀Englebart｀",
+      "ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ／Englebart",
+      "englebart＠example.com",
+      "src／Englebart／index．ts",
+      "－－Englebart",
+      "Englebart．ts",
+      "my＿Englebart",
+      "Englebart－style",
+    ]) {
+      expect(fit(state, "en-US", text).events).toEqual([]);
+    }
+    // A protected or joined word is not an opportunity either.
+    expect(fit(state, "en-US", "＃Englebart＃").scannedScripts).toEqual([]);
+    expect(fit(state, "en-US", "（Englebart），later").events).toEqual([
+      expect.objectContaining({ form: "Englebart", canonical: "Engelbart" }),
+    ]);
+  });
+
+  it("never lets a CJK span reach the Latin producer", () => {
+    expect(fit(withLexemes("Engelbart"), "zh-CN", "恩格尔巴特的演示")).toEqual({
+      status: "ok",
+      events: [],
+      scannedScripts: ["han"],
+      routedScripts: [],
+    });
+  });
+
+  it("reaches only en-US targets, never a same-spelling lexeme in another locale", () => {
+    for (const locale of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      expect(fit(withLocaleLexemes(locale, "Engelbart"), "zh-CN", "Englebart的").events)
+        .toEqual([]);
+    }
+    expect(fit(withLexemes("Engelbart"), "de-DE", "Englebart")).toMatchObject({
+      events: [],
+      routedScripts: [],
+    });
+  });
+
+  it("keeps an observed en-US canonical a hard no-op inside Chinese speech", () => {
+    expect(fit(withLexemes("Englebart", "Engelbart"), "zh-CN", "Englebart的演示").events)
+      .toEqual([]);
+  });
+
+  it("cannot tell a different real name one edit away until it is canonical", () => {
+    // A documented limit of the internal-edit producer in every locale: the
+    // gate, margin, canonical veto, and revert/reject are its mitigation.
+    expect(fit(withLexemes("Engelbart"), "zh-CN", "我采访了Engelhart").events)
+      .toEqual([expect.objectContaining({ form: "Engelhart", canonical: "Engelbart" })]);
+    expect(fit(withLexemes("Engelhart", "Engelbart"), "zh-CN", "我采访了Engelhart").events)
+      .toEqual([]);
+    expect(fit(withLexemes("Engelbart"), "zh-CN", "Engelhard公司").events).toEqual([]);
+  });
+
+  it("targets the long Latin starters but not KFC or the p-to-q starter", () => {
+    const snapshot = runtimeSnapshot(createInitialWikiState());
+    const events = fitCommittedWikiText(snapshot, {
+      locale: "zh-CN",
+      channel: "spoken",
+      text: "Englebart和Morphogenasis，还有KFD和P to R",
+    }, LATIN);
+
+    expect(snapshot.stats.eligibleLexemeCount).toBe(2);
+    expect(events.map((event) => event.canonical)).toEqual(["Engelbart", "Morphogenesis"]);
   });
 });
 
@@ -317,7 +537,7 @@ function runtimeSnapshot(state: WikiState) {
 }
 
 function withLocaleLexemes(
-  locale: "en-US" | "zh-CN" | "zh-TW",
+  locale: "en-US" | "zh-CN" | "zh-TW" | "ja-JP" | "de-DE",
   ...canonicals: string[]
 ): WikiState {
   let state = createEmptyWikiState();

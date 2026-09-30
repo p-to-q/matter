@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   excludePointTalkRightOccluder,
   intersectPointTalkBounds,
+  projectPointTalkEntrance,
   projectPointTalkPlacement,
   projectPointTalkPlacementWithinSurfaces,
   projectPointTalkScale,
@@ -147,5 +148,40 @@ describe("Point-and-Talk placement", () => {
       positioningSurface: { left: 8, top: 66, right: 162, bottom: 836 },
       rightOccluder: null,
     })).toEqual({ kind: "unusable" });
+  });
+});
+
+describe("Point-and-Talk entrance", () => {
+  const target = { left: 100, top: 300, right: 620, bottom: 360 };
+  const bubble = { width: 264, height: 38 };
+
+  it("grows from the pressed mark and settles toward a passage below it", () => {
+    expect(projectPointTalkEntrance({
+      origin: { x: 90, y: 270 },
+      placement: { left: 100, top: 248 },
+      bubble,
+      target,
+      travelPx: 4,
+    })).toEqual({ originX: 0, originY: 22, travelY: -4 });
+  });
+
+  it("travels upward toward a passage above it and clamps the origin into the field", () => {
+    expect(projectPointTalkEntrance({
+      origin: { x: 900, y: 10 },
+      placement: { left: 100, top: 374 },
+      bubble,
+      target,
+      travelPx: 4,
+    })).toEqual({ originX: 264, originY: 0, travelY: 4 });
+  });
+
+  it("grows from the edge facing the passage when nothing was pressed", () => {
+    expect(projectPointTalkEntrance({
+      origin: null,
+      placement: { left: 100, top: 248 },
+      bubble,
+      target,
+      travelPx: 4,
+    })).toEqual({ originX: 0, originY: 38, travelY: -4 });
   });
 });

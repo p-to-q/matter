@@ -13,6 +13,7 @@ import {
   MAX_WIKI_APPLICABLE_RULES,
   MAX_WIKI_LEXEMES,
   WIKI_SCHEMA_VERSION,
+  WIKI_SCORING_VERSION,
   type WikiEvent,
   type WikiState,
 } from "./wiki-model";
@@ -290,7 +291,7 @@ describe("Wiki basis", () => {
       ...state,
       revision: 2,
       termEvidence: Object.freeze([
-        Object.freeze({ ...state.termEvidence[0]!, support: 3 }),
+        Object.freeze({ ...state.termEvidence[0]!, support: 12 }),
       ]),
     });
     expect(validateWikiState(changed)).toEqual({ ok: true });
@@ -336,7 +337,7 @@ function oversizedWikiState(): WikiState {
   });
   return {
     schemaVersion: WIKI_SCHEMA_VERSION,
-    scoringVersion: 3,
+    scoringVersion: WIKI_SCORING_VERSION,
     fittingVersion: 1,
     revision: 1,
     nextLexemeId: 2_001,
@@ -356,6 +357,8 @@ function oversizedWikiState(): WikiState {
     }),
     aliasTombstones: [],
     lexemeTombstones: [],
+    revertStrikes: [],
+    settledOccurrences: [],
   };
 }
 
@@ -374,7 +377,7 @@ function maximumMatcherState(): WikiState {
   });
   return {
     schemaVersion: WIKI_SCHEMA_VERSION,
-    scoringVersion: 3,
+    scoringVersion: WIKI_SCORING_VERSION,
     fittingVersion: 1,
     revision: 1,
     nextLexemeId: MAX_WIKI_APPLICABLE_RULES + 1,
@@ -391,6 +394,8 @@ function maximumMatcherState(): WikiState {
     })),
     aliasTombstones: [],
     lexemeTombstones: [],
+    revertStrikes: [],
+    settledOccurrences: [],
   };
 }
 
@@ -407,7 +412,7 @@ function recoverySizeState(withTermEvidence = false): WikiState {
   }));
   return freezeWikiState({
     schemaVersion: WIKI_SCHEMA_VERSION,
-    scoringVersion: 3,
+    scoringVersion: WIKI_SCORING_VERSION,
     fittingVersion: 1,
     revision: 1,
     nextLexemeId: MAX_WIKI_LEXEMES + 1,
@@ -419,7 +424,7 @@ function recoverySizeState(withTermEvidence = false): WikiState {
           canonical: lexemes[0]!.canonical,
           producer: "locale-segment-v1" as const,
           phase: "collected" as const,
-          support: 2,
+          support: 8,
           quietTurns: 0,
         })])
       : Object.freeze([]),
@@ -427,6 +432,8 @@ function recoverySizeState(withTermEvidence = false): WikiState {
     authorities: Object.freeze([]),
     aliasTombstones: Object.freeze([]),
     lexemeTombstones: Object.freeze([]),
+    revertStrikes: Object.freeze([]),
+    settledOccurrences: Object.freeze([]),
   });
 }
 

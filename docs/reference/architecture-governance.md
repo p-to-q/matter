@@ -140,7 +140,7 @@ The following are implementation findings, not architectural guesses.
 | Manual names have durable failure semantics | `LabelWriteReceipt` and the label driver return a failed write to the editor for retry | A human decision is no longer reported as kept when it never reached disk. | Preserve typed receipts; model-label caching may remain best effort. |
 | Three view modules contain several lifecycles | `RootedMaterial`, `CanvasChrome`, and `MaterialFiles` coordinate several kinds of state or browser behavior | Cancellation, exclusivity, focus, geometry, and network ownership deserve review when a current slice touches them. | Treat size as a concentration signal only; extract one owner only when behavior or change evidence identifies an independent lifecycle. |
 | Local inference cancellation has an explicit worker lease | active cancellation retires the worker lease, rejects its pending work, and makes late messages inert | A cancelled long job no longer occupies the next turn. | Preserve queued/active cancel, timeout, late-result, and retry proofs; do not generalize it into a worker framework. |
-| Undo/Redo retains to physical limits | production history silently evicts nothing and persists exact inverses beside the snapshot | Logical reversibility is settled; long-session serialization and browser quota remain measured implementation limits. | Measure save/hydrate/quota behavior before introducing segmented storage; do not reintroduce silent count or byte eviction. |
+| Undo/Redo is bounded and stored per step | `MATTER_HISTORY_LIMITS` keeps 1,000 steps within 32 MiB; `history-journal.ts` writes one record per step inside the snapshot transaction; recovery dry-runs only the stack tops (8.87 ms vs 8.6 s whole-journal replay at 2,000 nodes; 2.9 ms per-step save vs 24.5 ms inline rewrite in Chromium 153) | Save and hydrate no longer grow with history; quota sheds durable history before material; an unrecoverable step is released with one notice. | Preserve the single transaction and the basis pair (generation + journal layout); reopen the bounds only with owner intent, and never validate the whole journal on the main thread. |
 | Inquiry retention is a bounded local exception | its generation-checked repository stores terminal exchanges without context and exposes them only through the existing inquiry | Continuity does not become material, archive, or model memory, and no log-management UI is implied. | Preserve the detachable repository and clear/tombstone semantics; add a new surface only after a separate product freeze. |
 
 The codebase is not a hollow scaffold: it contains substantial product code,
@@ -156,7 +156,8 @@ Use a guardrails-first, slice-by-slice route:
 2. **Make newly discovered cheap violations fail.** Add a narrow mechanical
    rule only after its seam is evidenced; do not grow an abstract lint regime.
 3. **Repair semantic seams.** Finish live-model reliability and abuse controls,
-   measure undo capacity before setting a retention policy, and preserve the
+   keep the measured undo bound and per-step journal (see the matrix row
+   below) rather than reopening retention by preference, and preserve the
    explicit local-inference cancellation proof.
 4. **Review by lifecycle.** When a current slice exposes an independent owner,
    freeze its behavior and extract only that owner. Do not schedule a component
@@ -191,8 +192,8 @@ check, and closed the manual-name durability seam. The local-inference
 cancellation proof ([#45](https://github.com/p-to-q/matter/issues/45)) and the
 interaction receipts ([#42](https://github.com/p-to-q/matter/issues/42)) remain
 covered by tests. Undo-journal capacity
-([#47](https://github.com/p-to-q/matter/issues/47)) is closed until it can be
-measured on the same rig as the large-tree gate. Component extraction remains an
+([#47](https://github.com/p-to-q/matter/issues/47)) was measured and bounded by
+the owner's 2026-09-29 decision: 1,000 steps and 32 MiB, stored per step. Component extraction remains an
 evidence-triggered future option rather than a current plan;
 [#48](https://github.com/p-to-q/matter/issues/48) is closed as not planned.
 

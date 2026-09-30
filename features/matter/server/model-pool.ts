@@ -1,11 +1,14 @@
+import { rejectOnAbort } from "./abort-boundary";
 import {
   CandidateAttemptTimeoutError,
   CandidateRejectedError,
   PoolDrainingError,
   ScenarioPolicyError,
   UnusableCompletionError,
+  type CompletionDisposition,
   type UnusableCompletionCode,
 } from "./completion-outcome";
+import { parseOpenAiChatCompletion } from "./openai-chat-completion";
 import {
   withAdapterOwnedHealth,
   type MatterScenarioId,
@@ -72,10 +75,7 @@ export type PoolParsedCompletion = Readonly<{
   unusable?: UnusableCompletionCode;
 }>;
 
-export type PoolCompletionDisposition =
-  | "complete"
-  | "missing"
-  | UnusableCompletionCode;
+export type PoolCompletionDisposition = CompletionDisposition;
 
 export type PoolLimits = Readonly<{
   /** Below this, a further attempt cannot finish inside the caller's deadline. */
@@ -385,9 +385,12 @@ function orderedCandidates(
   const healthy: PoolCandidate[] = [];
   const cooling: PoolCandidate[] = [];
   for (const candidate of pool) {
-    // A person's selected provider remains first across completed failures.
-    // An actually draining attempt is still skipped by the caller loop so an
-    // advisory abort cannot multiply live third-party work.
+    // A person's selected provider leads while its own credential scope is
+    // healthy. Once repeated transport failure cools that scope, it yields to
+    // healthy managed candidates but still precedes cooling managed ones;
+    // cooling orders, it never vetoes. An actually draining attempt is still
+    // skipped by the caller loop so an advisory abort cannot multiply live
+    // third-party work.
     const entry = health.get(healthKey(scenario, candidate));
     const candidateCooling = entry !== undefined && nowMs < entry.cooldownUntilMs;
     if (candidate.credentialScopeId !== undefined) {
@@ -475,7 +478,10 @@ async function completeOnce(
     );
     responseBodyConsumed = true;
     const payload = JSON.parse(body) as unknown;
-    const completion = transport?.parseCompletion(payload) ?? parseManagedCompletion(payload);
+    // A managed relay's stop report goes through the shared fail-closed
+    // vocabulary; a genuinely absent field stays a counted compatibility path
+    // for relays that predate that boundary.
+    const completion = transport?.parseCompletion(payload) ?? parseOpenAiChatCompletion(payload);
     const disposition = completion.disposition;
     if (disposition === "unknown-terminator") noteCandidate(input, "unknown-terminator");
     if (completion.unusable !== undefined) throw new UnusableCompletionError(completion.unusable);
@@ -586,134 +592,6 @@ class ProviderHttpResponseError extends Error {
   }
 }
 
-/**
- * Every explicit stop reason is fail-closed. Only a known complete value may
- * authorize text; truncation, block/refusal, tool continuation, conflict,
- * malformed metadata, and unknown vocabulary all lose to the product floor.
- * A genuinely absent field remains a counted compatibility path for relays
- * that predate this boundary.
- */
-const TRUNCATED_TERMINATORS: ReadonlySet<string> = new Set([
-  "length",                        // OpenAI chat completions
-  "max_tokens",                    // Anthropic, and relays that forward it
-  "max_output_tokens",             // Responses-shaped relays
-  "model_context_window_exceeded", // Anthropic
-]);
-
-/** Terminators that mean the model finished; anything else is worth counting. */
-const COMPLETE_TERMINATORS: ReadonlySet<string> = new Set([
-  "stop", "end_turn", "stop_sequence", "eos", "eos_token", "complete", "completed",
-]);
-
-const BLOCKED_TERMINATORS: ReadonlySet<string> = new Set([
-  "blocked", "content_filter", "guardrail_intervened", "refusal", "safety",
-]);
-
-const TOOL_TERMINATORS: ReadonlySet<string> = new Set([
-  "function_call", "pause_turn", "tool_calls", "tool_use",
-]);
-
-/**
- * Reads both common fields independently. An empty `finish_reason` cannot hide
- * a non-empty `stop_reason`, and two conflicting reports fail closed.
- */
-type TerminatorReport = Readonly<{ values: readonly string[]; invalid: boolean }>;
-
-function readTerminators(choice: Record<string, unknown>): TerminatorReport {
-  const values: string[] = [];
-  let invalid = false;
-  for (const key of ["finish_reason", "stop_reason"] as const) {
-    const reason = choice[key];
-    if (reason === undefined || reason === null) continue;
-    if (typeof reason !== "string") {
-      invalid = true;
-      continue;
-    }
-    const normalized = reason.trim().toLowerCase();
-    if (normalized.length === 0) {
-      invalid = true;
-      continue;
-    }
-    if (!values.includes(normalized)) values.push(normalized);
-  }
-  return Object.freeze({ values: Object.freeze(values), invalid });
-}
-
-function classifyTerminators(report: TerminatorReport): "complete" | "missing" | UnusableCompletionCode {
-  if (report.invalid) return "unknown-terminator";
-  if (report.values.length === 0) return "missing";
-  const kinds = report.values.map((reason) => {
-    if (COMPLETE_TERMINATORS.has(reason)) return "complete" as const;
-    if (TRUNCATED_TERMINATORS.has(reason)) return "truncated" as const;
-    if (BLOCKED_TERMINATORS.has(reason)) return "blocked-or-refused" as const;
-    if (TOOL_TERMINATORS.has(reason)) return "tool-or-continuation" as const;
-    return "unknown-terminator" as const;
-  });
-  if (kinds.every((kind) => kind === "complete")) return "complete";
-  if (kinds.includes("unknown-terminator")) return "unknown-terminator";
-  if (kinds.includes("blocked-or-refused")) return "blocked-or-refused";
-  if (kinds.includes("tool-or-continuation")) return "tool-or-continuation";
-  return "truncated";
-}
-
-function parseManagedCompletion(payload: unknown): PoolParsedCompletion {
-  const completion = extractCompletion(payload);
-  return Object.freeze({
-    content: completion.content,
-    disposition: classifyTerminators(completion.terminators),
-    ...(completion.unusable === undefined ? {} : { unusable: completion.unusable }),
-  });
-}
-
-function extractCompletion(payload: unknown): Readonly<{
-  content: unknown;
-  terminators: TerminatorReport;
-  unusable?: UnusableCompletionCode;
-}> {
-  if (typeof payload !== "object" || payload === null) {
-    throw new Error("The model provider response was not an object.");
-  }
-  const choices = (payload as { choices?: unknown }).choices;
-  if (!Array.isArray(choices) || choices.length === 0) {
-    throw new Error("The model provider response had no choice.");
-  }
-  const choice = choices[0];
-  if (typeof choice !== "object" || choice === null) {
-    throw new Error("The model provider response had no choice object.");
-  }
-  const record = choice as Record<string, unknown>;
-  const message = record.message;
-  const messageRecord = typeof message === "object" && message !== null
-    ? message as Record<string, unknown>
-    : null;
-  const unusable = hasRefusal(messageRecord?.refusal)
-    ? "blocked-or-refused" as const
-    : hasToolCalls(messageRecord?.tool_calls) || hasToolCalls(record.tool_calls)
-      ? "tool-or-continuation" as const
-      : hasFunctionCall(messageRecord?.function_call) || hasFunctionCall(record.function_call)
-        ? "tool-or-continuation" as const
-        : undefined;
-  return Object.freeze({
-    content: messageRecord?.content,
-    terminators: readTerminators(record),
-    ...(unusable === undefined ? {} : { unusable }),
-  });
-}
-
-function hasRefusal(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  return typeof value !== "string" || value.trim().length > 0;
-}
-
-function hasToolCalls(value: unknown): boolean {
-  if (value === undefined || value === null) return false;
-  return !Array.isArray(value) || value.length > 0;
-}
-
-function hasFunctionCall(value: unknown): boolean {
-  return value !== undefined && value !== null;
-}
-
 async function readBounded(
   response: Response,
   maxBytes: number,
@@ -756,23 +634,6 @@ async function readBounded(
     reader.releaseLock();
   }
   return new TextDecoder("utf-8", { fatal: true }).decode(bytes.snapshot());
-}
-
-function rejectOnAbort(signal: AbortSignal): {
-  promise: Promise<never>;
-  dispose: () => void;
-} {
-  let rejectPromise!: (error: DOMException) => void;
-  const promise = new Promise<never>((_resolve, reject) => {
-    rejectPromise = reject;
-  });
-  // The provider can win the race. Consume the later abort so it never becomes
-  // an unhandled rejection after a successful response.
-  promise.catch(() => undefined);
-  const reject = () => rejectPromise(new DOMException("Aborted", "AbortError"));
-  if (signal.aborted) reject();
-  else signal.addEventListener("abort", reject, { once: true });
-  return { promise, dispose: () => signal.removeEventListener("abort", reject) };
 }
 
 export type CandidateOutcome = "answered" | "failed" | "stalled" | "incomplete";

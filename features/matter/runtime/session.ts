@@ -1,8 +1,8 @@
 import {
+  commitDeliveredTreeCommand,
   commitTreeCommand,
   redoTreeHistory,
   undoTreeHistory,
-  type EstimateInverseBytes,
   type TreeHistory,
   type TreeHistoryLimits,
 } from "../tree/history";
@@ -32,6 +32,7 @@ export type RuntimeErrorCode =
   | "HISTORY_LIMIT_EXCEEDED"
   | "EMPTY_HISTORY"
   | "EMPTY_REDO"
+  | "HISTORY_UNAVAILABLE"
   | AdmissionError["code"]
   | AdmissionRepairError["code"];
 
@@ -73,19 +74,43 @@ export function commitSessionCommand(
   state: RuntimeState,
   command: TreeCommand,
   limits: TreeHistoryLimits,
-  estimateBytes?: EstimateInverseBytes,
 ): RuntimeResult {
   const committed = commitTreeCommand(
     state.tree,
     state.history,
     command,
     limits,
-    estimateBytes,
   );
   if (!committed.ok) {
     return reject(state, "commit", committed.error);
   }
 
+  return publish(
+    state,
+    "commit",
+    committed.tree,
+    committed.history,
+    committed.affectedNodeIds,
+  );
+}
+
+/**
+ * Publishes the result of work the person submitted earlier (a model turn or
+ * an admission repair). Unlike a human command it keeps any redo future that
+ * still replays exactly; see `commitDeliveredTreeCommand`.
+ */
+export function commitDeliveredSessionCommand(
+  state: RuntimeState,
+  command: TreeCommand,
+  limits: TreeHistoryLimits,
+): RuntimeResult {
+  const committed = commitDeliveredTreeCommand(
+    state.tree,
+    state.history,
+    command,
+    limits,
+  );
+  if (!committed.ok) return reject(state, "commit", committed.error);
   return publish(
     state,
     "commit",
@@ -104,7 +129,6 @@ export function commitHumanAdmission(
   anchor: AdmissionAnchor,
   values: AdmissionValues,
   limits: TreeHistoryLimits,
-  estimateBytes?: EstimateInverseBytes,
 ): RuntimeResult {
   const translated = admissionToTreeCommand(
     state.tree,
@@ -120,7 +144,6 @@ export function commitHumanAdmission(
     state,
     translated.command,
     limits,
-    estimateBytes,
   );
   if (!committed.ok) return committed;
 
@@ -160,34 +183,37 @@ export function commitHumanAdmission(
  * Publishes a bounded repair as a second ordinary command. The translator uses
  * the latest tree revision but requires the admitted node's exact text and
  * timestamp, so unrelated material may move without granting a late result
- * permission to overwrite the person's own follow-up edit.
+ * permission to overwrite the person's own follow-up edit. A repair settles
+ * after its admission, so it is a delivery and keeps a replayable redo future.
  */
 export function commitHumanAdmissionRepair(
   state: RuntimeState,
   values: AdmissionRepairValues,
   limits: TreeHistoryLimits,
-  estimateBytes?: EstimateInverseBytes,
 ): RuntimeResult {
   const translated = admissionRepairToTreeCommand(state.tree, values);
   if (!translated.ok) return reject(state, "commit", translated.error);
-  return commitSessionCommand(state, translated.command, limits, estimateBytes);
+  return commitDeliveredSessionCommand(state, translated.command, limits);
 }
 
 export function commitHumanRemoval(
   state: RuntimeState,
   values: HumanRemovalValues,
   limits: TreeHistoryLimits,
-  estimateBytes?: EstimateInverseBytes,
 ): RuntimeResult {
   const translated = selectedNodeToRemovalCommand(state.tree, state.navigation, values);
   if (!translated.ok) return reject(state, "commit", translated.error);
-  return commitSessionCommand(state, translated.command, limits, estimateBytes);
+  return commitSessionCommand(state, translated.command, limits);
 }
 
-export function undoSession(state: RuntimeState): RuntimeResult {
-  const undone = undoTreeHistory(state.tree, state.history);
+/**
+ * A rejected Undo or Redo may still publish a smaller history: an inverse that
+ * no longer applies releases the stack it heads, and the tree is unchanged.
+ */
+export function undoSession(state: RuntimeState, limits: TreeHistoryLimits): RuntimeResult {
+  const undone = undoTreeHistory(state.tree, state.history, limits);
   if (!undone.ok) {
-    return reject(state, "undo", undone.error);
+    return reject({ ...state, history: undone.history }, "undo", undone.error);
   }
 
   return publish(
@@ -199,9 +225,9 @@ export function undoSession(state: RuntimeState): RuntimeResult {
   );
 }
 
-export function redoSession(state: RuntimeState): RuntimeResult {
-  const redone = redoTreeHistory(state.tree, state.history);
-  if (!redone.ok) return reject(state, "redo", redone.error);
+export function redoSession(state: RuntimeState, limits: TreeHistoryLimits): RuntimeResult {
+  const redone = redoTreeHistory(state.tree, state.history, limits);
+  if (!redone.ok) return reject({ ...state, history: redone.history }, "redo", redone.error);
 
   return publish(
     state,

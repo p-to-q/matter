@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { canvasRegionCopy } from "../features/matter/components/canvas-region-copy";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const PREFERENCES_KEY = "matter.canvas-preferences.v1";
@@ -51,7 +52,7 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await page.goto("/matter");
   await page.evaluate(async () => document.fonts.ready);
 
-  const paper = page.getByRole("region", { name: "Thought material" });
+  const paper = page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material });
   const rootThought = page.locator('[data-thought-id="thought_fixture_root"]');
   const about = page.getByRole("button", { name: "关于", exact: true });
   const settings = page.getByRole("button", { name: "Matter 设置", exact: true });
@@ -310,7 +311,9 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   // rule instead of racing the canvas position.
   await rootThought.locator("[data-thought-text-id]").hover();
   await page.mouse.down();
-  await expect(matterTurn).toHaveText("它怀念的是过去仍允许人想象的其他生活。");
+  // The visible answer node; a visually hidden twin carries it to screen readers.
+  await expect(matterTurn.locator("[data-inquiry-answer-text]")).toHaveText("它怀念的是过去仍允许人想象的其他生活。");
+  await expect(matterTurn.locator(".visually-hidden")).toHaveText("它怀念的是过去仍允许人想象的其他生活。");
   await page.mouse.up();
   // An ordinary text click leaves Lasso and selects material; the reply stays
   // stable through that context transition until the person closes inquiry.
@@ -330,16 +333,24 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   await page.getByRole("menuitemradio", { name: "English" }).click();
   await expect(page.locator(".matter-guidance__next")).toHaveText("Select one thought.");
   await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
+  // The paper region is named in the chosen language like the rest of the
+  // chrome; its locale table has no fallback to the fixture's language.
+  await expect(paper).toHaveCount(0);
+  const englishPaper = page.getByRole("region", {
+    name: canvasRegionCopy("en-US").material,
+    exact: true,
+  });
+  await expect(englishPaper).toBeVisible();
 
   await page.getByRole("button", { name: "Leaf shadows: On" }).click();
-  await expect(paper).toHaveAttribute("data-leaf-fx", "off");
+  await expect(englishPaper).toHaveAttribute("data-leaf-fx", "off");
   await expect(page.locator("[data-matter-ambient='leaf-shadows']")).toHaveAttribute("data-fx", "off");
   await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
   await expect(page.locator("[data-matter-ambient-foreground-pass]")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Appearance: Auto" }).click();
-  await expect(paper).toHaveAttribute("data-canvas-theme-preference", "light");
-  await expect(paper).toHaveAttribute("data-canvas-theme", "light");
+  await expect(englishPaper).toHaveAttribute("data-canvas-theme-preference", "light");
+  await expect(englishPaper).toHaveAttribute("data-canvas-theme", "light");
   await rootThought.locator("[data-thought-text-id]").click();
   await expect(rootThought).toHaveAttribute("data-selected", "true");
   const structuralAddress = page.locator(
@@ -351,8 +362,8 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
     .toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await expect(structuralPath).toHaveCSS("fill", "rgba(22, 29, 39, 0.08)");
   await page.getByRole("button", { name: "Appearance: Light" }).click();
-  await expect(paper).toHaveAttribute("data-canvas-theme-preference", "dark");
-  await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
+  await expect(englishPaper).toHaveAttribute("data-canvas-theme-preference", "dark");
+  await expect(englishPaper).toHaveAttribute("data-canvas-theme", "dark");
   await expect(rootThought).toHaveAttribute("data-selected", "true");
   await expect(rootThought.locator("[data-thought-text-id]")).toHaveCSS("color", "rgb(243, 244, 241)");
   await expect(rootThought.locator(".spatial-thought__label"))
@@ -364,8 +375,8 @@ test("desktop canvas chrome keeps Lefos geometry and Matter semantics", async ({
   expect(await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "null"), PREFERENCES_KEY))
     .toEqual({ version: 1, language: "en-US", leafFx: false, appearance: "dark" });
   await page.reload();
-  await expect(paper).toHaveAttribute("data-canvas-theme", "dark");
-  await expect(paper).toHaveAttribute("data-leaf-fx", "off");
+  await expect(englishPaper).toHaveAttribute("data-canvas-theme", "dark");
+  await expect(englishPaper).toHaveAttribute("data-leaf-fx", "off");
   await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Ask Matter", exact: true })).toBeVisible();
 });
@@ -374,7 +385,7 @@ test("native leaf media crosses quiet corners while active chrome rises above it
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
 
-  const paper = page.getByRole("region", { name: "Thought material" });
+  const paper = page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material });
   const ambient = page.locator("[data-matter-ambient='leaf-shadows']");
   const media = ambient.locator(".matter-ambient__poster, .matter-ambient__video");
   const wash = ambient.locator(".matter-ambient__wash");
@@ -454,7 +465,7 @@ test("reduced motion keeps the native poster without loading leaf video", async 
   await expect(poster).toHaveCSS("opacity", "0.32");
 
   await page.locator('[data-chrome-control="appearance"]').click();
-  await expect(page.getByRole("region", { name: "Thought material" }))
+  await expect(page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material }))
     .toHaveAttribute("data-canvas-theme", "dark");
   await expect(page.locator("video.matter-ambient__video")).toHaveCount(0);
   await expect(poster).toHaveCSS("mix-blend-mode", "normal");
@@ -550,7 +561,7 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/matter");
 
-  const paper = page.getByRole("region", { name: "Thought material" });
+  const paper = page.getByRole("region", { name: fixtureUiCopy.canvasRegion.material });
   const trigger = page.getByRole("button", { name: "打开 Matter 菜单" });
   const indexTrigger = page.getByRole("button", { name: fixtureUiCopy.materialFiles.showMaterialFiles });
   const mobileMedia = page.locator(
@@ -637,6 +648,37 @@ test("mobile canvas menu stays inside the paper and restores focus", async ({ pa
   await expect(trigger).toBeFocused();
   await expect(page.locator(".tool-rail")).not.toHaveAttribute("aria-hidden", "true");
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+});
+
+test("a modal dialog makes shell chrome inert, including a drawer handle mounted after it opened", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const inert = (selector: string) => page.locator(selector).first().evaluate((element) =>
+    (element as HTMLElement).inert);
+  const shellChrome = [".tool-rail", ".material-files", ".matter-header"];
+  for (const selector of shellChrome) expect(await inert(selector)).toBe(false);
+
+  const about = page.getByRole("button", { name: "关于", exact: true });
+  await about.focus();
+  await about.press("Enter");
+  const dialog = page.getByRole("dialog", { name: "关于 Matter" });
+  await expect(dialog).toBeVisible();
+  for (const selector of shellChrome) await expect.poll(() => inert(selector)).toBe(true);
+
+  // The narrow drawer handle exists only below the breakpoint, so it mounts
+  // after the dialog opened; it must not stay reachable behind the dialog.
+  await expect(page.locator(".material-files-toggle")).toHaveCount(0);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(dialog).toBeVisible();
+  await expect(page.locator(".material-files-toggle")).toHaveCount(1);
+  await expect.poll(() => inert(".material-files-toggle")).toBe(true);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  for (const selector of [...shellChrome, ".material-files-toggle"]) {
+    await expect.poll(() => inert(selector)).toBe(false);
+  }
 });
 
 test("compact corner controls keep one tokenized geometry through the former 721px seam", async ({ page }) => {

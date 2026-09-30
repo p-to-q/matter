@@ -269,14 +269,303 @@ describe("AdmissionDriver", () => {
     const h = harness();
     await reachRecording(h.driver, h.voice);
     h.driver.stop();
-    h.driver.setDeliveryTargetVisible(false);
+    h.driver.setDeliveryTarget(ANCHOR, "hidden");
+    // A report about another parent cannot release this attempt.
+    h.driver.setDeliveryTarget({ ...ANCHOR, parentNodeId: "other" }, "visible");
     h.voice.finish({ interactionId: "voice_1", attempt: 1 });
     await settle();
 
     expect(h.commit).not.toHaveBeenCalled();
-    h.driver.setDeliveryTargetVisible(true);
+    h.driver.setDeliveryTarget(ANCHOR, "visible");
     await settle();
     expect(h.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a finished transcript when its parent vanishes and never records it as a person cancel", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    h.driver.setDeliveryWindowOpen(false);
+    await settle();
+    expect(h.driver.getState().phase).toBe("committing");
+
+    // Undo removes the parent while the admission waits for its window.
+    h.driver.setDeliveryTarget(ANCHOR, "missing");
+
+    expect(h.commit).not.toHaveBeenCalled();
+    expect(h.driver.getState()).toEqual({
+      phase: "error",
+      token: "voice_1",
+      attempt: 1,
+      anchor: ANCHOR,
+      errorCode: "STALE_TARGET",
+      submitted: true,
+      transcript: "保留这句话。",
+    });
+    expect(h.driver.getSettlement()).toBeNull();
+  });
+
+  it("keeps held and in-flight words across a back-forward-cache hide, and releases them on unload", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    h.driver.setDeliveryWindowOpen(false);
+    await settle();
+    h.driver.setDeliveryTarget(ANCHOR, "missing");
+    const held = h.driver.getState();
+    expect(held).toMatchObject({ phase: "error", transcript: "保留这句话。" });
+
+    // The page hides into the back-forward cache and later returns.
+    h.driver.suspendCapture();
+    h.driver.exit({ persisted: true });
+    h.driver.resumeDelivery();
+    expect(h.driver.getState()).toBe(held);
+    expect(h.driver.getSettlement()).toBeNull();
+
+    // A page that really unloads releases them as a system boundary.
+    h.driver.exit({ persisted: false });
+    expect(h.driver.getState().phase).toBe("idle");
+    expect(h.driver.getSettlement()).toMatchObject({ outcome: "released" });
+  });
+
+  it("keeps a transcription in flight across a back-forward-cache hide", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.driver.suspendCapture();
+    h.driver.exit({ persisted: true });
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+    expect(h.commit).not.toHaveBeenCalled();
+    h.driver.resumeDelivery();
+    await settle();
+    expect(h.commit).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps words transcribed after the parent vanished", async () => {
+    let resolveTranscript!: (transcript: string) => void;
+    type Transcription = Awaited<ReturnType<AdmissionDriverDependencies["transcribe"]>>;
+    const h = harness({
+      transcribe: vi.fn((input) => new Promise<Transcription>((resolve) => {
+        resolveTranscript = (transcript) => resolve({
+          protocolVersion: "0.2" as const,
+          interactionId: input.interactionId,
+          attempt: input.attempt,
+          transcript,
+        });
+      })),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+    expect(h.driver.getState().phase).toBe("transcribing");
+
+    h.driver.setDeliveryTarget(ANCHOR, "missing");
+    expect(h.driver.getState().phase).toBe("transcribing");
+    resolveTranscript("迟到的话。");
+    await settle();
+
+    expect(h.commit).not.toHaveBeenCalled();
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "STALE_TARGET",
+      transcript: "迟到的话。",
+    });
+  });
+
+  it("places held words at the explicit current target in the locale they were heard", async () => {
+    const commit = vi.fn((): AdmissionStoreReceipt => ({
+      operation: "commit",
+      status: "committed",
+      revision: 8,
+      affectedNodeIds: ["thought_1"],
+    }));
+    const h = harness({ commit });
+    h.driver.start(ANCHOR, "de-DE");
+    h.voice.grantPermission();
+    await settle();
+    h.driver.stop();
+    h.driver.setDeliveryWindowOpen(false);
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+    h.driver.setDeliveryTarget(ANCHOR, "missing");
+    h.driver.setDeliveryWindowOpen(true);
+    expect(h.driver.getState()).toMatchObject({ phase: "error", transcript: "保留这句话。" });
+
+    // Retry would discard the held words; only place or discard resolves them.
+    h.driver.retry();
+    expect(h.driver.getState()).toMatchObject({ phase: "error", attempt: 1 });
+
+    const target: AdmissionAnchor = {
+      kind: "child",
+      treeId: "tree_1",
+      baseRevision: 7,
+      parentNodeId: "document",
+    };
+    h.driver.place(target);
+    await settle();
+
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit).toHaveBeenCalledWith(
+      { target: "child", treeId: "tree_1", baseRevision: 7, parentNodeId: "document" },
+      expect.objectContaining({
+        commandId: "human_admission_voice_1_2",
+        repairLocale: "de-DE",
+      }),
+    );
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(h.driver.getSettlement()).toMatchObject({
+      anchor: target,
+      attempt: 2,
+      outcome: "committed",
+    });
+  });
+
+  it("keeps held words again when the store rejects the placement target", async () => {
+    const commit = vi.fn((): AdmissionStoreReceipt => ({
+      operation: "commit",
+      status: "rejected",
+      revision: 8,
+      errorCode: "INVALID_INTERACTION",
+    }));
+    const h = harness({ commit });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.driver.setDeliveryWindowOpen(false);
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+    h.driver.setDeliveryTarget(ANCHOR, "missing");
+    h.driver.setDeliveryWindowOpen(true);
+    const target: AdmissionAnchor = { ...ANCHOR, parentNodeId: "also_gone" };
+
+    // The target existed at render time and vanished before the tap landed.
+    h.driver.place(target);
+
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      attempt: 2,
+      anchor: target,
+      errorCode: "STALE_TARGET",
+      transcript: "保留这句话。",
+    });
+    h.driver.dismiss();
+    expect(h.driver.getSettlement()).toMatchObject({ attempt: 2, outcome: "withdrawn" });
+  });
+
+  it("holds words a store rejection could not place and lets the person place them", async () => {
+    const receipts: AdmissionStoreReceipt[] = [
+      { operation: "commit", status: "rejected", revision: 4, errorCode: "HISTORY_LIMIT_EXCEEDED" },
+      { operation: "commit", status: "committed", revision: 5, affectedNodeIds: ["thought_1"] },
+    ];
+    const commit = vi.fn((): AdmissionStoreReceipt => receipts.shift()!);
+    const h = harness({ commit });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "COMMIT_REJECTED",
+      submitted: true,
+      transcript: "保留这句话。",
+    });
+    h.driver.place(ANCHOR);
+    await settle();
+    expect(commit).toHaveBeenCalledTimes(2);
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(h.driver.getSettlement()).toMatchObject({ attempt: 2, outcome: "committed" });
+  });
+
+  it("re-anchors a retry after an unrelated revision so the turn is not dropped", async () => {
+    const h = harness({
+      transcribe: vi.fn(async () => {
+        throw new Error("synthetic transcription outage");
+      }),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+    expect(h.driver.getState()).toMatchObject({ phase: "error", errorCode: "TRANSCRIPTION_FAILED" });
+
+    h.driver.updateScope({ treeId: "tree_1", revision: 9 });
+    h.driver.retry();
+
+    expect(h.driver.getState()).toEqual({
+      phase: "requesting",
+      token: "voice_1",
+      attempt: 2,
+      anchor: { ...ANCHOR, baseRevision: 9 },
+    });
+    expect(h.voice.starts).toHaveLength(2);
+    expect(h.voice.starts[1]?.operation).toEqual({ interactionId: "voice_1", attempt: 2 });
+  });
+
+  it("makes a retry against a vanished parent a visible stale target", async () => {
+    const h = harness({
+      transcribe: vi.fn(async () => {
+        throw new Error("synthetic transcription outage");
+      }),
+    });
+    await reachRecording(h.driver, h.voice);
+    h.driver.stop();
+    h.voice.finish({ interactionId: "voice_1", attempt: 1 });
+    await settle();
+    h.driver.setDeliveryTarget(ANCHOR, "missing");
+
+    h.driver.retry();
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      attempt: 1,
+      errorCode: "STALE_TARGET",
+      submitted: true,
+    });
+    expect(h.voice.starts).toHaveLength(1);
+  });
+
+  it("ends live capture visibly when its parent vanishes before Stop", async () => {
+    const h = harness();
+    await reachRecording(h.driver, h.voice);
+
+    h.driver.setDeliveryTarget(ANCHOR, "missing");
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "error",
+      errorCode: "STALE_TARGET",
+      submitted: false,
+    });
+    expect(h.voice.cancel).toHaveBeenCalledWith({ interactionId: "voice_1", attempt: 1 });
+  });
+
+  it("distinguishes a person's withdrawal from a system release in the settlement", async () => {
+    const withdrawn = harness();
+    await reachRecording(withdrawn.driver, withdrawn.voice);
+    withdrawn.driver.cancel();
+    expect(withdrawn.driver.getSettlement()).toMatchObject({ outcome: "withdrawn" });
+
+    const released = harness();
+    await reachRecording(released.driver, released.voice);
+    released.driver.cancelRawCapture();
+    expect(released.driver.getSettlement()).toMatchObject({ outcome: "released" });
+
+    const suspended = harness();
+    await reachRecording(suspended.driver, suspended.voice);
+    suspended.driver.suspendCapture();
+    expect(suspended.driver.getSettlement()).toMatchObject({ outcome: "released" });
+  });
+
+  it("starts from an anchor one revision behind the scope instead of silently idling", async () => {
+    const h = harness();
+    h.driver.updateScope({ treeId: "tree_1", revision: 5 });
+    h.driver.start(ANCHOR);
+    expect(h.driver.getState()).toMatchObject({ phase: "requesting", anchor: ANCHOR });
+    expect(h.voice.starts).toHaveLength(1);
   });
 
   it("admits immediately, then applies an in-window repair as a second command", async () => {

@@ -1,12 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { MATTER_LOCALES } from "../config/locales";
 import type { ThoughtTree } from "../tree/model";
-import {
-  canReplayTreeHistory,
-  commitTreeCommand,
-  estimateSerializedInverseBytes,
-  undoTreeHistory,
-} from "../tree/history";
+import type { TreeHistory } from "../tree/history";
+import { commitTreeCommand, undoTreeHistory } from "../tree/history";
+import { canReplayTreeHistory } from "../tree/history-replay-oracle";
 import { validateThoughtTree } from "../tree/invariants";
 import {
   SEEDED_DOCUMENT_NODE_IDS,
@@ -111,6 +108,7 @@ describe("localized seeded material copy", () => {
       changed: false,
       tree: localized.tree,
       history: localized.history,
+      historyReleased: false,
     });
     if (!repeated.ok) return;
     expect(repeated.tree).toBe(localized.tree);
@@ -176,7 +174,7 @@ describe("localized seeded material copy", () => {
     expect(localized.tree.nodes[root.id].text).toBe(editedText);
     expect(canReplayTreeHistory(localized.tree, localized.history)).toBe(true);
 
-    const undone = undoTreeHistory(localized.tree, localized.history);
+    const undone = undoTreeHistory(localized.tree, localized.history, TEST_HISTORY_LIMITS);
     if (!undone.ok) throw new Error(undone.error.code);
     expect(undone.tree.nodes[root.id].text).toBe(seededNodeText("en-US", "root"));
 
@@ -186,39 +184,166 @@ describe("localized seeded material copy", () => {
     expect(canReplayTreeHistory(relocalized.tree, relocalized.history)).toBe(true);
   });
 
-  it("rejects an inexact journal rather than repairing or partially localizing it", () => {
+  it("keeps a long journal's objects when nothing reads differently in the language", () => {
+    const fixture = createSeededDocument();
+    const localized = relocalizeSeededSession(fixture.tree, fixture.history, "en-US");
+    if (!localized.ok) throw new Error(localized.errorCode);
+    const session = longTextJournal(localized.tree, localized.history, 1_000);
+
+    const repeated = relocalizeSeededSession(session.tree, session.history, "en-US");
+    expect(repeated).toMatchObject({ ok: true, changed: false, historyReleased: false });
+    if (!repeated.ok) return;
+    expect(repeated.tree).toBe(session.tree);
+    expect(repeated.history).toBe(session.history);
+  });
+
+  it("translates the seed text an Undo restores even when no untouched passage is left", () => {
+    // The root-only seed has one passage and no title; editing it leaves
+    // nothing untouched in the material, only the memento that restores it.
+    const fixture = createSeededDocument("root");
+    const root = fixture.tree.nodes[fixture.tree.rootId!]!;
+    const edited = commitTreeCommand(fixture.tree, fixture.history, {
+      id: "human_root_edit",
+      source: "human",
+      expectedTreeId: fixture.tree.id,
+      expectedRevision: fixture.tree.revision,
+      createdAt: "2026-08-24T00:05:00.000Z",
+      mutation: {
+        type: "replace-text",
+        nodeId: root.id,
+        expectedText: root.text,
+        expectedUpdatedAt: root.updatedAt,
+        text: "我自己的话。",
+        updatedAt: "2026-08-24T00:05:00.000Z",
+      },
+    }, TEST_HISTORY_LIMITS);
+    if (!edited.ok) throw new Error(edited.error.code);
+
+    const localized = relocalizeSeededSession(edited.tree, edited.history, "en-US");
+    expect(localized).toMatchObject({ ok: true, changed: true, historyReleased: false });
+    if (!localized.ok) return;
+    expect(localized.tree).toBe(edited.tree);
+    const undone = undoTreeHistory(localized.tree, localized.history, TEST_HISTORY_LIMITS);
+    if (!undone.ok) throw new Error(undone.error.code);
+    expect(undone.tree.nodes[root.id]).toMatchObject({
+      text: seededNodeText("en-US", "root"),
+      updatedAt: root.updatedAt,
+    });
+  });
+
+  it("checks only the next Undo and Redo when a language change rewrites seed mementos", () => {
+    const fixture = createSeededDocument();
+    const session = longTextJournal(fixture.tree, fixture.history, 1_000);
+    const started = performance.now();
+    const localized = relocalizeSeededSession(session.tree, session.history, "de-DE");
+    const elapsedMs = performance.now() - started;
+
+    expect(localized).toMatchObject({ ok: true, changed: true, historyReleased: false });
+    if (!localized.ok) return;
+    expect(localized.history.entries).toHaveLength(session.history.entries.length);
+    // Whole-journal replay measured seconds at this depth; tops-only is milliseconds.
+    expect(elapsedMs).toBeLessThan(1_000);
+    const undone = undoTreeHistory(localized.tree, localized.history, TEST_HISTORY_LIMITS);
+    expect(undone.ok).toBe(true);
+  });
+
+  it("translates the seed even when a deeper journal step is stale, leaving it to fail at use", () => {
     const fixture = createSeededDocument();
     const command = createBranchChildCommand(
       fixture.tree,
       SEEDED_DOCUMENT_NODE_IDS.root,
       { nodeId: "bounded_branch", createdAt: "2026-08-24T00:02:00.000Z" },
     );
-    const committed = commitTreeCommand(
-      fixture.tree,
-      fixture.history,
-      command,
+    const committed = commitTreeCommand(fixture.tree, fixture.history, command, TEST_HISTORY_LIMITS);
+    if (!committed.ok) throw new Error(committed.error.code);
+    const second = commitTreeCommand(
+      committed.tree,
+      committed.history,
+      createBranchChildCommand(
+        committed.tree,
+        SEEDED_DOCUMENT_NODE_IDS.root,
+        { nodeId: "second_branch", createdAt: "2026-08-24T00:03:00.000Z" },
+      ),
       TEST_HISTORY_LIMITS,
     );
-    if (!committed.ok) throw new Error(committed.error.code);
-    const entry = committed.history.entries[0];
-    const corruptHistory = {
-      ...committed.history,
-      entries: [{
-        ...entry,
-        retainedInverseBytes: estimateSerializedInverseBytes(entry.inverse) + 1,
-      }],
-      retainedInverseBytes: committed.history.retainedInverseBytes + 1,
+    if (!second.ok) throw new Error(second.error.code);
+    const [oldest, newest] = second.history.entries;
+    if (oldest === undefined || newest === undefined) throw new Error("two steps expected");
+    const staleDeep = {
+      ...second.history,
+      entries: [{ ...oldest, inverse: { ...oldest.inverse, expectedTreeId: "elsewhere" } }, newest],
     };
 
-    expect(relocalizeSeededSession(committed.tree, corruptHistory, "en-US"))
-      .toMatchObject({
-        ok: false,
-        errorCode: "SEED_LOCALIZATION_INVALID_HISTORY",
-        tree: committed.tree,
-        history: corruptHistory,
-      });
+    const localized = relocalizeSeededSession(second.tree, staleDeep, "en-US");
+    expect(localized).toMatchObject({ ok: true, changed: true, historyReleased: false });
+    if (!localized.ok) return;
+    expect(localized.tree.nodes[SEEDED_DOCUMENT_NODE_IDS.root]?.text).toBe(seededNodeText("en-US", "root"));
+    const first = undoTreeHistory(localized.tree, localized.history, TEST_HISTORY_LIMITS);
+    if (!first.ok) throw new Error(first.error.code);
+    expect(undoTreeHistory(first.tree, first.history, TEST_HISTORY_LIMITS)).toMatchObject({
+      ok: false,
+      error: { code: "HISTORY_UNAVAILABLE" },
+    });
+  });
+
+  it("releases a stack whose next step no longer matches the translated seed, and says so", () => {
+    const fixture = createSeededDocument();
+    const command = createBranchChildCommand(
+      fixture.tree,
+      SEEDED_DOCUMENT_NODE_IDS.root,
+      { nodeId: "bounded_branch", createdAt: "2026-08-24T00:02:00.000Z" },
+    );
+    const committed = commitTreeCommand(fixture.tree, fixture.history, command, TEST_HISTORY_LIMITS);
+    if (!committed.ok) throw new Error(committed.error.code);
+    const entry = committed.history.entries[0]!;
+    const staleTop = {
+      ...committed.history,
+      entries: [{ ...entry, inverse: { ...entry.inverse, expectedTreeId: "elsewhere" } }],
+    };
+
+    const localized = relocalizeSeededSession(committed.tree, staleTop, "en-US");
+    expect(localized).toMatchObject({ ok: true, changed: true, historyReleased: true });
+    if (!localized.ok) return;
+    expect(localized.history.entries).toEqual([]);
+    expect(localized.tree.nodes[SEEDED_DOCUMENT_NODE_IDS.root]?.text).toBe(seededNodeText("en-US", "root"));
   });
 });
+
+/** Text steps on the one node that is never seed copy, so seed passages stay untouched. */
+function longTextJournal(tree: ThoughtTree, history: TreeHistory, count: number) {
+  let session = { tree, history };
+  const command = createBranchChildCommand(
+    tree,
+    SEEDED_DOCUMENT_NODE_IDS.root,
+    { nodeId: "journal_branch", createdAt: "2026-08-24T00:04:00.000Z" },
+  );
+  const branched = commitTreeCommand(tree, history, command, JOURNAL_LIMITS);
+  if (!branched.ok) throw new Error(branched.error.code);
+  session = branched;
+  for (let step = 0; step < count - 1; step += 1) {
+    const node = session.tree.nodes.journal_branch!;
+    const result = commitTreeCommand(session.tree, session.history, {
+      id: `journal_${step}`,
+      source: "human",
+      expectedTreeId: session.tree.id,
+      expectedRevision: session.tree.revision,
+      createdAt: node.updatedAt,
+      mutation: {
+        type: "replace-text",
+        nodeId: node.id,
+        expectedText: node.text,
+        expectedUpdatedAt: node.updatedAt,
+        text: `edit ${step} ${"y".repeat(300)}`,
+        updatedAt: node.updatedAt,
+      },
+    }, JOURNAL_LIMITS);
+    if (!result.ok) throw new Error(result.error.code);
+    session = result;
+  }
+  return session;
+}
+
+const JOURNAL_LIMITS = { maxEntries: 1_000, maxRetainedInverseBytes: 32 * 1_024 * 1_024 };
 
 const GRAPHEME_SEGMENTER = new Intl.Segmenter("en", { granularity: "grapheme" });
 

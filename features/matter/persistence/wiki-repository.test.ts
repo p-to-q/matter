@@ -52,7 +52,7 @@ describe("IndexedDB Wiki repository", () => {
     await expect(repository.save(state, null)).resolves.toEqual({ ok: true, value: 1 });
     expect(put).toHaveBeenCalledWith({
       storageSchemaVersion: 1,
-      recordSchemaVersion: 6,
+      recordSchemaVersion: 7,
       key: "origin",
       writeGeneration: 1,
       state,
@@ -126,7 +126,7 @@ describe("IndexedDB Wiki repository", () => {
     const migrated = await repository.load();
     expect(migrated).toMatchObject({
       ok: true,
-      value: { writeGeneration: 8, state: { schemaVersion: 6 } },
+      value: { writeGeneration: 8, state: { schemaVersion: 7 } },
     });
     if (!migrated.ok || migrated.value === null) return;
     expect(migrated.value.state.lexemes[0].scope).toBe("both");
@@ -184,7 +184,7 @@ describe("IndexedDB Wiki repository", () => {
     })).toBe(relations);
   });
 
-  it("durably rewrites a valid V5 split ledger as one V6 record", async () => {
+  it("durably rewrites a valid V5 split ledger as one current record", async () => {
     let stored: unknown = {
       storageSchemaVersion: 1,
       recordSchemaVersion: 5,
@@ -236,21 +236,134 @@ describe("IndexedDB Wiki repository", () => {
       value: {
         writeGeneration: 8,
         state: {
-          schemaVersion: 6,
-          termEvidence: [{ producer: "legacy-term-v1" }],
+          schemaVersion: 7,
+          termEvidence: [{ producer: "legacy-term-v1", support: 4 }],
         },
       },
     });
     expect(put).toHaveBeenCalledOnce();
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
-      recordSchemaVersion: 6,
+      recordSchemaVersion: 7,
       writeGeneration: 8,
-      state: expect.objectContaining({ schemaVersion: 6 }),
+      state: expect.objectContaining({ schemaVersion: 7, revertStrikes: [] }),
     }));
 
     await expect(repository.load()).resolves.toEqual(migrated);
     expect(put).toHaveBeenCalledOnce();
   });
+
+  it("rewrites a V6 record once as one record-V7 quarter-unit state", async () => {
+    let stored: unknown = {
+      storageSchemaVersion: 1,
+      recordSchemaVersion: 6,
+      key: "origin",
+      writeGeneration: 3,
+      state: {
+        schemaVersion: 6,
+        scoringVersion: 3,
+        fittingVersion: 1,
+        revision: 2,
+        nextLexemeId: 2,
+        automaticLearningSaturated: false,
+        lexemes: [{
+          id: 1,
+          locale: "en-US",
+          canonical: "Engelbart",
+          scope: "both",
+          provenance: "human-confirmed",
+          confirmedAtRevision: 1,
+        }],
+        termEvidence: [],
+        aliasEvidence: [{
+          lexemeId: 1,
+          channel: "spoken",
+          boundary: "word",
+          form: "Englebart",
+          producer: "latin-internal-edit-v2",
+          phase: "active",
+          support: 4,
+          quietTurns: 2,
+        }],
+        authorities: [],
+        aliasTombstones: [],
+        lexemeTombstones: [],
+      },
+    };
+    const put = vi.fn(async (value: unknown) => {
+      stored = value;
+    });
+    vi.mocked(openDB).mockResolvedValue({
+      transaction: vi.fn(() => ({
+        store: { get: vi.fn(async () => stored), put },
+        abort: vi.fn(),
+        done: Promise.resolve(),
+      })),
+    } as never);
+    const repository = createIndexedDbWikiRepository();
+
+    const loaded = await repository.load();
+    expect(loaded).toMatchObject({
+      ok: true,
+      value: {
+        writeGeneration: 4,
+        state: {
+          schemaVersion: 7,
+          scoringVersion: 4,
+          aliasEvidence: [{ phase: "active", support: 16, kept: 0, keptQuietTurns: 0 }],
+          revertStrikes: [],
+          settledOccurrences: [],
+        },
+      },
+    });
+    expect(put).toHaveBeenCalledOnce();
+    expect(put).toHaveBeenCalledWith(expect.objectContaining({
+      recordSchemaVersion: 7,
+      writeGeneration: 4,
+      state: expect.objectContaining({ schemaVersion: 7, scoringVersion: 4 }),
+    }));
+
+    await expect(repository.load()).resolves.toEqual(loaded);
+    expect(put).toHaveBeenCalledOnce();
+  });
+
+  it("treats a row from a newer Matter as unavailable and never resettable", async () => {
+    for (const newer of [
+      { recordSchemaVersion: 8, state: createInitialWikiState() },
+      { recordSchemaVersion: 7, state: { ...createInitialWikiState(), schemaVersion: 8 } },
+    ]) {
+      const stored = {
+        storageSchemaVersion: 1,
+        key: "origin",
+        writeGeneration: 9,
+        ...newer,
+      };
+      const put = vi.fn();
+      const abort = vi.fn();
+      vi.mocked(openDB).mockResolvedValue({
+        transaction: vi.fn(() => ({
+          store: { get: vi.fn(async () => stored), put },
+          abort,
+          done: Promise.resolve(),
+        })),
+      } as never);
+      const repository = createIndexedDbWikiRepository();
+
+      await expect(repository.load()).resolves.toMatchObject({
+        ok: false,
+        error: { code: "PERSISTENCE_UNAVAILABLE" },
+      });
+      await expect(repository.save(createInitialWikiState(), 9)).resolves.toMatchObject({
+        ok: false,
+        error: { code: "PERSISTENCE_UNAVAILABLE" },
+      });
+      await expect(repository.resetCorrupt(0)).resolves.toMatchObject({
+        ok: false,
+        error: { code: "PERSISTENCE_CONFLICT" },
+      });
+      expect(put).not.toHaveBeenCalled();
+    }
+  });
+
 
   it("does not replay removed starters after the one-time record migration", async () => {
     const removed = applyWikiEvent(createInitialWikiState(), {
@@ -283,7 +396,7 @@ describe("IndexedDB Wiki repository", () => {
     });
     expect(put).toHaveBeenCalledOnce();
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
-      recordSchemaVersion: 6,
+      recordSchemaVersion: 7,
       writeGeneration: 5,
       state: removed.state,
     }));
@@ -383,7 +496,7 @@ describe("IndexedDB Wiki repository", () => {
       value: { state, writeGeneration: 13 },
     });
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
-      recordSchemaVersion: 6,
+      recordSchemaVersion: 7,
       writeGeneration: 13,
       state,
     }));

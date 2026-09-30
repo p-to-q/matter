@@ -9,6 +9,7 @@ import { wikiStateStorageBytes } from "../wiki/wiki-codec";
 import {
   applyWikiObservationBatch,
   applyWikiEvent,
+  applyWikiOccurrenceSettlement,
   clearWikiState,
   createEmptyWikiState,
   WIKI_CONFIRMED_ONLY,
@@ -18,7 +19,8 @@ import {
   MAX_WIKI_STATE_BYTES,
   type WikiEvent,
   type WikiObserveEvidenceEvent,
-  type WikiObservationDispositions,
+  type WikiObservationTick,
+  type WikiOccurrenceSettlement,
   type WikiState,
   type WikiTransitionResult,
 } from "../wiki/wiki-model";
@@ -66,9 +68,17 @@ export type WikiCoordinator = Readonly<{
   decide(event: WikiDecision, expectedStateRevision?: number): Promise<WikiCoordinatorResult>;
   observe(
     events: readonly WikiObserveEvidenceEvent[],
-    dispositions?: WikiObservationDispositions,
+    tick: WikiObservationTick,
     expectedView?: WikiObservationView,
   ): Promise<WikiCoordinatorResult>;
+  /**
+   * Records the one settlement of one applied occurrence. Informed acceptance
+   * and inspection are soft evidence: they rebase over a concurrent write and
+   * pause silently under the byte bound. A person's explicit decision or
+   * revert also rebases, because it addresses a rule rather than a view, but
+   * reports every failure.
+   */
+  settle(settlement: WikiOccurrenceSettlement): Promise<WikiCoordinatorResult>;
   clear(expectedStateRevision?: number): Promise<WikiCoordinatorResult>;
   resetCorrupt(): Promise<WikiCoordinatorResult>;
   dispose(): void;
@@ -91,14 +101,14 @@ const MAX_OBSERVATION_REBASE_ATTEMPTS = 4;
 export function applyBoundedWikiObservationBatch(
   state: WikiState,
   events: readonly WikiObserveEvidenceEvent[],
-  dispositions: WikiObservationDispositions | undefined,
+  tick: WikiObservationTick,
   qualifiedAliasProducers: ReadonlySet<WikiAliasEvidenceProducer>,
   maxStateBytes = MAX_WIKI_STATE_BYTES,
 ): WikiTransitionResult {
   const result = applyWikiObservationBatch(
     state,
     events,
-    dispositions,
+    tick,
     qualifiedAliasProducers,
   );
   if (!result.ok || !result.changed ||
@@ -108,7 +118,7 @@ export function applyBoundedWikiObservationBatch(
   const fallback = applyWikiObservationBatch(
     state,
     retained,
-    dispositions,
+    tick,
     qualifiedAliasProducers,
   );
   if (!fallback.ok || !fallback.changed ||
@@ -417,19 +427,31 @@ export function createWikiCoordinator(
       (state) => applyWikiEvent(state, event),
       expectedStateRevision,
     ),
-    async observe(events, dispositions, expectedView) {
+    async observe(events, tick, expectedView) {
       await start();
       return enqueue(
         (state) => applyBoundedWikiObservationBatch(
           state,
           events,
-          dispositions,
+          tick,
           qualifiedAliasProducers,
         ),
         expectedView?.stateRevision,
         false,
         true,
         expectedView?.generation,
+      );
+    },
+    async settle(settlement) {
+      await start();
+      const soft = settlement.outcome === "accepted-implicit" ||
+        settlement.outcome === "inspected-kept" ||
+        settlement.outcome === "censored";
+      return enqueue(
+        (state) => applyWikiOccurrenceSettlement(state, settlement, qualifiedAliasProducers),
+        undefined,
+        true,
+        soft,
       );
     },
     clear: (expectedStateRevision) => enqueue(clearWikiState, expectedStateRevision),

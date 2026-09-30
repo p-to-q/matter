@@ -80,6 +80,40 @@ export function measureTextRange(
   }
 }
 
+/**
+ * Builds a live DOM Range over one logical address for a caller that owns its
+ * lifetime, such as a Custom Highlight. Returns null unless the rendered text
+ * is exactly the material text and both ends are grapheme boundaries.
+ */
+export function createMaterialTextRange(
+  root: Element,
+  materialText: string,
+  start: number,
+  end: number,
+): Range | null {
+  if (!root.isConnected) return null;
+  const textNodes = collectDescendantTextNodes(root);
+  if (textNodes.map((node) => node.data).join("") !== materialText) return null;
+  if (
+    !isValidRange({ start, end, selectedText: materialText.slice(start, end) }, materialText.length) ||
+    !hasGraphemeBoundaries(materialText, start, end)
+  ) return null;
+  const startPosition = locatePosition(textNodes, start, "start");
+  const endPosition = locatePosition(textNodes, end, "end");
+  const ownerDocument = root.ownerDocument;
+  if (!startPosition || !endPosition || typeof ownerDocument?.createRange !== "function") {
+    return null;
+  }
+  try {
+    const range = ownerDocument.createRange();
+    range.setStart(startPosition.node, startPosition.offset);
+    range.setEnd(endPosition.node, endPosition.offset);
+    return range;
+  } catch {
+    return null;
+  }
+}
+
 /** Converts live CSSOM rectangles into immutable client-pixel values. */
 export function normalizeClientRects(
   rects: Iterable<Pick<DOMRect, "left" | "top" | "right" | "bottom">>,
@@ -145,10 +179,22 @@ function isValidRange(address: LogicalTextRange, textLength: number): boolean {
   );
 }
 
+/**
+ * Validates only the two addressed boundaries. `containing` asks the platform
+ * break iterator about one offset of the whole text, so the answer is exact
+ * (regional-indicator parity and long combining runs included) while the cost
+ * stays local; segmenting the complete passage on every call made each mark
+ * sync scale with passage length times mark count.
+ */
 function hasGraphemeBoundaries(text: string, start: number, end: number): boolean {
-  const boundaries = new Set<number>([0, text.length]);
-  for (const part of GRAPHEME_SEGMENTER.segment(text)) boundaries.add(part.index);
-  return boundaries.has(start) && boundaries.has(end);
+  const segments = GRAPHEME_SEGMENTER.segment(text);
+  return isGraphemeBoundary(segments, text.length, start) &&
+    isGraphemeBoundary(segments, text.length, end);
+}
+
+function isGraphemeBoundary(segments: Intl.Segments, length: number, offset: number): boolean {
+  if (offset === 0 || offset === length) return true;
+  return segments.containing(offset)?.index === offset;
 }
 
 function failure(code: RangeMeasurementErrorCode): RangeMeasurementResult {

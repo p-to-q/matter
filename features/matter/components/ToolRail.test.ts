@@ -70,6 +70,21 @@ describe("ToolRail", () => {
     expect(markup).not.toMatch(/data-tool-id="voice"[^>]*disabled/);
   });
 
+  it("keeps an unavailable tool focusable and says why it cannot act", () => {
+    const idle = renderToolRail({});
+    // Native `disabled` would drop focus the moment a pending operation flips it.
+    expect(idle).not.toMatch(/<button[^>]*\sdisabled=""/);
+    expect(idle).toMatch(/aria-disabled="true"[^>]*data-tool-id="branch"/);
+    expect(idle).toMatch(/aria-disabled="true"[^>]*data-tool-id="undo"/);
+    expect(idle).toContain(">Select a thought first.</span>");
+    expect(idle).toContain(">Nothing to undo yet.</span>");
+    expect(idle).toMatch(/aria-describedby="[^"]+"[^>]*data-tool-id="undo"/);
+
+    const pending = renderToolRail({ interactionPending: true });
+    expect(pending).toContain(">Available when the current action finishes.</span>");
+    expect(pending).toMatch(/aria-disabled="true"[^>]*data-tool-id="move"/);
+  });
+
   it("restores the original filled active receipt and keeps focus separate", () => {
     const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
 
@@ -83,7 +98,7 @@ describe("ToolRail", () => {
       /\.tool-rail__button:focus-visible::after\s*\{[^}]*outline:\s*2px solid var\(--rail-active\);/s,
     );
     expect(css).toMatch(
-      /\.tool-rail__button\[data-tool-emphasis="primary"\]:disabled\s*\{[^}]*color:\s*var\(--rail-active-ink\);/s,
+      /\.tool-rail__button\[data-tool-emphasis="primary"\]\[aria-disabled="true"\]\s*\{[^}]*color:\s*var\(--rail-active-ink\);/s,
     );
   });
 

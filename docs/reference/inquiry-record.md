@@ -1,9 +1,19 @@
 # Ask Matter record
 
-This is the persistence boundary for the product correction named in the active
-plan: Ask Matter may keep a small local record, but reopening Ask Matter always
-starts clean and does not replay it. It creates no separate product surface. It
-is deliberately not conversation memory, material, or hidden retrieval.
+This is the persistence boundary for the product correction frozen in the plan
+on 2026-08-11 (now trace in
+[`../../archive/plans-0.2-history.md`](../../archive/plans-0.2-history.md)):
+Ask Matter may keep a small local record, but reopening Ask Matter never
+replays it. It creates no separate product surface. It is deliberately not
+conversation memory, material, or hidden retrieval.
+
+The one thing a reopened bubble carries is not the record: it is a question that
+was submitted and has not yet been seen settled. Closing is presentation
+dismissal, not cancellation, so that exchange keeps its pending turn, shows its
+answer when it arrives, and is released by the first close after it has been
+seen settled. A provider refusal returns the question to the field with one
+quiet localized line in the bubble's status slot, never an error turn. Cancel,
+shown in place of Ask while a question waits, is the explicit cancellation.
 
 ## Scope
 
@@ -69,9 +79,13 @@ they never infer a record from a current transient composer.
   latest durable version, and clear ordering cannot resurrect a stale epoch;
 - each request writes only its original `{ treeId, revision, scope }` receipt;
   ordinary material, scope, lineage, selection, and tab-visibility changes do
-  not erase that captured read-only answer; explicit close and AI-surface switch
-  detach only the transient presentation, while a different local document
-  owner, page exit, or unmount revokes the submitted operation;
+  not erase that captured read-only answer; explicit close, AI-surface switch,
+  and a compact-breakpoint crossing detach only the transient presentation,
+  while explicit Cancel, a different local document owner, a real unload
+  (non-persisted `pagehide`), or unmount revokes the submitted operation; a
+  back-forward-cache hide keeps the opening's turns, the pending question, and
+  its bounded snapshot for the page's return, and a request the browser drops
+  meanwhile returns the question with the ordinary quiet transport notice;
 - internal clear, quota, malformed data, and cross-tab generation conflict
   cannot modify material or command history;
 - only bounded, terminal outcomes are encoded; provider content and material

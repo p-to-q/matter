@@ -1,9 +1,11 @@
+import "server-only";
+
+import { createHash } from "node:crypto";
 import {
   decideModelRequest,
   deriveProvisionalLabel,
-  labelFingerprint,
+  labelQuestionIdentity,
   normalizeLabelInput,
-  validateSemanticLabel,
   type NormalizedLabelInput,
 } from "../material/semantic-label";
 import { PROTOCOL_VERSION } from "../tree/model";
@@ -58,6 +60,28 @@ type CacheEntry = Readonly<{ label: string; expiresAtMs: number }>;
  * Process-local state. It is a cache and a health counter, never authority:
  * every horizontal replica may hold a different view without changing what a
  * person sees, because the deterministic label is always available.
+ *
+ * The label cache, stated once:
+ * - owner: this module; authority: a disposable model proposal for a derived
+ *   index label, never material and never a person's own name;
+ * - key: a SHA-256 digest of the credential scope and the complete label
+ *   question (`labelQuestionIdentity`), so one scope's answer cannot serve
+ *   another and distinct questions cannot share an entry in practice;
+ * - value: only the adjudicated label, never node text, prompt, or provider;
+ * - bound: `cacheEntries` entries, least recently used evicted first, each for
+ *   `cacheTtlMs`;
+ * - invalidation: expiry, eviction, a changed question (a new key), process
+ *   restart, or a read that no longer passes adjudication;
+ * - read-time revalidation: a hit is judged by the scenario's own adjudicator
+ *   against the current question, exactly as a fresh answer is;
+ * - failure fallback: a miss asks the model, and the deterministic label is
+ *   always the floor.
+ *
+ * In-flight coalescing is keyed differently on purpose. A joined flight hands
+ * its answer over without adjudicating it again, so it keys on the exact
+ * scoped question rather than its digest: only a byte-identical question can
+ * join. That key holds material only while its one provider call is pending,
+ * like the request itself, and is never logged or retained afterwards.
  */
 const cache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, Promise<ModelAttempt>>();
@@ -94,26 +118,28 @@ export async function generateLabel(
     return settle(request, provisional.text, undefined, "provisional");
   }
 
-  const key = `${cacheScope}\u0000${labelFingerprint(input, request.promptVersion)}`;
+  const question = scopedLabelQuestion(cacheScope, input, request.promptVersion);
+  const key = labelCacheKey(question);
   const cached = readCache(key, input, now());
   if (cached !== null) return settle(request, cached, undefined, "model");
 
   const attempt = await withRequestSignal(
-    shareModelCall(key, async () => {
+    shareModelCall(question, async () => {
       const outcome = await runScenario(LABEL_SCENARIO, input, adapter, governor, {
         now,
         limits,
         deadlineCeilingMs: limits.timeoutMs,
       });
-      return outcome.ok
-        ? { label: outcome.value }
-        : { label: null, reason: outcome.fallback };
+      if (!outcome.ok) return { label: null, reason: outcome.fallback };
+      // The flight owns its adjudicated answer, not any one caller. A paid call
+      // that finishes after every caller has left still serves the next one.
+      writeCache(key, outcome.value, now(), limits);
+      return { label: outcome.value };
     }),
     requestSignal,
   );
 
   if (attempt.label === null) return settle(request, provisional.text, attempt.reason);
-  writeCache(key, attempt.label, now(), limits);
   return settle(request, attempt.label, undefined, "model");
 }
 
@@ -156,24 +182,37 @@ export function resolveLabelAdapter(
 }
 
 function shareModelCall(
-  key: string,
+  scopedQuestion: string,
   run: () => Promise<ModelAttempt>,
 ): Promise<ModelAttempt> {
   // Two nodes with identical material and context are the same question. One
   // provider call answers both; neither caller can cancel the other's work.
-  const existing = inFlight.get(key);
+  // Exact equality, never a digest, decides who may join: the joiner receives
+  // the answer without its own adjudication.
+  const existing = inFlight.get(scopedQuestion);
   if (existing !== undefined) return existing;
   const flight = run().finally(() => {
-    inFlight.delete(key);
+    inFlight.delete(scopedQuestion);
   });
-  inFlight.set(key, flight);
+  inFlight.set(scopedQuestion, flight);
   return flight;
 }
 
+/** The exact question within one credential scope; it carries material. */
+function scopedLabelQuestion(scope: string, input: NormalizedLabelInput, promptVersion: string): string {
+  return JSON.stringify([scope, labelQuestionIdentity(input, promptVersion)]);
+}
+
+function labelCacheKey(scopedQuestion: string): string {
+  return createHash("sha256").update(scopedQuestion).digest("hex");
+}
+
 /**
- * A cache hit is re-validated rather than trusted. The bound, the sibling set,
- * or the prompt version may have moved since the entry was written, and a
- * stored label that no longer passes is deleted instead of shown.
+ * A cache hit is adjudicated rather than trusted. Syntax alone is not enough:
+ * a well-formed label can still be ungrounded in this material, drop one of
+ * its identifiers, or blur into a sibling. Running the scenario's complete
+ * judgement means the cache can never show a label the fresh path would have
+ * refused, whatever produced the entry; one that fails is deleted, not shown.
  */
 function readCache(key: string, input: NormalizedLabelInput, nowMs: number): string | null {
   const entry = cache.get(key);
@@ -182,19 +221,21 @@ function readCache(key: string, input: NormalizedLabelInput, nowMs: number): str
     cache.delete(key);
     return null;
   }
-  const validation = validateSemanticLabel(entry.label, {
-    locale: input.locale,
-    maxGraphemes: input.maxGraphemes,
-    siblingLabels: input.context.siblingLabels,
-  });
-  if (!validation.ok) {
+  let verdict: ReturnType<typeof LABEL_SCENARIO.adjudicate> | null;
+  try {
+    verdict = LABEL_SCENARIO.adjudicate(entry.label, input);
+  } catch {
+    // A local policy defect cannot make a stored answer trustworthy.
+    verdict = null;
+  }
+  if (verdict === null || !verdict.ok) {
     cache.delete(key);
     return null;
   }
   // Refresh recency: Map preserves insertion order, which is the eviction order.
   cache.delete(key);
   cache.set(key, entry);
-  return validation.label;
+  return verdict.value;
 }
 
 function writeCache(key: string, label: string, nowMs: number, limits: LabelGeneratorLimits): void {

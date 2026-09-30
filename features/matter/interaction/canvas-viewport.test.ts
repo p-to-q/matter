@@ -181,6 +181,21 @@ describe("reduceCanvasViewport", () => {
     expect(state.gesture).toBeNull();
   });
 
+  it("reverts only the pan a revoked pointer owned", () => {
+    let state = apply(INITIAL_CANVAS_VIEWPORT, down("touch"));
+    state = apply(state, { type: "pointer-move", pointerId: 3, clientX: 160, clientY: 140 });
+    expect(state.x).not.toBe(INITIAL_CANVAS_VIEWPORT.x);
+    expect(apply(state, { type: "pointer-revert", pointerId: 9 })).toEqual(state);
+    const reverted = apply(state, { type: "pointer-revert", pointerId: 3 });
+    expect(reverted).toMatchObject({
+      x: INITIAL_CANVAS_VIEWPORT.x,
+      y: INITIAL_CANVAS_VIEWPORT.y,
+      zoom: INITIAL_CANVAS_VIEWPORT.zoom,
+      gesture: null,
+    });
+    expect(reduceCanvasViewport(state, { type: "pointer-revert", pointerId: -1 }).ok).toBe(false);
+  });
+
   it("ignores events belonging to another pointer", () => {
     const active = apply(INITIAL_CANVAS_VIEWPORT, down());
     const state = apply(active, {

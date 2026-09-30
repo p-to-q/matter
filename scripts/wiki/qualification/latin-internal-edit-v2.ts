@@ -23,8 +23,14 @@ import {
   type WikiLexeme,
   type WikiState,
 } from "../../../features/matter/wiki/wiki-model";
-import type { MatterLocale } from "../../../features/matter/config/locales";
+import {
+  MATTER_LOCALES,
+  type MatterLocale,
+} from "../../../features/matter/config/locales";
+import { wikiLatinLedgerLocale } from
+  "../../../features/matter/wiki/wiki-script-routing";
 import { selectBestCompleteWikiPerformanceTrial } from "./performance-trials";
+import { recordWikiProducerVotes, type WikiProducerCaseVotes } from "./producer-votes";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const PRODUCER_FILES = Object.freeze([
@@ -33,10 +39,23 @@ const PRODUCER_FILES = Object.freeze([
   "features/matter/wiki/wiki-text-safety.ts",
   "features/matter/wiki/wiki-learning-policy.ts",
   "features/matter/wiki/wiki-model.ts",
+  "features/matter/wiki/wiki-script.ts",
+  "features/matter/wiki/wiki-script-routing.ts",
 ]);
+// Version 1.1.0 added the script route and the width fold for routed words.
+// Version 1.2.0 decides width by script: every Latin word is read by its
+// folded spelling, in English turns too, and a Latin word the producer cannot
+// read in any width is not an opportunity. Both only change which turns can
+// present an ASCII word; what a vote means for a stored (en-US, form,
+// canonical) relation is unchanged, so the family stays v2.
 const RESOURCE_BYTES = new TextEncoder().encode(
-  "ascii-latin:a-z;case-fold:en-US;segmentation:ecmascript-2026",
+  "ascii-latin:a-z;case-fold:en-US;segmentation:ecmascript-2026;" +
+    "route:zh-CN,zh-TW,ja-JP>en-US:latin;" +
+    "width-fold:every-latin-word:ff10-ff19,ff21-ff3a,ff41-ff5a;opportunity:readable-words",
 );
+const PRODUCER_VERSION = "2.2.0";
+const RESOURCE_VERSION = "1.2.0";
+const CORPUS_VERSION = "latin-internal-edit-corpus/3";
 const CAPACITY = 512;
 const LOOKUPS = 1_000;
 const PERFORMANCE_TRIALS = 3;
@@ -48,30 +67,150 @@ const QUALIFIED_PERFORMANCE_RECEIPT = Object.freeze({
   attemptedEntryCount: CAPACITY,
   compiledEntryCount: CAPACITY,
   overflowCount: 0,
-  compileMicros: 87_432,
+  compileMicros: 2_038,
   lookupSampleCount: LOOKUPS,
-  lookupP95Micros: 253,
+  lookupP95Micros: 20,
 });
 
+/**
+ * Corpus 2 adds whole mixed-script turns. `observedForm` is the complete
+ * spoken turn and `candidateCanonicals` are placed in the one ledger the
+ * turn's Latin words belong to (`en-US` for English, Chinese, and Japanese
+ * turns). A locale-isolation case instead places them in every other locale,
+ * so it proves a Latin word reaches its own ledger and no other. Corpus 1's
+ * `locale-isolation` case asserted that a Chinese turn never reaches en-US;
+ * script routing deliberately reverses that, so the case was replaced rather
+ * than relabelled. An action names the ledger locale and the stored form, so
+ * the full-width positive proves that the folded ASCII form is what is kept.
+ * Corpus 3 adds full-width English and German turns: an English full-width
+ * word votes like its routed spelling, and a German one reaches no en-US
+ * target in either width.
+ */
 export const LATIN_INTERNAL_EDIT_CASES = Object.freeze([
   corpusCase("positive-transposition", "positive", "en-US", "spoken",
-    "Englebart", ["Engelbart"], "human-material", "canonical:Engelbart"),
+    "Englebart", ["Engelbart"], "human-material", "relation:en-US:Englebart>Engelbart"),
   corpusCase("positive-substitution", "positive", "en-US", "spoken",
-    "Morphogenasis", ["Morphogenesis"], "human-material", "canonical:Morphogenesis"),
+    "Morphogenasis", ["Morphogenesis"], "human-material",
+    "relation:en-US:Morphogenasis>Morphogenesis"),
+  corpusCase("positive-routed-zh-cn", "positive", "zh-CN", "spoken",
+    "我读了Englebart的论文", ["Engelbart"], "human-material",
+    "relation:en-US:Englebart>Engelbart"),
+  corpusCase("positive-routed-zh-tw", "positive", "zh-TW", "spoken",
+    "我讀了Morphogenasis的論文", ["Morphogenesis"], "human-material",
+    "relation:en-US:Morphogenasis>Morphogenesis"),
+  corpusCase("positive-routed-ja-jp", "positive", "ja-JP", "spoken",
+    "Englebartの論文を読んだ", ["Engelbart"], "human-material",
+    "relation:en-US:Englebart>Engelbart"),
+  corpusCase("positive-routed-full-width", "positive", "zh-CN", "spoken",
+    "我读了Ｅｎｇｌｅｂａｒｔ的论文", ["Engelbart"], "human-material",
+    "relation:en-US:Englebart>Engelbart"),
+  corpusCase("positive-routed-punctuation-emoji", "positive", "zh-CN", "spoken",
+    "😀Englebart，对吧？", ["Engelbart"], "human-material",
+    "relation:en-US:Englebart>Engelbart"),
   corpusCase("adversarial-written", "adversarial", "en-US", "written",
     "Englebart", ["Engelbart"], "human-material", null),
   corpusCase("adversarial-distant", "adversarial", "en-US", "spoken",
     "Engleboard", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-written", "adversarial", "zh-CN", "written",
+    "我读了Englebart的论文", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-han-transliteration", "adversarial", "zh-CN", "spoken",
+    "恩格尔巴特的演示", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-correct-name", "adversarial", "zh-CN", "spoken",
+    "Engelhard公司的报告", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-code-switch", "adversarial", "zh-CN", "spoken",
+    "这个feature下周review一下", ["Engelbart", "Morphogenesis"], "human-material", null),
+  corpusCase("adversarial-routed-digit-joined", "adversarial", "zh-CN", "spoken",
+    "Englebart2号", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-url", "adversarial", "zh-CN", "spoken",
+    "看https://example.com/Englebart的页面", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-email", "adversarial", "zh-CN", "spoken",
+    "邮箱Englebart@example.com", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-width-identifier", "adversarial", "zh-CN", "spoken",
+    "打开ＥｎｇｌｅＢａｒｔ模块", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-file-path", "adversarial", "zh-CN", "spoken",
+    "路径src/Englebart/index.ts", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-mention", "adversarial", "zh-CN", "spoken",
+    "@Englebart 你好", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-hashtag", "adversarial", "zh-CN", "spoken",
+    "#Englebart 话题", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-url", "adversarial", "zh-CN", "spoken",
+    "看ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ／Ｅｎｇｌｅｂａｒｔ的页面", ["Engelbart"],
+    "human-material", null),
+  corpusCase("adversarial-routed-full-width-email", "adversarial", "zh-CN", "spoken",
+    "邮箱englebart＠example.com", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-path", "adversarial", "zh-CN", "spoken",
+    "路径ｓｒｃ／Ｅｎｇｌｅｂａｒｔ／ｉｎｄｅｘ．ｔｓ", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-flag", "adversarial", "zh-CN", "spoken",
+    "运行－－Ｅｎｇｌｅｂａｒｔ参数", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-mention", "adversarial", "zh-CN", "spoken",
+    "＠Englebart 你好", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-hashtag", "adversarial", "zh-CN", "spoken",
+    "＃Englebart＃话题", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-routed-full-width-backticks", "adversarial", "zh-CN", "spoken",
+    "代码｀Englebart｀里", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-mention", "adversarial", "en-US", "spoken",
+    "@Englebart said", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-mention", "adversarial", "en-US", "spoken",
+    "＠Englebart said", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-hashtag", "adversarial", "en-US", "spoken",
+    "＃Englebart＃", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-backticks", "adversarial", "en-US", "spoken",
+    "｀Englebart｀", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-url", "adversarial", "en-US", "spoken",
+    "ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ／Englebart", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-email", "adversarial", "en-US", "spoken",
+    "englebart＠example.com", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-path", "adversarial", "en-US", "spoken",
+    "src／Englebart／index．ts", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-flag", "adversarial", "en-US", "spoken",
+    "－－Englebart", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-dotted", "adversarial", "en-US", "spoken",
+    "Englebart．ts", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-snake", "adversarial", "en-US", "spoken",
+    "my＿Englebart", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-hyphen", "adversarial", "en-US", "spoken",
+    "Englebart－style", ["Engelbart"], "human-material", null),
+  corpusCase("positive-full-width-parentheses", "positive", "en-US", "spoken",
+    "（Englebart），later", ["Engelbart"], "human-material",
+    "relation:en-US:Englebart>Engelbart"),
+  corpusCase("positive-full-width-en-us", "positive", "en-US", "spoken",
+    "Ｅｎｇｌｅｂａｒｔ", ["Engelbart"], "human-material",
+    "relation:en-US:Englebart>Engelbart"),
+  corpusCase("positive-full-width-en-us-sentence", "positive", "en-US", "spoken",
+    "I read Ｍｏｒｐｈｏｇｅｎａｓｉｓ today", ["Morphogenesis"], "human-material",
+    "relation:en-US:Morphogenasis>Morphogenesis"),
+  corpusCase("adversarial-full-width-digit-joined", "adversarial", "en-US", "spoken",
+    "Ｅｎｇｌｅｂａｒｔ２", ["Engelbart"], "human-material", null),
+  corpusCase("adversarial-full-width-de-de", "adversarial", "de-DE", "spoken",
+    "Ｅｎｇｌｅｂａｒｔ", ["Engelbart"], "human-material", null),
   corpusCase("ambiguity-two-canonicals", "ambiguity", "en-US", "spoken",
     "Abczefgh", ["Abcxefgh", "Abcyefgh"], "human-material", null),
   corpusCase("ambiguity-canonical-noop", "ambiguity", "en-US", "spoken",
     "Englebart", ["Englebart", "Engelbart"], "human-material", null),
-  corpusCase("locale-isolation", "locale-isolation", "zh-CN", "spoken",
+  corpusCase("ambiguity-routed-name-collision", "ambiguity", "zh-CN", "spoken",
+    "Engelbirt的演示", ["Engelbart", "Engelbert"], "human-material", null),
+  corpusCase("ambiguity-routed-brand-collision", "ambiguity", "ja-JP", "spoken",
+    "Morphogenosisの新製品", ["Morphogenesis", "Morphogenasis"], "human-material", null),
+  corpusCase("ambiguity-routed-correct-name-noop", "ambiguity", "zh-CN", "spoken",
+    "我采访了Engelhart", ["Engelhart", "Engelbart"], "human-material", null),
+  corpusCase("locale-isolation-routed-ledger-only", "locale-isolation", "zh-CN", "spoken",
+    "我读了Englebart的论文", ["Engelbart"], "human-material", null),
+  corpusCase("locale-isolation-ja-jp-routed-ledger-only", "locale-isolation", "ja-JP",
+    "spoken", "Englebartの論文", ["Engelbart"], "human-material", null),
+  corpusCase("locale-isolation-de-de", "locale-isolation", "de-DE", "spoken",
+    "Englebart", ["Engelbart"], "human-material", null),
+  corpusCase("locale-isolation-full-width-de-de", "locale-isolation", "de-DE", "spoken",
+    "Ｅｎｇｌｅｂａｒｔ", ["Engelbart"], "human-material", null),
+  corpusCase("locale-isolation-en-us", "locale-isolation", "en-US", "spoken",
     "Englebart", ["Engelbart"], "human-material", null),
   corpusCase("protected-code", "protected", "en-US", "spoken",
     "Englebart", ["Engelbart"], "protected-text", null),
+  corpusCase("protected-routed-code", "protected", "zh-CN", "spoken",
+    "我读了Englebart的论文", ["Engelbart"], "protected-text", null),
   corpusCase("generated-range", "generated", "en-US", "spoken",
     "Englebart", ["Engelbart"], "generated-output", null),
+  corpusCase("generated-routed-range", "generated", "zh-CN", "spoken",
+    "我读了Englebart的论文", ["Engelbart"], "generated-output", null),
 ]) satisfies readonly WikiProducerExpectedCase[];
 
 export async function runLatinInternalEditQualification(
@@ -86,14 +225,14 @@ export async function runLatinInternalEditQualification(
   if (corpusDigest === null) throw new Error("The Latin fitting corpus is invalid.");
   const identity = Object.freeze({
     producerId: "latin-internal-edit-v2" as const,
-    producerVersion: "2.0.0",
+    producerVersion: PRODUCER_VERSION,
     producerDigest: await digestWikiProducerArtifact(producerBytes),
     resourceId: "ascii-latin",
-    resourceVersion: "1.0.0",
+    resourceVersion: RESOURCE_VERSION,
     resourceDigest: await digestWikiProducerArtifact(RESOURCE_BYTES),
   });
   const corpus = Object.freeze({
-    corpusVersion: "latin-internal-edit-corpus/1",
+    corpusVersion: CORPUS_VERSION,
     corpusDigest,
   });
   const candidateRelease: WikiQualifiedProducerRelease = Object.freeze({
@@ -112,13 +251,15 @@ export async function runLatinInternalEditQualification(
       ...PERFORMANCE_BUDGET,
     }),
   });
+  const votes = Object.freeze(LATIN_INTERNAL_EDIT_CASES.map((item) =>
+    runCase(item, candidateRelease)));
   const receipt: WikiProducerCorpusRun = Object.freeze({
     qualificationVersion: WIKI_PRODUCER_QUALIFICATION_VERSION,
     identity,
     corpus,
-    outputs: Object.freeze(LATIN_INTERNAL_EDIT_CASES.map((item) => Object.freeze({
+    outputs: Object.freeze(votes.map((item) => Object.freeze({
       caseId: item.caseId,
-      appliedActionId: runCase(item, candidateRelease),
+      appliedActionId: item.appliedActionId,
     }))),
     performance: measureLivePerformance
       ? await measurePerformance(candidateRelease)
@@ -127,18 +268,19 @@ export async function runLatinInternalEditQualification(
   const qualification = await qualifyWikiProducerReleases([
     Object.freeze({ manifest, receipt, artifacts }),
   ]);
-  return Object.freeze({ manifest, receipt, artifacts, qualification });
+  return Object.freeze({ manifest, receipt, artifacts, qualification, votes });
 }
 
 function runCase(
   item: WikiProducerExpectedCase,
   candidateRelease: WikiQualifiedProducerRelease,
-): string | null {
-  const candidateLocale = item.category === "locale-isolation"
-    ? "en-US"
-    : item.input.locale;
+): WikiProducerCaseVotes {
+  const ledger = wikiLatinLedgerLocale(item.input.locale);
+  const candidateLocales = item.category === "locale-isolation"
+    ? MATTER_LOCALES.filter((locale) => locale !== ledger)
+    : [ledger];
   const snapshot = compileWikiFitSnapshot(stateWithCanonicals(
-    candidateLocale,
+    candidateLocales,
     item.input.candidateCanonicals,
   ), [candidateRelease]);
   const text = item.input.environment === "protected-text"
@@ -154,7 +296,13 @@ function runCase(
       ? { eligibleRanges: [{ start: item.input.observedForm.length + 1, end: text.length }] }
       : {}),
   }, new Set(["latin-internal-edit-v2"]));
-  return events.length === 1 ? `canonical:${events[0].canonical}` : null;
+  return recordWikiProducerVotes(item.caseId, events.map((event) =>
+    event.source === "machine-inference"
+      ? Object.freeze({
+          actionId: `relation:${event.locale}:${event.form}>${event.canonical}`,
+          competesFor: `${event.locale}:${event.form}`,
+        })
+      : Object.freeze({ actionId: `term:${event.locale}:${event.canonical}` })));
 }
 
 async function measurePerformance(
@@ -173,7 +321,7 @@ function measurePerformanceTrial(
   const canonicals = Array.from({ length: CAPACITY }, (_, index) => capacityWord(index));
   const started = performance.now();
   const snapshot = compileWikiFitSnapshot(
-    stateWithCanonicals("en-US", canonicals),
+    stateWithCanonicals(["en-US"], canonicals),
     [candidateRelease],
   );
   const compileMicros = Math.ceil((performance.now() - started) * 1_000);
@@ -181,11 +329,14 @@ function measurePerformanceTrial(
   for (let index = 0; index < LOOKUPS; index += 1) {
     const canonical = canonicals[index % canonicals.length];
     const observed = `${canonical.slice(0, 3)}a${canonical.slice(4)}`;
+    // Half the lookups are routed: a Chinese turn is segmented by the zh-CN
+    // dictionary segmenter before its Latin word reaches the same index.
+    const routed = index % 2 === 1;
     const lookupStarted = performance.now();
     fitCommittedWikiText(snapshot, {
-      locale: "en-US",
+      locale: routed ? "zh-CN" : "en-US",
       channel: "spoken",
-      text: observed,
+      text: routed ? `我们读了${observed}的论文` : observed,
     }, new Set(["latin-internal-edit-v2"]));
     samples.push((performance.now() - lookupStarted) * 1_000);
   }
@@ -202,10 +353,13 @@ function measurePerformanceTrial(
 }
 
 function stateWithCanonicals(
-  locale: MatterLocale,
+  locales: readonly MatterLocale[],
   canonicals: readonly string[],
 ): WikiState {
-  const lexemes = canonicals.map((canonical, index): WikiLexeme => Object.freeze({
+  const lexemes = locales.flatMap((locale) => canonicals.map((canonical) => ({
+    locale,
+    canonical,
+  }))).map(({ locale, canonical }, index): WikiLexeme => Object.freeze({
     id: index + 1,
     locale,
     canonical,
@@ -226,6 +380,8 @@ function stateWithCanonicals(
     authorities: Object.freeze([]),
     aliasTombstones: Object.freeze([]),
     lexemeTombstones: Object.freeze([]),
+    revertStrikes: Object.freeze([]),
+    settledOccurrences: Object.freeze([]),
   });
 }
 

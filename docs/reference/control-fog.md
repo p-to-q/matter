@@ -6,7 +6,7 @@ or where it sits.
 ## What it is
 
 **Control fog** is the small blurred plate that carries a passage's local
-actions. It appears on hover, keyboard focus, or coarse selection, holds the
+actions. It appears on hover, keyboard focus, or selection, holds the
 left Point-and-Talk AI mark and the right working-context glyph, and vanishes again. It is
 not a card, a toolbar, or a panel: it is
 a patch of paper going quiet so a control can be read against arbitrary

@@ -1,9 +1,11 @@
 import type { InquiryRequest } from "../protocol/inquiry-contract";
 import { isInquiryAnswerProse } from "../protocol/inquiry-answer-policy.mjs";
 import { MAX_INQUIRY_ANSWER_CODE_POINTS } from "../config/inquiry";
-import type { MatterScenario } from "./harness";
+import { rejectionVocabulary, type MatterScenario } from "./harness";
 import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { boundedIntent, composePrompt, fenceJson } from "./prompt-spine";
+
+type InquiryRejection = "not-text" | "empty" | "invalid-format" | "too-long";
 
 export const INQUIRY_SCENARIO_ID = "matter-inquiry";
 /** Named like every sibling scenario; inquiry never carries it on the wire. */
@@ -29,7 +31,7 @@ export const INQUIRY_PROVIDER_DEADLINE_MS = MODEL_DEADLINES.inquiry.providerMs;
  * the inquiry against the bounded virtual tree, and no retrieval happens behind
  * that decision.
  */
-export const INQUIRY_SCENARIO: MatterScenario<InquiryRequest, string> = Object.freeze({
+export const INQUIRY_SCENARIO: MatterScenario<InquiryRequest, string, InquiryRejection> = Object.freeze({
   id: "matter-inquiry",
   promptVersion: INQUIRY_PROMPT_VERSION,
   rejectedCandidate: "continue-if-budget",
@@ -54,6 +56,12 @@ export const INQUIRY_SCENARIO: MatterScenario<InquiryRequest, string> = Object.f
     }
     return Object.freeze({ ok: true as const, value: text });
   },
+  rejectionCodes: rejectionVocabulary<InquiryRejection>({
+    "not-text": true,
+    empty: true,
+    "invalid-format": true,
+    "too-long": true,
+  }),
 });
 
 /**

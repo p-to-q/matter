@@ -13,7 +13,12 @@ import {
 import { WikiBasisOwner } from "../wiki/wiki-basis-owner";
 import { wikiStateStorageBytes } from "../wiki/wiki-codec";
 import type { WikiAliasEvidenceProducer } from "../wiki/wiki-learning-policy";
-import type { WikiState } from "../wiki/wiki-model";
+import type {
+  WikiEvidenceTickDisposition,
+  WikiObservationTick,
+  WikiOccurrenceSettlement,
+  WikiState,
+} from "../wiki/wiki-model";
 
 const DECISION = Object.freeze({
   type: "confirm-rule" as const,
@@ -34,6 +39,25 @@ const OBSERVATION = Object.freeze({
   source: "machine-inference" as const,
   producer: "legacy-v1" as const,
 });
+
+const ENGLISH_TURN = Object.freeze({
+  locale: "en-US" as const,
+  channel: "spoken" as const,
+  scripts: Object.freeze(["latin" as const]),
+});
+
+function tick(
+  term: WikiEvidenceTickDisposition,
+  alias: WikiEvidenceTickDisposition,
+): WikiObservationTick {
+  const ledger = (disposition: WikiEvidenceTickDisposition) =>
+    disposition === "observed" || disposition === "quiet"
+      ? Object.freeze({ disposition, opportunity: ENGLISH_TURN })
+      : Object.freeze({ disposition });
+  return Object.freeze({ term: ledger(term), alias: ledger(alias) });
+}
+
+const ALIAS_TURN = tick("paused", "observed");
 
 describe("Wiki coordinator", () => {
   it("serves an empty basis while hydration completes", async () => {
@@ -210,7 +234,7 @@ describe("Wiki coordinator", () => {
     })).resolves.toMatchObject({ ok: true, generation: 1, stateRevision: 1 });
     await expect(coordinator.observe(
       [OBSERVATION],
-      undefined,
+      ALIAS_TURN,
       {
         generation: derivedFrom.snapshot.generation,
         stateRevision: derivedFrom.stateRevision,
@@ -238,7 +262,7 @@ describe("Wiki coordinator", () => {
     await expect(coordinator.observe([
       OBSERVATION,
       OBSERVATION,
-    ])).resolves.toMatchObject({
+    ], ALIAS_TURN)).resolves.toMatchObject({
       ok: true,
       changed: true,
       generation: 2,
@@ -249,14 +273,14 @@ describe("Wiki coordinator", () => {
       expect.objectContaining({
         form: "Englebart",
         producer: "legacy-v1",
-        support: 1,
+        support: 4,
       }),
     ]);
   });
 
   it("keeps existing evidence and quiet aging when a new row exceeds the byte budget", () => {
     const state = createdLexemeState();
-    const seeded = applyWikiObservationBatch(state, [OBSERVATION]);
+    const seeded = applyWikiObservationBatch(state, [OBSERVATION], ALIAS_TURN);
     if (!seeded.ok) throw new Error(seeded.error.message);
     const newTerm = Object.freeze({
       type: "observe-evidence" as const,
@@ -269,7 +293,7 @@ describe("Wiki coordinator", () => {
     const knownOnly = applyWikiObservationBatch(
       seeded.state,
       [OBSERVATION],
-      { term: "observed", alias: "observed" },
+      tick("observed", "observed"),
       qualified,
     );
     if (!knownOnly.ok) throw new Error(knownOnly.error.message);
@@ -277,7 +301,7 @@ describe("Wiki coordinator", () => {
     const advanced = applyBoundedWikiObservationBatch(
       seeded.state,
       [OBSERVATION, newTerm],
-      { term: "observed", alias: "observed" },
+      tick("observed", "observed"),
       qualified,
       wikiStateStorageBytes(knownOnly.state),
     );
@@ -285,20 +309,20 @@ describe("Wiki coordinator", () => {
     if (!advanced.ok) return;
     expect(advanced.state.termEvidence).toEqual([]);
     expect(advanced.state.aliasEvidence).toEqual([
-      expect.objectContaining({ form: "Englebart", support: 2 }),
+      expect.objectContaining({ form: "Englebart", support: 8 }),
     ]);
 
     const quietOnly = applyWikiObservationBatch(
       seeded.state,
       [],
-      { term: "observed", alias: "quiet" },
+      tick("observed", "quiet"),
       qualified,
     );
     if (!quietOnly.ok) throw new Error(quietOnly.error.message);
     const aged = applyBoundedWikiObservationBatch(
       seeded.state,
       [newTerm],
-      { term: "observed", alias: "quiet" },
+      tick("observed", "quiet"),
       qualified,
       wikiStateStorageBytes(quietOnly.state),
     );
@@ -332,7 +356,7 @@ describe("Wiki coordinator", () => {
       ...upgrade,
       canonical: "Morphogenesis",
     });
-    const dispositions = Object.freeze({ term: "observed" as const, alias: "paused" as const });
+    const dispositions = tick("observed", "paused");
     const qualified = new Set<WikiAliasEvidenceProducer>();
     const upgraded = applyWikiObservationBatch(
       legacy,
@@ -364,13 +388,13 @@ describe("Wiki coordinator", () => {
       expect.objectContaining({
         canonical: "Lexicorium",
         producer: "locale-segment-v1",
-        support: 1,
+        support: 4,
       }),
     ]);
   });
 
   it("retains an alias producer upgrade when an unseen row exceeds the byte budget", () => {
-    const seeded = applyWikiObservationBatch(createdLexemeState(), [OBSERVATION]);
+    const seeded = applyWikiObservationBatch(createdLexemeState(), [OBSERVATION], ALIAS_TURN);
     if (!seeded.ok) throw new Error(seeded.error.message);
     const upgrade = Object.freeze({
       ...OBSERVATION,
@@ -380,7 +404,7 @@ describe("Wiki coordinator", () => {
       ...upgrade,
       form: "Engelbartt",
     });
-    const dispositions = Object.freeze({ term: "paused" as const, alias: "observed" as const });
+    const dispositions = ALIAS_TURN;
     const qualified = new Set<WikiAliasEvidenceProducer>(["latin-internal-edit-v2"]);
     const upgraded = applyWikiObservationBatch(
       seeded.state,
@@ -432,7 +456,7 @@ describe("Wiki coordinator", () => {
     await expect(coordinator.observe([
       OBSERVATION,
       { ...OBSERVATION, form: "Engelbart" },
-    ])).resolves.toEqual({ ok: false, code: "INVALID_DECISION" });
+    ], ALIAS_TURN)).resolves.toEqual({ ok: false, code: "INVALID_DECISION" });
     expect(coordinator.readState()).toBe(before);
     expect(repository.save).toHaveBeenCalledTimes(1);
   });
@@ -459,13 +483,13 @@ describe("Wiki coordinator", () => {
     });
 
     for (let index = 0; index < 3; index += 1) {
-      await coordinator.observe([OBSERVATION]);
+      await coordinator.observe([OBSERVATION], ALIAS_TURN);
       expect(coordinator.readBasis().snapshot.rules).toEqual([]);
     }
-    await coordinator.observe([OBSERVATION]);
+    await coordinator.observe([OBSERVATION], ALIAS_TURN);
     expect(coordinator.readBasis().snapshot.rules).toEqual([]);
     expect(coordinator.readState()?.aliasEvidence[0]).toMatchObject({
-      producer: "legacy-v1", support: 4, phase: "candidate",
+      producer: "legacy-v1", support: 16, phase: "candidate",
     });
   });
 
@@ -569,8 +593,8 @@ describe("Wiki coordinator", () => {
     await Promise.all([first.start(), second.start()]);
 
     const results = await Promise.all([
-      first.observe([OBSERVATION]),
-      second.observe([{ ...OBSERVATION, form: "Engelbartt" }]),
+      first.observe([OBSERVATION], ALIAS_TURN),
+      second.observe([{ ...OBSERVATION, form: "Engelbartt" }], ALIAS_TURN),
     ]);
 
     expect(results.filter((result) => result.ok)).toHaveLength(1);
@@ -594,8 +618,8 @@ describe("Wiki coordinator", () => {
     await Promise.all([first.start(), second.start()]);
 
     const results = await Promise.all([
-      first.observe([OBSERVATION]),
-      second.observe([OBSERVATION]),
+      first.observe([OBSERVATION], ALIAS_TURN),
+      second.observe([OBSERVATION], ALIAS_TURN),
     ]);
 
     expect(results.filter((result) => result.ok)).toHaveLength(1);
@@ -609,7 +633,7 @@ describe("Wiki coordinator", () => {
       expect.objectContaining({
         form: "Englebart",
         producer: "legacy-v1",
-        support: 1,
+        support: 4,
       }),
     ]);
   });
@@ -673,6 +697,91 @@ describe("Wiki coordinator", () => {
     });
     expect(repository.resetCorrupt).toHaveBeenCalledWith(0);
     expect(coordinator.getStatus()).toMatchObject({ phase: "ready", generation: 4 });
+  });
+
+  it("hydrates, records informed acceptance as kept evidence, and settles once", async () => {
+    const state = observedAliasState();
+    const repository = fakeRepository();
+    repository.load.mockResolvedValue({ ok: true, value: { state, writeGeneration: 3 } });
+    repository.save.mockResolvedValue({ ok: true, value: 4 });
+    const coordinator = createWikiCoordinator(repository);
+
+    const settlement = occurrenceSettlement("occ_implicit", "accepted-implicit", state.revision);
+    await expect(coordinator.settle(settlement)).resolves.toMatchObject({
+      ok: true,
+      changed: true,
+      generation: 4,
+    });
+    expect(coordinator.readState()?.aliasEvidence[0]).toMatchObject({ form: "Englebart", kept: 4 });
+    expect(coordinator.readState()?.settledOccurrences).toEqual(["occ_implicit"]);
+
+    await expect(coordinator.settle(settlement)).resolves.toMatchObject({ ok: true, changed: false });
+    expect(repository.save).toHaveBeenCalledOnce();
+  });
+
+  it("rebases a settlement over a concurrent durable write", async () => {
+    const initial = observedAliasState();
+    const external = applyWikiEvent(initial, {
+      type: "create-lexeme",
+      locale: "en-US",
+      canonical: "Morphogenesis",
+      scope: "both",
+    });
+    if (!external.ok) throw new Error(external.error.message);
+    const repository = fakeRepository();
+    repository.load
+      .mockResolvedValueOnce({ ok: true, value: { state: initial, writeGeneration: 1 } })
+      .mockResolvedValueOnce({ ok: true, value: { state: external.state, writeGeneration: 2 } });
+    repository.save
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { code: "PERSISTENCE_CONFLICT", message: "newer tab" },
+      })
+      .mockResolvedValueOnce({ ok: true, value: 3 });
+    const coordinator = createWikiCoordinator(repository);
+
+    await expect(coordinator.settle(
+      occurrenceSettlement("occ_rebased", "inspected-kept", initial.revision),
+    )).resolves.toMatchObject({ ok: true, changed: true, generation: 3 });
+    expect(repository.save).toHaveBeenCalledTimes(2);
+    expect(coordinator.readState()?.lexemes.map((lexeme) => lexeme.canonical))
+      .toContain("Morphogenesis");
+    expect(coordinator.readState()?.aliasEvidence[0]).toMatchObject({ kept: 8 });
+  });
+
+  it("routes Keep through human authority and reports an explicit failure", async () => {
+    const state = observedAliasState();
+    const repository = fakeRepository();
+    repository.load.mockResolvedValue({ ok: true, value: { state, writeGeneration: 1 } });
+    repository.save
+      .mockResolvedValueOnce({
+        ok: false,
+        error: { code: "PERSISTENCE_WRITE_FAILED", message: "quota" },
+      })
+      .mockResolvedValueOnce({ ok: true, value: 2 });
+    const coordinator = createWikiCoordinator(repository);
+    const keep = occurrenceSettlement("occ_keep", "explicit-confirm", state.revision);
+
+    await expect(coordinator.settle(keep)).resolves.toEqual({
+      ok: false,
+      code: "PERSISTENCE_FAILED",
+    });
+    await expect(coordinator.settle(keep)).resolves.toMatchObject({ ok: true, changed: true });
+    expect(coordinator.readState()?.authorities).toEqual([
+      expect.objectContaining({ form: "Englebart", channel: "spoken" }),
+    ]);
+  });
+
+  it("rejects a settlement applied from a basis newer than durable authority", async () => {
+    const state = observedAliasState();
+    const repository = fakeRepository();
+    repository.load.mockResolvedValue({ ok: true, value: { state, writeGeneration: 1 } });
+    const coordinator = createWikiCoordinator(repository);
+
+    await expect(coordinator.settle(
+      occurrenceSettlement("occ_future", "reverted", state.revision + 1),
+    )).resolves.toEqual({ ok: false, code: "INVALID_DECISION" });
+    expect(repository.save).not.toHaveBeenCalled();
   });
 
   it("does not expose corrupt reset as a general clear shortcut", async () => {
@@ -761,6 +870,32 @@ function sharedRepositoryPair(initialState?: WikiState): Readonly<{
     close() {},
   });
   return Object.freeze({ first: create(), second: create() });
+}
+
+function observedAliasState(): WikiState {
+  const result = applyWikiEvent(createdLexemeState(), OBSERVATION);
+  if (!result.ok) throw new Error(result.error.message);
+  return result.state;
+}
+
+function occurrenceSettlement(
+  occurrenceId: string,
+  outcome: "accepted-implicit" | "inspected-kept" | "explicit-confirm" | "reverted",
+  appliedAtRevision: number,
+): WikiOccurrenceSettlement {
+  return Object.freeze({
+    occurrenceId,
+    outcome,
+    origin: "human-admission",
+    rule: Object.freeze({
+      locale: "en-US",
+      channel: "spoken",
+      boundary: "word",
+      form: "Englebart",
+      canonical: "Engelbart",
+      appliedAtRevision,
+    }),
+  });
 }
 
 function createdLexemeState(): WikiState {

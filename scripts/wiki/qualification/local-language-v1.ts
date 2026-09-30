@@ -34,6 +34,7 @@ import {
   "../../../features/matter/wiki/wiki-term-collection";
 import { runLatinInternalEditQualification } from "./latin-internal-edit-v2";
 import { selectBestCompleteWikiPerformanceTrial } from "./performance-trials";
+import { recordWikiProducerVotes, type WikiProducerCaseVotes } from "./producer-votes";
 import {
   compileQualificationPronunciationSnapshot,
   fitQualificationPronunciationText,
@@ -56,57 +57,94 @@ const TERM_PRODUCER_FILES = Object.freeze([
   "features/matter/wiki/wiki-invariants.ts",
   "features/matter/wiki/wiki-model.ts",
   "features/matter/wiki/wiki-learning-policy.ts",
+  "features/matter/wiki/wiki-script.ts",
+  "features/matter/wiki/wiki-script-routing.ts",
   "features/matter/config/locales.ts",
   "features/matter/tree/unicode-text.ts",
 ]);
 const FITTING_PRODUCER_FILES = Object.freeze([
   "scripts/wiki/qualification/pronunciation-fitting-v1.ts",
   "features/matter/wiki/canonicalize-wiki-text.ts",
+  "features/matter/wiki/wiki-script-routing.ts",
   "features/matter/wiki/wiki-text-safety.ts",
   "features/matter/wiki/wiki-learning-policy.ts",
   "features/matter/wiki/wiki-model.ts",
 ]);
+// Term producers 1.1 classify a Latin word of a Chinese or Japanese turn in
+// the en-US ledger; corpus 2 binds the ledger locale into every action.
+// Producers 1.2 decide width by script: a full-width Latin spelling is never
+// collected, nor counted as an absence, in any locale; corpus 3 adds English
+// and German full-width turns. The classifier and what a stored vote means
+// are unchanged, so the families stay v1.
+const TERM_PRODUCER_VERSION = "1.2.0";
+const TERM_CORPUS_GENERATION = 3;
 
 type LocalProducer = Exclude<WikiQualifiableProducerId,
   "latin-internal-edit-v2" | "en-exact-homophone-v1">;
 
 const STATIC_PERFORMANCE: Readonly<Record<LocalProducer, WikiProducerPerformanceReceipt>> =
   Object.freeze({
-    "shape-specific-v1": performanceReceipt(14_332, 22),
-    "locale-segment-v1": performanceReceipt(4_596, 20),
-    "en-metaphone-v1": performanceReceipt(12_812, 113),
-    "zh-exact-homophone-v1": performanceReceipt(67_240, 902),
-    "zh-final-pair-v1": performanceReceipt(27_131, 203),
+    "shape-specific-v1": performanceReceipt(4_517, 10),
+    "locale-segment-v1": performanceReceipt(2_097, 7),
+    "en-metaphone-v1": performanceReceipt(1_911, 12),
+    "zh-exact-homophone-v1": performanceReceipt(3_543, 22),
+    "zh-final-pair-v1": performanceReceipt(3_254, 11),
   });
 
 const CASES: Readonly<Record<LocalProducer, readonly WikiProducerExpectedCase[]>> =
   Object.freeze({
+    // Term actions name the ledger locale. A Latin word of a Chinese or
+    // Japanese turn is an en-US term; corpus 1 could not tell the two apart.
     "shape-specific-v1": Object.freeze([
-      termCase("shape-positive", "positive", "en-US", "OpenAI", "term:OpenAI"),
-      termCase("shape-positive-de", "positive", "de-DE", "GitHub", "term:GitHub"),
-      termCase("shape-positive-zh-cn", "positive", "zh-CN", "OpenAI", "term:OpenAI"),
-      termCase("shape-positive-zh-tw", "positive", "zh-TW", "OpenAI", "term:OpenAI"),
-      termCase("shape-positive-ja", "positive", "ja-JP", "カタカナ", "term:カタカナ"),
+      termCase("shape-positive", "positive", "en-US", "OpenAI", "term:en-US:OpenAI"),
+      termCase("shape-positive-de", "positive", "de-DE", "GitHub", "term:de-DE:GitHub"),
+      termCase("shape-positive-zh-cn", "positive", "zh-CN", "OpenAI", "term:en-US:OpenAI"),
+      termCase("shape-positive-zh-tw", "positive", "zh-TW", "OpenAI", "term:en-US:OpenAI"),
+      termCase("shape-positive-ja", "positive", "ja-JP", "カタカナ", "term:ja-JP:カタカナ"),
+      termCase("shape-positive-routed-sentence", "positive", "zh-CN",
+        "我们用OpenAI的模型", "term:en-US:OpenAI"),
+      termCase("shape-positive-routed-ja", "positive", "ja-JP", "これはGitHubです",
+        "term:en-US:GitHub"),
       termCase("shape-title-case", "adversarial", "en-US", "Matter", null),
       termCase("shape-adversarial", "adversarial", "en-US", "ordinary", null),
+      termCase("shape-routed-title-case", "adversarial", "zh-CN", "Matter的", null),
+      termCase("shape-routed-full-width", "adversarial", "zh-CN", "ＯｐｅｎＡＩ的模型", null),
+      termCase("shape-full-width-code", "adversarial", "en-US", "｀OpenAI｀", null),
+      termCase("shape-full-width-code-de", "adversarial", "de-DE", "｀GitHub｀", null),
+      termCase("shape-full-width-en", "adversarial", "en-US", "ＯｐｅｎＡＩ", null),
+      termCase("shape-full-width-de", "adversarial", "de-DE", "ＫＦＣ", null),
       termCase("shape-ambiguity", "ambiguity", "en-US", "2026", null),
       termCase("shape-locale", "locale-isolation", "en-US", "カタカナ", null),
       termCase("shape-protected", "protected", "en-US", "OpenAI", null),
+      termCase("shape-routed-protected", "protected", "zh-CN", "我们用OpenAI的模型", null),
       termCase("shape-generated", "generated", "en-US", "OpenAI", null),
+      termCase("shape-routed-generated", "generated", "zh-CN", "我们用OpenAI的模型", null),
     ]),
     "locale-segment-v1": Object.freeze([
       termCase("segment-positive", "positive", "en-US", "morphogenesis",
-        "term:morphogenesis"),
+        "term:en-US:morphogenesis"),
       termCase("segment-positive-de", "positive", "de-DE", "Morphogenese",
-        "term:Morphogenese"),
-      termCase("segment-positive-zh-cn", "positive", "zh-CN", "青色", "term:青色"),
-      termCase("segment-positive-zh-tw", "positive", "zh-TW", "青色", "term:青色"),
-      termCase("segment-positive-ja", "positive", "ja-JP", "物語", "term:物語"),
+        "term:de-DE:Morphogenese"),
+      termCase("segment-positive-zh-cn", "positive", "zh-CN", "青色", "term:zh-CN:青色"),
+      termCase("segment-positive-zh-tw", "positive", "zh-TW", "青色", "term:zh-TW:青色"),
+      termCase("segment-positive-ja", "positive", "ja-JP", "物語", "term:ja-JP:物語"),
+      termCase("segment-positive-routed", "positive", "zh-CN", "morphogenesis的",
+        "term:en-US:morphogenesis"),
       termCase("segment-adversarial", "adversarial", "en-US", "the", null),
+      termCase("segment-routed-english-stop-word", "adversarial", "zh-CN", "with的", null),
+      termCase("segment-routed-full-width", "adversarial", "zh-CN", "ｍｏｒｐｈｏｇｅｎｅｓｉｓ的",
+        null),
+      termCase("segment-full-width-code", "adversarial", "en-US", "｀morphogenesis｀", null),
+      termCase("segment-full-width-path", "adversarial", "de-DE", "src／Morphogenese／a．ts",
+        null),
+      termCase("segment-full-width-en", "adversarial", "en-US", "ｍｏｒｐｈｏｇｅｎｅｓｉｓ", null),
+      termCase("segment-full-width-de", "adversarial", "de-DE", "Ｍｏｒｐｈｏｇｅｎｅｓｅ", null),
       termCase("segment-ambiguity", "ambiguity", "en-US", "2026", null),
       termCase("segment-locale", "locale-isolation", "en-US", "普通名词", null),
       termCase("segment-protected", "protected", "en-US", "morphogenesis", null),
+      termCase("segment-routed-protected", "protected", "zh-CN", "morphogenesis的", null),
       termCase("segment-generated", "generated", "en-US", "morphogenesis", null),
+      termCase("segment-routed-generated", "generated", "zh-CN", "morphogenesis的", null),
     ]),
     "en-metaphone-v1": Object.freeze([
       aliasCase("metaphone-positive-codex", "positive", "en-US", "Codecs", ["Codex"],
@@ -232,10 +270,15 @@ const CASES: Readonly<Record<LocalProducer, readonly WikiProducerExpectedCase[]>
 export async function runLocalLanguageQualifications(measureLivePerformance = false) {
   const latin = await runLatinInternalEditQualification(measureLivePerformance);
   const local: WikiProducerReleaseCandidate[] = [];
+  const votes: [WikiQualifiableProducerId, readonly WikiProducerCaseVotes[]][] = [
+    ["latin-internal-edit-v2", latin.votes],
+  ];
   // Performance receipts must be measured serially. Parallel qualification
   // would make producers compete for one CPU and turn the budget into noise.
   for (const producer of Object.keys(CASES) as LocalProducer[]) {
-    local.push(await buildCandidate(producer, measureLivePerformance));
+    const built = await buildCandidate(producer, measureLivePerformance);
+    local.push(built.candidate);
+    votes.push([producer, built.votes]);
   }
   const candidates: WikiProducerReleaseCandidate[] = [
     Object.freeze({
@@ -249,6 +292,11 @@ export async function runLocalLanguageQualifications(measureLivePerformance = fa
   return Object.freeze({
     candidates: Object.freeze(candidates),
     qualification,
+    /** Every sorted vote per case, so abstention never reads as two votes. */
+    votes: Object.freeze(Object.fromEntries(votes)) as Readonly<Record<
+      WikiQualifiableProducerId,
+      readonly WikiProducerCaseVotes[]
+    >>,
     performance: Object.freeze(Object.fromEntries([
       ["latin-internal-edit-v2", latin.receipt.performance],
       ...local.map((candidate) => {
@@ -262,7 +310,10 @@ export async function runLocalLanguageQualifications(measureLivePerformance = fa
 async function buildCandidate(
   producer: LocalProducer,
   measureLivePerformance: boolean,
-): Promise<WikiProducerReleaseCandidate> {
+): Promise<Readonly<{
+  candidate: WikiProducerReleaseCandidate;
+  votes: readonly WikiProducerCaseVotes[];
+}>> {
   const producerBytesPromise = producer === "shape-specific-v1" ||
       producer === "locale-segment-v1"
     ? readTermProducerQualificationBytes()
@@ -273,16 +324,17 @@ async function buildCandidate(
   const cases = CASES[producer];
   const corpusDigest = await digestWikiProducerCorpus(cases);
   if (corpusDigest === null) throw new Error(`The ${producer} corpus is invalid.`);
+  const termProducer = producer === "shape-specific-v1" || producer === "locale-segment-v1";
   const identity = Object.freeze({
     producerId: producer,
-    producerVersion: "1.0.0",
+    producerVersion: termProducer ? TERM_PRODUCER_VERSION : "1.0.0",
     producerDigest: await digestWikiProducerArtifact(producerBytes),
     resourceId: resourceId(producer),
     resourceVersion: resourceVersion(producer),
     resourceDigest: await digestWikiProducerArtifact(resourceBytes),
   });
   const corpus = Object.freeze({
-    corpusVersion: `${producer}-corpus/1`,
+    corpusVersion: `${producer}-corpus/${termProducer ? TERM_CORPUS_GENERATION : 1}`,
     corpusDigest,
   });
   const manifest: WikiProducerQualificationManifest = Object.freeze({
@@ -296,25 +348,29 @@ async function buildCandidate(
       ...PERFORMANCE_BUDGET,
     }),
   });
+  const votes = Object.freeze(cases.map((item) => runCase(producer, item)));
   const receipt: WikiProducerCorpusRun = Object.freeze({
     qualificationVersion: WIKI_PRODUCER_QUALIFICATION_VERSION,
     identity,
     corpus,
-    outputs: Object.freeze(cases.map((item) => Object.freeze({
+    outputs: Object.freeze(votes.map((item) => Object.freeze({
       caseId: item.caseId,
-      appliedActionId: runCase(producer, item),
+      appliedActionId: item.appliedActionId,
     }))),
     performance: measureLivePerformance
       ? await measurePerformance(producer)
       : STATIC_PERFORMANCE[producer],
   });
-  return Object.freeze({ manifest, receipt, artifacts });
+  return Object.freeze({
+    candidate: Object.freeze({ manifest, receipt, artifacts }),
+    votes,
+  });
 }
 
 function runCase(
   producer: LocalProducer,
   item: WikiProducerExpectedCase,
-): string | null {
+): WikiProducerCaseVotes {
   const text = item.input.environment === "protected-text"
     ? `\`${item.input.observedForm}\``
     : item.input.environment === "generated-output"
@@ -330,7 +386,9 @@ function runCase(
       text,
       ...(eligibleRanges === undefined ? {} : { eligibleRanges }),
     }, new Set<WikiTermEvidenceProducer>([producer]));
-    return events.length === 1 ? `term:${events[0].canonical}` : null;
+    // Every collected term is its own vote; terms never compete.
+    return recordWikiProducerVotes(item.caseId, events.map((event) =>
+      Object.freeze({ actionId: `term:${event.locale}:${event.canonical}` })));
   }
   const candidateLocale = item.category === "locale-isolation"
     ? producer === "en-metaphone-v1" ? "en-US" : "zh-CN"
@@ -346,9 +404,13 @@ function runCase(
     text,
     ...(eligibleRanges === undefined ? {} : { eligibleRanges }),
   }, pronunciationProducer);
-  return events.length === 1 && events[0].source === "machine-inference"
-    ? `alias:${events[0].canonical}`
-    : null;
+  return recordWikiProducerVotes(item.caseId, events.map((event) =>
+    event.source === "machine-inference"
+      ? Object.freeze({
+          actionId: `alias:${event.canonical}`,
+          competesFor: `${event.locale}:${event.form}`,
+        })
+      : Object.freeze({ actionId: `term:${event.locale}:${event.canonical}` })));
 }
 
 async function measurePerformance(

@@ -4,8 +4,18 @@ import type {
   TextSwapInteractionState,
 } from "../runtime/text-swap-interaction";
 import {
+  emptySettledStatus,
+  projectSettledStatus,
+  settledStatusDeadline,
+  syncSettledStatus,
+} from "./presence";
+import {
+  condensePointTalkDirection,
+  pointTalkCopy,
   pointTalkOutsidePointerDismisses,
+  pointTalkPhaseLabel,
   pointTalkRecoveryAction,
+  pointTalkStatusInput,
 } from "./PointTalkComposer";
 
 const BASIS = Object.freeze({
@@ -72,6 +82,14 @@ describe("Point Talk recovery", () => {
       insideVoiceTool: true,
       submitted: false,
     })).toBe(false);
+    // Ask Matter takes the slot itself; its press is not the person's close.
+    expect(pointTalkOutsidePointerDismisses({
+      insideBubble: false,
+      insideCanvasChrome: true,
+      insideSlotOwner: true,
+      insideVoiceTool: false,
+      submitted: false,
+    })).toBe(false);
   });
 
   it("keeps request retry and voice retry as distinct pointer actions", () => {
@@ -96,5 +114,60 @@ describe("Point Talk recovery", () => {
       failure("MICROPHONE_DENIED", { retryable: false }),
       true,
     )).toBeNull();
+  });
+
+  it("names each status phase without the transient partial it may paint", () => {
+    for (const locale of ["en-US", "zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      for (const phase of ["permission", "recording", "transcribing", "pending", "error"] as const) {
+        expect(pointTalkPhaseLabel(phase, locale).length).toBeGreaterThan(0);
+      }
+    }
+    expect(pointTalkPhaseLabel("recording", "en-US")).toBe("Listening…");
+    expect(pointTalkPhaseLabel("error", "zh-CN")).toBe("原文没有改变。");
+  });
+
+  it("stops claiming to listen the moment the person taps Stop", () => {
+    const scope = "0:thought_1:1";
+    const listening = syncSettledStatus(
+      emptySettledStatus(),
+      pointTalkStatusInput(scope, "recording"),
+      1_000,
+    );
+    expect(listening.shown).toBe("recording");
+    // Stop 3 s later: recording becomes transcribing, a settling system phase.
+    const stopped = syncSettledStatus(listening, pointTalkStatusInput(scope, "transcribing"), 4_000);
+    expect(projectSettledStatus(stopped, pointTalkStatusInput(scope, "transcribing"))).toBeNull();
+    expect(stopped.shown).toBeNull();
+    expect(settledStatusDeadline(stopped)).toBe(4_150);
+    // A submit shows at once; waiting for the microphone settles first.
+    expect(pointTalkStatusInput(scope, "pending")).toMatchObject({ urgent: true, lingers: true });
+    expect(pointTalkStatusInput(scope, "permission")).toMatchObject({ urgent: false, lingers: true });
+    expect(pointTalkStatusInput(scope, "error")).toMatchObject({ urgent: true, lingers: false });
+  });
+});
+
+describe("Point and Talk copy", () => {
+  it("speaks each locale's own status lines", () => {
+    const english = pointTalkCopy("en-US");
+    for (const locale of ["ja-JP", "de-DE"] as const) {
+      const copy = pointTalkCopy(locale);
+      expect(copy.listening).not.toBe(english.listening);
+      expect(copy.rewording).not.toBe(english.rewording);
+      expect(copy.originalKept).not.toBe(english.originalKept);
+    }
+    expect(pointTalkCopy("zh-TW").originalKept).toBe("原文沒有改變。");
+    expect(pointTalkCopy("zh-CN").originalKept).toBe("原文没有改变。");
+  });
+});
+
+describe("Point and Talk pending echo", () => {
+  it("repeats the submitted direction as one short line", () => {
+    expect(condensePointTalkDirection("  更凝练\n一些  ")).toBe("更凝练 一些");
+    expect(condensePointTalkDirection("   ")).toBeNull();
+    const echo = condensePointTalkDirection("请把这一段改得更加凝练一些并且保留原来的语气和节奏感");
+    expect(Array.from(echo ?? "")).toHaveLength(24);
+    expect(echo?.endsWith("…")).toBe(true);
+    // Elision never splits a surrogate pair.
+    expect(condensePointTalkDirection("😀".repeat(40))).toBe(`${"😀".repeat(23)}…`);
   });
 });

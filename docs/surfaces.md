@@ -8,24 +8,36 @@ is deliberately absent.
 
 | Surface | Status | Evidence |
 | --- | --- | --- |
-| ThoughtTree kernel and exact reversible history | implemented | focused atomicity, ownership, pointer undo, keyboard redo, and reload tests |
+| ThoughtTree kernel and exact reversible history | implemented; bounded to 1,000 steps and 32 MiB across Undo and Redo | focused atomicity, ownership, pointer undo, keyboard redo, bound, delivered-redo replay-oracle, and reload tests |
 | Full/focus/fold navigation | implemented | pure runtime tests and exact-lineage selectors |
 | Rooted fixture renderer | implemented | pointer receipt at laptop and narrow widths |
-| 2,000-node spatial renderer | measured | full canvas DOM and windowed file index; strict full-remount long-task gate remains open |
-| Voice admission | browser-native in the public preview; fixture is local-only | Web Speech partials stay transient; MediaRecorder/multipart is an explicit non-fixture fallback |
+| 2,000-node spatial renderer | measured | full canvas DOM and windowed file index; strict full-remount long-task gate remains open (issue #63) |
+| Voice admission | browser-native in the public preview; fixture is local-only | Web Speech partials stay transient; MediaRecorder/multipart is an explicit non-fixture fallback; words whose commit fails are held with Place and Discard, never dropped; the recording box holds, fades, or cuts by the presence rules, and while committing its withdraw action reads Discard |
+| Local Whisper final transcript | implemented for browsers without Web Speech | the public build records locally and runs one final transcript through a lazy on-device Whisper worker; audio never reaches `/api/transcribe`, which refuses fixture speech in browser mode |
 | Punctuation lasso + shared stretch degree | implemented | pure segment/geometry tests and laptop/narrow browser receipts |
 | Split-language projection | implemented | original text remains DOM owner; projection is aria-hidden/inert |
-| Material files + IndexedDB durability | implemented | deterministic snapshot codec, generation conflict, reload/copy e2e |
+| Material files + IndexedDB durability | implemented at database schema v6 | deterministic snapshot codec, per-step undo journal with constant-cost recovery, generation conflict, cross-tab `matter.document-generation.v1` refresh behind the material-idle gate, terminal superseded and cleared states with export-and-reload, at-risk-only `beforeunload`, confirmed replacement of refused material by import, reload/copy e2e, and `npm run proof:persistence` in real Chromium |
+| Durability line | implemented | one localized line with a static dot under the index identity while material is not safely kept, announced once from a live region outside the index; a matching dot on Archive and on the closed narrow-drawer toggle; its only action opens Archive |
 | Transcript repair after admission | ordered local rules plus one managed proposal implemented; browser model remains gated | baseline paints immediately; one opaque 12-second lease may commit a separately undoable correction after a 650 ms visibility floor and exact document/node/semantic checks |
 | Derived thought labels | implemented | deterministic derivation, adjudication, staleness and cancellation tests; ordered relay pool with corpus evaluation; durable per-node store and manual rename proven by reload e2e |
-| Lightweight Matter inquiry | local bounded record and independently gated live adapter implemented | paper-contained questions, per-tree local completed-record behind the existing surface, no record-management control, material mutation, or model-memory retrieval |
-| Fixture-gated transform turn | implemented | strict `/api/turn`, server-built plan, client revalidation, tree-engine commit, and exact undo/redo; live provider remains separately gated |
-| Passage-local Point-and-Talk | implemented; live provider separately gated | one whole-node `text-swap/2` address, bounded typed/Voice direction, server-built plan, tree-engine replacement, exact pointer Undo, and no chat surface |
-| Deployment health probe | implemented | `/matter/api/health` reports protocol, base path, app version, and per-surface gate status for voice, label, repair, inquiry, and transform |
+| Lightweight Matter inquiry | implemented; managed answer adapter independently gated | paper-contained questions whose turns scroll within one opening; Cancel replaces Ask while a question waits; a closed bubble carries only a question in flight or unseen; a refusal returns the question with one quiet localized status line; answers are announced politely; completed exchanges are written to a bounded per-tree local record (at most 20) that no surface renders yet; no record-management control, material mutation, or model-memory retrieval |
+| Elastic transform turn (`transform/2`) | implemented; public surface only a verified user Model API lease can supply; managed adapter off | strict `/api/turn`, server-built plan, client revalidation, tree-engine commit, and exact undo/redo; `Escape` after confirmation removes only the degree; an unchanged end is said once on the outcome line; a parked result waits under one line with Discard; the fixture proves this locally; Production reads `unavailable` until issue #104 closes |
+| Passage-local Point-and-Talk (`text-swap/2`) | implemented; separately gated public surface under the same user-lease rule; managed adapter off | the AI mark or fixed Voice on a selected passage opens one whole-node address, bounded typed/Voice direction, server-built plan, tree-engine replacement, exact pointer Undo, and no chat surface; the field holds and exits by the presence rules with dark-theme tokens; a submitted rewrite that goes stale, or fails after its field closed, is said once on the outcome line |
+| Outcome line | implemented | the lower-left guidance line carries one queued outcome per turn owner (expansion, rewrite, Wiki) in the person's language with one polite announcement, cleared by the next non-modifier action; held admission words take precedence |
+| Model API settings | implemented; Production reports `available: false` until issue #104 | one API address and key in settings; an explicit verified save seals a fixed 30-day HttpOnly lease through `provider-session/4`; the server owns a finite reviewed protocol set, model choice, and request shape; the key never reaches material, history, or browser-readable storage |
+| Local Wiki (`词典 WIKI`) | implemented at record V7 | origin-local lexical authority behind material ingress, opened from settings; add, rename, scope, remove, and export canonical words; four editable starters; automatic term collection plus one runtime-qualified internal-Latin-edit fitting producer learn only from successful human admission, including Latin words routed out of Chinese and Japanese speech; quarter-unit evidence, retention-only informed acceptance, and two-strike reversion; two default-on local permission actions; pronunciation producers stay offline; a row from a newer Matter reads as unavailable, never corrupt; nothing crosses a model, wire, archive, or history boundary; `npm run qualify:wiki` and Chromium Wiki specs |
+| Wiki disclosure and takeover | implemented; reject and replace from the word reserved | one heard-to-canonical settle at first perceivable arrival and a dotted mark while unsettled, drawn with Custom Highlights; a tap on the word, or **Review Wiki change** in a focused or selected passage's actions (at most three), opens Keep / heard form / Wiki… at the word; the passage carries a count-aware hidden description; the takeover is a paper-tier `Escape` layer; “Wiki could not save that.” and “Passage changed. Not restored.” use the outcome line; Wiki… opens settings on that one term |
+| Five interface locales | implemented | zh-CN, en-US, ja-JP, de-DE, and zh-TW for chrome, guidance, and settings copy with typed per-locale tables; the untouched built-in seed relocalizes, while human, voice, model, and imported material keep their exact text |
+| Deployment health probe | implemented | `/matter/api/health` (`/api/health` on the dedicated domain) reports protocol, base path, app version, and per-surface state for material, local persistence, voice, label, repair, inquiry, transform, Text Swap, and archive; `user-configurable` means a user lease may supply the surface, not that a provider answers |
 | Fixed workbench shell + leaf atmosphere | implemented | 304 px desktop field, inset rounded paper, supplied silent loop/still, and five-slot editing island |
 | Canvas-scoped corner utilities | implemented | 24 px desktop grid, existing lower-left guidance, static information, validated language/FX/appearance preferences, and desktop/mobile browser proof |
 | Transient working context | implemented | held branches stay legible while selection, lasso, and bounded inquiry omit them; disclosure remains independent |
 | Structural paper ruling + local node actions | implemented | FX-off-only one-layer ruling and one measured AI/working-context lens; no document coordinates or per-node control mount |
+| Touch canvas navigation | implemented; no physical iOS/iPadOS receipt yet | one finger keeps the selected tool; two to ten contacts pan and zoom the transient camera around their centroid, and the last remaining finger continues the pan; pure reducer tests and Chromium touch receipts |
+| Keyboard, IME, and Escape | implemented | Enter and `Escape` never act on an input-method keydown (`isComposing` or `keyCode` 229); one `Escape` closes at most one layer by tier: gesture, transient menus, panels, paper surfaces, then Lasso; disabled rail tools stay focusable with `aria-disabled` and a stated reason; hover affordances exist only under `(hover: hover)` |
+| Pen and palm | implemented; no physical-device receipt | one canvas gesture owner; a touch is rejected while a pen is in contact and for 400 ms after, a pen landing within 300 ms of one finger takes over, and pen hover is not activity |
+| Canvas zoom readout | implemented | while Move owns the canvas, the lower-left guidance line shows the camera ratio as a whole percentage, `60%`–`180%`; higher-priority guidance still wins |
+| Installable manifest | implemented; no service worker | `standalone` display with 192, 512, and maskable icons; an installed window is the same online surface, not an offline copy |
 
 ## Specified for `0.2`
 
@@ -34,7 +46,7 @@ is deliberately absent.
 | Single-root ThoughtTree and tree engine | implemented |
 | Human material admission without generative rewrite | implemented with browser-native public speech; fixture HTTP path remains local-only |
 | Punctuation segment addressing | implemented |
-| Root-to-focus lineage context | implemented locally and in the fixture-gated transform envelope |
+| Root-to-focus lineage context | implemented locally and in the `transform/2` envelope |
 | Derived rooted layout with transient focus and fold | implemented |
 | Markdown snapshot and local durability | implemented |
 | Explicit ZIP export/import; directory export | ZIP implemented; directory export specified |
@@ -95,7 +107,7 @@ Focus and fold remain navigation capabilities but have no first-release fixed-ra
 presenter. One frosted local action field prefers the passage's upper-left edge
 and exposes the Point-and-Talk AI mark plus the same `−` / `+` working-context
 transition as the material index for the precise hovered, keyboard-focused, or
-coarse-selected passage.
+selected passage.
 Its field and actions arrive in the same reveal. The disclosure control in the
 left material outline remains a separate file-tree affordance. The field is
 transient rendering state and never mounts one control set per node.
@@ -104,7 +116,8 @@ The paper corner system is presentation state only. About, pre-release pricing,
 privacy and terms are static information rather than a support agent. Ask Matter
 is the one secondary-input exception: it stays closed until requested, submits
 one bounded question with lassoed passages or the bounded virtual-tree context,
-keeps only a bounded local completed record, and cannot mutate material. Language changes canvas guidance and corner
+scrolls the turns of one opening, keeps only a bounded local completed record
+that nothing reads back yet, and cannot mutate material. Language changes canvas guidance and corner
 copy, leaf FX pauses and hides only decorative media, and appearance scopes theme
 tokens to the paper. Desktop controls follow a 24 px edge grid; below 768 px they
 collapse into one paper-contained menu with inert background, bounded focus and
@@ -121,19 +134,25 @@ the paper-only tool vocabulary.
 
 ## Gated in this migration
 
-Accounts, sync, collaboration, touch parity, cross-branch links, split/merge, a
-durable memory service, permanent assistant UI, and a public SDK.
+Accounts, sync, collaboration, cross-branch links, split/merge, a durable
+memory service, a reader for the Ask Matter record, permanent assistant UI, and
+a public SDK. Touch is not gated: canvas navigation, pen, and palm rules are
+implemented, and only physical iOS/iPadOS receipts are owed.
 
 The public interface is a root-seeded preview. Its browser-native voice path is
-enabled on `matter.ptoq.io` when the browser exposes Web Speech recognition; no
-fixture transcript is used there. The transform route exists but a live provider,
-account/sync, and the strict large-tree performance receipt remain gated. The
-fixture path proves the prompt, degree bound, plan, revalidation, and command
-translation without impersonating live generation. ZIP export/import is
-available; directory export remains absent.
+enabled on `matter.ptoq.io` when the browser exposes Web Speech recognition,
+with the local Whisper worker as the final-transcript fallback; no fixture
+transcript is used there. The transform and Text Swap routes are public
+surfaces that only a verified user Model API lease can supply, and in
+Production that lease path waits on issue #104. Matter's managed material
+adapters, account/sync, and the strict large-tree performance receipt remain
+gated. The fixture path proves the prompt, degree bound, plan, revalidation,
+and command translation without impersonating live generation. ZIP
+export/import is available; directory export remains absent.
 `/matter/api/health` is the machine-readable deployment probe; it must not be
 read as a product capability claim. The exact implementation sequence is
 [`../plans/active-tree-material.md`](../plans/active-tree-material.md).
-Its current phase is release convergence: make the existing admission, repair,
-label, transform-fixture, Undo/Redo, and reload paths truthful together. Its
-endpoint is the first publicly usable release, not a speculative platform roadmap.
+Its current phase is Phase 4, first-release integration: make the existing
+admission, repair, label, transform, Undo/Redo, and reload paths truthful
+together. Its endpoint is the first publicly usable release, not a speculative
+platform roadmap.

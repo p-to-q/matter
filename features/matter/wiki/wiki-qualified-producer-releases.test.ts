@@ -10,7 +10,10 @@ import {
   "../../../scripts/wiki/qualification/local-language-v1";
 import { readProducerBytes as readLatinInternalEditProducerBytes } from
   "../../../scripts/wiki/qualification/latin-internal-edit-v2";
-import { digestWikiProducerArtifact } from "./wiki-producer-qualification";
+import {
+  digestWikiProducerArtifact,
+  type WikiProducerQualificationManifest,
+} from "./wiki-producer-qualification";
 import {
   MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES,
 } from
@@ -69,6 +72,35 @@ describe("qualified Wiki producer releases", () => {
     ]);
     expect(result.qualification.qualifiedProducers)
       .toEqual(MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES);
+
+    // Abstention and two votes are recorded apart. Only an ambiguity case may
+    // carry votes that apply nothing, and only because they compete for one
+    // source; every other non-positive case casts no vote at all.
+    const categories = new Map<string, string>(result.candidates.flatMap((candidate) => {
+      const manifest = candidate.manifest as WikiProducerQualificationManifest;
+      return manifest.cases.map((item) =>
+        [`${manifest.identity.producerId} ${item.caseId}`, item.category] as const);
+    }));
+    const unapplied: string[] = [];
+    for (const [producerId, votes] of Object.entries(result.votes)) {
+      for (const vote of votes) {
+        const category = categories.get(`${producerId} ${vote.caseId}`);
+        if (category !== "positive" && category !== "ambiguity") {
+          expect(vote.voteActionIds, `${producerId} ${vote.caseId}`).toEqual([]);
+        }
+        if (vote.appliedActionId === null && vote.voteActionIds.length > 0) {
+          unapplied.push(`${producerId} ${vote.caseId} ${vote.voteActionIds.join(" | ")}`);
+        }
+      }
+    }
+    expect(unapplied.sort()).toEqual([
+      "latin-internal-edit-v2 ambiguity-routed-brand-collision " +
+        "relation:en-US:Morphogenosis>Morphogenasis | relation:en-US:Morphogenosis>Morphogenesis",
+      "latin-internal-edit-v2 ambiguity-routed-name-collision " +
+        "relation:en-US:Engelbirt>Engelbart | relation:en-US:Engelbirt>Engelbert",
+      "latin-internal-edit-v2 ambiguity-two-canonicals " +
+        "relation:en-US:Abczefgh>Abcxefgh | relation:en-US:Abczefgh>Abcyefgh",
+    ]);
   }, 120_000);
 
   it("binds the pinyin release to the executable dictionaries", async () => {
@@ -109,12 +141,15 @@ describe("qualified Wiki producer releases", () => {
       "wiki-invariants.ts",
       "wiki-model.ts",
       "wiki-learning-policy.ts",
+      "wiki-script.ts",
+      "wiki-script-routing.ts",
       "config/locales.ts",
       "tree/unicode-text.ts",
     ]) expect(termText).toContain(file);
     for (const file of [
       "pronunciation-fitting-v1.ts",
       "canonicalize-wiki-text.ts",
+      "wiki-script-routing.ts",
       "wiki-text-safety.ts",
       "wiki-learning-policy.ts",
       "wiki-model.ts",
@@ -125,6 +160,8 @@ describe("qualified Wiki producer releases", () => {
       "wiki-text-safety.ts",
       "wiki-learning-policy.ts",
       "wiki-model.ts",
+      "wiki-script.ts",
+      "wiki-script-routing.ts",
     ]) expect(latinText).toContain(file);
 
     const changed = fitting.slice();

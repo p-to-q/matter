@@ -1,0 +1,327 @@
+/* The index is a slip of paper on the desk, not a second canvas. It carries a
+   compact structural outline; spatial geometry stays on the canvas. */
+.material-files-toggle { position: fixed; z-index: 42; top: 21px; right: calc(100% - var(--sidebar-width) + 14px); left: auto; display: grid; width: 32px; height: 32px; padding: 0; place-items: center; border: 0; border-radius: 9px; background: transparent; color: var(--muted); cursor: pointer; touch-action: auto; transition: color 140ms ease, background 140ms ease; }
+.material-files-toggle svg { width: 15px; height: 15px; }
+
+@media (hover: hover) {
+  .material-files-toggle:hover { background: rgba(22,29,39,.05); color: var(--ink); }
+}
+.material-files-toggle[aria-expanded="true"] { color: var(--ink); }
+.material-files-toggle[data-persistence-error="true"] { background: rgba(173,74,54,.1); color: var(--active); }
+.material-files-toggle__dot { position: absolute; top: 5px; right: 5px; width: 4px; height: 4px; border-radius: 50%; background: currentColor; pointer-events: none; }
+.material-files-toggle[data-durability="notice"] .material-files-toggle__dot { background: var(--ink); }
+.material-files-toggle[aria-expanded="true"] .material-files-toggle__dot { display: none; }
+.material-files__clip { display: contents; }
+.material-files { --index-row: 40px; --index-ink: #161d27; --index-muted: rgba(22,29,39,.72); --index-faint: rgba(22,29,39,.66); --index-line: rgba(22,29,39,.09); position: fixed; z-index: 41; top: 62px; bottom: var(--shell-gutter); left: 10px; display: grid; width: calc(var(--sidebar-width) - 24px); grid-template-rows: auto auto minmax(0,1fr) auto auto; padding: 6px 4px 3px; border: 0; border-radius: 0; background: transparent; box-shadow: none; opacity: 0; overflow: hidden; pointer-events: none; touch-action: pan-y; transform: translateX(-9px); transition: opacity 150ms ease, transform 200ms cubic-bezier(.2,.8,.2,1); }
+.material-files[data-open="true"] { opacity: 1; pointer-events: auto; transform: translateX(0); }
+.material-files[data-mode="search"] { --index-row: 50px; }
+
+/* Context row — the thought the list is inside. It is the parent row itself,
+   which is why it selects on the canvas like any other row. */
+.material-files__context { display: flex; min-width: 0; flex-direction: column; align-items: stretch; padding-bottom: 7px; }
+.material-files__up { display: flex; min-width: 0; height: 24px; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--index-faint); cursor: pointer; text-align: left; transition: color 120ms ease, background 120ms ease, opacity 120ms ease; }
+.material-files__up svg { width: 11px; height: 11px; flex: 0 0 auto; }
+.material-files__up span { min-width: 0; overflow: hidden; font: 9px/1 var(--mono); letter-spacing: .02em; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+
+@media (hover: hover) {
+  .material-files__up:hover:not(:disabled) { background: rgba(22,29,39,.05); color: var(--index-ink); }
+}
+.material-files__up:disabled { cursor: default; opacity: .22; }
+.material-files__context-title { display: flex; min-width: 0; height: 34px; align-items: center; padding: 0 10px 0 20px; border: 0; border-radius: 8px; background: transparent; color: var(--index-ink); cursor: pointer; text-align: left; transition: background 120ms ease; }
+.material-files__context-title span { min-width: 0; overflow: hidden; font: 600 15px/1.25 var(--matter-face); letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+
+@media (hover: hover) {
+  .material-files__context-title:hover:not(:disabled) { background: rgba(22,29,39,.05); }
+}
+.material-files__context-title[data-active="true"] { background: transparent; color: var(--index-ink); }
+.material-files__context-title:disabled { cursor: default; color: var(--index-faint); }
+.material-files__context-title-input { box-sizing: border-box; width: 100%; height: 34px; padding: 0 10px 0 20px; border: 0; border-radius: 6px; outline: 1px solid rgba(22,29,39,.16); background: transparent; color: var(--index-ink); font: 600 15px/1.25 var(--matter-face); letter-spacing: 0; }
+
+/* Mode row — search, selection, archive. Chrome speaks mono; material does not. */
+.material-files__controls { display: grid; min-width: 0; height: 38px; grid-template-columns: minmax(0,1fr) max-content max-content; align-items: center; column-gap: 1px; margin: 0 3px 6px; padding-bottom: 4px; border-bottom: 1px solid var(--index-line); }
+.material-files__mode-action { display: flex; height: 32px; align-items: center; gap: 6px; padding: 0 8px; border: 0; border-radius: 8px; background: transparent; color: var(--index-muted); font: 10px/1 var(--mono); letter-spacing: .02em; cursor: pointer; transition: color 120ms ease, background 120ms ease; }
+.material-files__mode-action svg { width: 13px; height: 13px; }
+
+@media (hover: hover) {
+  .material-files__mode-action:hover:not(:disabled) { background: rgba(22,29,39,.05); color: var(--index-ink); }
+}
+.material-files__mode-action--search,
+.material-files__search,
+.material-files__section-label { grid-column: 1; }
+.material-files__mode-action--select { grid-column: 2; }
+.material-files__mode-action--archive,
+.material-files__mode-action--close { grid-column: 3; }
+.material-files__mode-action[aria-pressed="true"] { background: rgba(22,29,39,.07); color: var(--index-ink); }
+
+/* Archive carries the same static ink dot as the durability line it resolves. */
+.material-files__mode-action[data-attention]::after { width: 3px; height: 3px; flex: 0 0 auto; border-radius: 50%; background: currentColor; content: ""; }
+.material-files__mode-action[data-attention="risk"] { color: var(--active); }
+.material-files__mode-action:disabled { cursor: default; opacity: .42; }
+.material-files__section-label { min-width: 0; padding-left: 7px; color: var(--index-ink); font: 10px/1 var(--mono); letter-spacing: .025em; }
+:lang(zh) .material-files__mode-action,
+:lang(zh) .material-files__section-label,
+:lang(ja) .material-files__mode-action,
+:lang(ja) .material-files__section-label { font-size: 12px; }
+.material-files__search { display: flex; width: 100%; min-width: 0; height: 32px; align-items: center; gap: 7px; padding-left: 8px; color: var(--index-faint); box-shadow: none; animation: material-search-enter 150ms cubic-bezier(.2,.8,.2,1) both; transition: color 120ms ease; }
+.material-files__search svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.material-files__search input { width: 100%; min-width: 0; height: 100%; padding: 0; border: 0; outline: 0; background: transparent; color: var(--index-ink); font: 11px/1 var(--mono); }
+.material-files__search:has(input:focus-visible) { color: var(--index-ink); box-shadow: none; }
+.material-files__search input:focus-visible { outline: 0; }
+.material-files__search input::placeholder { color: var(--index-faint); letter-spacing: -.02em; }
+.material-files__search input::-webkit-search-cancel-button { display: none; }
+.material-files__search-close { display: grid; width: 32px; height: 32px; flex: 0 0 auto; padding: 0; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--index-muted); font: 15px/1 var(--mono); cursor: pointer; }
+
+@media (hover: hover) {
+  .material-files__search-close:hover { background: rgba(22,29,39,.05); color: var(--index-ink); }
+}
+.material-files[data-mode="search"] .material-files__search { gap: 5px; }
+
+/* Structural depth advances by one restrained step without imitating canvas geometry. */
+.material-files__body { min-height: 0; padding: 0 2px; overflow: auto; overscroll-behavior: contain; scrollbar-color: rgba(22,29,39,.14) transparent; scrollbar-width: thin; }
+.material-files__tree { --material-file-action-width: 24px; --material-file-context-width: 24px; --material-file-context-icon: 11px; --material-file-guide-width: 1px; --material-file-step: 14px; --material-file-max-indent: max(0px, calc(100% - var(--material-file-action-width) - var(--material-file-context-width) - 90px)); position: relative; margin: 0; padding: 0; list-style: none; }
+.material-file__spacer { display: block; min-height: 0; pointer-events: none; }
+.material-file { --material-file-step: 14px; position: relative; display: grid; min-width: 0; min-height: var(--index-row); grid-template-columns: var(--material-file-action-width) minmax(0,1fr) var(--material-file-context-width); align-items: center; padding-left: min(calc(var(--material-file-depth, 0) * var(--material-file-step)), var(--material-file-max-indent)); color: var(--index-muted); transition: color 120ms ease; }
+.material-file:focus-visible { border-radius: 7px; outline: 2px solid var(--index-ink); outline-offset: -2px; }
+
+@media (hover: hover) {
+  .material-file:hover { color: var(--index-ink); }
+}
+.material-file[data-active="true"] { color: var(--index-ink); }
+.material-file[data-lasso-selected="true"] .material-file__open { border-radius: 8px; background: rgba(22,29,39,.065); color: var(--index-ink); }
+.material-file[data-lasso-selected="true"] .material-file__title { font-weight: 600; }
+.material-file button { font: inherit; }
+.material-file__open { display: flex; min-width: 0; height: 100%; min-height: var(--index-row); flex-direction: column; align-items: flex-start; justify-content: center; gap: 3px; padding: 0 10px 0 0; border: 0; background: transparent; color: inherit; cursor: pointer; text-align: left; }
+
+/* Only browsing has a disclosure column; search and selection give the whole
+   row to the label. */
+.material-files:not([data-mode="browse"]) .material-file__open { grid-column: 1 / -1; padding-left: 10px; }
+.material-file__title { max-width: 100%; overflow: hidden; font: 400 13px/1.35 var(--matter-face); letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+.material-file[data-active="true"] .material-file__title { font-weight: 600; }
+.material-file__path { max-width: 100%; overflow: hidden; color: var(--index-faint); font: 10px/1.2 var(--mono); text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
+.material-file__structure-control,
+.material-file__context-space { position: relative; z-index: 1; display: grid; width: var(--material-file-action-width); height: var(--index-row); place-items: center; padding: 0; border: 0; background: transparent; color: inherit; }
+.material-file__terminal-marker { pointer-events: none; }
+.material-file__terminal-marker::before { width: 2.5px; height: 2.5px; border-radius: 50%; background: currentColor; content: ""; opacity: .48; }
+.material-file__structure-control { cursor: pointer; opacity: .46; transition: opacity 120ms ease, color 120ms ease; }
+.material-file__structure-control:disabled { cursor: default; opacity: 0; }
+
+@media (hover: hover) {
+  .material-file:hover .material-file__structure-control:not(:disabled) { opacity: 1; }
+}
+.material-file[data-expanded="true"] .material-file__structure-control,
+.material-file__structure-control:focus-visible { opacity: 1; }
+.material-file__structure-glyph { position: relative; display: block; width: var(--material-file-context-icon); height: var(--material-file-context-icon); pointer-events: none; }
+.material-file__structure-glyph svg { position: absolute; inset: 0; width: var(--material-file-context-icon); height: var(--material-file-context-icon); transform-origin: center; }
+.material-file__restore-plus { opacity: 0; transform: rotate(-24deg) scale(.86); transition: opacity 70ms linear, transform 130ms cubic-bezier(.2,.8,.2,1); }
+.material-file__disclosure-chevron { opacity: 0; transform: rotate(72deg) scale(.86); transition: opacity 80ms 20ms linear, transform 140ms 10ms cubic-bezier(.2,.8,.2,1); }
+.material-file__structure-control[data-structure-action="restore"] .material-file__restore-plus { opacity: 1; transform: rotate(0deg) scale(1); transition-delay: 20ms, 10ms; }
+.material-file__structure-control[data-structure-action="collapsed"] .material-file__disclosure-chevron { opacity: 1; transform: rotate(0deg) scale(1); }
+.material-file__structure-control[data-structure-action="expanded"] .material-file__disclosure-chevron { opacity: 1; transform: rotate(90deg) scale(1); }
+.material-file__context-control { position: relative; z-index: 2; display: grid; width: var(--material-file-context-width); height: var(--index-row); place-items: center; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; transition: opacity 100ms ease, color 120ms ease; }
+.material-file__context-control svg { width: var(--material-file-context-icon); height: var(--material-file-context-icon); }
+.material-file__context-control--set-aside { grid-column: 3; opacity: 0; pointer-events: none; }
+.material-file__context-control--set-aside svg { transform: rotate(-15deg) scale(.86); transition: transform 140ms cubic-bezier(.2,.8,.2,1); }
+
+@media (hover: hover) {
+  .material-file:hover .material-file__context-control--set-aside { opacity: .68; pointer-events: auto; }
+}
+.material-file__context-control--set-aside:focus-visible { opacity: .68; pointer-events: auto; }
+
+@media (hover: hover) {
+  .material-file:hover .material-file__context-control--set-aside svg { transform: rotate(0deg) scale(1); }
+}
+.material-file__context-control--set-aside:focus-visible svg { transform: rotate(0deg) scale(1); }
+.material-file__context-control--set-aside:focus-visible { opacity: 1; }
+.material-file__context-control--restore { width: var(--material-file-action-width); color: var(--index-muted); opacity: .86; }
+.material-file__context-control:disabled { cursor: default; opacity: .22; }
+.material-file[data-context-excluded="true"] { color: color-mix(in srgb, var(--index-ink) 66%, transparent); }
+.material-file[data-context-excluded="true"] .material-file__title { color: currentcolor; }
+
+/* Sibling segments join controls; a final branch tail closes only its own
+   visible scope and never reaches a descendant control or title. */
+.material-files__tree-guides { position: absolute; z-index: 0; inset: 0; pointer-events: none; }
+.material-files__tree-guide { position: absolute; top: var(--material-file-guide-top); left: calc(min(calc(var(--material-file-guide-child-depth) * var(--material-file-step)), var(--material-file-max-indent)) + (var(--material-file-action-width) / 2)); width: var(--material-file-guide-width); height: var(--material-file-guide-height); background: rgba(22,29,39,.18); transform: translateX(-50%); transition: background 120ms ease; }
+.material-files__tree-guide[data-guide-kind="branch-tail"][data-guide-tail-end="true"] { --material-file-tail-run: max(0px, min(14px, calc(min(calc(var(--material-file-guide-target-depth) * var(--material-file-step)), var(--material-file-max-indent)) - min(calc(var(--material-file-guide-child-depth) * var(--material-file-step)), var(--material-file-max-indent)) - var(--material-file-guide-target-clearance)))); width: var(--material-file-tail-run); box-sizing: border-box; border-bottom: var(--material-file-guide-width) solid rgba(22,29,39,.18); border-left: var(--material-file-guide-width) solid rgba(22,29,39,.18); border-bottom-left-radius: 2px; background: transparent; transform: translateX(-.5px); transition: border-color 120ms ease; }
+
+@media (hover: hover) {
+  .material-files:hover .material-files__tree-guide { background: rgba(22,29,39,.24); }
+}
+
+@media (hover: hover) {
+  .material-files:hover .material-files__tree-guide[data-guide-kind="branch-tail"][data-guide-tail-end="true"] { border-color: rgba(22,29,39,.24); background: transparent; }
+}
+.material-file__open { position: relative; z-index: 1; }
+
+@media (hover: none) {
+  .material-file[data-active="true"] .material-file__context-control--set-aside { opacity: .68; pointer-events: auto; }
+  .material-file[data-active="true"] .material-file__context-control--set-aside svg { transform: rotate(0deg) scale(1); }
+}
+
+/* A branch title identifies a group, while its children retain their own
+   horizontal structural step. Weight may clarify role; it never replaces depth. */
+.material-file[data-has-children="true"]:not([data-context-excluded="true"]) .material-file__title { color: var(--index-ink); }
+.material-file__check { position: relative; display: grid; min-width: 0; height: var(--index-row); grid-template-columns: var(--material-file-action-width) minmax(0,1fr); align-items: center; padding: 0 9px 0 0; grid-column: 1 / -1; cursor: pointer; }
+.material-file__check input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.material-file__check-mark { box-sizing: border-box; display: grid; width: 11px; height: 11px; justify-self: center; place-items: center; border: 1px solid rgba(22,29,39,.5); border-radius: 2px; background: transparent; transition: border-color 120ms ease; }
+.material-file__check input:checked + .material-file__check-mark { border-color: var(--active); background: transparent; }
+.material-file__check input:checked + .material-file__check-mark::after { width: 5px; height: 2.5px; border-bottom: 1px solid var(--active); border-left: 1px solid var(--active); content: ""; transform: translateY(-.5px) rotate(-45deg); }
+.material-file__check input:focus-visible + .material-file__check-mark { outline: 2px solid var(--ink); outline-offset: 3px; }
+.material-file__rename { width: calc(100% - 12px); min-width: 0; height: calc(var(--index-row) - 10px); margin: 0 2px 0 0; grid-column: 2; padding: 0 5px; border: 1px solid var(--active); border-radius: 5px; background: rgba(255,255,255,.62); color: var(--index-ink); font: 400 12px/1.35 var(--matter-face); unicode-bidi: plaintext; }
+.material-file__rename:focus-visible { outline: 1px solid var(--ink); outline-offset: 1px; }
+.material-files__empty { margin: 16px 8px; color: var(--index-faint); font: 10px/1.7 var(--mono); }
+
+/* Archive is a document boundary, so it replaces the list rather than floating. */
+.material-files__archive { min-height: 0; padding: 8px 8px 6px; color: var(--index-muted); font: 10px/1.6 var(--mono); }
+.material-files__archive-note { max-width: 188px; margin: 0 0 14px; }
+.material-files__archive-actions { display: grid; gap: 5px; }
+.material-files__archive-actions button,
+.material-files__archive-confirm button { min-height: 34px; padding: 0 10px; border: 1px solid rgba(22,29,39,.1); border-radius: 8px; background: rgba(255,255,255,.34); color: var(--index-ink); font: 9px/1 var(--mono); text-align: left; cursor: pointer; transition: background 120ms ease, border-color 120ms ease; }
+
+@media (hover: hover) {
+  .material-files__archive-actions button:hover:not(:disabled),
+  .material-files__archive-confirm button:hover:not(:disabled) { border-color: rgba(22,29,39,.22); background: rgba(255,255,255,.62); }
+}
+.material-files__archive-actions button:disabled,
+.material-files__archive-confirm button:disabled { cursor: default; opacity: .45; }
+.material-files__archive-retry { width: 100%; min-height: 34px; margin-top: 7px; border: 1px solid var(--index-line); border-radius: 8px; background: transparent; color: var(--active); font: 9px/1 var(--mono); cursor: pointer; }
+
+@media (hover: hover) {
+  .material-files__archive-retry:hover:not(:disabled) { border-color: currentcolor; background: rgba(22,29,39,.04); }
+}
+.material-files__archive-retry:focus-visible { border-color: currentcolor; background: rgba(22,29,39,.04); }
+.material-files__archive-retry:disabled { cursor: default; opacity: .45; }
+.material-files__archive-status,
+.material-files__archive-error { margin: 12px 0 0; font-size: 9px; line-height: 1.5; }
+.material-files__archive-error { color: var(--active); }
+.material-files__archive-status:empty,
+.material-files__archive-error:empty { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); }
+.material-files__archive-confirm { margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--index-line); }
+.material-files__archive-confirm p { margin: 0 0 9px; color: var(--index-ink); line-height: 1.55; }
+.material-files__archive-confirm > div { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.material-files__archive-confirm button:last-child { border-color: var(--index-ink); background: var(--index-ink); color: var(--paper-solid); text-align: center; }
+.material-files__archive-confirm button:first-child { text-align: center; }
+
+/* Copy bar, only while selecting. */
+.material-files__footer { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 3px 0; padding-top: 6px; border-top: 1px solid var(--index-line); color: var(--index-faint); animation: material-selection-enter 120ms ease both; }
+.material-files__copy-status { overflow: hidden; padding-left: 7px; font: 9px/1 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.material-files__copy { display: flex; height: 30px; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 8px; background: rgba(22,29,39,.07); color: var(--index-ink); font: 9px/1 var(--mono); cursor: pointer; transition: background 120ms ease; }
+.material-files__copy svg { width: 13px; height: 13px; }
+
+@media (hover: hover) {
+  .material-files__copy:hover:not(:disabled) { background: rgba(22,29,39,.12); }
+}
+.material-files__copy:disabled { cursor: default; opacity: .34; }
+
+/* The index ends with a local identity, not an account or status surface. */
+.material-files__identity { padding: 22px 3px 2px; }
+.material-files__profile { display: grid; width: 100%; min-height: 60px; grid-template-columns: 32px minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 12px 6px 12px 4px; border-top: 1px solid var(--index-line); color: inherit; }
+.material-files__profile-copy { display: grid; min-width: 0; gap: 5px; }
+.material-files__profile-name { overflow: hidden; color: var(--index-ink); font: 600 13px/1.15 var(--matter-face); letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; }
+.material-files__profile-meta { display: flex; min-width: 0; align-items: center; gap: 6px; overflow: hidden; color: var(--index-faint); font: 9px/1 var(--mono); letter-spacing: .05em; white-space: nowrap; }
+.material-files__profile-action { display: grid; width: 36px; height: 36px; padding: 0; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--active); cursor: pointer; transition: color 130ms ease, background 130ms ease; }
+.material-files__profile-action svg { width: 14px; height: 14px; }
+
+@media (hover: hover) {
+  .material-files__profile-action:hover { background: rgba(22,29,39,.07); color: var(--index-ink); }
+}
+.material-files__profile-action:focus-visible { background: rgba(22,29,39,.07); color: var(--index-ink); }
+.material-files__profile[data-state="error"] .material-files__profile-meta,
+.material-files__profile[data-state="error"] .material-files__profile-action { color: var(--active); }
+.material-files__status-dot { width: 3px; height: 3px; flex: 0 0 auto; border-radius: 50%; background: currentColor; }
+
+/* The durability line stays text: tapping it only opens Archive. */
+.material-files__durability { display: inline-flex; min-width: 0; align-items: center; gap: 6px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-align: left; cursor: pointer; }
+.material-files__durability > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+
+@media (hover: hover) {
+  .material-files__durability:hover:not(:disabled) > span:first-child { text-decoration: underline; text-underline-offset: 2px; }
+}
+.material-files__durability:focus-visible > span:first-child { text-decoration: underline; text-underline-offset: 2px; }
+.material-files__durability:disabled { cursor: default; }
+.material-files__profile-meta[data-tone="notice"] { color: var(--index-muted); }
+.material-files__status-dot[data-saving="true"] { animation: material-saving-pulse 1.2s ease-in-out infinite; }
+@keyframes material-search-enter {
+  from { opacity: 0; transform: translateX(-5px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes material-selection-enter {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes material-saving-pulse {
+  0%, 100% { opacity: .35; }
+  50% { opacity: .8; }
+}
+
+@media (max-width: 959px) {
+  .material-files-toggle[aria-expanded="true"] { background: var(--ink); color: var(--paper); }
+  .material-files__clip { position: fixed; z-index: 41; top: var(--narrow-paper-top); right: var(--narrow-paper-inset); bottom: var(--narrow-paper-inset); left: var(--narrow-paper-inset); display: block; overflow: clip; border-radius: var(--narrow-paper-radius); pointer-events: none; }
+  .material-files { --index-row: 48px; position: absolute; z-index: auto; top: 0; right: auto; bottom: 0; left: 0; width: var(--narrow-index-width); padding: 8px 10px 6px 8px; border: 0; border-radius: 0; background: rgba(245,245,242,.98); box-shadow: 18px 0 40px rgba(22,29,39,.09); transform: translateX(-100%); transform-origin: left center; }
+  .material-files[data-open="true"] { transform: translateX(0); }
+  .material-files[data-mode="search"] { --index-row: 60px; }
+  .material-files__context { padding-bottom: 4px; }
+  .material-files__search-close { width: 48px; height: 48px; }
+  .material-files__tree { --material-file-action-width: 48px; --material-file-context-width: 48px; }
+  .material-file__structure-control,
+  .material-file__context-control,
+  .material-file__context-space { height: 48px; }
+  .material-file { grid-template-columns: var(--material-file-action-width) minmax(0,1fr) var(--material-file-context-width); }
+  .material-files__context-title { min-height: 48px; padding-left: 28px; }
+  .material-files__controls { height: 56px; padding-bottom: 6px; }
+  .material-files__mode-action { min-width: 48px; min-height: 48px; }
+  .material-files__search { height: 48px; }
+  .material-files__copy { min-width: 48px; height: 48px; }
+  .material-files__profile-action { width: 48px; height: 48px; }
+  .material-files__archive-actions button,
+  .material-files__archive-confirm button { min-height: 48px; }
+}
+
+@media (min-width: 768px) and (max-width: 959px) {
+  .material-files-toggle { top: 14px; right: 16px; left: auto; width: 40px; height: 40px; border-radius: 10px; }
+  .material-files-toggle svg { width: var(--corner-instrument-glyph); height: var(--corner-instrument-glyph); }
+  .material-files__profile { min-height: 70px; margin-top: 20px; padding-top: 12px; }
+}
+
+@media (max-width: 767px) {
+  /* Compact disclosure is a paper cut entering from the left, not a floating
+     drawer card. The shared clip already owns the outer paper corners; the
+     narrowest seam additionally gives up its residual depth shadow. */
+  .material-files { box-shadow: none; }
+  /* With the gear absent, the two mobile roles share a stronger 20px
+     mark inside the same 48px target; the 768px handoff returns to quiet gear. */
+  .material-files-toggle { top: 9px; right: 9px; left: auto; width: var(--compact-corner-target); height: var(--compact-corner-target); border-radius: 12px; }
+  .material-files-toggle svg { width: var(--mobile-corner-glyph); height: var(--mobile-corner-glyph); }
+  .material-files__identity { padding-top: 20px; }
+  .material-files__profile { min-height: 68px; }
+}
+
+@media (pointer: coarse) {
+  .material-files__context-title { min-height: 48px; }
+  .material-files__controls { min-height: 56px; }
+  .material-files__mode-action,
+  .material-files__search-close,
+  .material-files__copy { min-width: 48px; min-height: 48px; }
+  .material-files__search { min-height: 48px; }
+  .material-files__archive-actions button,
+  .material-files__archive-confirm button,
+  .material-files__archive-retry { min-height: 48px; }
+  .material-files__tree { --material-file-action-width: 48px; --material-file-context-width: 48px; }
+  .material-file__structure-control,
+  .material-file__context-space,
+  .material-file__context-control { min-width: 48px; min-height: 48px; }
+  .material-file { min-height: 48px; }
+  .material-file__open,
+  .material-file__check { min-height: 48px; }
+}
+
+@media (forced-colors: active) {
+  .material-files__search:has(input:focus-visible) { outline: 2px solid Highlight; outline-offset: 2px; box-shadow: none; }
+  .material-files__tree-guide { background: CanvasText; }
+  @media (hover: hover) {
+    .material-files:hover .material-files__tree-guide[data-guide-kind="branch-tail"][data-guide-tail-end="true"] { border-color: CanvasText; background: transparent; }
+  }
+  .material-files__tree-guide[data-guide-kind="branch-tail"][data-guide-tail-end="true"] { border-color: CanvasText; background: transparent; }
+  .material-file__check-mark { border-color: ButtonText; }
+  .material-file__check input:checked + .material-file__check-mark,
+  .material-file__check input:checked + .material-file__check-mark::after { border-color: Highlight; }
+}

@@ -112,10 +112,14 @@ and fan-in are concentration signals only; none is a refactoring requirement.
 
 ## Architecture fitness
 
-These are the rules a change is held to, and `npm run check:architecture` now
-holds the four of them that are syntactic: layers point inward, the protocol
-stays neutral, only server code reaches a provider, and the runtime import graph
-has no cycle. It runs inside `npm test`, so CI enforces it. The exceptions that used
+These are the rules a change is held to, and `npm run check:architecture`
+holds the eight of them that are syntactic: layers point inward; the protocol
+stays neutral; only server code reaches a provider; `studio/` is never a
+product dependency; server, protocol, and API route code never reach local
+Wiki; the store never reaches concrete Wiki, only the neutral lexical port;
+archive, snapshot, and history modules never reach Wiki, so a writer of
+persisted material cannot name a Wiki type; and the runtime import graph has no
+cycle. It runs inside `npm test`, so CI enforces it. The exceptions that used
 to live here — an import cycle between the two voice transports, browser code
 reaching into `server/*-contract`, and a fixture on a production path — were
 cleared before the check landed, because a check that fails on the day it

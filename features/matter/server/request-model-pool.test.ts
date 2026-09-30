@@ -446,6 +446,7 @@ const USER_INQUIRY: MatterScenario<string, string> = Object.freeze({
   adjudicate: (answer) => typeof answer === "string" && answer.length > 0
     ? Object.freeze({ ok: true as const, value: answer })
     : Object.freeze({ ok: false as const, reason: "empty" }),
+  rejectionCodes: ["empty"],
 });
 
 const SHORT_USER_INQUIRY: MatterScenario<string, string> = Object.freeze({

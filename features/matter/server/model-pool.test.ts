@@ -427,6 +427,7 @@ describe("pool adapter", () => {
       adjudicate: (answer) => answer === "good"
         ? { ok: true, value: answer }
         : { ok: false, reason: "invalid" },
+      rejectionCodes: ["invalid"],
     });
     const observations: ScenarioPerformanceObservation[] = [];
     await expect(runScenario(scenario, null, adapter, new ScenarioGovernor(), {
@@ -459,6 +460,7 @@ describe("pool adapter", () => {
       compile: () => "label",
       budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
       adjudicate: () => ({ ok: false as const, reason: "invalid" }),
+      rejectionCodes: ["invalid"],
     });
     await expect(runScenario(scenario, null, adapter, new ScenarioGovernor()))
       .resolves.toEqual({ ok: false, fallback: "MODEL_REJECTED" });
@@ -480,6 +482,7 @@ describe("pool adapter", () => {
       compile: () => "answer",
       budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
       adjudicate: () => ({ ok: false as const, reason: "invalid" }),
+      rejectionCodes: ["invalid"],
     });
     const governor = new ScenarioGovernor();
     await expect(runScenario(scenario, null, adapter, governor))
@@ -513,6 +516,7 @@ describe("pool adapter", () => {
       adjudicate: (answer) => answer === "good"
         ? { ok: true as const, value: answer }
         : { ok: false as const, reason: "invalid" },
+      rejectionCodes: ["invalid"],
     });
 
     await expect(runScenario(scenario, null, adapter, new ScenarioGovernor()))
@@ -545,6 +549,7 @@ describe("pool adapter", () => {
       adjudicate: (answer) => answer === "good"
         ? { ok: true as const, value: answer }
         : { ok: false as const, reason: "invalid" },
+      rejectionCodes: ["invalid"],
     });
     const observations: ScenarioPerformanceObservation[] = [];
     await expect(runScenario(scenario, null, adapter, new ScenarioGovernor(), {
@@ -585,6 +590,7 @@ describe("pool adapter", () => {
         adjudicate: (answer) => answer === "good"
           ? { ok: true as const, value: answer }
           : { ok: false as const, reason: "invalid" },
+        rejectionCodes: ["invalid"],
       });
       const observations: ScenarioPerformanceObservation[] = [];
       const outcome = runScenario(scenario, null, adapter, new ScenarioGovernor(), {
@@ -619,6 +625,7 @@ describe("pool adapter", () => {
       compile: () => "answer",
       budget: () => ({ deadlineMs: 3_000, maxOutputTokens: 16 }),
       adjudicate: () => { throw new Error("policy defect"); },
+      rejectionCodes: [],
     });
     const observations: ScenarioPerformanceObservation[] = [];
     await expect(runScenario(scenario, null, adapter, new ScenarioGovernor(), {
@@ -652,6 +659,37 @@ describe("pool adapter", () => {
       "selected", "managed",
       "managed",
       "selected", "managed",
+    ]);
+  });
+
+  it("places a cooling request credential behind healthy managed candidates, ahead of cooling ones", async () => {
+    const tried: string[] = [];
+    const limits = { ...DEFAULT_POOL_LIMITS, failuresBeforeCooldown: 1 };
+    let steadyAnswers = 1;
+    const adapter = createPoolAdapter([
+      candidate("managed", "managed"),
+      { ...candidate("selected", "user"), credentialScopeId: "user-cooling" },
+      candidate("steady", "steady"),
+    ], limits, Date.now, async (_url, init) => {
+      const model = (JSON.parse(String(init?.body)) as { model: string }).model;
+      tried.push(model);
+      if (model === "steady" && steadyAnswers > 0) {
+        steadyAnswers -= 1;
+        return chatResponse("steady");
+      }
+      return chatResponse("", 503);
+    });
+
+    // All healthy: the person's provider leads. Its failure and the first
+    // managed failure cool both; the steady candidate answers.
+    await expect(adapter(adapterInput(), new AbortController().signal))
+      .resolves.toEqual({ text: "steady" });
+    // Next action: the healthy managed candidate first, then the cooling user
+    // scope ahead of the cooling managed one. Cooling orders, never removes.
+    await expect(adapter(adapterInput(), new AbortController().signal)).rejects.toThrow();
+    expect(tried).toEqual([
+      "selected", "managed", "steady",
+      "steady", "selected", "managed",
     ]);
   });
 
@@ -1385,6 +1423,7 @@ describe("pool adapter", () => {
       adjudicate: (answer) => typeof answer === "string"
         ? { ok: true, value: answer }
         : { ok: false, reason: "empty" },
+      rejectionCodes: ["empty"],
     });
     const outcome = await runScenario(scenario, null, adapter, new ScenarioGovernor(), {
       observePerformance: (observation) => observations.push(observation),

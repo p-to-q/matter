@@ -114,9 +114,13 @@ describe("subscribePageExit", () => {
     expect(exit).not.toHaveBeenCalled();
     pageWindow.dispatchEvent(new Event("pagehide"));
     expect(exit).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenLastCalledWith({ persisted: false });
+    // A back-forward-cache hide says so, so a submitted owner can keep its work.
+    pageWindow.dispatchEvent(Object.assign(new Event("pagehide"), { persisted: true }));
+    expect(exit).toHaveBeenLastCalledWith({ persisted: true });
 
     unsubscribe();
     pageWindow.dispatchEvent(new Event("pagehide"));
-    expect(exit).toHaveBeenCalledTimes(1);
+    expect(exit).toHaveBeenCalledTimes(2);
   });
 });

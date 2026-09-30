@@ -28,7 +28,8 @@ pointer starts at empty root / node / segment
 ```
 
 Raw audio is never written to storage or logs. Failure preserves the admission
-anchor and exposes a pointer retry. An admission transcript is not rendered as
+anchor and exposes a pointer retry that re-anchors the same parent to the
+current revision. An admission transcript is not rendered as
 a message: it becomes human material. When an existing passage is selected,
 Point-and-Talk instead leases the same bounded microphone capability from the
 fixed Voice rail for one transient transform direction attached to that exact
@@ -52,7 +53,13 @@ that worker handshake beside microphone permission and recording; no worker,
 Whisper runtime, model, audio decoding, or transcription is requested during
 page hydration. The handshake remains bounded to fifteen seconds, and the
 actual transcription call owns the same lazy factory if speculative warming did
-not finish or failed. Browser-native recognition also has a bounded start
+not finish or failed. That bound rejects only the speculative warm-up: an idle
+lease that never became ready is released, but a lease already carrying a
+submitted recording is left to that request's own deadline, so a slow network
+cannot turn a finished utterance into a timeout. Such a lease is marked
+overdue; if its request then ends by timeout or cancellation before the lease
+ever became ready, the lease is retired, so the next recording starts a fresh
+worker instead of queueing behind the same stall. Browser-native recognition also has a bounded start
 watchdog, so a browser that neither starts nor errors returns a recoverable
 failure instead of leaving the first turn indefinitely in "waiting for
 microphone".
@@ -69,24 +76,45 @@ The admission voice control has a target only in the full material view. A truly
 empty tree initializes its root. In the document-root runtime, speaking with no
 visible passage selected appends first-level material beneath the invisible
 structural root. A selected passage routes fixed Voice to Point and Talk instead
-of this admission lifecycle. Admission activation freezes the exact parent,
-tree id, and revision. Transcription never chooses a newer target or relocates its result.
+of this admission lifecycle. Admission activation freezes the exact parent and
+tree id; the revision it saw is a receipt, not a cancellation token.
+Transcription never chooses a newer target or relocates its result.
 A successful admission keeps the current selection, so recording does not
 select the material it creates.
 
-Commit revalidates that frozen handle. A different tree or revision, leaving
-the full view, losing the parent, or selecting another non-empty target makes
-the result stale. Clearing the selection or changing only fold state does not
-retarget or invalidate it. Working-context exclusion clears an affected
-selection before admission can start, so held-aside material never becomes a
-voice parent through this path.
+Commit revalidates that frozen parent. Another document cancels the attempt.
+An unrelated edit does not: the result commits under the same parent, and a
+retry re-anchors that parent to the current revision. Clearing the selection
+or changing only fold state does not retarget or invalidate it.
+Working-context exclusion clears an affected selection before admission can
+start, so held-aside material never becomes a voice parent through this path.
+
+Undo and Delete stay live after Stop, so the parent can vanish while its words
+are still being transcribed or waiting for a delivery window. The rendering
+edge reports that as a missing target; it never cancels on the person's
+behalf. Words already submitted then become a `STALE_TARGET` error that holds
+them — bounded to one node's text, transient, and never persisted, logged, or
+placed in history — with a short preview and exactly two actions: place them
+at the current admission target, named by the same rule a new admission uses
+(root, top level, or below the selected material), or discard them. Every other
+commit failure, a store rejection or a local fault, holds its words the same
+way under its own message. Placement is a new attempt that commits through the
+same revalidation, so a target lost again, or a second rejection, holds the
+words again. Retry never replaces held words. Before Stop, a lost parent ends
+capture with a visible stale-target error instead of a silent return to idle.
 
 The framework-free controller owns these serializable phases:
 
 ```text
 idle → requesting → recording → stopping → transcribing → committing
                                                     ↘ recoverable error
+                                     (a stale target may hold its words → place)
 ```
+
+Each return to idle is settled as `committed`, `withdrawn` (the person's
+Cancel, Dismiss, or Discard), or `released` (modal chrome, a hidden page,
+device revocation, or a document switch). Presentation and focus restoration
+read that settlement; nothing else interprets it.
 
 Browser resources live behind `VoicePort`, keyed by interaction id and attempt.
 They never enter the store, tree, history, or a retry cache. Cancel invalidates
@@ -100,13 +128,79 @@ stream; `timeslice` is never a duration clock.
 
 React does not interpret these effects directly. A small Matter-specific driver
 serializes reducer events, owns the operation registry, and disposes idempotently.
-It receives the current `{ treeId, revision }` scope; a document or material
-revision change cancels capture or fetch immediately. Fold and selection remain
-outside that asynchronous resource scope. The synchronous commit boundary still
-applies the frozen-parent rules above, so a later selection can invalidate an
-utterance but can never retarget it. Client and server deadlines settle
-independently of whether a fetch wrapper or provider adapter observes its abort
-signal.
+It receives the current `{ treeId, revision, documentEpoch }` scope; a document
+or session change cancels capture or fetch immediately, while a revision change
+only refreshes the receipt a retry uses. Fold and selection remain outside that
+asynchronous resource scope. The synchronous commit boundary still applies the
+frozen-parent rules above, so no later selection can retarget an utterance.
+Client and server deadlines settle independently of whether a fetch wrapper or
+provider adapter observes its abort signal.
+
+## Feedback presence
+
+The recording box under its material lane is a transient surface, not a
+message. It enters at once after the person's tap and never vanishes in one
+frame. A system-changed label — waiting for the microphone, transcribing,
+placing — appears only if its phase lasts 150 ms, and once shown stays 400 ms
+before another such label replaces it; live capture, the person's Stop, and an
+error are shown at once, because the label must stay honest about the
+microphone. The live region announces phase labels only, never partial
+transcripts.
+
+When the attempt settles, the box keeps its last content frozen, inert, and
+unannounced. Committed work releases the reserved lane the moment the box
+stops being live, in the same commit that shows the admitted passage, so that
+passage never moves after its first paint; the frozen box then holds until it
+has been painted for 400 ms and fades in place for 140 ms over whatever now
+fills the lane. A box that finishes before it was ever painted — a held commit
+released the instant modal chrome closes — unmounts at once instead of holding
+a stale label over the new passage. The person's Cancel, Dismiss, or Discard
+fades at once and keeps the lane until the box is gone. Modal chrome, a hidden
+page, or a document switch cuts it at 0 ms; while such work is still in
+flight, its lane keeps the last measured height.
+Focus returns to the Voice tool with the live phase, before the box becomes
+inert. Reduced motion removes the fades and keeps the holds. The CSS fade reads
+its duration from the same timer that unmounts it.
+
+### Point and Talk field
+
+The field is painted through an exit host that shows only a frozen copy after
+its owner has unmounted with every listener it held. It leaves only for one of
+five reasons, a closed list in `components/point-talk-close.ts` that every close
+call site names and a source scan holds:
+
+```text
+person          Escape, a press elsewhere, a rail tool,   fade + .98 shrink, 200 ms
+                keyboard Undo
+result          its rewrite was delivered                  fade 240 ms over the
+                                                           rewritten passage
+slot            Ask Matter, a grip adjustment, index       fade 120 ms
+                navigation, a Wiki takeover
+target-changed  its passage vanished or changed            fade 200 ms + one outcome
+                                                           line (“段落已变化，未改写。”)
+cut             modal chrome, a hidden page, a document    0 ms, the only cut
+                switch
+```
+
+Relayout, re-render, re-measured selection, a scroll (including the direction
+input scrolling as the person types), a software keyboard animating in, a font
+loading, and temporarily lost or unusable placement never close it: the field
+holds its last place and re-places at the next measurement, keeping its focus
+and typed words. Ask Matter's own control is not a press elsewhere; opening it
+takes the slot.
+
+The field enters from the AI mark that summoned it (from its passage-facing edge
+when Voice summoned it): opacity 0→1, scale .98→1 about that point, and 4 px of
+travel toward its passage, in 200 ms on the shared `cubic-bezier(.2,.8,.2,1)`;
+later re-placements never replay it. Once painted it stays at least 800 ms
+unless the person closes it or another surface takes the slot, so a stray
+release or event cannot knock it out. A submitted direction keeps the field in
+place, reading “正在换一种说法…” beside a condensed echo of the direction, for at
+least 600 ms: a faster result waits for that dwell before it may change the
+passage, and the field then fades over the change. Reduced motion keeps every
+duration, hold, and fade and drops only scale and travel. All of these numbers
+live in `POINT_TALK_TIMING` (`components/presence.ts`), which also sets the CSS
+durations.
 
 The first-release recording policy prefers WebM/Opus and falls back to MP4/AAC
 where supported. Capture stops at 60 seconds; the route allows 65 seconds of
@@ -133,7 +227,10 @@ service. It never uses the fixture transcript in production. The microphone
 remains visible in its stable composer position. `POST /api/transcribe` is strict
 multipart and echoes protocol version,
 interaction id and attempt. It receives purpose, locale, duration and audio,
-but no tree, target, lineage, provider name or fixture flag. The route parses;
+but no tree, target, lineage, provider name or fixture flag. The purpose also
+travels once as `?purpose=`, so a closed purpose is refused before any audio is
+read; the form field stays authoritative (see
+[`../protocol.md`](../protocol.md#transcription-boundary)). The route parses;
 server-only adapters transcribe. Provider selection is deployment configuration.
 Fixture and live adapters use the same controller, request, response and human
 tree-command path.
@@ -284,7 +381,13 @@ transient.
 but it does not revoke a finalized Admission or Point Talk transcript that has
 already crossed submit. That bounded inference may finish in the existing local
 worker; any material write then waits until the page is visible, no pointer is
-active, and its exact node is rendered. `pagehide`, document replacement,
+active, and its exact node is rendered. One owner tracks pressed pointers for
+admission, Point Talk, and Elastic; a release it never saw — outside the
+window, during a permission sheet — is recovered on window blur, capture
+lost with no button held, or the next buttonless move, so one lost `pointerup`
+cannot hold delivery closed. Canvas code may release capture while the person
+still presses; that is not a release, and a pressed move closes the window
+again for a pointer it had cleared. `pagehide`, document replacement,
 explicit cancellation, and owner disposal still retire the worker and reject
 late messages. Returning visible never starts capture, constructs a worker, or
 reloads model assets by itself; it may only release an already-retained result.

@@ -2,8 +2,10 @@ import type { AdmissionAnchor as RuntimeAdmissionAnchor } from "../runtime/admis
 import type { MatterLocale } from "../config/locales";
 import { ADMISSION_REPAIR_WINDOW_MS } from "../runtime/admission-repair";
 import {
+  admissionHoldsTranscript,
   createAdmissionInteractionState,
   reduceAdmissionInteraction,
+  sameAdmissionTarget,
   type AdmissionAnchor,
   type AdmissionErrorCode,
   type AdmissionInteractionEffect,
@@ -39,13 +41,26 @@ export type AdmissionScope = Readonly<{
   documentEpoch?: number;
 }>;
 
+/**
+ * How an attempt left the canvas: `committed` admitted material, `withdrawn`
+ * was the person's own Cancel, Dismiss, or Discard, and `released` was a
+ * system boundary such as modal chrome, a hidden page, or a document switch.
+ */
+export type AdmissionSettlementOutcome = "committed" | "withdrawn" | "released";
+
 export type AdmissionSettlement = Readonly<{
   anchor: AdmissionAnchor;
   attempt: number;
   documentEpoch: number;
-  outcome: "committed" | "released";
+  outcome: AdmissionSettlementOutcome;
   token: string;
 }>;
+
+/**
+ * The rendering edge's report on an attempt's parent: laid out, present but
+ * not laid out, or no longer in the material at all.
+ */
+export type AdmissionTargetStatus = "visible" | "hidden" | "missing";
 
 type Transcribe = typeof requestTranscription;
 
@@ -123,8 +138,13 @@ export class AdmissionDriver {
   private settlement: AdmissionSettlement | null = null;
   private pendingCommit: PendingAdmissionCommit | null = null;
   private deliveryWindowOpen = true;
-  private deliveryTargetVisible = true;
+  private deliveryTarget: Readonly<{
+    anchor: AdmissionAnchor;
+    status: AdmissionTargetStatus;
+  }> | null = null;
   private deliveryVisibleNodeIds = new Set<string>();
+  /** Transcription locale per interaction, so held words commit as heard. */
+  private readonly interactionLocales = new Map<string, MatterLocale>();
 
   constructor(dependencies: AdmissionDriverDependencies) {
     this.dependencies = dependencies;
@@ -167,6 +187,7 @@ export class AdmissionDriver {
   start(anchor: AdmissionAnchor, locale = this.dependencies.locale): void {
     if (this.disposed || this.state.phase !== "idle") return;
     const token = this.dependencies.createInteractionId();
+    this.deliveryTarget = null;
     this.pendingLocales.set(operationKey({ interactionId: token, attempt: 1 }), locale);
     this.send({
       type: "start",
@@ -188,20 +209,50 @@ export class AdmissionDriver {
 
   /** Cancels only microphone work that the person has not submitted yet. */
   cancelRawCapture(): void {
-    if (admissionRawCaptureOwnsOperation(this.state)) this.send({ type: "cancel" });
+    this.send({ type: "release-capture" });
   }
 
+  /**
+   * Records again at the same parent, re-anchored to the current revision.
+   * A parent the rendering edge reported missing yields a visible stale
+   * target instead of an attempt that could only be invalidated.
+   */
   retry(locale = this.dependencies.locale): void {
-    if (this.state.phase !== "error") return;
+    const state = this.state;
+    if (state.phase !== "error") return;
     const operation = {
-      interactionId: this.state.token,
-      attempt: this.state.attempt + 1,
+      interactionId: state.token,
+      attempt: state.attempt + 1,
     };
+    const sameDocument = this.scope !== null && this.scope.treeId === state.anchor.treeId;
     this.pendingLocales.set(operationKey(operation), locale);
-    this.send({ type: "retry" });
+    this.send({
+      type: "retry",
+      revision: sameDocument && this.scope !== null ? this.scope.revision : state.anchor.baseRevision,
+      targetAvailable: sameDocument && this.targetStatus(state.anchor) !== "missing",
+    });
     if (!stateOwnsOperation(this.state, operation)) {
       this.pendingLocales.delete(operationKey(operation));
     }
+  }
+
+  /**
+   * Commits held words at `anchor`, which the caller derives with the same
+   * explicit rule a new admission uses. The words keep the locale they were
+   * heard in and the document epoch they belong to.
+   */
+  place(anchor: AdmissionAnchor): void {
+    const state = this.state;
+    if (this.disposed || !admissionHoldsTranscript(state)) return;
+    const operation = { interactionId: state.token, attempt: state.attempt + 1 };
+    const key = operationKey(operation);
+    this.resources.set(key, {
+      operation,
+      documentEpoch: this.activeSettlementOrigin?.documentEpoch ?? this.scope?.documentEpoch ?? 0,
+      locale: this.interactionLocales.get(state.token) ?? this.dependencies.locale,
+    });
+    this.send({ type: "place", anchor });
+    if (!stateOwnsOperation(this.state, operation)) this.resources.delete(key);
   }
 
   dismiss(): void {
@@ -210,17 +261,11 @@ export class AdmissionDriver {
 
   suspendCapture(): void {
     this.setDeliveryWindowOpen(false);
-    if (admissionRawCaptureOwnsOperation(this.state)) {
-      this.cancelRawCapture();
-      return;
-    }
     // Permission and live-capture errors precede submission, so their surface
     // can leave with the hidden capture UI. A failure after Stop still belongs
     // to an accepted user action; keep its recovery state for the next visible
     // delivery window instead of making event timing decide whether it exists.
-    if (this.state.phase === "error" && !this.state.submitted) {
-      this.send({ type: "dismiss" });
-    }
+    this.send({ type: "suspend" });
   }
 
   resumeDelivery(): void {
@@ -235,9 +280,21 @@ export class AdmissionDriver {
     }
   }
 
-  setDeliveryTargetVisible(visible: boolean): void {
-    this.deliveryTargetVisible = visible;
-    if (visible) this.deliverPendingCommitIfReady();
+  /**
+   * The rendering edge reports the current attempt's parent after every
+   * material or layout change. A report about any other parent is ignored, so
+   * a late layout effect cannot speak for a newer attempt.
+   */
+  setDeliveryTarget(anchor: AdmissionAnchor, status: AdmissionTargetStatus): void {
+    const state = this.state;
+    if (
+      this.disposed ||
+      state.phase === "idle" ||
+      !sameAdmissionTarget(state.anchor, anchor)
+    ) return;
+    this.deliveryTarget = Object.freeze({ anchor, status });
+    if (status === "missing") this.send({ type: "target-lost" });
+    this.deliverPendingCommitIfReady();
   }
 
   setDeliveryVisibleNodeIds(nodeIds: ReadonlySet<string>): void {
@@ -245,9 +302,17 @@ export class AdmissionDriver {
     this.deliverLateRepairsIfReady();
   }
 
-  exit(): void {
+  /**
+   * The page is leaving. A page kept in the back-forward cache may return with
+   * its memory intact, and suspension has already ended raw capture, so words
+   * the person submitted (in flight or held) stay for that return instead of
+   * vanishing. Only a page that is really unloading releases them.
+   */
+  exit(exit: Readonly<{ persisted: boolean }> = { persisted: false }): void {
+    if (exit.persisted) return;
     this.send({ type: "unmount" });
     this.pendingLocales.clear();
+    this.interactionLocales.clear();
     this.pendingCommit = null;
     this.cancelLateRepairs();
   }
@@ -275,6 +340,7 @@ export class AdmissionDriver {
     }
     this.cancelLateRepairs();
     this.pendingLocales.clear();
+    this.interactionLocales.clear();
     this.pendingCommit = null;
     this.dependencies.repair.dispose();
     this.events.length = 0;
@@ -308,9 +374,10 @@ export class AdmissionDriver {
             const origin = this.activeSettlementOrigin;
             this.settlement = origin === null ? null : Object.freeze({
               ...origin,
-              outcome: nextEvent.type === "commit-succeeded" ? "committed" : "released",
+              outcome: settlementOutcome(nextEvent),
             });
             this.activeSettlementOrigin = null;
+            this.interactionLocales.clear();
           }
           this.state = result.state;
           this.notify();
@@ -328,11 +395,9 @@ export class AdmissionDriver {
     switch (effect.type) {
       case "request-microphone": {
         const scope = this.scope;
-        if (
-          scope === null ||
-          scope.treeId !== effect.anchor.treeId ||
-          scope.revision !== effect.anchor.baseRevision
-        ) {
+        // Only another document invalidates the request. Revision is a
+        // receipt; the commit revalidates the parent it will write under.
+        if (scope === null || scope.treeId !== effect.anchor.treeId) {
           this.send({ type: "scope-invalidated" });
           return;
         }
@@ -352,6 +417,7 @@ export class AdmissionDriver {
         this.pendingLocales.delete(key);
         const owned = this.resources.get(key);
         if (owned === undefined) return;
+        this.interactionLocales.set(operation.interactionId, owned.locale);
         void voice.start(operation, {
           locale: owned.locale,
           onTranscript: (transcript) => this.send({
@@ -372,7 +438,7 @@ export class AdmissionDriver {
             if (
               sameVoiceOperation(operation, revoked) &&
               admissionRawCaptureOwnsOperation(this.state, operation)
-            ) this.send({ type: "cancel" });
+            ) this.send({ type: "release-capture" });
           },
         }).then(
           () => this.send({
@@ -461,7 +527,15 @@ export class AdmissionDriver {
         return;
       }
       case "commit-admission": {
-        if (!this.deliveryWindowOpen || !this.deliveryTargetVisible) {
+        const target = this.targetStatus(effect.anchor);
+        if (target === "missing") {
+          // Submitted words stay with the attempt as a visible, placeable
+          // conflict; they are never written under a parent nobody chose.
+          this.pendingCommit = null;
+          this.send(failureEvent("commit-failed", effect, "STALE_TARGET"));
+          return;
+        }
+        if (!this.deliveryWindowOpen || target === "hidden") {
           this.pendingCommit = effect;
           return;
         }
@@ -669,8 +743,19 @@ export class AdmissionDriver {
 
   private deliverPendingCommitIfReady(): void {
     const pending = this.pendingCommit;
-    if (pending === null || !this.deliveryWindowOpen || !this.deliveryTargetVisible) return;
-    this.runEffect(pending);
+    if (pending === null) return;
+    const target = this.targetStatus(pending.anchor);
+    if (target === "missing" || (this.deliveryWindowOpen && target === "visible")) {
+      this.runEffect(pending);
+    }
+  }
+
+  /** An unreported parent is treated as visible, as before any report. */
+  private targetStatus(anchor: AdmissionAnchor): AdmissionTargetStatus {
+    const target = this.deliveryTarget;
+    return target !== null && sameAdmissionTarget(target.anchor, anchor)
+      ? target.status
+      : "visible";
   }
 
   private deliverLateRepairsIfReady(): void {
@@ -688,6 +773,15 @@ export class AdmissionDriver {
         // Observation cannot interrupt lifecycle cleanup or event ordering.
       }
     }
+  }
+}
+
+function settlementOutcome(event: AdmissionInteractionEvent): AdmissionSettlementOutcome {
+  switch (event.type) {
+    case "commit-succeeded": return "committed";
+    case "cancel":
+    case "dismiss": return "withdrawn";
+    default: return "released";
   }
 }
 

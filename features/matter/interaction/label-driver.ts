@@ -24,6 +24,11 @@ import type { requestLabel } from "./label-client";
 export type LabelScope = Readonly<{
   tree: ThoughtTree;
   documentEpoch: number;
+  /**
+   * The language labels are derived in. It is observation input, not driver
+   * identity: changing it must not replace the owner of a person's names.
+   */
+  locale?: string;
 }>;
 
 export type LabelDriverLimits = Readonly<{
@@ -43,6 +48,7 @@ export const DEFAULT_LABEL_DRIVER_LIMITS: LabelDriverLimits = Object.freeze({
 export type LabelDriverDependencies = Readonly<{
   request: typeof requestLabel;
   createOperationId: () => string;
+  /** Initial label language; a later `LabelScope.locale` replaces it. */
   locale: string;
   /**
    * Durable storage for labels that cost something to produce. Absent in tests
@@ -51,6 +57,8 @@ export type LabelDriverDependencies = Readonly<{
   repository?: LabelRepository;
   canonicalNow?: () => string;
   now?: () => number;
+  /** Runs `callback` once after `delayMs`; returns its cancellation. */
+  schedule?: (delayMs: number, callback: () => void) => () => void;
   limits?: LabelDriverLimits;
 }>;
 
@@ -81,6 +89,9 @@ export class LabelDriver {
   private readonly limits: LabelDriverLimits;
   private readonly now: () => number;
   private readonly canonicalNow: () => string;
+  private readonly schedule: (delayMs: number, callback: () => void) => () => void;
+  private locale: string;
+  private cancelCooldownReplan: (() => void) | null = null;
   private readonly listeners = new Set<(state: LabelSessionState) => void>();
   private readonly active = new Map<string, PendingRequest>();
   private readonly queue: PendingRequest[] = [];
@@ -111,6 +122,8 @@ export class LabelDriver {
     this.limits = dependencies.limits ?? DEFAULT_LABEL_DRIVER_LIMITS;
     this.now = dependencies.now ?? Date.now;
     this.canonicalNow = dependencies.canonicalNow ?? (() => new Date().toISOString());
+    this.schedule = dependencies.schedule ?? scheduleWithTimer;
+    this.locale = scope.locale ?? dependencies.locale;
     this.state = createLabelSessionState(scope.tree.id, scope.documentEpoch);
     // Keep the constructor document as the cleanup baseline even if an archive
     // replacement arrives before the first projection observation.
@@ -159,6 +172,9 @@ export class LabelDriver {
   ): void {
     if (this.disposed) return;
     this.applyDocument(scope);
+    if (scope.locale !== undefined && scope.locale !== this.locale) {
+      this.changeLocale(scope.locale);
+    }
     this.lastScope = scope;
     this.lastNodeIds = nodeIds;
     this.lastFixedLabels = fixedLabels;
@@ -168,7 +184,7 @@ export class LabelDriver {
       scope.tree,
       nodeIds,
       this.state,
-      this.dependencies.locale,
+      this.locale,
       fixedLabels,
     );
     let cancelledSupersededWork = false;
@@ -288,16 +304,51 @@ export class LabelDriver {
     this.active.clear();
     this.queue.length = 0;
     this.listeners.clear();
+    this.cancelCooldownReplan?.();
+    this.cancelCooldownReplan = null;
     // The driver and repository are one session owner. Closing from a separate
     // React effect would permanently close a lazy repository during Strict
     // Mode's setup/cleanup replay, before the retained driver is disposed.
-    this.dependencies.repository?.close();
+    // A typed name may still be on its way to disk; it is durable human
+    // authority, so the repository closes only after every queued write settles.
+    const writes = [...new Set(this.durableMutations.values())];
+    const close = () => this.dependencies.repository?.close();
+    if (writes.length === 0) close();
+    else void Promise.allSettled(writes).then(close);
   }
 
   /** Hidden documents release derived model work without touching durable names. */
   suspend(): void {
     if (this.disposed || this.paused) return;
     this.paused = true;
+    this.releasePendingModelWork();
+  }
+
+  /** A visible document replans the rows it last observed, so deferred work resumes. */
+  resume(): void {
+    if (this.disposed || !this.paused) return;
+    this.paused = false;
+    this.replanLastObservation();
+  }
+
+  /**
+   * Model work was asked in the previous language and can no longer settle the
+   * entries it will be planned against. A name the person typed is
+   * language-independent, and its durable write queue continues untouched.
+   */
+  private changeLocale(locale: string): void {
+    this.locale = locale;
+    this.releasePendingModelWork();
+    // Stored model labels carry a language-bearing basis. Read storage again so
+    // a language already paid for is restored instead of asked twice.
+    if (this.restoredTreeId !== null) {
+      this.restoredTreeId = null;
+      this.restoreGeneration += 1;
+      this.restoring = false;
+    }
+  }
+
+  private releasePendingModelWork(): void {
     const pending = [...this.active.values(), ...this.queue];
     this.active.clear();
     this.queue.length = 0;
@@ -314,10 +365,24 @@ export class LabelDriver {
     }
   }
 
-  /** Visibility restores eligibility; a later real projection observation replans. */
-  resume(): void {
-    if (this.disposed || !this.paused) return;
-    this.paused = false;
+  private replanLastObservation(): void {
+    if (this.disposed || this.paused || this.lastScope === null) return;
+    this.observe(this.lastScope, this.lastNodeIds, this.lastFixedLabels);
+  }
+
+  /** Rows deferred by a cooldown are asked again when it ends, not at the next scroll. */
+  private scheduleCooldownReplan(): void {
+    this.cancelCooldownReplan?.();
+    const remainingMs = Math.max(0, this.cooldownUntilMs - this.now());
+    this.cancelCooldownReplan = this.schedule(remainingMs, () => {
+      this.cancelCooldownReplan = null;
+      if (this.disposed) return;
+      if (this.now() < this.cooldownUntilMs) {
+        this.scheduleCooldownReplan();
+        return;
+      }
+      this.replanLastObservation();
+    });
   }
 
   private applyDocument(scope: LabelScope): void {
@@ -421,7 +486,7 @@ export class LabelDriver {
           if (record.origin === "model" && this.lastFixedLabels.has(record.nodeId)) return [];
           if (
             record.origin === "model" &&
-            record.basis !== labelMaterialBasis(node.text, this.dependencies.locale)
+            record.basis !== labelMaterialBasis(node.text, this.locale)
           ) {
             return [];
           }
@@ -664,6 +729,7 @@ export class LabelDriver {
       // than spending a deadline per visible row.
       this.cooldownUntilMs = this.now() + this.limits.cooldownMs;
       this.consecutiveFailures = 0;
+      this.scheduleCooldownReplan();
       // Dropping a queued request must also release its session entry. An entry
       // left holding a pending operation id is skipped by every later plan, so
       // one bad endpoint window would otherwise cost those rows their model
@@ -703,4 +769,9 @@ export class LabelDriver {
       }
     }
   }
+}
+
+function scheduleWithTimer(delayMs: number, callback: () => void): () => void {
+  const timer = setTimeout(callback, delayMs);
+  return () => clearTimeout(timer);
 }

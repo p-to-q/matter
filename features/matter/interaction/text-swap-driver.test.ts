@@ -527,6 +527,91 @@ describe("TextSwapDriver", () => {
     expect(h.commit).toHaveBeenCalledTimes(1);
   });
 
+  it("publishes a parked result while its passage is not laid out, then delivers it", async () => {
+    const h = harness();
+    const notified = vi.fn();
+    h.driver.subscribe(notified);
+    h.driver.updateScope({ ...SCOPE, deliveryTargetVisible: false });
+    expect(h.driver.enter(BASIS)).toBe(true);
+    h.driver.acceptDirection("Use a calmer rhythm");
+    h.driver.submit();
+    await settle();
+
+    expect(h.commit).not.toHaveBeenCalled();
+    expect(h.driver.isDeliveryParked()).toBe(true);
+    expect(notified).toHaveBeenCalled();
+
+    h.driver.updateScope({ ...SCOPE, deliveryTargetVisible: true });
+    await settle();
+    expect(h.commit).toHaveBeenCalledTimes(1);
+    expect(h.driver.isDeliveryParked()).toBe(false);
+  });
+
+  it("releases a parked result explicitly without committing it", async () => {
+    const h = harness();
+    h.driver.updateScope({ ...SCOPE, deliveryTargetVisible: false });
+    expect(h.driver.enter(BASIS)).toBe(true);
+    h.driver.acceptDirection("Use a calmer rhythm");
+    h.driver.submit();
+    await settle();
+    expect(h.driver.isDeliveryParked()).toBe(true);
+
+    h.driver.cancel();
+    expect(h.driver.isDeliveryParked()).toBe(false);
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+    h.driver.updateScope({ ...SCOPE, deliveryTargetVisible: true });
+    await settle();
+    expect(h.commit).not.toHaveBeenCalled();
+  });
+
+  it("does not report an in-flight request as parked", async () => {
+    let resolvePlan!: () => void;
+    const h = harness({
+      request: vi.fn((envelope: TextSwapEnvelope) => new Promise<TextSwapPlan>((resolve) => {
+        resolvePlan = () => resolve(plan(envelope));
+      })),
+    });
+    h.driver.updateScope({ ...SCOPE, deliveryTargetVisible: false });
+    expect(h.driver.enter(BASIS)).toBe(true);
+    h.driver.acceptDirection("Use a calmer rhythm");
+    h.driver.submit();
+    await settle();
+    expect(h.driver.isDeliveryParked()).toBe(false);
+    resolvePlan();
+    await settle();
+    expect(h.driver.isDeliveryParked()).toBe(true);
+  });
+
+  it("keeps a live recording and a typed draft through a delivery-visibility blip", async () => {
+    const h = harness();
+    const operation = await reachRecording(h);
+
+    // A relayout briefly empties the laid-out set while the person speaks.
+    h.driver.updateScope({ ...SCOPE, deliveryTargetVisible: false });
+    h.driver.updateScope({ ...SCOPE, deliveryTargetVisible: true });
+    expect(h.driver.getState().phase).toBe("recording");
+    expect(h.voice.cancel).not.toHaveBeenCalled();
+
+    h.driver.stopRecording();
+    h.voice.finish(operation, "Make it more tentative");
+    await settle(30);
+    expect(h.commit).toHaveBeenCalledTimes(1);
+    expect(h.driver.getState().phase).toBe("success");
+
+    const typed = harness();
+    expect(typed.driver.enter(BASIS)).toBe(true);
+    typed.driver.updateScope({ ...SCOPE, deliveryTargetVisible: false });
+    expect(typed.driver.acceptDirection("Use a calmer rhythm")).toBe(true);
+    expect(typed.driver.getState().phase).toBe("ready");
+  });
+
+  it("still invalidates an unsubmitted draft when its target changes", () => {
+    const h = harness();
+    expect(h.driver.enter(BASIS)).toBe(true);
+    h.driver.updateScope({ ...SCOPE, interactionScopeKey: "focus:another" });
+    expect(h.driver.getState().phase).toBe("stale");
+  });
+
   it("refuses a new action instead of replacing a submitted request", async () => {
     let resolveRequest!: (plan: TextSwapPlan) => void;
     const observedSignal: { current?: AbortSignal } = {};

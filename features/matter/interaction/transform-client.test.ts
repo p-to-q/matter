@@ -54,6 +54,15 @@ describe("transform client", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it.each([429, 503])("keeps a %i admission refusal retryable", async (status) => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({
+      error: { code: "RATE_LIMITED", message: "Please wait before changing this passage again.", retryable: true },
+    }, { status })));
+
+    await expect(requestTransform(fixtureEnvelope(), new AbortController().signal))
+      .rejects.toMatchObject({ retryable: true, message: "Please wait before changing this passage again." });
+  });
+
   it("fails closed on malformed refusals and preserves strict retryability", async () => {
     const envelope = fixtureEnvelope();
     const fetchMock = vi.fn()

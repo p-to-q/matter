@@ -1,6 +1,11 @@
 # Agent Boundary
 
-Module: `features/matter/server/planner.ts`
+Modules: `features/matter/server/transform-route.ts`, `text-swap-route.ts`;
+plan construction in `features/matter/protocol/transform-contract.ts`
+(`buildTransformPlan`, `planToTreeCommand`) and `text-swap-contract.ts`
+(`buildTextSwapPlan`, `planToTextSwapCommand`). There is no separate planner
+module: each route runs its scenario for `{ text }` and builds the one plan
+from the envelope it parsed.
 
 ## Problem
 
@@ -68,26 +73,42 @@ envelope (selection + gesture + lineage)
 This is the load-bearing decision on this page. Because the plan is built from
 the envelope rather than from the response, the model cannot name a different
 node, widen a range, emit more than one action, or invent an action type — not
-because those are rejected, but because there is no channel for them. Phase 2
-must preserve this specified `0.2` boundary when the provider route is built.
+because those are rejected, but because there is no channel for them. Both
+built provider routes preserve this specified `0.2` boundary, and any later
+material route must too.
 
-**Degree comes from the gesture.** `targetCharacterRange(length, amount)`
-converts the stretch into a character range, which enters the instruction as a
-hard bound. The model is told how much to write; it does not decide.
+**Degree comes from the gesture.** `deriveExpandInPlaceLength` in
+`protocol/expand-in-place-policy.ts` converts the stretch into a grapheme target
+and accepted added-grapheme interval, which enter the instruction as a hard
+bound and are enforced again by adjudication. Text Swap's degree is a tool-owned near-source
+band instead. The model is told how much to write; it does not decide.
 
 **The prompt itself is shared.** The turn's prompt, budget, and answer
 judgement are one scenario on the common spine in
-[`prompt-harness.md`](prompt-harness.md), already compiled and tested as
-`transform-harness.ts`. The route and planner remain gated; freezing the prompt
+[`prompt-harness.md`](prompt-harness.md), compiled and tested as
+`transform-harness.ts` and `text-swap-harness.ts`. Both routes are built and
+proved against frozen fixtures. Their managed provider gates
+(`MATTER_TRANSFORM_ADAPTER`, `MATTER_TEXT_SWAP_ADAPTER`) stay off until each
+promotion receipt exists; a person's own Model API key can supply the provider
+once the independent `MATTER_*_SURFACE=public` gate is open. That is the
+current production shape for both surfaces, though Production reports them
+`unavailable` until issue #104's session-sealing ring is installed (see
+[`../release-readiness.md`](../release-readiness.md)). Freezing the prompt
 early is deliberate, because it decides what a person's material becomes.
 
 **Document context is labeled.** Lineage text is passed as reference material
 with an explicit statement that it is never instruction, and it is bounded by
 the limits in [`../protocol.md`](../protocol.md).
 
-**Providers live in one file.** `server/` is the only place a provider name
-appears. Adapters are selected by environment variable, and mock, fixture, and
-live adapters return the same validated shape through the same path.
+**Provider code stays in `server/`.** It is the only place a provider name,
+endpoint, or wire shape appears: the managed pool (`model-pool.ts`), reviewed
+user transports (`user-provider-registry.ts`), their pinned public fetch
+(`public-provider-fetch.ts`), the one chat-completions response parser both
+lanes read (`openai-chat-completion.ts`), and completion settlement
+(`completion-outcome.ts`). The adapter is chosen per request by server
+configuration and, where the product surface allows it, by a person's own
+sealed Model API key lease; the browser never names one. Fixture, managed, and
+user-key adapters return the same validated shape through the same path.
 
 **Failures are stated.** A fallback to fixture output is never silent. The error
 codes are stable and the messages are written for the person holding the mouse,

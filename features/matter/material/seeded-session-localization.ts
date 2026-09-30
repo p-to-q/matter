@@ -1,6 +1,6 @@
 import {
-  canReplayTreeHistory,
   estimateSerializedInverseBytes,
+  verifyHistoryTops,
   type TreeHistory,
   type TreeHistoryEntry,
 } from "../tree/history";
@@ -34,10 +34,12 @@ export type SeededSessionRelocalization =
       changed: boolean;
       tree: ThoughtTree;
       history: TreeHistory;
+      /** A stack whose next step no longer matched the localized material was released. */
+      historyReleased: boolean;
     }>
   | Readonly<{
       ok: false;
-      errorCode: "SEED_LOCALIZATION_INVALID_TREE" | "SEED_LOCALIZATION_INVALID_HISTORY";
+      errorCode: "SEED_LOCALIZATION_INVALID_TREE";
       tree: ThoughtTree;
       history: TreeHistory;
     }>;
@@ -58,6 +60,18 @@ const SEED_LOCALIZATION_CHUNK_SENTINEL = "matter-seeded-session-localization";
  * This proof is loaded after mount because ordinary material use never needs
  * its journal migration machinery. The Store still invokes it synchronously
  * against current state and publishes its tree/history candidate atomically.
+ *
+ * Untouched seed copy lives in the material and in every memento that can
+ * restore it, so both follow the language: an Undo of a person's edit to a
+ * seed passage restores that passage in the language being read, even when
+ * no untouched passage is left in the material itself. Every memento's seed
+ * copy is rewritten and only rewritten steps are measured again; the tree is
+ * validated only when its own copy changes. Nothing is replayed: only the next
+ * Undo and Redo are dry-run against the localized tree, as journal recovery
+ * does, and a deeper stale step is refused by the engine at use, like any
+ * other. The walk is linear in the bounded journal (1,000 steps, 32 MiB), so
+ * the caller runs it once per language and document instance, never per save
+ * or per settled turn.
  */
 export const relocalizeSeededSession: SeededSessionRelocalizer = (
   tree,
@@ -65,13 +79,10 @@ export const relocalizeSeededSession: SeededSessionRelocalizer = (
   locale,
 ) => {
   if (tree.id !== SEEDED_DOCUMENT_TREE_ID && tree.id !== SEEDED_ROOT_ONLY_TREE_ID) {
-    return Object.freeze({ ok: true, changed: false, tree, history });
+    return unchanged(tree, history);
   }
-  if (!validateThoughtTree(tree).ok) {
+  if (seedCopyDiffers(tree, locale) && !validateThoughtTree(tree).ok) {
     return localizationFailure("SEED_LOCALIZATION_INVALID_TREE", tree, history);
-  }
-  if (!historyBytesAreExact(history) || !canReplayTreeHistory(tree, history)) {
-    return localizationFailure("SEED_LOCALIZATION_INVALID_HISTORY", tree, history);
   }
 
   let candidateTree = tree;
@@ -138,19 +149,33 @@ export const relocalizeSeededSession: SeededSessionRelocalizer = (
   }
 
   const localizedHistory = localizeSeededHistory(history, locale);
-  if (localizedHistory === null || !canReplayTreeHistory(candidateTree, localizedHistory.history)) {
-    return localizationFailure("SEED_LOCALIZATION_INVALID_HISTORY", tree, history);
-  }
-  if (!treeChanged && !localizedHistory.changed) {
-    return Object.freeze({ ok: true, changed: false, tree, history });
-  }
+  if (!treeChanged && !localizedHistory.changed) return unchanged(tree, history);
+  const verified = verifyHistoryTops(candidateTree, localizedHistory.history);
   return Object.freeze({
     ok: true,
     changed: true,
     tree: candidateTree,
-    history: localizedHistory.history,
+    history: verified.history,
+    historyReleased: verified.released,
   });
 };
+
+/** Whether any untouched seed passage or the canonical seed title reads differently in `locale`. */
+function seedCopyDiffers(tree: ThoughtTree, locale: MatterLocale): boolean {
+  for (const spec of SEEDED_BOOTSTRAP_NODES) {
+    const node = tree.nodes[spec.id];
+    if (node !== undefined && isOwnedSeedNode(node, spec) && node.text !== seededNodeText(locale, spec.copyKey)) {
+      return true;
+    }
+  }
+  return typeof tree.title === "string" &&
+    isCanonicalSeededTitle(tree.title) &&
+    tree.title !== seededMaterialCopy(locale).title;
+}
+
+function unchanged(tree: ThoughtTree, history: TreeHistory): SeededSessionRelocalization {
+  return Object.freeze({ ok: true, changed: false, tree, history, historyReleased: false });
+}
 
 function isOwnedSeedNode(node: ThoughtNode, spec: BootstrapNode): boolean {
   return node.id === spec.id &&
@@ -159,55 +184,40 @@ function isOwnedSeedNode(node: ThoughtNode, spec: BootstrapNode): boolean {
     isCanonicalSeededNodeText(spec.copyKey, node.text);
 }
 
-function historyBytesAreExact(history: TreeHistory): boolean {
-  let total = 0;
-  for (const entry of [...history.entries, ...(history.redoEntries ?? [])]) {
-    const bytes = estimateSerializedInverseBytes(entry.inverse);
-    if (entry.retainedInverseBytes !== bytes) return false;
-    total += bytes;
-    if (!Number.isSafeInteger(total)) return false;
-  }
-  return total === history.retainedInverseBytes;
-}
-
 function localizeSeededHistory(
   history: TreeHistory,
   locale: MatterLocale,
-): Readonly<{ changed: boolean; history: TreeHistory }> | null {
+): Readonly<{ changed: boolean; history: TreeHistory }> {
   const entries = localizeHistoryEntries(history.entries, locale);
-  const redoEntries = localizeHistoryEntries(history.redoEntries ?? [], locale);
-  if (entries === null || redoEntries === null) return null;
+  const redoEntries = localizeHistoryEntries(history.redoEntries, locale);
   const changed = entries.changed || redoEntries.changed;
   if (!changed) return Object.freeze({ changed: false, history });
-  const retainedInverseBytes = [...entries.entries, ...redoEntries.entries]
-    .reduce((total, entry) => total + entry.retainedInverseBytes, 0);
-  if (!Number.isSafeInteger(retainedInverseBytes)) return null;
   return Object.freeze({
     changed: true,
-    history: {
-      entries: entries.entries,
-      redoEntries: redoEntries.entries,
-      retainedInverseBytes,
-    },
+    history: { entries: entries.entries, redoEntries: redoEntries.entries },
   });
 }
 
 function localizeHistoryEntries(
   entries: readonly TreeHistoryEntry[],
   locale: MatterLocale,
-): Readonly<{ changed: boolean; entries: TreeHistoryEntry[] }> | null {
+): Readonly<{ changed: boolean; entries: TreeHistoryEntry[] }> {
   let changed = false;
   const localized: TreeHistoryEntry[] = [];
   for (const entry of entries) {
     const inverse = localizeHistoryCommand(entry.inverse, locale);
-    const retainedInverseBytes = estimateSerializedInverseBytes(inverse);
-    if (!Number.isSafeInteger(retainedInverseBytes)) return null;
-    if (inverse !== entry.inverse || retainedInverseBytes !== entry.retainedInverseBytes) {
-      changed = true;
-      localized.push({ ...entry, inverse, retainedInverseBytes });
-    } else {
+    if (inverse === entry.inverse) {
       localized.push(entry);
+      continue;
     }
+    // Only a rewritten memento is measured again; its new count is exact.
+    changed = true;
+    localized.push({
+      commandId: entry.commandId,
+      source: entry.source,
+      inverse,
+      retainedInverseBytes: estimateSerializedInverseBytes(inverse),
+    });
   }
   return Object.freeze({ changed, entries: localized });
 }

@@ -10,10 +10,13 @@ import {
 import {
   CANVAS_CHROME_INFO,
   CanvasChrome,
+  INQUIRY_CANCEL_ARM_MS,
   canvasOverlayOwnsSurface,
+  inquiryCancelAccepted,
   isCanvasChromeInfoOverlay,
   nextDialogTabFocusIndex,
   nextMenuFocusIndex,
+  overlayOutlivesBreakpoint,
   projectInquiryDictationControl,
   type CanvasChromeProps,
 } from "./CanvasChrome";
@@ -29,6 +32,52 @@ describe("CanvasChrome", () => {
     for (const overlay of [null, "settings", "language", "inquiry"] as const) {
       expect(canvasOverlayOwnsSurface(overlay)).toBe(false);
     }
+  });
+
+  it("names the compact menu in every locale", () => {
+    for (const [language, label] of [
+      ["en-US", "Matter menu"],
+      ["zh-CN", "Matter 菜单"],
+      ["zh-TW", "Matter 選單"],
+      ["ja-JP", "Matter メニュー"],
+      ["de-DE", "Matter-Menü"],
+    ] as const) {
+      const markup = renderChrome({
+        overlay: "mobile",
+        preferences: { ...DEFAULT_CANVAS_PREFERENCES, language },
+      });
+      expect(markup).toContain(`<nav aria-label="${label}"`);
+    }
+    for (const language of ["ja-JP", "de-DE"] as const) {
+      const about = CANVAS_CHROME_INFO[language].about.body.at(-1);
+      expect(JSON.stringify(about)).not.toContain(" project");
+    }
+  });
+
+  it("closes only the overlay a breakpoint crossing removes", () => {
+    // Desktop menus do not exist on a phone; the compact sheet does not exist
+    // on a desk. Ask Matter's turns and an open dialog's editor survive both.
+    expect(overlayOutlivesBreakpoint("settings", true)).toBe(false);
+    expect(overlayOutlivesBreakpoint("language", true)).toBe(false);
+    expect(overlayOutlivesBreakpoint("settings", false)).toBe(true);
+    expect(overlayOutlivesBreakpoint("mobile", false)).toBe(false);
+    expect(overlayOutlivesBreakpoint("mobile", true)).toBe(true);
+    for (const overlay of [null, "inquiry", "about", "pricing", "privacy", "terms", "api", "wiki"] as const) {
+      expect(overlayOutlivesBreakpoint(overlay, true)).toBe(true);
+      expect(overlayOutlivesBreakpoint(overlay, false)).toBe(true);
+    }
+  });
+
+  it("lets only a deliberate press cancel a waiting question", () => {
+    // Cancel takes Ask's place and arms only after a beat, so the second click
+    // of a double-click on Ask, or a click already on its way, cannot revoke
+    // what it sent; the inquiry-lifecycle journey proves the double-click.
+    expect(INQUIRY_CANCEL_ARM_MS).toBeGreaterThanOrEqual(300);
+    // Keyboard activation (detail 0) and a single click cancel; the second
+    // click of a double-click does not.
+    expect(inquiryCancelAccepted(0)).toBe(true);
+    expect(inquiryCancelAccepted(1)).toBe(true);
+    expect(inquiryCancelAccepted(2)).toBe(false);
   });
 
   it("renders the desktop corner system and one mobile menu trigger", () => {
@@ -103,23 +152,15 @@ describe("CanvasChrome", () => {
     expect(markup).not.toMatch(/chat|assistant|history/i);
   });
 
-  it("detaches inquiry presentation without aborting an already submitted request", () => {
-    const source = readFileSync(new URL("./CanvasChrome.tsx", import.meta.url), "utf8");
-    expect(source).toContain('presented={overlay === "inquiry"}');
-    const detachStart = source.indexOf("const detach = useCallback");
-    const detachEnd = source.indexOf("useImperativeHandle", detachStart);
-    const detach = source.slice(detachStart, detachEnd);
-    expect(detach).toContain('dispatch({ type: "close" })');
-    expect(detach).not.toContain("abort(");
-    expect(detach).not.toContain("authorityRef.current += 1");
-    expect(source).toContain("setSubmissionPending(true)");
-  });
-
   it("projects the bounded API-key contract into the browser form", () => {
     const markup = renderToStaticMarkup(createElement(ApiSettingsForm, {
       language: "en-US",
       presented: true,
     }));
+    // The notice region exists before its first notice, and no alert nests
+    // inside a polite region.
+    expect(markup).toMatch(/data-silent="true"[^>]*><div aria-atomic="true"[^>]*role="status"><\/div>/u);
+    expect(markup).not.toContain('role="alert"');
     expect(markup).toContain(`minLength="${MIN_USER_PROVIDER_API_KEY_CODE_UNITS}"`);
     expect(markup).toContain('maxLength="512"');
     expect(markup).toMatch(/<input[^>]*required=""[^>]*type="password"|<input[^>]*type="password"[^>]*required=""/u);
@@ -189,7 +230,9 @@ describe("CanvasChrome", () => {
       new URL("./CanvasChrome.module.css", import.meta.url),
       "utf8",
     );
-    const globalCss = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
+    // The index toggle's geometry loads with the Files panel's stylesheet.
+    const globalCss = ["../../../app/globals.css", "./MaterialFiles.css"]
+      .map((path) => readFileSync(new URL(path, import.meta.url), "utf8")).join("\n");
 
     expect(css).toMatch(/\.topRight\s*{[^}]*top:\s*24px;[^}]*right:\s*24px;/s);
     expect(css).toMatch(/\.bottomRight\s*{[^}]*right:\s*24px;[^}]*bottom:\s*24px;/s);

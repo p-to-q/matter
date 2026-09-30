@@ -5,12 +5,12 @@ Matter does not add a separate memory or session system beside it.
 
 A lightweight inquiry may read either the transient lasso selection or a bounded
 projection of the active working material when no lasso selection exists.
-Drafts, pending state, and voice partials are transient chrome. Dormant Text
-Swap direction data, when exercised by regression tests, is transient too. Completed
-question/answer exchanges may live in the separate, bounded local Ask Matter
-record, but never in the tree, material command history, or material archive.
-They are not replayed when the inquiry is opened again and never become model
-context; its adapter boundary is specified in
+Drafts, pending state, voice partials, and Point-and-Talk directions are
+transient chrome. Completed question/answer exchanges may live in the separate,
+bounded local Ask Matter record, but never in the tree, material command
+history, or material archive. A settled exchange is not replayed when the
+inquiry is opened again, and no exchange becomes model context; its adapter
+boundary is specified in
 [`reference/inquiry-record.md`](reference/inquiry-record.md).
 
 Every final STT path performs the same punctuation-only normalization at the
@@ -54,12 +54,17 @@ ask one captured local lexical session for a deterministic suggestion. Wiki is
 the current adapter, not part of the material model, memory, or model context.
 Human admission and repair use its spoken view; only newly generated spans use
 its written view. Matter validates both the source and any suggested result, and
-Wiki cannot authorize or publish a command. Only a successfully committed human
-admission advances Wiki observation. Repair, transformation, text swap, and all
-other generated text contribute no learning evidence, and existing material is never rescanned because a
-persisted node does not prove human authorship. Routine hits are silent. Only a
-person who chooses to correct an erroneous visible word enters the Wiki's
-exceptional calibration or configuration path.
+Wiki cannot authorize or publish a command. When a suggestion would make an
+otherwise valid result invalid, only the suggestion is withheld: the validated
+source still commits. Only a successfully committed human admission advances
+Wiki observation or teaches it a word or relation. Repair, transformation, text
+swap, and all other generated text contribute no admission evidence, and
+existing material is never rescanned because a persisted node does not prove
+human authorship. A word Wiki changed is disclosed once and carries a quiet
+mark until its occurrence settles; the occurrence is an in-memory address of
+the committed word, never material, history, or archive data. Its settlement
+may only retain an active rule. Restoring the heard form at the word is an
+ordinary human `replace-text` command; Wiki never reads material history.
 
 Moving a node is a durable tree mutation. Exact source and target child-order
 mementos make one undo restore the previous virtual file-system projection and
@@ -318,13 +323,15 @@ document root records `role: document-root` in frontmatter so export/import does
 not turn it back into visible material.
 
 The snapshot preserves the complete `ThoughtTree`: current material, structure,
-ids, order, times, tree revision, and protocol version. The browser pairs that
-snapshot with its local inverse journal in one IndexedDB record, so accepted
-commands remain reversible after reload. Archive export deliberately contains
-only the material snapshot: importing an archive establishes a new undo boundary.
+ids, order, times, tree revision, and protocol version. The browser saves that
+snapshot and one record per retained undo step in one IndexedDB transaction, so
+accepted commands remain reversible after reload within the undo bound (1,000
+steps, 32 MiB). Archive export deliberately contains only the material
+snapshot: importing an archive establishes a new undo boundary, and the archive
+is the long-term recovery path.
 
 In a browser, local durability and a user-visible folder are different physical
-stores. IndexedDB keeps one versioned logical Markdown bundle and its paired
+stores. IndexedDB keeps one versioned logical Markdown bundle and its per-step
 inverse journal automatically. A ZIP or directory export is an explicit copy of
 the bundle only. They share one codec, not one filesystem object.
 

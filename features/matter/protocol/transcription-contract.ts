@@ -23,6 +23,18 @@ export const TRANSCRIPTION_CLIENT_TIMEOUT_MS =
   TRANSCRIPTION_SERVER_TIMEOUT_MS + TRANSCRIPTION_TRANSPORT_GRACE_MS;
 
 export type TranscriptionPurpose = "admission" | "direction" | "swap-direction";
+
+/**
+ * The purpose also travels as this one URL query parameter, so a route can
+ * refuse a surface that is closed before it reads a single recording byte.
+ * The multipart field stays authoritative and must match it exactly.
+ */
+export const TRANSCRIPTION_PURPOSE_QUERY_PARAMETER = "purpose";
+
+export function isTranscriptionPurpose(value: unknown): value is TranscriptionPurpose {
+  return value === "admission" || value === "direction" || value === "swap-direction";
+}
+
 const PRESENTED_EMOJI = /(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|\u20E3)/u;
 
 /** STT transports carry words and punctuation; inferred expression belongs to

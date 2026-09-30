@@ -11,6 +11,10 @@ const ignoredDirectories = new Set([
   "node_modules",
   "test-results",
   "archive",
+  // Local checkouts and scratch space are not this tree's documents; lint and
+  // TypeScript exclude them for the same reason.
+  ".claude",
+  "tmp",
 ]);
 
 async function markdownFiles(directory) {

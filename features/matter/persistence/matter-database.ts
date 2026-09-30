@@ -6,7 +6,11 @@ import type {
 } from "idb";
 import { openDB } from "idb";
 import type { SnapshotBundle } from "./snapshot-codec";
-import type { TreeHistory } from "../tree/history";
+import type {
+  StoredHistoryEntry,
+  StoredHistoryJournal,
+  StoredHistoryKey,
+} from "./history-journal";
 import { MAX_NODES_PER_TREE } from "../tree/invariants";
 import type { WikiState } from "../wiki/wiki-model";
 
@@ -19,6 +23,8 @@ import type { WikiState } from "../wiki/wiki-model";
  *
  * `snapshots` is durable material. Labels, inquiries, and Wiki authority stay
  * outside the snapshot, so the archive remains exactly what a person wrote.
+ * `historyEntries` holds one record per retained inverse; it is written only in
+ * the same transaction as the snapshot row whose manifest describes it.
  */
 
 export const STORAGE_SCHEMA_VERSION = 1 as const;
@@ -29,8 +35,13 @@ export type StoredSnapshot = Readonly<{
   treeRevision: number;
   writeGeneration: number;
   bundle: SnapshotBundle;
-  /** Absent only for snapshots written before durable undo history existed. */
-  history?: TreeHistory;
+  /** Present on every row this schema writes. */
+  historyJournal?: StoredHistoryJournal;
+  /**
+   * The pre-v6 inline journal. It is only read, once, to migrate; a row keeps
+   * it only while no save of this schema has replaced that row.
+   */
+  history?: unknown;
 }>;
 
 /** Origin of a stored label. A provisional label is never stored: it is a pure
@@ -98,12 +109,12 @@ export type StoredInquiryRecord = Readonly<{
 }>;
 
 export const WIKI_RECORD_KEY = "origin" as const;
-export const WIKI_RECORD_SCHEMA_VERSION = 6 as const;
+export const WIKI_RECORD_SCHEMA_VERSION = 7 as const;
 
 /** Wiki is local lexical authority. It is neither material nor a model cache. */
 export type StoredWikiRecord = Readonly<{
   storageSchemaVersion: typeof STORAGE_SCHEMA_VERSION;
-  recordSchemaVersion: 1 | 2 | 3 | 4 | 5 | typeof WIKI_RECORD_SCHEMA_VERSION;
+  recordSchemaVersion: 1 | 2 | 3 | 4 | 5 | 6 | typeof WIKI_RECORD_SCHEMA_VERSION;
   key: typeof WIKI_RECORD_KEY;
   writeGeneration: number;
   state: WikiState;
@@ -113,6 +124,10 @@ export interface MatterDatabase extends DBSchema {
   snapshots: {
     key: string;
     value: StoredSnapshot;
+  };
+  historyEntries: {
+    key: StoredHistoryKey;
+    value: StoredHistoryEntry;
   };
   labels: {
     key: string;
@@ -133,7 +148,7 @@ export interface MatterDatabase extends DBSchema {
 }
 
 const DATABASE_NAME = "ptoq-matter";
-export const MATTER_DATABASE_VERSION = 5;
+export const MATTER_DATABASE_VERSION = 6;
 /** Two maximum documents stay warm; manual names are not part of this cache. */
 export const MAX_CACHED_MODEL_LABELS = MAX_NODES_PER_TREE * 2;
 
@@ -146,15 +161,50 @@ export function labelKey(treeId: string, nodeId: string): string {
 }
 
 /**
- * Each caller keeps its own connection handle so one module closing does not
- * strand another. `blocking` closes eagerly so a newer tab can upgrade.
+ * What another tab did to this tab's database. `upgrade-blocked` and
+ * `upgrade-ready` bracket an upgrade waiting for older tabs to close.
+ * `superseded` (a newer schema) and `cleared` (the database was deleted) are
+ * terminal: this build must never reopen, recreate, or write it again.
  */
-export function createMatterDatabaseHandle(): {
+export type MatterDatabaseLifecycle = "upgrade-blocked" | "upgrade-ready" | "superseded" | "cleared";
+
+export const SUPERSEDED_DATABASE_ERROR = "MatterDatabaseSupersededError";
+export const CLEARED_DATABASE_ERROR = "MatterDatabaseClearedError";
+
+export type MatterDatabaseHandle = Readonly<{
   open: () => Promise<IDBPDatabase<MatterDatabase>>;
   close: () => void;
-} {
+  /** Drops a connection the engine reports as lost so the next open is fresh. */
+  reset: () => void;
+}>;
+
+/**
+ * Each caller keeps its own connection handle so one module closing does not
+ * strand another. `blocking` closes eagerly so a newer tab can upgrade, and
+ * leaves the handle terminal so it cannot silently recreate an older schema.
+ * By default a blocked upgrade fails the open; the material owner instead
+ * keeps waiting and reports it, because its tab can do nothing useful first.
+ */
+export function createMatterDatabaseHandle(options: Readonly<{
+  waitWhenBlocked?: boolean;
+  onLifecycle?: (event: MatterDatabaseLifecycle) => void;
+}> = {}): MatterDatabaseHandle {
   let databasePromise: Promise<IDBPDatabase<MatterDatabase>> | null = null;
+  let terminal: "superseded" | "cleared" | null = null;
+  const report = (event: MatterDatabaseLifecycle) => {
+    try {
+      options.onLifecycle?.(event);
+    } catch {
+      // A lifecycle observer cannot break the connection owner.
+    }
+  };
+  const enterTerminal = (state: "superseded" | "cleared") => {
+    if (terminal !== null) return;
+    terminal = state;
+    report(state);
+  };
   const open = () => {
+    if (terminal !== null) return Promise.reject(terminalError(terminal));
     if (databasePromise !== null) return databasePromise;
     const owner: { opening: Promise<IDBPDatabase<MatterDatabase>> | null } = {
       opening: null,
@@ -164,6 +214,7 @@ export function createMatterDatabaseHandle(): {
     };
     const opening = new Promise<IDBPDatabase<MatterDatabase>>((resolveOpen, rejectOpen) => {
       let abandoned = false;
+      let blockedReported = false;
       const nativeOpen = openDB<MatterDatabase>(DATABASE_NAME, MATTER_DATABASE_VERSION, {
         upgrade(db, oldVersion, _newVersion, transaction) {
           if (!db.objectStoreNames.contains("snapshots")) {
@@ -197,8 +248,20 @@ export function createMatterDatabaseHandle(): {
           if (!db.objectStoreNames.contains("wiki")) {
             db.createObjectStore("wiki", { keyPath: "key" });
           }
+          // Legacy inline journals migrate lazily on the first save of each
+          // row, so the upgrade stays constant-time for any stored history.
+          if (!db.objectStoreNames.contains("historyEntries")) {
+            db.createObjectStore("historyEntries", {
+              keyPath: ["treeId", "epoch", "stack", "position"],
+            });
+          }
         },
         blocked() {
+          if (options.waitWhenBlocked === true) {
+            blockedReported = true;
+            report("upgrade-blocked");
+            return;
+          }
           abandoned = true;
           resetIfCurrent();
           const error = new Error("The Matter database upgrade is blocked by another tab.");
@@ -206,18 +269,29 @@ export function createMatterDatabaseHandle(): {
           rejectOpen(error);
         },
         terminated: resetIfCurrent,
-        blocking() {
+        blocking(_currentVersion, blockedVersion) {
           void owner.opening?.then((db) => db.close()).catch(() => undefined);
           resetIfCurrent();
+          enterTerminal(blockedVersion === null ? "cleared" : "superseded");
         },
       });
       void nativeOpen.then((db) => {
-        if (abandoned) {
+        if (abandoned || terminal !== null) {
           db.close();
+          if (!abandoned) rejectOpen(terminalError(terminal ?? "superseded"));
           return;
         }
+        if (blockedReported) report("upgrade-ready");
         resolveOpen(db);
-      }, rejectOpen);
+      }, (error: unknown) => {
+        // This build asked for an older version than the one on disk.
+        if (error instanceof DOMException && error.name === "VersionError") {
+          enterTerminal("superseded");
+          rejectOpen(terminalError("superseded"));
+          return;
+        }
+        rejectOpen(error);
+      });
     });
     owner.opening = opening;
     databasePromise = opening;
@@ -227,30 +301,41 @@ export function createMatterDatabaseHandle(): {
     });
     return databasePromise;
   };
-  return {
-    open,
-    close() {
-      void databasePromise?.then((db) => db.close()).catch(() => undefined);
-      databasePromise = null;
-    },
+  const close = () => {
+    void databasePromise?.then((db) => db.close()).catch(() => undefined);
+    databasePromise = null;
   };
+  return Object.freeze({ open, close, reset: close });
 }
 
-/** Reclaims only derived rows, oldest first, inside the caller's transaction. */
+function terminalError(state: "superseded" | "cleared"): Error {
+  const error = new Error(state === "superseded"
+    ? "A newer Matter schema owns this database."
+    : "The Matter database was deleted by another tab.");
+  error.name = state === "superseded" ? SUPERSEDED_DATABASE_ERROR : CLEARED_DATABASE_ERROR;
+  return error;
+}
+
+/**
+ * Reclaims only derived rows, oldest first, inside the caller's transaction,
+ * and returns how many it removed.
+ */
 export async function retainNewestModelLabels<
   TxStores extends ArrayLike<StoreNames<MatterDatabase>>,
   Mode extends "readwrite" | "versionchange",
 >(
   store: IDBPObjectStore<MatterDatabase, TxStores, "labels", Mode>,
   maximum: number,
-): Promise<void> {
+): Promise<number> {
   const index = store.index("originUpdatedAt");
   const range = IDBKeyRange.bound(["model", ""], ["model", "\uffff"]);
-  let remaining = Math.max(0, await index.count(range) - maximum);
+  const excess = Math.max(0, await index.count(range) - maximum);
+  let remaining = excess;
   let cursor = remaining === 0 ? null : await index.openCursor(range);
   while (cursor !== null && remaining > 0) {
     await cursor.delete();
     remaining -= 1;
     cursor = await cursor.continue();
   }
+  return excess - remaining;
 }

@@ -1,32 +1,92 @@
 "use client";
 
+// Loads with this lazy chunk; nothing in the initial graph renders these classes.
+import "./PointTalkComposer.css";
 import {
   useCallback,
   useEffect,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
+  type FormEvent,
   type RefObject,
 } from "react";
 import type { TextSwapController } from "../interaction/use-text-swap";
-import { textSwapActionWasSubmitted } from "../runtime/text-swap-interaction";
+import {
+  textSwapActionWasSubmitted,
+  type TextSwapInteractionState,
+} from "../runtime/text-swap-interaction";
 import type { CanvasLanguage } from "./canvas-preferences";
 import { VoiceIcon } from "./icons";
 import {
+  POINT_TALK_PRESENCE_POLICY,
+  POINT_TALK_TIMING,
+  type PresenceHandoff,
+  type SettledStatusInput,
+} from "./presence";
+import { usePresence, useSettledStatus } from "./use-presence";
+import { pointTalkPresenceClose, pointTalkReleaseReason } from "./point-talk-close";
+import {
+  projectPointTalkEntrance,
   projectPointTalkPlacementWithinSurfaces,
   projectPointTalkScale,
   type PointTalkBounds,
+  type PointTalkEntrance,
+  type PointTalkOrigin,
   type PointTalkPlacement,
 } from "./point-talk-placement";
 import { constrainPointTalkDirectionInput } from "./point-talk-direction-input";
+import { useEscapeLayer } from "./escape-layers";
+import { useOutsidePressDismissal } from "./touch-commitment";
+
+export type PointTalkStatusPhase = Extract<
+  TextSwapInteractionState["phase"],
+  "permission" | "recording" | "transcribing" | "pending" | "error"
+>;
+
+type PointTalkFeedbackAction = "stop" | "retry" | "record-again";
+
+type PointTalkSurfaceContent =
+  | Readonly<{ kind: "form"; direction: string; formKey: string; voiceAvailable: boolean }>
+  | Readonly<{
+      kind: "feedback";
+      /** The settled phase label; the only text a live region announces. */
+      label: string;
+      /** What is painted: the live partial while listening, else the label. */
+      text: string;
+      /** A condensed echo of the submitted direction while it is pending. */
+      echo: string | null;
+      action: PointTalkFeedbackAction | null;
+    }>;
+
+/** Everything needed to paint a frozen copy of the bubble after its owner left. */
+export type PointTalkSurfaceView = Readonly<{
+  phase: TextSwapInteractionState["phase"];
+  left: number;
+  top: number;
+  maxWidth: number;
+  scale: number;
+  entrance: PointTalkEntrance | null;
+  content: PointTalkSurfaceContent;
+}>;
+
+type PointTalkHandlers = Readonly<{
+  onRetry: () => void;
+  onStartVoice: () => void;
+  onStopVoice: () => void;
+  onSubmit: (direction: string) => void;
+}>;
 
 export function PointTalkComposer({
   boundaryRef,
   canvasRef,
   canvasZoom,
   controller,
+  exitHandoff,
   geometryKey,
   locale,
   nodeId,
@@ -35,7 +95,10 @@ export function PointTalkComposer({
   onStartVoice,
   onStopVoice,
   onSubmit,
+  origin,
+  penActive,
   positioningRef,
+  presenceIdentity,
   surfaceAvailable,
   targetBounds,
   voiceAvailable,
@@ -44,15 +107,23 @@ export function PointTalkComposer({
   canvasRef: RefObject<HTMLDivElement | null>;
   canvasZoom: number;
   controller: TextSwapController;
+  /** Receives the last painted bubble so its exit outlives this owner. */
+  exitHandoff?: PresenceHandoff<PointTalkSurfaceView>;
   geometryKey: string;
   locale: CanvasLanguage;
   nodeId: string;
+  /** The person dismissed the field. */
   onCancel: () => void;
   onRetry: () => void;
   onStartVoice: () => void;
   onStopVoice: () => void;
   onSubmit: (direction: string) => void;
+  /** Where the person summoned the field; its entrance grows from there. */
+  origin: PointTalkOrigin | null;
+  penActive: (timeStamp: number) => boolean;
   positioningRef: RefObject<HTMLElement | null>;
+  /** One opening of the field; a new opening never inherits the last one's exit. */
+  presenceIdentity: string;
   surfaceAvailable: boolean;
   targetBounds: PointTalkBounds | null;
   voiceAvailable: boolean;
@@ -62,12 +133,14 @@ export function PointTalkComposer({
   const retryRef = useRef<HTMLButtonElement>(null);
   const measurementFrameRef = useRef<number | null>(null);
   const [placement, setPlacement] = useState<PointTalkPlacement | null>(null);
+  const [entrance, setEntrance] = useState<PointTalkEntrance | null>(null);
   const inputId = useId();
   const phase = controller.state.phase;
   const submitted = textSwapActionWasSubmitted(controller.state);
   const recoveryAction = pointTalkRecoveryAction(controller.state, voiceAvailable);
   const recoveryAvailable = recoveryAction !== null;
-  const placementReady = placement !== null && targetBounds !== null;
+  // Once placed, the field keeps its place until a new measurement moves it.
+  const placementReady = placement !== null;
   const visualScale = projectPointTalkScale(canvasZoom);
   const formVisible = phase === "eligible" || phase === "ready";
   const copy = pointTalkCopy(locale);
@@ -85,18 +158,17 @@ export function PointTalkComposer({
     const canvas = canvasRef.current;
     const bubble = bubbleRef.current;
     const positioningSurface = positioningRef.current;
-    // The controller renders one idle pass before entering its usable phase;
-    // no bubble exists yet, so absence here is not damaged geometry.
-    if (bubble === null) return;
-    if (targetBounds === null) {
-      setPlacement(null);
-      return;
-    }
-    if (boundary === null || canvas === null || positioningSurface === null) {
-      onCancel();
-      return;
-    }
-    const bubbleRect = bubble.getBoundingClientRect();
+    // Geometry that is missing or unusable here is transient: a relayout, a
+    // re-measured selection, a keyboard animating in, a font arriving. The
+    // field holds its last place and the next measurement re-places it; it
+    // never leaves for geometry (`point-talk-close.ts` names every way out).
+    if (
+      bubble === null || targetBounds === null ||
+      boundary === null || canvas === null || positioningSurface === null
+    ) return;
+    // The layout box, not the painted one: the entrance scales the field, and
+    // a measurement taken mid-entrance must not place it a fraction off.
+    const bubbleRect = { width: bubble.offsetWidth, height: bubble.offsetHeight };
     const toolRail = visiblePointTalkToolRail(boundary);
     const projection = projectPointTalkPlacementWithinSurfaces({
       target: targetBounds,
@@ -110,21 +182,22 @@ export function PointTalkComposer({
       rightOccluder: toolRail?.getBoundingClientRect() ?? null,
       gap: 14 * visualScale,
     });
-    if (projection.kind === "temporarily-unavailable") {
-      setPlacement(null);
-      return;
-    }
-    if (projection.kind === "unusable") {
-      onCancel();
-      return;
-    }
+    if (projection.kind !== "placed") return;
     const next = projection.placement;
     setPlacement((current) => current !== null &&
       current.left === next.left && current.top === next.top
       && current.maxWidth === next.maxWidth
       ? current
       : next);
-  }, [boundaryRef, canvasRef, onCancel, positioningRef, surfaceAvailable, targetBounds, visualScale]);
+    // The entrance is fixed by the first placement and never replays.
+    setEntrance((current) => current ?? projectPointTalkEntrance({
+      origin,
+      placement: next,
+      bubble: { width: bubbleRect.width, height: bubbleRect.height },
+      target: targetBounds,
+      travelPx: POINT_TALK_TIMING.enterTravelPx * visualScale,
+    }));
+  }, [boundaryRef, canvasRef, origin, positioningRef, surfaceAvailable, targetBounds, visualScale]);
 
   const scheduleMeasure = useCallback(() => {
     if (measurementFrameRef.current !== null) return;
@@ -166,7 +239,9 @@ export function PointTalkComposer({
       attributes: true,
       attributeFilter: ["data-canvas-modal-open"],
     });
-    if (shell !== null) chromeObserver?.observe(shell, { childList: true, subtree: true });
+    // The lazily loaded index mounts its drawer as a direct child of the shell;
+    // watching the whole subtree remeasured on every material text mutation.
+    if (shell !== null) chromeObserver?.observe(shell, { childList: true });
     observeFiles();
     const visual = window.visualViewport;
     window.addEventListener("resize", scheduleMeasure);
@@ -185,37 +260,37 @@ export function PointTalkComposer({
     };
   }, [boundaryRef, canvasRef, geometryKey, measure, nodeId, phase, positioningRef, scheduleMeasure]);
 
-  useEffect(() => {
-    if (!surfaceAvailable) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.preventDefault();
-      event.stopPropagation();
-      cancelAndRestoreFocus();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  }, [cancelAndRestoreFocus, surfaceAvailable]);
+  // Before submit Escape cancels the local turn; after submit it only detaches
+  // this presentation. An IME candidate dismissal never reaches it. The field
+  // is a paper surface, so chrome or a panel that covers it closes first.
+  useEscapeLayer(pointTalkSurfaceVisible(controller.state.phase), "paper", () => {
+    cancelAndRestoreFocus();
+    return true;
+  });
 
-  useEffect(() => {
-    if (!surfaceAvailable) return;
-    const cancelFromOutsidePointer = (event: PointerEvent) => {
+  // A palm while a pen writes (perhaps into this very field) is not a tap,
+  // and a palm resting beside the pen must not discard a typed direction: a
+  // touch dismisses only once it commits to a real tap or gesture. The
+  // subscription belongs to this opening, so a re-render (a live partial, a
+  // phase change) never discards a touch that is still deciding.
+  useOutsidePressDismissal(surfaceAvailable ? presenceIdentity : null, {
+    resolve: (event) => {
       const target = event.target;
       const targetElement = target instanceof Element
         ? target
         : target instanceof Node
           ? target.parentElement
           : null;
-      if (pointTalkOutsidePointerDismisses({
+      return pointTalkOutsidePointerDismisses({
         insideBubble: target instanceof Node && bubbleRef.current?.contains(target) === true,
         insideCanvasChrome: targetElement?.closest("[data-canvas-chrome]") != null,
+        insideSlotOwner: targetElement?.closest('[data-chrome-control="inquiry"]') != null,
         insideVoiceTool: targetElement?.closest('[data-tool-id="voice"]') != null,
         submitted,
-      })) onCancel();
-    };
-    document.addEventListener("pointerdown", cancelFromOutsidePointer, true);
-    return () => document.removeEventListener("pointerdown", cancelFromOutsidePointer, true);
-  }, [onCancel, submitted, surfaceAvailable]);
+      }) ? onCancel : null;
+    },
+    penActive,
+  });
 
   useEffect(() => {
     if (
@@ -235,9 +310,106 @@ export function PointTalkComposer({
   }, [placementReady, recoveryAvailable, surfaceAvailable]);
 
   const activeState = controller.state;
-  if (activeState.phase === "idle" || activeState.phase === "success" || activeState.phase === "stale") return null;
-  const recording = activeState.phase === "recording";
-  const status = pointTalkStatus(activeState, locale);
+  const surfaceLive = pointTalkSurfaceVisible(activeState.phase);
+  const statusPhase: PointTalkStatusPhase | null =
+    surfaceLive && !formVisible ? activeState.phase as PointTalkStatusPhase : null;
+  const shownStatus = useSettledStatus(pointTalkStatusInput(presenceIdentity, statusPhase), false);
+  const partialDirection = activeState.phase === "recording"
+    ? activeState.partialDirection?.trim() ?? ""
+    : "";
+  const readyDirection = activeState.phase === "ready" ? activeState.direction : "";
+  const pendingEcho = activeState.phase === "pending"
+    ? condensePointTalkDirection(activeState.direction)
+    : null;
+  const feedbackAction: PointTalkFeedbackAction | null = activeState.phase === "recording"
+    ? "stop"
+    : recoveryAction === "request"
+      ? "retry"
+      : recoveryAction === "voice" ? "record-again" : null;
+  const content = useMemo<PointTalkSurfaceContent>(() => {
+    if (formVisible) {
+      return Object.freeze({
+        kind: "form",
+        direction: readyDirection,
+        formKey: `${nodeId}:${readyDirection}`,
+        voiceAvailable,
+      });
+    }
+    const label = shownStatus === null ? "" : pointTalkPhaseLabel(shownStatus, locale);
+    return Object.freeze({
+      kind: "feedback",
+      label,
+      text: shownStatus === "recording" && partialDirection.length > 0 ? partialDirection : label,
+      echo: shownStatus === "pending" ? pendingEcho : null,
+      action: feedbackAction,
+    });
+  }, [
+    feedbackAction,
+    formVisible,
+    locale,
+    nodeId,
+    partialDirection,
+    pendingEcho,
+    readyDirection,
+    shownStatus,
+    voiceAvailable,
+  ]);
+  const surfaceView = useMemo<PointTalkSurfaceView | null>(
+    () => !surfaceLive || !surfaceAvailable || placement === null
+      ? null
+      : Object.freeze({
+          phase,
+          left: placement.left,
+          top: placement.top,
+          maxWidth: placement.maxWidth,
+          scale: visualScale,
+          entrance,
+          content,
+        }),
+    [content, entrance, phase, placement, surfaceAvailable, surfaceLive, visualScale],
+  );
+  const lastSurfaceViewRef = useRef<PointTalkSurfaceView | null>(null);
+  const typedDirectionRef = useRef<Readonly<{ formKey: string; value: string }> | null>(null);
+  const recordTypedDirection = useCallback((event: FormEvent<HTMLDivElement>) => {
+    if (!(event.target instanceof HTMLInputElement) || content.kind !== "form") return;
+    typedDirectionRef.current = Object.freeze({
+      formKey: content.formKey,
+      value: constrainPointTalkDirectionInput(event.target.value),
+    });
+  }, [content]);
+  // Hands the painted bubble to its exit host as it stops being live or
+  // unmounts. Every listener, observer, and frame above is torn down with
+  // this owner, so the frozen copy can own none of them. The host's close
+  // (`closePointTalk`) declares its way before the field goes; a release
+  // nobody declared is named by the phase the field stopped being live in.
+  const shownRef = useRef<Readonly<{ phase: TextSwapInteractionState["phase"] }> | null>(null);
+  const releaseSurface = useCallback((endedIn: TextSwapInteractionState["phase"]) => {
+    shownRef.current = null;
+    exitHandoff?.release(
+      presenceIdentity,
+      withTypedDirection(lastSurfaceViewRef.current, typedDirectionRef.current),
+      pointTalkPresenceClose(pointTalkReleaseReason(endedIn)),
+    );
+  }, [exitHandoff, presenceIdentity]);
+  useLayoutEffect(() => {
+    exitHandoff?.enter(presenceIdentity);
+  }, [exitHandoff, presenceIdentity]);
+  useLayoutEffect(() => {
+    if (surfaceView !== null) {
+      lastSurfaceViewRef.current = surfaceView;
+      shownRef.current = Object.freeze({ phase });
+      exitHandoff?.show(presenceIdentity, surfaceView);
+      return;
+    }
+    if (shownRef.current !== null) releaseSurface(phase);
+  }, [exitHandoff, phase, presenceIdentity, releaseSurface, surfaceView]);
+  useLayoutEffect(() => () => {
+    const shown = shownRef.current;
+    if (shown !== null) releaseSurface(shown.phase);
+  }, [releaseSurface]);
+
+  if (!surfaceLive) return null;
+  const placed = surfaceAvailable && placement !== null;
 
   return (
     <div
@@ -245,62 +417,220 @@ export function PointTalkComposer({
       className="point-talk"
       data-canvas-interactive
       data-phase={phase}
+      data-placed={placed ? "" : undefined}
+      data-presence="present"
       data-surface-available={surfaceAvailable || undefined}
       inert={!surfaceAvailable || undefined}
       ref={bubbleRef}
-      role={formVisible || recoveryAvailable ? undefined : "status"}
-      style={!surfaceAvailable || placement === null || targetBounds === null
+      style={!placed
         ? { visibility: "hidden" }
         : {
             left: placement.left,
             top: placement.top,
             "--point-talk-available-width": `${placement.maxWidth}px`,
             "--point-talk-scale": visualScale,
+            ...pointTalkEntranceStyle(entrance),
           } as CSSProperties}
+      onInput={recordTypedDirection}
       onPointerDown={(event) => event.stopPropagation()}
     >
-      {formVisible ? (
-        <PointTalkForm
-          copy={copy}
-          initialDirection={activeState.phase === "ready" ? activeState.direction : ""}
-          inputId={inputId}
-          inputRef={inputRef}
-          key={`${nodeId}:${activeState.phase === "ready" ? activeState.direction : ""}`}
-          onStartVoice={onStartVoice}
-          onSubmit={onSubmit}
-          voiceAvailable={voiceAvailable}
-        />
-      ) : (
-        <div className="point-talk__feedback">
-          <span aria-atomic="true" aria-live="polite" dir="auto">{status}</span>
-          {recording ? (
-            <button onClick={onStopVoice} type="button">{copy.stop}</button>
-          ) : recoveryAction === "request" ? (
-            <button onClick={onRetry} ref={retryRef} type="button">{copy.retry}</button>
-          ) : recoveryAction === "voice" ? (
-            <button onClick={onStartVoice} ref={retryRef} type="button">{copy.recordAgain}</button>
-          ) : null}
-        </div>
-      )}
+      <PointTalkContent
+        content={content}
+        copy={copy}
+        handlers={{ onRetry, onStartVoice, onStopVoice, onSubmit }}
+        inputId={inputId}
+        inputRef={inputRef}
+        retryRef={retryRef}
+      />
     </div>
   );
+}
+
+/**
+ * Hosts the frozen exit of a Point Talk bubble whose live owner already
+ * unmounted. It paints only the handed-off copy: inert, hidden from assistive
+ * technology, and without handlers, focus, or a live region.
+ */
+export function PointTalkExit({
+  available,
+  handoff,
+  locale,
+}: Readonly<{
+  /** False while a modal, hidden page, or another AI surface owns the paper. */
+  available: boolean;
+  handoff: PresenceHandoff<PointTalkSurfaceView>;
+  locale: CanvasLanguage;
+}>) {
+  const record = useSyncExternalStore(handoff.subscribe, handoff.getSnapshot, handoff.getSnapshot);
+  const live = useMemo(
+    () => record === null || record.view === null
+      ? null
+      : { identity: record.identity, view: record.view },
+    [record],
+  );
+  const frame = usePresence(
+    live,
+    available ? record?.close ?? "preempted" : "preempted",
+    pointTalkPresencePolicy,
+  );
+  if (
+    frame === null ||
+    frame.stage === "present" ||
+    record === null ||
+    record.identity !== frame.identity
+  ) return null;
+  const view = record.lastView ?? frame.view;
+  return (
+    <div
+      aria-hidden="true"
+      className="point-talk"
+      data-phase={view.phase}
+      data-placed=""
+      data-presence={frame.stage}
+      data-presence-close={frame.close ?? undefined}
+      inert
+      style={{
+        left: view.left,
+        top: view.top,
+        "--point-talk-available-width": `${view.maxWidth}px`,
+        "--point-talk-scale": view.scale,
+        ...pointTalkEntranceStyle(view.entrance),
+        // The fade lasts exactly as long as the timer that unmounts it.
+        "--presence-exit-duration": `${
+          frame.close === null ? 0 : POINT_TALK_PRESENCE_POLICY.exitMs[frame.close]
+        }ms`,
+      } as CSSProperties}
+    >
+      <PointTalkContent content={view.content} copy={pointTalkCopy(locale)} handlers={null} />
+    </div>
+  );
+}
+
+function PointTalkContent({
+  content,
+  copy,
+  handlers,
+  inputId,
+  inputRef,
+  retryRef,
+}: Readonly<{
+  content: PointTalkSurfaceContent;
+  copy: ReturnType<typeof pointTalkCopy>;
+  /** Null for a frozen copy, which must not act. */
+  handlers: PointTalkHandlers | null;
+  inputId?: string;
+  inputRef?: RefObject<HTMLInputElement | null>;
+  retryRef?: RefObject<HTMLButtonElement | null>;
+}>) {
+  const frozenInputId = useId();
+  if (content.kind === "form") {
+    return (
+      <PointTalkForm
+        copy={copy}
+        initialDirection={content.direction}
+        inputId={inputId ?? frozenInputId}
+        inputRef={inputRef}
+        key={content.formKey}
+        onStartVoice={handlers?.onStartVoice ?? ignore}
+        onSubmit={handlers?.onSubmit ?? ignore}
+        voiceAvailable={content.voiceAvailable}
+      />
+    );
+  }
+  const live = handlers !== null;
+  return (
+    <div className="point-talk__feedback">
+      {/* Partials repaint as the person speaks; only phase labels are announced. */}
+      <span aria-hidden={live || undefined} dir="auto">{content.text}</span>
+      {content.echo === null ? null : (
+        <span aria-hidden="true" className="point-talk__echo" dir="auto">{content.echo}</span>
+      )}
+      {live ? (
+        <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
+          {content.label}
+        </span>
+      ) : null}
+      {content.action === "stop" ? (
+        <button onClick={handlers?.onStopVoice} type="button">{copy.stop}</button>
+      ) : content.action === "retry" ? (
+        <button onClick={handlers?.onRetry} ref={retryRef} type="button">{copy.retry}</button>
+      ) : content.action === "record-again" ? (
+        <button onClick={handlers?.onStartVoice} ref={retryRef} type="button">{copy.recordAgain}</button>
+      ) : null}
+    </div>
+  );
+}
+
+function withTypedDirection(
+  view: PointTalkSurfaceView | null,
+  typed: Readonly<{ formKey: string; value: string }> | null,
+): PointTalkSurfaceView | null {
+  if (view === null || view.content.kind !== "form" || typed?.formKey !== view.content.formKey) {
+    return view;
+  }
+  return Object.freeze({ ...view, content: Object.freeze({ ...view.content, direction: typed.value }) });
+}
+
+function ignore(): void {}
+
+function pointTalkPresencePolicy() {
+  return POINT_TALK_PRESENCE_POLICY;
+}
+
+/** The entrance's origin, travel, and duration, all read by CSS. */
+function pointTalkEntranceStyle(entrance: PointTalkEntrance | null): CSSProperties {
+  return {
+    "--point-talk-enter-duration": `${POINT_TALK_TIMING.enterMs}ms`,
+    "--point-talk-rest-scale": POINT_TALK_TIMING.restScale,
+    ...(entrance === null ? {} : {
+      "--point-talk-origin-x": `${entrance.originX}px`,
+      "--point-talk-origin-y": `${entrance.originY}px`,
+      "--point-talk-enter-travel": `${entrance.travelY}px`,
+    }),
+  } as CSSProperties;
+}
+
+const POINT_TALK_ECHO_CODE_POINTS = 24;
+
+/**
+ * A pending field repeats what the person asked for, condensed to one short
+ * line: whitespace collapsed and the tail elided by code point, never inside
+ * a surrogate pair.
+ */
+export function condensePointTalkDirection(direction: string): string | null {
+  const collapsed = direction.replace(/\s+/gu, " ").trim();
+  if (collapsed.length === 0) return null;
+  const points = Array.from(collapsed);
+  return points.length <= POINT_TALK_ECHO_CODE_POINTS
+    ? collapsed
+    : `${points.slice(0, POINT_TALK_ECHO_CODE_POINTS - 1).join("").trimEnd()}…`;
+}
+
+function pointTalkSurfaceVisible(phase: TextSwapController["state"]["phase"]): boolean {
+  return phase !== "idle" && phase !== "success" && phase !== "stale";
 }
 
 export function pointTalkOutsidePointerDismisses({
   insideBubble,
   insideCanvasChrome,
+  insideSlotOwner = false,
   insideVoiceTool,
   submitted,
 }: Readonly<{
   insideBubble: boolean;
   insideCanvasChrome: boolean;
+  /** A control that opens another AI surface, which takes the slot itself. */
+  insideSlotOwner?: boolean;
   insideVoiceTool: boolean;
   submitted: boolean;
 }>): boolean {
   // Chrome may temporarily occlude accepted work, but draft and capture still
   // follow their visible control and remain easy to dismiss. The fixed Voice
   // tool belongs to the current turn even though it lives outside the bubble.
-  return !insideBubble && !insideVoiceTool && (!insideCanvasChrome || !submitted);
+  // Ask Matter is not a press elsewhere: opening it takes the paper's slot,
+  // and the field leaves as a yielded presentation, not the person's close.
+  return !insideBubble && !insideVoiceTool && !insideSlotOwner &&
+    (!insideCanvasChrome || !submitted);
 }
 
 function PointTalkForm({
@@ -315,7 +645,7 @@ function PointTalkForm({
   copy: ReturnType<typeof pointTalkCopy>;
   initialDirection: string;
   inputId: string;
-  inputRef: RefObject<HTMLInputElement | null>;
+  inputRef?: RefObject<HTMLInputElement | null>;
   onStartVoice: () => void;
   onSubmit: (direction: string) => void;
   voiceAvailable: boolean;
@@ -390,17 +720,36 @@ function visualViewportBounds(): Readonly<{
       };
 }
 
-function pointTalkStatus(
-  state: TextSwapController["state"],
+/**
+ * How one status phase settles. Listening, the person's own submit, and a
+ * failure show at once; waiting for the microphone or for transcription
+ * settles first. Neither "Listening" nor a failure may stay once its phase
+ * ended: after the person's Stop the field must not claim it still listens.
+ */
+export function pointTalkStatusInput(
+  scope: string,
+  phase: PointTalkStatusPhase | null,
+): SettledStatusInput<PointTalkStatusPhase> {
+  return {
+    scope,
+    value: phase,
+    urgent: phase === "recording" || phase === "pending" || phase === "error",
+    lingers: phase !== "recording" && phase !== "error",
+  };
+}
+
+export function pointTalkPhaseLabel(
+  phase: PointTalkStatusPhase,
   locale: CanvasLanguage,
 ): string {
-  const zh = locale === "zh-CN" || locale === "zh-TW";
-  if (state.phase === "permission") return zh ? "正在等待麦克风…" : "Waiting for microphone…";
-  if (state.phase === "recording") return state.partialDirection?.trim() || (zh ? "正在听…" : "Listening…");
-  if (state.phase === "transcribing") return zh ? "正在听清…" : "Transcribing…";
-  if (state.phase === "pending") return zh ? "正在换一种说法…" : "Rewording…";
-  if (state.phase === "error") return zh ? "原文没有改变。" : "The original language was kept.";
-  return "";
+  const copy = pointTalkCopy(locale);
+  switch (phase) {
+    case "permission": return copy.waitingForMicrophone;
+    case "recording": return copy.listening;
+    case "transcribing": return copy.transcribing;
+    case "pending": return copy.rewording;
+    case "error": return copy.originalKept;
+  }
 }
 
 export function pointTalkRecoveryAction(
@@ -422,8 +771,25 @@ export function pointTalkRecoveryAction(
   }
 }
 
-function pointTalkCopy(locale: CanvasLanguage) {
-  if (locale === "zh-CN") return {
+type PointTalkCopy = Readonly<{
+  label: string;
+  placeholder: string;
+  voice: string;
+  apply: string;
+  stop: string;
+  retry: string;
+  recordAgain: string;
+  waitingForMicrophone: string;
+  listening: string;
+  transcribing: string;
+  rewording: string;
+  originalKept: string;
+}>;
+
+// Complete per locale: status lines once fell back to English for Japanese and
+// German and to Simplified Chinese for Traditional Chinese.
+const POINT_TALK_COPY: Readonly<Record<CanvasLanguage, PointTalkCopy>> = Object.freeze({
+  "zh-CN": Object.freeze({
     label: "告诉 AI 这段文字应该怎样改变",
     placeholder: "例如：更凝练一些",
     voice: "说出改写方向",
@@ -431,8 +797,13 @@ function pointTalkCopy(locale: CanvasLanguage) {
     stop: "完成",
     retry: "重试",
     recordAgain: "重新录音",
-  };
-  if (locale === "zh-TW") return {
+    waitingForMicrophone: "正在等待麦克风…",
+    listening: "正在听…",
+    transcribing: "正在听清…",
+    rewording: "正在换一种说法…",
+    originalKept: "原文没有改变。",
+  }),
+  "zh-TW": Object.freeze({
     label: "告訴 AI 這段文字應該怎樣改變",
     placeholder: "例如：更精煉一些",
     voice: "說出改寫方向",
@@ -440,8 +811,13 @@ function pointTalkCopy(locale: CanvasLanguage) {
     stop: "完成",
     retry: "重試",
     recordAgain: "重新錄音",
-  };
-  if (locale === "ja-JP") return {
+    waitingForMicrophone: "正在等待麥克風…",
+    listening: "正在聽…",
+    transcribing: "正在聽清…",
+    rewording: "正在換一種說法…",
+    originalKept: "原文沒有改變。",
+  }),
+  "ja-JP": Object.freeze({
     label: "この文章をどう変えるか AI に伝える",
     placeholder: "例：もう少し簡潔に",
     voice: "書き換え方を話す",
@@ -449,8 +825,13 @@ function pointTalkCopy(locale: CanvasLanguage) {
     stop: "完了",
     retry: "再試行",
     recordAgain: "もう一度録音",
-  };
-  if (locale === "de-DE") return {
+    waitingForMicrophone: "マイクを待っています…",
+    listening: "聞いています…",
+    transcribing: "文字に起こしています…",
+    rewording: "言い換えています…",
+    originalKept: "元の文章はそのままです。",
+  }),
+  "de-DE": Object.freeze({
     label: "AI eine Richtung für diesen Text geben",
     placeholder: "Zum Beispiel: etwas prägnanter",
     voice: "Richtung einsprechen",
@@ -458,8 +839,13 @@ function pointTalkCopy(locale: CanvasLanguage) {
     stop: "Fertig",
     retry: "Erneut",
     recordAgain: "Erneut aufnehmen",
-  };
-  return {
+    waitingForMicrophone: "Warte auf das Mikrofon …",
+    listening: "Hört zu …",
+    transcribing: "Wird transkribiert …",
+    rewording: "Wird umformuliert …",
+    originalKept: "Der ursprüngliche Text bleibt erhalten.",
+  }),
+  "en-US": Object.freeze({
     label: "Tell AI how this passage should change",
     placeholder: "For example: make it more concise",
     voice: "Speak a rewrite direction",
@@ -467,5 +853,14 @@ function pointTalkCopy(locale: CanvasLanguage) {
     stop: "Done",
     retry: "Retry",
     recordAgain: "Record again",
-  };
+    waitingForMicrophone: "Waiting for microphone…",
+    listening: "Listening…",
+    transcribing: "Transcribing…",
+    rewording: "Rewording…",
+    originalKept: "The original language was kept.",
+  }),
+});
+
+export function pointTalkCopy(locale: CanvasLanguage): PointTalkCopy {
+  return POINT_TALK_COPY[locale];
 }

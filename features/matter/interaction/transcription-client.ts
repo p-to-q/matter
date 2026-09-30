@@ -6,6 +6,7 @@ import {
   MAX_AUDIO_BYTES,
   MAX_TRANSCRIPTION_RESPONSE_BYTES,
   TRANSCRIPTION_CLIENT_TIMEOUT_MS,
+  TRANSCRIPTION_PURPOSE_QUERY_PARAMETER,
   hasPresentedEmoji,
   maxTranscriptionOutputCodePoints,
   transcriptionTextFitsCapacity,
@@ -57,7 +58,7 @@ export async function requestTranscription(input: {
   let response: Response | undefined;
   try {
     response = await Promise.race([
-      fetch(`${basePath()}/api/transcribe`, {
+      fetch(transcriptionUrl(input.purpose), {
         method: "POST",
         headers: { accept: "application/json" },
         body: form,
@@ -312,8 +313,13 @@ function isSuccess(
     (purpose !== "swap-direction" || normalizeTextSwapDirection(candidate.transcript) === candidate.transcript);
 }
 
-function basePath(): string {
-  return clientMatterBasePath();
+/**
+ * The purpose is repeated in the URL so the route can refuse a closed surface
+ * before the recording uploads into its buffer; the form field still decides.
+ */
+function transcriptionUrl(purpose: TranscriptionPurpose): string {
+  const query = new URLSearchParams({ [TRANSCRIPTION_PURPOSE_QUERY_PARAMETER]: purpose });
+  return `${clientMatterBasePath()}/api/transcribe?${query.toString()}`;
 }
 
 export function localTranscriptionIsEnabled(): boolean {

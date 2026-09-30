@@ -64,7 +64,7 @@ features/matter/
   layout/        visible traversal and focus/fold projection
   interaction/   pointer machine, DOM Range geometry, voice lifecycle
   persistence/   snapshot codec, IndexedDB, archive transport
-  server/        transcription, provider adapter, planner
+  server/        route handlers, transcription, provider adapter
   store/         thin React/Zustand binding over the modules above
 ```
 

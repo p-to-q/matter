@@ -7,6 +7,7 @@ import {
   TRANSFORM_REQUEST_VERSION,
   buildTransformPlan,
   parseTransformEnvelope,
+  parseTransformError,
   parseTransformPlan,
   planToTreeCommand,
 } from "./transform-contract";
@@ -146,6 +147,21 @@ describe("transform/2 contract", () => {
         { id: "thought", text: emojiPassage, parentId: null, createdAt: TIME, updatedAt: TIME },
       ] },
     })).ok).toBe(true);
+  });
+
+  it("keeps an admission refusal distinct from every model outcome", () => {
+    expect(parseTransformError({
+      error: { code: "RATE_LIMITED", message: "wait", retryable: true },
+    })).toEqual({ code: "RATE_LIMITED", message: "wait", retryable: true });
+    expect(parseTransformError({
+      error: { code: "RATE_LIMITED", message: "wait", retryable: false },
+    })).toBeNull();
+    expect(parseTransformError({
+      error: { code: "RATE_LIMITED", message: "wait", retryable: true, fallbackReason: "MODEL_BUSY" },
+    })).toBeNull();
+    expect(parseTransformError({
+      error: { code: "TURN_UNAVAILABLE", message: "later", retryable: true, fallbackReason: "MODEL_BUSY" },
+    })).toEqual({ code: "TURN_UNAVAILABLE", message: "later", retryable: true, fallbackReason: "MODEL_BUSY" });
   });
 
   it("requires an exact echo, fixed grow presentation, and a policy-valid expansion", () => {

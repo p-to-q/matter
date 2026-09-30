@@ -43,7 +43,7 @@ describe("Matter transcription route", () => {
     expect(response.status).toBe(503);
     expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: true },
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: false },
     });
   });
 
@@ -73,8 +73,78 @@ describe("Matter transcription route", () => {
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: true },
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: false },
     });
+  });
+
+  it("refuses a closed purpose the URL declares before reading any recording byte", async () => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    process.env.MATTER_TEXT_SWAP_SURFACE = "off";
+    const pulled = vi.fn();
+    const cancelled = vi.fn();
+    // Reading this stream would hold the route until its deadline.
+    const body = new ReadableStream<Uint8Array>({ pull: pulled, cancel: cancelled }, { highWaterMark: 0 });
+
+    const response = await POST(requestFromStream(body, {}, undefined, "?purpose=swap-direction"));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: false },
+    });
+    expect(pulled).not.toHaveBeenCalled();
+    expect(cancelled).toHaveBeenCalledOnce();
+  });
+
+  it("refuses a closed purpose before judging the recording it carries", async () => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    process.env.MATTER_TEXT_SWAP_SURFACE = "off";
+    const form = validForm();
+    form.set("purpose", "swap-direction");
+    form.set("durationMs", String(MAX_ACCEPTED_RECORDING_MS + 1));
+
+    // A client that does not declare the purpose in its URL is refused as soon
+    // as the field is read: an unavailable surface, not a too-long recording.
+    const response = await POST(requestFrom(form));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: false },
+    });
+  });
+
+  it("accepts a URL purpose only when the form field names the same purpose", async () => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    process.env.MATTER_TEXT_SWAP_SURFACE = "public";
+    const matching = validForm();
+    matching.set("purpose", "swap-direction");
+    const mismatched = validForm();
+
+    const accepted = await POST(requestFrom(matching, "?purpose=swap-direction"));
+    const refused = await POST(requestFrom(mismatched, "?purpose=swap-direction"));
+
+    expect(accepted.status).toBe(200);
+    expect(refused.status).toBe(400);
+    await expect(refused.json()).resolves.toMatchObject({
+      error: { code: "INVALID_REQUEST", retryable: false },
+    });
+  });
+
+  it.each([
+    ["an unknown purpose", "?purpose=delete"],
+    ["an empty purpose", "?purpose="],
+    ["a repeated purpose", "?purpose=admission&purpose=admission"],
+  ])("rejects %s in the URL before reading any recording byte", async (_name, query) => {
+    process.env.MATTER_TRANSCRIPTION_ADAPTER = "fixture";
+    const pulled = vi.fn();
+    const cancelled = vi.fn();
+    const body = new ReadableStream<Uint8Array>({ pull: pulled, cancel: cancelled }, { highWaterMark: 0 });
+
+    const response = await POST(requestFromStream(body, {}, undefined, query));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "INVALID_REQUEST" } });
+    expect(pulled).not.toHaveBeenCalled();
+    expect(cancelled).toHaveBeenCalledOnce();
   });
 
   it("admits swap direction speech when the surface is public and the managed adapter is off", async () => {
@@ -159,11 +229,40 @@ describe("Matter transcription route", () => {
     });
   });
 
+  it("refuses a closed declared purpose before spending the caller's rate window", async () => {
+    process.env = {
+      ...process.env,
+      NODE_ENV: "production",
+      MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io",
+      MATTER_TRANSCRIPTION_ADAPTER: "fixture",
+      NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED: "true",
+      MATTER_TEXT_SWAP_SURFACE: "off",
+    };
+    const swap = validForm();
+    swap.set("purpose", "swap-direction");
+    for (let index = 0; index < 20; index += 1) {
+      const refused = await POST(productionRequestFrom(swap, "192.0.2.1", "?purpose=swap-direction"));
+      expect(refused.status).toBe(503);
+      await expect(refused.json()).resolves.toMatchObject({
+        error: { code: "TRANSCRIPTION_UNAVAILABLE", retryable: false },
+      });
+    }
+    // Every slot of the window is still there for the purpose that is open.
+    for (let index = 0; index < 12; index += 1) {
+      const response = await POST(productionRequestFrom(validForm(), "192.0.2.1", "?purpose=admission"));
+      expect(response.status).toBe(200);
+    }
+    const limited = await POST(productionRequestFrom(validForm(), "192.0.2.1", "?purpose=admission"));
+    expect(limited.status).toBe(429);
+  });
+
   it("keeps temporary busy admission distinct from browser incompatibility", async () => {
     process.env = {
       ...process.env,
       NODE_ENV: "production",
       MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io",
+      // Only a deployment that can transcribe reads, and therefore holds, a body.
+      MATTER_TRANSCRIPTION_ADAPTER: "fixture",
     };
     const controllers = Array.from({ length: 3 }, () => new AbortController());
     const held = controllers.map((controller, index) => POST(requestFromStream(
@@ -441,6 +540,48 @@ describe("Matter transcription route", () => {
     await expect(overlongResponse.json()).resolves.toMatchObject({ error: { code: "AUDIO_TOO_LONG" } });
   });
 
+  it.each([
+    [
+      "a browser-native deployment",
+      { MATTER_TRANSCRIPTION_ADAPTER: "browser" },
+      "This deployment uses browser-native speech recognition.",
+    ],
+    [
+      "an unconfigured production deployment",
+      { NODE_ENV: "production" },
+      "Speech transcription is not configured.",
+    ],
+    [
+      "a deployment whose every voice purpose is closed",
+      {
+        MATTER_TRANSCRIPTION_ADAPTER: "fixture",
+        NEXT_PUBLIC_MATTER_VOICE_ADMISSION_ENABLED: "false",
+        MATTER_TEXT_SWAP_SURFACE: "off",
+      },
+      "Speech transcription is not configured.",
+    ],
+  ] as const)("refuses %s before reading any recording byte", async (_name, environment, message) => {
+    process.env = { ...process.env, ...environment };
+    const pulled = vi.fn();
+    const cancelled = vi.fn();
+    // A stream that never closes: reading it would hold the route until its
+    // 30-second deadline instead of refusing at once.
+    const body = new ReadableStream<Uint8Array>({ pull: pulled, cancel: cancelled }, { highWaterMark: 0 });
+
+    const response = await POST(requestFromStream(body, {
+      origin: "http://localhost",
+      "sec-fetch-site": "same-origin",
+      "content-length": String(MAX_AUDIO_REQUEST_BYTES),
+    }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toEqual({
+      error: { code: "TRANSCRIPTION_UNAVAILABLE", message, retryable: true },
+    });
+    expect(pulled).not.toHaveBeenCalled();
+    expect(cancelled).toHaveBeenCalledOnce();
+  });
+
   it("maps unsupported deployment configuration without exposing a provider", async () => {
     process.env.MATTER_TRANSCRIPTION_ADAPTER = "unsupported";
     const response = await POST(requestFrom(validForm()));
@@ -468,12 +609,12 @@ function validForm(): FormData {
   return form;
 }
 
-function requestFrom(form: FormData): Request {
-  return new Request("http://localhost/api/transcribe", { method: "POST", body: form });
+function requestFrom(form: FormData, query = ""): Request {
+  return new Request(`http://localhost/api/transcribe${query}`, { method: "POST", body: form });
 }
 
-function productionRequestFrom(form: FormData, address = "192.0.2.1"): Request {
-  return new Request("https://matter.ptoq.io/api/transcribe", {
+function productionRequestFrom(form: FormData, address = "192.0.2.1", query = ""): Request {
+  return new Request(`https://matter.ptoq.io/api/transcribe${query}`, {
     method: "POST",
     headers: productionHeaders(address),
     body: form,
@@ -492,8 +633,9 @@ function requestFromStream(
   body: ReadableStream<Uint8Array>,
   headers: Record<string, string> = {},
   signal?: AbortSignal,
+  query = "",
 ): Request {
-  return new Request("http://localhost/api/transcribe", {
+  return new Request(`http://localhost/api/transcribe${query}`, {
     method: "POST",
     headers: {
       "content-type": "multipart/form-data; boundary=x",

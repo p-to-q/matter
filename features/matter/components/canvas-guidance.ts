@@ -4,6 +4,7 @@ import type {
 } from "../runtime/admission-interaction";
 import { projectCanvasZoomPercent } from "../interaction/canvas-viewport";
 import type { CanvasLanguage } from "./canvas-preferences";
+import type { MaterialOutcome } from "./outcome-line";
 
 export type CanvasMaterialGuidanceState =
   | Readonly<{ kind: "empty" }>
@@ -30,9 +31,22 @@ export type CanvasCameraGuidanceState =
   | Readonly<{ kind: "none" }>
   | Readonly<{ kind: "pan"; zoom: number }>;
 
+/**
+ * A submitted Elastic or Point-and-Talk turn whose resolved result waits for
+ * its passage to be laid out. It keeps its owner busy, so the line says why
+ * and offers the explicit release.
+ */
+export type CanvasTurnGuidanceState =
+  | Readonly<{ kind: "none" }>
+  | Readonly<{ kind: "parked" }>;
+
 export type CanvasGuidanceInput = Readonly<{
   admission: AdmissionInteractionState;
   camera: CanvasCameraGuidanceState;
+  expansion?: CanvasTurnGuidanceState;
+  rewrite?: CanvasTurnGuidanceState;
+  /** The head of the outcome line, shown until the person's next action. */
+  outcome?: MaterialOutcome | null;
   language: CanvasLanguageGuidanceState;
   material: CanvasMaterialGuidanceState;
 }>;
@@ -48,6 +62,7 @@ type CanvasActionGuidanceId =
   | "use-recording-browser"
   | "record-again"
   | "dismiss-stale-recording"
+  | "place-held-words"
   | "speak-root"
   | "close-lasso"
   | "begin-stretch"
@@ -55,16 +70,25 @@ type CanvasActionGuidanceId =
   | "set-degree"
   | "apply-stretch"
   | "wait-expansion"
+  | "expansion-parked"
+  | "text-swap-parked"
+  | "expansion-unavailable"
+  | "expansion-stale"
   | "circle-selection"
   | "unfold-thought"
   | "speak-child"
-  | "select-thought";
+  | "select-thought"
+  | "text-swap-unavailable"
+  | "text-swap-stale"
+  | "wiki-unsaved"
+  | "wiki-passage-changed";
 
 export type CanvasGuidanceId = CanvasActionGuidanceId | "canvas-zoom";
 
 export const CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT = 34;
+const NOT_PARKED: CanvasTurnGuidanceState = Object.freeze({ kind: "none" });
 
-const GUIDANCE_COPY = Object.freeze({
+const EN_US_LINES = Object.freeze({
   "allow-microphone": "Allow microphone access.",
   "speak-recording": "Speak your thought.",
   "wait-recording": "Wait for recording to finish.",
@@ -75,6 +99,7 @@ const GUIDANCE_COPY = Object.freeze({
   "use-recording-browser": "Use a browser that can record.",
   "record-again": "Record your thought again.",
   "dismiss-stale-recording": "Dismiss this recording.",
+  "place-held-words": "Place or discard these words.",
   "speak-root": "Speak to place your first thought.",
   "close-lasso": "Close the loop around a phrase.",
   "begin-stretch": "Pull to begin.",
@@ -82,13 +107,21 @@ const GUIDANCE_COPY = Object.freeze({
   "set-degree": "Pull either handle outward.",
   "apply-stretch": "Tap the selection to confirm.",
   "wait-expansion": "Confirmed. Expanding.",
+  "expansion-parked": "Expansion waits for its passage.",
+  "text-swap-parked": "Rewording waits for its passage.",
+  "expansion-unavailable": "Not expanded. Text unchanged.",
+  "expansion-stale": "Passage changed. Not expanded.",
   "circle-selection": "Circle text between punctuation.",
   "unfold-thought": "Unfold this thought.",
   "speak-child": "Speak to grow beneath it.",
   "select-thought": "Select one thought.",
+  "text-swap-unavailable": "Not rewritten. Text unchanged.",
+  "text-swap-stale": "Passage changed. Not rewritten.",
+  "wiki-unsaved": "Wiki could not save that.",
+  "wiki-passage-changed": "Passage changed. Not restored.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
-const GUIDANCE_COPY_ZH = Object.freeze({
+const ZH_CN_LINES = Object.freeze({
   "allow-microphone": "允许使用麦克风。",
   "speak-recording": "说出你的想法。",
   "wait-recording": "请等待录音结束。",
@@ -99,6 +132,7 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "use-recording-browser": "请使用支持录音的浏览器。",
   "record-again": "请重新录下这段想法。",
   "dismiss-stale-recording": "关闭这次录音。",
+  "place-held-words": "放下这段话，或把它丢弃。",
   "speak-root": "说出你的第一个想法。",
   "close-lasso": "闭合圈选这段文字。",
   "begin-stretch": "拉动握点开始展开。",
@@ -106,10 +140,18 @@ const GUIDANCE_COPY_ZH = Object.freeze({
   "set-degree": "向外拉动任一握点展开。",
   "apply-stretch": "轻点选中框内确认展开。",
   "wait-expansion": "已确认，正在展开。",
+  "expansion-parked": "展开结果正在等待原段落出现。",
+  "text-swap-parked": "改写结果正在等待原段落出现。",
+  "expansion-unavailable": "未展开，原文未变。",
+  "expansion-stale": "段落已变化，未展开。",
   "circle-selection": "圈住一段连续文字，边界停在标点处。",
   "unfold-thought": "展开这段想法。",
   "speak-child": "说话，让想法向下生长。",
   "select-thought": "选择一段想法。",
+  "text-swap-unavailable": "未改写，原文未变。",
+  "text-swap-stale": "段落已变化，未改写。",
+  "wiki-unsaved": "词典 WIKI 未能记下这次选择。",
+  "wiki-passage-changed": "段落已变化，未恢复。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 export type CanvasGuidance =
@@ -138,6 +180,20 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
     )
   ) {
     return projectAdmissionGuidance(input.admission);
+  }
+
+  // An outcome is said once and holds the line until the person's next
+  // action; the outcome line queues any other, so none hides another.
+  if (input.outcome !== undefined && input.outcome !== null) {
+    return guidance(outcomeGuidanceId(input.outcome), "recovery");
+  }
+  // A parked result outranks lasso guidance: while it waits off-screen it also
+  // blocks its owner, so the line must say why and offer the release.
+  if ((input.expansion ?? NOT_PARKED).kind === "parked") {
+    return guidance("expansion-parked", "recovery");
+  }
+  if ((input.rewrite ?? NOT_PARKED).kind === "parked") {
+    return guidance("text-swap-parked", "recovery");
   }
 
   if (input.material.kind === "empty") {
@@ -204,6 +260,30 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
   }
 }
 
+/** The guidance line that says one outcome. */
+export function outcomeGuidanceId(outcome: MaterialOutcome): CanvasActionGuidanceId {
+  switch (outcome.owner) {
+    case "expansion":
+      return outcome.reason === "stale" ? "expansion-stale" : "expansion-unavailable";
+    case "rewrite":
+      return outcome.reason === "stale" ? "text-swap-stale" : "text-swap-unavailable";
+    case "wiki":
+      return outcome.reason === "passage-changed" ? "wiki-passage-changed" : "wiki-unsaved";
+    default:
+      return assertNever(outcome);
+  }
+}
+
+/** The polite announcement of one outcome, in the line's own words. */
+export function localizeOutcome(outcome: MaterialOutcome, language: CanvasLanguage): string {
+  return GUIDANCE_COPY[language].lines[outcomeGuidanceId(outcome)];
+}
+
+/** The explicit release beside a parked Elastic or Point-and-Talk result. */
+export function localizeParkedRelease(language: CanvasLanguage): string {
+  return GUIDANCE_COPY[language].discard;
+}
+
 /** Localization changes copy only; the interaction state machine remains authoritative. */
 export function localizeCanvasGuidance(
   guidanceState: CanvasGuidance,
@@ -213,23 +293,10 @@ export function localizeCanvasGuidance(
   // form also makes server and browser rendering identical across ICU builds.
   if (guidanceState.id === "canvas-zoom") return guidanceState;
   if (language === "en-US") return guidanceState;
-  if (language === "zh-TW") {
-    return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY_ZH_TW[guidanceState.id] });
-  }
-  if (language === "ja-JP") {
-    return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY_JA[guidanceState.id] });
-  }
-  if (language === "de-DE") {
-    return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY_DE[guidanceState.id] });
-  }
-  return Object.freeze({
-    ...guidanceState,
-    text: GUIDANCE_COPY_ZH[guidanceState.id],
-  });
+  return Object.freeze({ ...guidanceState, text: GUIDANCE_COPY[language].lines[guidanceState.id] });
 }
 
-const GUIDANCE_COPY_ZH_TW = Object.freeze({
-  ...GUIDANCE_COPY_ZH,
+const ZH_TW_LINES = Object.freeze({
   "allow-microphone": "允許使用麥克風。",
   "speak-recording": "說出你的想法。",
   "wait-recording": "請等待錄音結束。",
@@ -240,6 +307,7 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "use-recording-browser": "請使用支援錄音的瀏覽器。",
   "record-again": "請重新錄下這段想法。",
   "dismiss-stale-recording": "關閉這次錄音。",
+  "place-held-words": "放下這段話，或把它丟棄。",
   "speak-root": "說出你的第一個想法。",
   "close-lasso": "閉合圈選這段文字。",
   "begin-stretch": "拉動握點開始展開。",
@@ -247,13 +315,20 @@ const GUIDANCE_COPY_ZH_TW = Object.freeze({
   "set-degree": "向外拉動任一握點展開。",
   "apply-stretch": "輕點選取框內確認展開。",
   "wait-expansion": "已確認，正在展開。",
+  "expansion-parked": "展開結果正在等待原段落出現。",
+  "text-swap-parked": "改寫結果正在等待原段落出現。",
+  "expansion-unavailable": "未展開，原文未變。",
+  "expansion-stale": "段落已變更，未展開。",
   "circle-selection": "圈住一段連續文字，邊界停在標點處。",
   "unfold-thought": "展開這段想法。",
   "speak-child": "說話，讓想法向下生長。",
   "select-thought": "選擇一段想法。",
-});
-const GUIDANCE_COPY_JA = Object.freeze({
-  ...GUIDANCE_COPY,
+  "text-swap-unavailable": "未改寫，原文未變。",
+  "text-swap-stale": "段落已變更，未改寫。",
+  "wiki-unsaved": "詞典 WIKI 未能記下這次選擇。",
+  "wiki-passage-changed": "段落已變更，未恢復。",
+} satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
+const JA_JP_LINES = Object.freeze({
   "allow-microphone": "マイクの使用を許可してください。",
   "speak-recording": "考えを話してください。",
   "wait-recording": "録音が終わるまで待ってください。",
@@ -264,6 +339,7 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "use-recording-browser": "録音に対応したブラウザを使ってください。",
   "record-again": "もう一度考えを録音してください。",
   "dismiss-stale-recording": "この録音を閉じてください。",
+  "place-held-words": "この言葉を置くか、破棄してください。",
   "speak-root": "最初の考えを話してください。",
   "close-lasso": "フレーズを囲んで輪を閉じてください。",
   "begin-stretch": "ハンドルを引いて展開します。",
@@ -271,13 +347,20 @@ const GUIDANCE_COPY_JA = Object.freeze({
   "set-degree": "どちらかのハンドルを外向きに引いて展開。",
   "apply-stretch": "選択枠内をタップして確定。",
   "wait-expansion": "確定しました。展開中。",
+  "expansion-parked": "展開結果は元の段落の表示を待っています。",
+  "text-swap-parked": "言い換え結果は元の段落の表示を待っています。",
+  "expansion-unavailable": "展開されませんでした。原文はそのままです。",
+  "expansion-stale": "段落が変わったため展開しませんでした。",
   "circle-selection": "連続した一節を囲み、句読点で境界を止めます。",
   "unfold-thought": "この考えを展開してください。",
   "speak-child": "話して、考えを下へ育ててください。",
   "select-thought": "考えを一つ選んでください。",
-});
-const GUIDANCE_COPY_DE = Object.freeze({
-  ...GUIDANCE_COPY,
+  "text-swap-unavailable": "書き換えませんでした。原文はそのままです。",
+  "text-swap-stale": "段落が変わったため書き換えませんでした。",
+  "wiki-unsaved": "辞書 WIKI はこの選択を保存できませんでした。",
+  "wiki-passage-changed": "段落が変わったため戻しませんでした。",
+} satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
+const DE_DE_LINES = Object.freeze({
   "allow-microphone": "Mikrofonzugriff erlauben.",
   "speak-recording": "Sprich deinen Gedanken aus.",
   "wait-recording": "Warte, bis die Aufnahme beendet ist.",
@@ -288,6 +371,7 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "use-recording-browser": "Einen Browser mit Aufnahmefunktion verwenden.",
   "record-again": "Gedanken erneut aufnehmen.",
   "dismiss-stale-recording": "Diese Aufnahme schließen.",
+  "place-held-words": "Worte einfügen oder verwerfen.",
   "speak-root": "Sprich deinen ersten Gedanken aus.",
   "close-lasso": "Schließe den Kreis um eine Phrase.",
   "begin-stretch": "Zum Erweitern am Griff ziehen.",
@@ -295,10 +379,38 @@ const GUIDANCE_COPY_DE = Object.freeze({
   "set-degree": "Einen Griff nach außen ziehen, um zu erweitern.",
   "apply-stretch": "Zum Bestätigen in die Auswahl tippen.",
   "wait-expansion": "Bestätigt. Wird erweitert.",
+  "expansion-parked": "Die Erweiterung wartet auf ihre Passage.",
+  "text-swap-parked": "Die Umformulierung wartet auf ihre Passage.",
+  "expansion-unavailable": "Nicht erweitert. Text unverändert.",
+  "expansion-stale": "Passage geändert. Nicht erweitert.",
   "circle-selection": "Eine zusammenhängende Passage einkreisen; an Satzzeichen enden.",
   "unfold-thought": "Diesen Gedanken ausklappen.",
   "speak-child": "Sprich, damit der Gedanke darunter weiterwächst.",
   "select-thought": "Einen Gedanken auswählen.",
+  "text-swap-unavailable": "Nicht umgeschrieben. Text unverändert.",
+  "text-swap-stale": "Passage geändert. Nicht umgeschrieben.",
+  "wiki-unsaved": "Wiki konnte das nicht speichern.",
+  "wiki-passage-changed": "Passage geändert. Nicht wiederhergestellt.",
+} satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
+
+type GuidanceLocaleCopy = Readonly<{
+  lines: Readonly<Record<CanvasActionGuidanceId, string>>;
+  /**
+   * The one word for releasing work held for the person; the admission box's
+   * Discard for held words says the same.
+   */
+  discard: string;
+}>;
+
+// One entry per locale, each naming its own complete lines table: a spread
+// would let a missing key fall back to another language instead of failing
+// the type check.
+const GUIDANCE_COPY: Readonly<Record<CanvasLanguage, GuidanceLocaleCopy>> = Object.freeze({
+  "en-US": Object.freeze({ lines: EN_US_LINES, discard: "Discard" }),
+  "zh-CN": Object.freeze({ lines: ZH_CN_LINES, discard: "丢弃" }),
+  "zh-TW": Object.freeze({ lines: ZH_TW_LINES, discard: "丟棄" }),
+  "ja-JP": Object.freeze({ lines: JA_JP_LINES, discard: "破棄" }),
+  "de-DE": Object.freeze({ lines: DE_DE_LINES, discard: "Verwerfen" }),
 });
 
 function projectAdmissionGuidance(
@@ -316,7 +428,9 @@ function projectAdmissionGuidance(
     case "committing":
       return guidance("wait-commit", "progress");
     case "error":
-      return projectAdmissionError(admission.errorCode);
+      return admission.transcript === undefined
+        ? projectAdmissionError(admission.errorCode)
+        : guidance("place-held-words", "recovery");
     default:
       return assertNever(admission);
   }
@@ -349,7 +463,7 @@ function guidance(
   id: CanvasActionGuidanceId,
   kind: "action" | "progress" | "recovery",
 ): Extract<CanvasGuidance, { id: CanvasActionGuidanceId }> {
-  const text = GUIDANCE_COPY[id];
+  const text = EN_US_LINES[id];
   if (text.length > CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT) {
     throw new Error(`Canvas guidance exceeds narrow line budget: ${id}`);
   }

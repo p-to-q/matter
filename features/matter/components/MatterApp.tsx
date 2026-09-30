@@ -2,32 +2,56 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { RootedMaterial } from "./RootedMaterial";
-import { useMatterStore } from "./use-matter-store";
+import { useMatterStore, useWikiOccurrences } from "./use-matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
+import { admissionHoldsSubmittedWords } from "../runtime/admission-interaction";
 import { useAdmission } from "../interaction/use-admission";
 import { useMaterialPersistence } from "../persistence/use-material-persistence";
-import { exportSnapshotArchive, importSnapshotArchive } from "../persistence/archive-transport";
-import { treeToBundle } from "../persistence/snapshot-codec";
 import { useCanvasPreferences } from "./use-canvas-preferences";
 import type { TransformEnvelope, TransformPlan } from "../protocol/transform-contract";
 import type { TextSwapEnvelope, TextSwapPlan } from "../protocol/text-swap-contract";
 import type {
+  MatterStoreReceipt,
   TextSwapCommittedChange,
   TransformCommittedChange,
 } from "../store/matter-store";
-import type { TextSwapCommitResult } from "../interaction/text-swap-driver";
+import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
+import {
+  IDLE_PAPER_ACTIVITY,
+  materialIsIdle,
+  materialTurnsHoldBasis,
+  type PaperActivity,
+} from "./material-turn-activity";
 import {
   seededFallbackBranchTexts,
   type SeededBranchTextResolver,
 } from "../material/seeded-material-core";
 import type { SeededSessionRelocalizer } from "../material/seeded-session-localization";
 import { useWikiAuthority } from "../persistence/use-wiki-authority";
+import { useStoragePersistence } from "../persistence/use-storage-persistence";
+import type { MaterialFilesCopy } from "./material-files-copy";
+import type { MatterLocale } from "../config/locales";
+import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
+
+// Archive bytes move only after a Files-panel gesture. The transport and its
+// snapshot encoder load after first paint, and the zip codec when Archive
+// opens, so neither Export nor a chosen file waits on a code fetch.
+const loadArchiveTransport = () => Promise.all([
+  import("../persistence/archive-transport"),
+  import("../persistence/snapshot-codec"),
+]).then(([transport, codec]) => Object.freeze({
+  exportSnapshotArchive: transport.exportSnapshotArchive,
+  importSnapshotArchive: transport.importSnapshotArchive,
+  preloadArchiveCodec: transport.preloadArchiveCodec,
+  treeToBundle: codec.treeToBundle,
+}));
 
 export function MatterApp() {
   useWikiAuthority();
   const tree = useMatterStore((state) => state.tree);
   const documentEpoch = useMatterStore((state) => state.documentEpoch);
   const history = useMatterStore((state) => state.history);
+  const untouchedTree = useMatterStore((state) => state.untouchedTree);
   const navigation = useMatterStore((state) => state.navigation);
   const extendMaterial = useMatterStore((state) => state.extendMaterial);
   const localizeSeededMaterial = useMatterStore((state) => state.localizeSeededMaterial);
@@ -47,8 +71,30 @@ export function MatterApp() {
   const renameDocument = useMatterStore((state) => state.renameDocument);
   const hydrateSnapshot = useMatterStore((state) => state.hydrateSnapshot);
   const switchDocument = useMatterStore((state) => state.switchDocument);
-  const persistence = useMaterialPersistence(tree, history, documentEpoch, hydrateSnapshot, switchDocument);
+  const wikiOccurrences = useWikiOccurrences();
   const canvasPreferences = useCanvasPreferences();
+  const admission = useAdmission({
+    commit: admitHumanTranscript,
+    settleRepair: settleHumanTranscriptRepair,
+    scope: { treeId: tree.id, revision: tree.revision, documentEpoch },
+    locale: canvasPreferences.preferences.language,
+  });
+  const [paperActivity, setPaperActivity] = useState<PaperActivity>(IDLE_PAPER_ACTIVITY);
+  // One signal gates every replacement of the loaded document instance.
+  const materialTurns = { admission: admission.state.phase, paper: paperActivity };
+  const persistence = useMaterialPersistence(
+    tree,
+    history,
+    untouchedTree,
+    documentEpoch,
+    hydrateSnapshot,
+    switchDocument,
+    materialIsIdle(materialTurns),
+    admissionHoldsSubmittedWords(admission.state),
+  );
+  const storagePersistence = useStoragePersistence();
+  const requestStoragePersistence = storagePersistence.request;
+  const archiveLanguage = canvasPreferences.preferences.language;
   const branchTextResolverRef = useRef<SeededBranchTextResolver>(seededFallbackBranchTexts);
   const [seededSessionRelocalizer, setSeededSessionRelocalizer] =
     useState<SeededSessionRelocalizer | null>(null);
@@ -87,10 +133,13 @@ export function MatterApp() {
     documentEpoch,
     seededSessionRelocalizer,
   ]);
+  // Export, Replace, and Retry are the only gestures that may ask the browser
+  // to keep storage persistent; each asks before its first await.
   const exportArchive = useCallback(async () => {
+    requestStoragePersistence("export");
     if (persistence.status.errorCode === "PERSISTENCE_CORRUPT") {
       const recovery = await persistence.exportCorruptRecovery();
-      if (!recovery.ok) return archiveFailure(recovery.errorCode);
+      if (!recovery.ok) return archiveFailure(recovery.errorCode, archiveLanguage);
       downloadLocalBytes(recovery.bytes, recovery.fileName, "application/json");
       return Object.freeze({
         ok: true as const,
@@ -98,75 +147,118 @@ export function MatterApp() {
           const replaced = await persistence.replaceCorrupt();
           return replaced.ok
             ? Object.freeze({ ok: true } as const)
-            : archiveFailure(replaced.errorCode);
+            : archiveFailure(replaced.errorCode, archiveLanguage);
         },
       });
     }
+    // Always exported from memory: superseded or cleared storage cannot be read.
+    const { exportSnapshotArchive, treeToBundle } = await loadArchiveTransport();
     const archive = await exportSnapshotArchive(treeToBundle(tree));
-    if (!archive.ok) return archiveFailure(archive.error.code);
+    if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     downloadLocalBytes(archive.bytes, `${tree.id}.matter.zip`, "application/zip");
+    // The exported copy carries every word whose address still holds.
+    wikiOccurrences.noteExported();
     return Object.freeze({ ok: true } as const);
-  }, [persistence, tree]);
+  }, [archiveLanguage, persistence, requestStoragePersistence, tree, wikiOccurrences]);
   const validateArchive = useCallback(async (file: File) => {
+    const { importSnapshotArchive } = await loadArchiveTransport();
     const archive = await importSnapshotArchive(file);
-    if (!archive.ok) return archiveFailure(archive.error.code);
+    if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     return archive.tree.id === tree.id
-      ? Object.freeze({ ok: true } as const)
-      : archiveFailure("IMPORT_FOREIGN_DOCUMENT");
-  }, [tree.id]);
-  const replaceArchive = useCallback(async (file: File) => {
+      ? Object.freeze({ ok: true as const, olderThanCurrent: archive.tree.revision < tree.revision })
+      : archiveFailure("IMPORT_FOREIGN_DOCUMENT", archiveLanguage);
+  }, [archiveLanguage, tree.id, tree.revision]);
+  const replaceArchive = useCallback(async (
+    file: File,
+    options: Readonly<{ replaceUnsaved: boolean }>,
+  ) => {
+    requestStoragePersistence("replace");
     const basis = Object.freeze({
       treeId: tree.id,
       revision: tree.revision,
       documentEpoch,
     });
+    const { importSnapshotArchive } = await loadArchiveTransport();
     const archive = await importSnapshotArchive(file);
-    if (!archive.ok) return archiveFailure(archive.error.code);
-    const imported = await persistence.importMaterial(archive.tree, basis);
+    if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
+    const imported = await persistence.importMaterial(archive.tree, basis, options);
     return imported.status === "switched"
       ? Object.freeze({ ok: true } as const)
-      : archiveFailure(imported.errorCode);
-  }, [documentEpoch, persistence, tree.id, tree.revision]);
+      : archiveFailure(imported.errorCode, archiveLanguage);
+  }, [archiveLanguage, documentEpoch, persistence, requestStoragePersistence, tree.id, tree.revision]);
+  useEffect(() => preloadWhenIdle([loadArchiveTransport]), []);
   const archive = useMemo(() => Object.freeze({
+    prepare: () => preloadNow(() => loadArchiveTransport()
+      .then((transport) => transport.preloadArchiveCodec())),
     exportCopy: exportArchive,
     validateImport: validateArchive,
     replaceImport: replaceArchive,
   }), [exportArchive, replaceArchive, validateArchive]);
-  const admission = useAdmission({
-    commit: admitHumanTranscript,
-    settleRepair: settleHumanTranscriptRepair,
-    scope: { treeId: tree.id, revision: tree.revision, documentEpoch },
-    locale: canvasPreferences.preferences.language,
-  });
+  const retrySaving = persistence.retry;
+  const persistenceSurface = useMemo(() => Object.freeze({
+    status: persistence.status,
+    retry: () => {
+      requestStoragePersistence("retry");
+      retrySaving();
+    },
+    resolveConflict: persistence.resolveConflict,
+    acknowledgeHistoryNotice: persistence.acknowledgeHistoryNotice,
+    storagePersisted: storagePersistence.persisted,
+  }), [
+    persistence.acknowledgeHistoryNotice,
+    persistence.resolveConflict,
+    persistence.status,
+    requestStoragePersistence,
+    retrySaving,
+    storagePersistence.persisted,
+  ]);
+  const turnsHoldSeedBasis = materialTurnsHoldBasis(materialTurns);
+  const reportHistoryUnavailable = persistence.reportHistoryUnavailable;
+  // Reconciliation completes once, after the first load; save phases are not
+  // a reason to look at the seed again.
+  const materialReconciled = persistence.initialReconciliationComplete &&
+    persistence.status.phase !== "loading";
+  // The language and document instance the seed copy was last localized for.
+  const localizedForRef = useRef<string | null>(null);
   useLayoutEffect(() => {
+    // Relocalization waits for every material turn that read current passages
+    // and runs once the last one settles, so a locale change never revokes a
+    // submitted Point-and-Talk or Elastic request on seed copy. It walks the
+    // bounded journal, so it runs once per language and document instance,
+    // never again merely because a turn settled.
     if (
       seededSessionRelocalizer === null ||
-      !persistence.initialReconciliationComplete ||
-      persistence.status.phase === "loading" ||
-      admission.state.phase !== "idle"
+      !materialReconciled ||
+      turnsHoldSeedBasis
     ) return;
-    localizeSeededMaterial(
+    const localizedFor = `${canvasPreferences.preferences.language} ${documentEpoch}`;
+    if (localizedForRef.current === localizedFor) return;
+    localizedForRef.current = localizedFor;
+    const receipt = localizeSeededMaterial(
       canvasPreferences.preferences.language,
       seededSessionRelocalizer,
     );
+    if (receipt.historyReleased === true) reportHistoryUnavailable();
   }, [
-    admission.state.phase,
     canvasPreferences.preferences.language,
     documentEpoch,
     localizeSeededMaterial,
-    persistence.initialReconciliationComplete,
-    persistence.status.phase,
+    materialReconciled,
+    reportHistoryUnavailable,
     seededSessionRelocalizer,
+    turnsHoldSeedBasis,
   ]);
   const clearRepairPresentations = admission.clearRepairPresentations;
+  // A step that no longer applies releases its stack in the store; the
+  // durability surface carries the one quiet notice about it.
   const undoWithPresentationReset = useCallback(() => {
     clearRepairPresentations();
-    undo();
-  }, [clearRepairPresentations, undo]);
+    if (isHistoryUnavailable(undo())) reportHistoryUnavailable();
+  }, [clearRepairPresentations, reportHistoryUnavailable, undo]);
   const redoWithPresentationReset = useCallback(() => {
     clearRepairPresentations();
-    redo();
-  }, [clearRepairPresentations, redo]);
+    if (isHistoryUnavailable(redo())) reportHistoryUnavailable();
+  }, [clearRepairPresentations, redo, reportHistoryUnavailable]);
   const admissionAnchor = createAdmissionAnchor(tree, navigation);
   const removeCurrentThought = useCallback(() => removeSelected({
     commandId: `human_removal_${createOperationId()}`,
@@ -199,27 +291,22 @@ export function MatterApp() {
     envelope: TransformEnvelope,
     plan: TransformPlan,
     expectedDocumentEpoch: number,
-  ): TransformCommittedChange | null => {
+  ): MaterialTurnCommitResult<TransformCommittedChange> => {
     const receipt = commitTransform(envelope, plan, expectedDocumentEpoch, Date.now());
-    return receipt.operation === "commit" && receipt.status === "committed" && "transformChange" in receipt
-      ? receipt.transformChange
-      : null;
+    return materialTurnResult(receipt, "transformChange" in receipt ? receipt.transformChange : null);
   }, [commitTransform]);
   const commitTextSwapTurn = useCallback((
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
     expectedDocumentEpoch: number,
-  ): TextSwapCommitResult<TextSwapCommittedChange> => {
+  ): MaterialTurnCommitResult<TextSwapCommittedChange> => {
     const receipt = commitTextSwap(envelope, plan, expectedDocumentEpoch, Date.now());
-    if (receipt.operation !== "commit" || receipt.status !== "committed" || !("textSwapChange" in receipt)) {
-      return Object.freeze({ status: receipt.status === "stale" ? "stale" : "rejected" });
-    }
-    return Object.freeze({ status: "committed", change: receipt.textSwapChange });
+    return materialTurnResult(receipt, "textSwapChange" in receipt ? receipt.textSwapChange : null);
   }, [commitTextSwap]);
   return (
     <RootedMaterial
       canUndo={history.entries.length > 0}
-      canRedo={(history.redoEntries?.length ?? 0) > 0}
+      canRedo={history.redoEntries.length > 0}
       canvasPreferences={canvasPreferences}
       locale={canvasPreferences.preferences.language}
       documentEpoch={documentEpoch}
@@ -242,13 +329,14 @@ export function MatterApp() {
           : null
       }
       navigation={navigation}
-      persistence={persistence}
+      persistence={persistenceSurface}
       onRemoveSelected={removeCurrentThought}
       onMoveNode={moveCurrentThought}
       onRenameDocument={renameCurrentDocument}
       onClearSelection={clearSelection}
       onTransformCommit={commitTransformTurn}
       onTextSwapCommit={commitTextSwapTurn}
+      onPaperActivityChange={setPaperActivity}
       onExitFocus={showFull}
       onFocusNode={focus}
       onInsertChild={extendChild}
@@ -257,8 +345,19 @@ export function MatterApp() {
       onUndo={undoWithPresentationReset}
       onRedo={redoWithPresentationReset}
       tree={tree}
+      wikiOccurrences={wikiOccurrences}
     />
   );
+}
+
+function materialTurnResult<Change>(
+  receipt: Readonly<{ status: string }>,
+  change: Change | null,
+): MaterialTurnCommitResult<Change> {
+  if (receipt.status === "committed" && change !== null) {
+    return Object.freeze({ status: "committed", change });
+  }
+  return Object.freeze({ status: receipt.status === "stale" ? "stale" : "rejected" });
 }
 
 function createOperationId(): string {
@@ -267,34 +366,58 @@ function createOperationId(): string {
     : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-function archiveFailure(code: string) {
-  const message = archiveMessage(code);
-  return Object.freeze({ ok: false as const, message });
+function isHistoryUnavailable(receipt: MatterStoreReceipt): boolean {
+  return receipt.status === "rejected" &&
+    "errorCode" in receipt &&
+    receipt.errorCode === "HISTORY_UNAVAILABLE";
 }
 
-function archiveMessage(code: string): string {
+// A failure is reported only in answer to an archive gesture made in the Files
+// panel, whose lazy chunk already holds this copy, so the import resolves
+// without a network fetch. The copy stays out of the initial graph.
+async function archiveFailure(code: string, language: MatterLocale) {
+  const { materialFilesCopy } = await import("./material-files-copy");
+  return Object.freeze({
+    ok: false as const,
+    message: archiveMessage(code, materialFilesCopy(language)),
+  });
+}
+
+function archiveMessage(code: string, copy: MaterialFilesCopy): string {
   switch (code) {
     case "IMPORT_STALE":
-      return "Material changed while this archive was being prepared. Review it and try again.";
+      return copy.archiveErrorStale;
+    case "IMPORT_BUSY":
+      return copy.archiveErrorBusy;
     case "IMPORT_CONFLICT":
-      return "A different copy of this material is already stored here.";
+      return copy.archiveErrorConflict;
+    case "IMPORT_DIRTY":
+      return copy.archiveErrorDirty;
+    case "IMPORT_SAVING":
+      return copy.archiveErrorSaving;
     case "IMPORT_FOREIGN_DOCUMENT":
-      return "This preview can restore only a copy of the current document.";
+      return copy.archiveErrorForeign;
     case "IMPORT_INVALID_TREE":
-      return "This material cannot be restored.";
+      return copy.archiveErrorInvalidTree;
+    case "PERSISTENCE_STORAGE_FULL":
+      return copy.archiveErrorStorageFull;
     case "PERSISTENCE_UNAVAILABLE":
     case "PERSISTENCE_WRITE_FAILED":
-      return "This browser could not save the imported material.";
+      return copy.archiveErrorSaveFailed;
     case "PERSISTENCE_CORRUPT":
-      return "Stored material must be repaired before importing.";
+      return copy.archiveErrorCorrupt;
+    case "PERSISTENCE_SUPERSEDED":
+      return copy.archiveErrorSuperseded;
+    case "PERSISTENCE_CLEARED":
+      return copy.archiveErrorCleared;
     case "ARCHIVE_BOUND_EXCEEDED":
-      return "This archive exceeds Matter’s supported size.";
+      return copy.archiveErrorTooLarge;
     case "ARCHIVE_UNSUPPORTED_ENTRY":
-      return "This archive contains unsupported files or paths.";
+      return copy.archiveErrorUnsupported;
     case "ARCHIVE_UNAVAILABLE":
-      return "Archive support is unavailable in this browser.";
+      return copy.archiveErrorUnavailable;
     default:
-      return "This archive is not valid Matter material.";
+      return copy.archiveErrorInvalid;
   }
 }
 

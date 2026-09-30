@@ -90,8 +90,14 @@ canvas appearance, or the right-rail editing tools.
   `48px`-high targets. Focus follows the visible button, not the invisible
   extension.
 - One measured frosted action field prefers the upper-left clear space of a
-  hovered or keyboard-focused passage, then tries the other above, below, and
-  side positions in a fixed collision-safe order. The field and all available
+  hovered, keyboard-focused, or selected passage, then tries the other above,
+  below, and
+  side positions in a fixed collision-safe order. A fine pointer's click
+  selects the passage it will act on, so the selection keeps the field after
+  the pointer leaves, and a press on a passage never closes that passage's
+  field; hover or focus elsewhere still takes precedence, and `Escape`
+  dismisses the selection's field until that passage is pressed or selected
+  again. The field and all available
   actions reveal together. Its left control is the supplied AI placeholder and
   opens the node-local Point-and-Talk direction field; its right control reuses the
   material index's working-context transition: `−` sets the active branch aside
@@ -110,6 +116,98 @@ high-contrast `2px` perimeter around the visible control, calibrated against
 [2.4.13 Focus Appearance](https://www.w3.org/WAI/WCAG22/Understanding/focus-appearance.html).
 These measurements are component evidence, not a claim of product-wide WCAG
 conformance.
+
+## Keyboard ownership
+
+A keydown belongs to the IME iff `isComposing || keyCode === 229`
+(`components/composition-safe-keys.ts`). Chromium flags the confirming Enter;
+WebKit before its April 2026 event-order fix fired `compositionend` first and
+then a `229` keydown with the flag already clear; Android keyboards report `229`
+for nearly every key. Every caller therefore passes `keyCode`, React call sites
+pass `event.nativeEvent`, and Enter or Escape acts only on keydown. An Android
+Enter is accepted as IME-owned: every such field also has a visible action, and
+a rename still commits on blur.
+
+Document-level Escape has one owner, `components/escape-layers.ts`: a single
+bubble-phase `window` listener that runs after every React handler and ignores
+`defaultPrevented`, auto-repeat, and IME-owned keys. Registered layers are
+ordered by tier, then activation recency, and one keydown closes at most one:
+
+```text
+gesture 4    node drag, grip drag
+transient 3  settings and language menus
+panel 2      Ask Matter, modal dialogs, the overlay material drawer
+paper 1      node action lens, Point and Talk, the Wiki takeover,
+             a submitted Elastic degree
+mode 0       Lasso
+```
+
+Everything that covers the paper outranks every paper surface, so no paper
+surface asks whether something covers it. A layer that had nothing left to
+cancel declines, and the next one tries. The overlay drawer keeps the key while
+its archive or the canvas is busy: it stays open and nothing beneath it acts.
+Focused fields (rename, canvas title, index search, a slider grip) keep their
+own `onKeyDown`, test `isCancelEscape`, and call `preventDefault()`. No keydown
+handler runs in the capture phase or stops a keydown's propagation (the canvas's
+capture-phase click suppression for a rejected palm is a click, not a key).
+After a submit Escape only dismisses
+presentation: Elastic loses its visible degree, its range staying addressed with
+both grips at zero, and Point and Talk detaches, while the submitted request
+continues. Escape on the Point and Talk field is the person's close: its
+frozen copy fades and shrinks for 200 ms, never a cut. `escape-ownership.test.ts` holds the boundary
+by scanning the source tree.
+
+## Canvas pointer ownership
+
+The canvas has one gesture owner (`runtime/canvas-pointer-arbitration.ts`),
+which replaces the per-type `isPrimary` gate: Pointer Events make a palm primary
+for its own type, so a palm during a pen stroke used to reach node drag, Pan, or
+a pinch. There is no persistent pen mode. While a pen is in contact, and for
+`PEN_PALM_GRACE_MS` (400 ms) after its last contact event, a touch pointer-down
+is rejected before the contact registry, capture, Lasso, drag, or camera; every
+later event of that pointer and its click are ignored, and so is an unowned
+touch's cancel. A pen that lands anywhere, a local field included, within
+`PEN_TAKEOVER_WINDOW_MS` (300 ms) of a single-finger touch takes the canvas
+over: the touch's Lasso stroke restores its prior selection, its Pan returns the
+camera to where it began, and its tap never settles. Until a touch founder
+commits (it travels `TOUCH_COMMIT_SLOP_PX`, ends as a tap, or outlives the
+window) it dismisses nothing a person made: Point and Talk, a committed Elastic
+degree, and repair presentations wait, while camera interruption stays
+immediate. The grips, Point and Talk's outside dismissal, and the Wiki
+takeover's outside dismissal sit outside the canvas owner, so they apply the
+same rule through the arbitration module's one press-dismissal policy.
+Otherwise the
+first pointer owns the gesture and only another touch may join it, so two
+fingers still pinch whenever no pen is touching. Pen hover is not activity, and
+a mouse alone behaves as before. Pen contact is noted in the window capture
+phase, so a control that stops propagation cannot strand it. A pointer-down
+that reuses an id still held as owned or rejected settles that earlier contact
+first: ids are unique among active pointers, so an end the page never received
+cannot leave every later touch joining a pinch that no longer exists. A move
+with nothing pressed settles its own pointer the same way, and a hovering pen
+settles every pen contact still recorded, because a stylus returns into range
+under a fresh id and one screen carries one stylus. A settled pen keeps the
+grace of its last real contact event: hover never extends palm rejection, and
+a barrel press while hovering is not contact.
+
+## Chrome accessibility
+
+- Hover affordances exist only under `@media (hover: hover)`, so a tap never
+  leaves a sticky hover state; focus, press, and selection states stay ungated,
+  and a hovering desktop sees the same cascade as before.
+- An unavailable rail tool is `aria-disabled`, not `disabled`: it keeps focus
+  when a pending operation flips it and describes why it cannot act (pending
+  work, no selection, or no history).
+- Under forced colors every focus and selection that was a background plate or
+  box-shadow also draws a system-color outline or bar.
+- An open modal dialog makes the rail, index, drawer handle, and brand header
+  inert, including a handle mounted after the dialog opened.
+- Live regions are mounted before they speak; a silent region leaves the flow
+  but stays in the accessibility tree.
+- Chrome, guidance, Wiki, Point and Talk, and paper-region copy tables are
+  typed per locale (`Record<CanvasLanguage, …>` or `satisfies` the full key
+  set); none spreads another language, so a missing key fails the type check
+  instead of falling back to English or Simplified Chinese.
 
 ## Left field: separately frozen
 

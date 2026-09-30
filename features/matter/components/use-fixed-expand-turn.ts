@@ -11,19 +11,30 @@ import {
   type TransformPlan,
 } from "../protocol/transform-contract";
 import type { StretchCommitBasis } from "../runtime/stretch-interaction";
+import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import type { TransformCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
 import { selectLineage } from "../tree/selectors";
-import { subscribePageExit, subscribePageSuspension } from "../interaction/page-suspension";
+import { useDeliveryWindow } from "../interaction/use-delivery-window";
+
+/**
+ * How a submitted turn ended without changing material. `unavailable` covers
+ * provider, transport, and admissibility failures; `stale` means its exact
+ * passage changed first.
+ */
+export type FixedExpandTurnOutcome = "unavailable" | "stale";
 
 export type FixedExpandTurnState = Readonly<{
   phase: "idle" | "requesting";
   basis: StretchCommitBasis | null;
+  /** A resolved result is held only because its exact passage is not laid out. */
+  parked: boolean;
 }>;
 
 export type FixedExpandTurn = Readonly<{
   state: FixedExpandTurnState;
   start: (basis: StretchCommitBasis) => boolean;
+  /** Explicitly releases the submitted or parked turn without an outcome. */
   cancel: () => void;
 }>;
 
@@ -40,12 +51,18 @@ type FixedExpandInput = Readonly<{
     envelope: TransformEnvelope,
     plan: TransformPlan,
     expectedDocumentEpoch: number,
-  ) => TransformCommittedChange | null;
+  ) => MaterialTurnCommitResult<TransformCommittedChange>;
   onCommitted: (change: TransformCommittedChange) => void;
+  /** Reports, once, a turn that ended without the change the person asked for. */
+  onOutcome?: (outcome: FixedExpandTurnOutcome) => void;
   onUnavailable?: () => void;
 }>;
 
-const IDLE: FixedExpandTurnState = Object.freeze({ phase: "idle", basis: null });
+const IDLE: FixedExpandTurnState = Object.freeze({
+  phase: "idle",
+  basis: null,
+  parked: false,
+});
 
 type OwnedFixedExpandRequest = {
   readonly controller: AbortController;
@@ -53,6 +70,7 @@ type OwnedFixedExpandRequest = {
   readonly envelope: TransformEnvelope;
   readonly basis: StretchCommitBasis;
   plan?: TransformPlan;
+  parked: boolean;
 };
 
 /** Owns one immutable fixed-expand request; material remains store-owned. */
@@ -61,7 +79,6 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
   const [invariantFailure, setInvariantFailure] = useState<Readonly<{ error: unknown }> | null>(null);
   const inputRef = useRef(input);
   const requestRef = useRef<OwnedFixedExpandRequest | null>(null);
-  const activePointersRef = useRef(new Set<number>());
   const deliveryAvailableRef = useRef(input.deliveryWindowAvailable !== false);
   const deliveryWindowOpenRef = useRef(
     typeof document === "undefined" || document.visibilityState === "visible",
@@ -79,43 +96,73 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
     setState(IDLE);
   }, []);
 
+  /**
+   * Returns to idle after a turn that changed nothing. A failure the person
+   * should know about reports one quiet outcome; a replaced document reports
+   * none, because its passage no longer exists for them.
+   */
+  const publishUnchanged = useCallback((outcome: FixedExpandTurnOutcome | null) => {
+    setState(IDLE);
+    if (outcome !== null) inputRef.current.onOutcome?.(outcome);
+  }, []);
+
+  const settleUnchanged = useCallback((
+    request: OwnedFixedExpandRequest,
+    outcome: FixedExpandTurnOutcome | null,
+  ) => {
+    if (requestRef.current !== request) return;
+    request.controller.abort(new DOMException("Settled", "AbortError"));
+    requestRef.current = null;
+    publishUnchanged(outcome);
+  }, [publishUnchanged]);
+
+  const settleConflict = useCallback((request: OwnedFixedExpandRequest) => {
+    const current = inputRef.current;
+    const sameDocument = request.documentEpoch === current.documentEpoch &&
+      request.envelope.treeId === current.tree.id;
+    settleUnchanged(request, sameDocument ? "stale" : null);
+  }, [settleUnchanged]);
+
   const deliver = useCallback((request: OwnedFixedExpandRequest) => {
     if (
       requestRef.current !== request ||
       request.controller.signal.aborted ||
-      request.plan === undefined ||
-      !deliveryWindowOpenRef.current
+      request.plan === undefined
     ) return;
     const current = inputRef.current;
     if (!fixedExpandRequestIsCurrent(request, current)) {
-      requestRef.current = null;
-      setState(IDLE);
+      settleConflict(request);
       current.onUnavailable?.();
       return;
     }
-    if (
-      current.deliveryVisibleNodeIds !== undefined &&
-      !current.deliveryVisibleNodeIds.has(request.basis.selection.nodeId)
-    ) return;
+    const targetLaidOut = current.deliveryVisibleNodeIds === undefined ||
+      current.deliveryVisibleNodeIds.has(request.basis.selection.nodeId);
+    if (request.parked === targetLaidOut) {
+      // Parking is a visible state with an explicit release, never an
+      // invisible block on every later stretch.
+      request.parked = !targetLaidOut;
+      setState(requestingState(request));
+    }
+    if (!targetLaidOut || !deliveryWindowOpenRef.current) return;
     requestRef.current = null;
     try {
-      const change = current.commit(
+      const result = current.commit(
         request.envelope,
         request.plan,
         request.documentEpoch,
       );
-      if (change === null) {
+      if (result.status !== "committed") {
+        publishUnchanged(result.status === "stale" ? "stale" : "unavailable");
         current.onUnavailable?.();
-        setState(IDLE);
         return;
       }
-      current.onCommitted(change);
+      current.onCommitted(result.change);
       setState(IDLE);
     } catch (error) {
       setState(IDLE);
       setInvariantFailure(Object.freeze({ error }));
     }
-  }, []);
+  }, [publishUnchanged, settleConflict]);
 
   const start = useCallback((basis: StretchCommitBasis): boolean => {
     const current = inputRef.current;
@@ -132,10 +179,10 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
         })
       : null;
     if (envelope === null) {
-      // A release can race a bounded-context or scope refusal. It is not a new
-      // material state: reopen the same local degree without vendor chrome.
+      // A release can race a bounded-context or scope refusal. Reopen the same
+      // local degree and say quietly that nothing was sent.
       current.onUnavailable?.();
-      setState(IDLE);
+      publishUnchanged("unavailable");
       return false;
     }
 
@@ -145,9 +192,10 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
       documentEpoch: basis.documentEpoch,
       envelope,
       basis,
+      parked: false,
     };
     requestRef.current = request;
-    setState(Object.freeze({ phase: "requesting", basis }));
+    setState(requestingState(request));
     void requestTransform(envelope, controller.signal).then(
       (plan) => {
         if (requestRef.current !== request || controller.signal.aborted) return;
@@ -156,84 +204,61 @@ export function useFixedExpandTurn(input: FixedExpandInput): FixedExpandTurn {
       },
       () => {
         if (requestRef.current !== request || controller.signal.aborted) return;
-        requestRef.current = null;
         if (!fixedExpandRequestIsCurrent(request, inputRef.current)) {
-          setState(IDLE);
+          settleConflict(request);
           return;
         }
         // Provider and transport availability are operational facts, not new
-        // material. Leave the selection and document untouched without drawing
-        // a vendor failure into the paper.
+        // material. Leave the selection and document untouched, reopen the
+        // degree, and announce only that the text is unchanged.
+        settleUnchanged(request, "unavailable");
         inputRef.current.onUnavailable?.();
-        setState(IDLE);
       },
     );
     return true;
-  }, [deliver]);
+  }, [deliver, publishUnchanged, settleConflict, settleUnchanged]);
 
   useEffect(() => {
     const request = requestRef.current;
     if (request === null) return;
-    if (!fixedExpandRequestIsCurrent(request, input)) queueMicrotask(cancel);
-    else deliver(request);
-  }, [cancel, deliver, input]);
+    if (!fixedExpandRequestIsCurrent(request, input)) {
+      queueMicrotask(() => settleConflict(request));
+    } else deliver(request);
+  }, [deliver, input, settleConflict]);
 
-  useEffect(() => {
-    deliveryWindowOpenRef.current = deliveryAvailableRef.current &&
-      document.visibilityState === "visible" && activePointersRef.current.size === 0;
-    const request = requestRef.current;
-    if (request !== null) deliver(request);
-  }, [deliver, input.deliveryWindowAvailable]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (
-        !deliveryAvailableRef.current || event.key !== "Escape" ||
-        requestRef.current === null
-      ) return;
-      event.preventDefault();
-      cancel();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    const openDeliveryIfUsable = () => {
-      deliveryWindowOpenRef.current =
-        deliveryAvailableRef.current && document.visibilityState === "visible" &&
-          activePointersRef.current.size === 0;
+  const refreshDeliveryWindow = useDeliveryWindow({
+    isAvailable: () => deliveryAvailableRef.current,
+    onChange: (open) => {
+      deliveryWindowOpenRef.current = open;
+      // Delivery also reflects whether a resolved plan is parked, so it runs
+      // on every evaluation and commits only when the window is open.
       const request = requestRef.current;
       if (request !== null) deliver(request);
-    };
-    const onPointerDown = (event: PointerEvent) => {
-      activePointersRef.current.add(event.pointerId);
-      deliveryWindowOpenRef.current = false;
-    };
-    const onPointerDone = (event: PointerEvent) => {
-      activePointersRef.current.delete(event.pointerId);
-      openDeliveryIfUsable();
-    };
-    window.addEventListener("pointerdown", onPointerDown, true);
-    window.addEventListener("pointerup", onPointerDone, true);
-    window.addEventListener("pointercancel", onPointerDone, true);
-    const unsubscribePageSuspension = subscribePageSuspension(
-      () => {
-        activePointersRef.current.clear();
-        deliveryWindowOpenRef.current = false;
-      },
-      openDeliveryIfUsable,
-    );
-    const unsubscribePageExit = subscribePageExit(cancel);
-    openDeliveryIfUsable();
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("pointerdown", onPointerDown, true);
-      window.removeEventListener("pointerup", onPointerDone, true);
-      window.removeEventListener("pointercancel", onPointerDone, true);
-      unsubscribePageSuspension();
-      unsubscribePageExit();
-      cancel();
-    };
-  }, [cancel, deliver]);
+    },
+    // A back-forward-cache hide keeps a submitted expansion for the page's
+    // return, where delivery revalidates as usual; only a real unload ends it.
+    onExit: (exit) => {
+      if (!exit.persisted) cancel();
+    },
+  }, deliver);
+
+  useEffect(() => {
+    refreshDeliveryWindow();
+  }, [input.deliveryWindowAvailable, refreshDeliveryWindow]);
+
+  // Escape never reaches this owner: after submit it may only remove the
+  // committed degree from the paper, which the composition's Escape layer does.
+  useEffect(() => () => cancel(), [cancel]);
 
   return { state, start, cancel };
+}
+
+function requestingState(request: OwnedFixedExpandRequest): FixedExpandTurnState {
+  return Object.freeze({
+    phase: "requesting",
+    basis: request.basis,
+    parked: request.parked,
+  });
 }
 
 export function createFixedExpandEnvelope(input: Readonly<{

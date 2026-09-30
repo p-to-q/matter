@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
 import {
   SEEDED_DOCUMENT_NODE_IDS,
   SEEDED_EMPTY_TREE_ID,
@@ -18,6 +19,7 @@ import { relocalizeSeededSession } from "../material/seeded-session-localization
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
 import { createMatterStore } from "./matter-store";
 import type { ThoughtTree } from "../tree/model";
+import type { TreeHistory } from "../tree/history";
 import { buildTransformPlan, parseTransformEnvelope } from "../protocol/transform-contract";
 import { buildTextSwapPlan, parseTextSwapEnvelope } from "../protocol/text-swap-contract";
 import { selectLineage } from "../tree/selectors";
@@ -31,6 +33,10 @@ import {
   type MaterialLexicalPort,
 } from "../application/material-lexical-port";
 import type { MaterialLexicalObservationPort } from "../application/material-lexical-observation-port";
+import { adjudicateAdmissionRepair } from "../runtime/admission-repair-adjudication";
+
+// The repair runtime supplies this adjudicator; the product loads it lazily.
+const judgeRepair = () => adjudicateAdmissionRepair;
 
 describe("Matter store", () => {
   it("opens the pre-admission document with quiet identity and no sample material", () => {
@@ -84,6 +90,30 @@ describe("Matter store", () => {
       .toBe("被允许想象的其他生活");
   });
 
+  it("hydrates stored material only over the exact tree the caller read storage against", () => {
+    const store = createMatterStore("expanded", { documentRoot: true });
+    const read = store.getState().tree as ThoughtTree;
+    const stored = structuredClone(read) as ThoughtTree;
+    stored.title = "Saved in another tab";
+    stored.revision += 3;
+    // A commit lands after the caller read storage.
+    store.getState().renameDocument({ commandId: "rename_meanwhile", title: "Mine", createdAt: "2026-09-29T00:00:00.000Z" });
+    const committed = store.getState().tree as ThoughtTree;
+    expect(committed).not.toBe(read);
+
+    expect(store.getState().hydrateSnapshot(stored, null, read)).toMatchObject({
+      operation: "hydrate",
+      status: "rejected",
+      errorCode: "MATERIAL_CHANGED",
+      revision: committed.revision,
+    });
+    expect(store.getState().tree).toBe(committed);
+    expect(store.getState().history.entries).toHaveLength(1);
+
+    expect(store.getState().hydrateSnapshot(stored, null, committed)).toMatchObject({ status: "hydrated" });
+    expect(store.getState().tree.title).toBe("Saved in another tab");
+  });
+
   it("starts the public root-only document without descendants and grows locally", () => {
     const store = createMatterStore("root");
     const rootId = store.getState().tree.rootId;
@@ -103,7 +133,7 @@ describe("Matter store", () => {
 
   it("publishes late transcript repair as its own undoable command", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -166,10 +196,58 @@ describe("Matter store", () => {
     expect(store.getState().tree.nodes.voice_node_store_1.text).toBe("我觉得可以。");
   });
 
+  it("refuses a repair candidate it has no adjudicator to judge, keeping the admitted words", () => {
+    let judge: ReturnType<typeof judgeRepair> | null = null;
+    const store = createMatterStore("root", {
+      admissionRepair: () => judge,
+      monotonicNow: () => 100,
+    });
+    const rootId = store.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    const admit = (suffix: string) => store.getState().admitHumanTranscript({
+      target: "child",
+      treeId: store.getState().tree.id,
+      baseRevision: store.getState().tree.revision,
+      parentNodeId: rootId,
+    }, {
+      interactionId: `voice_unjudged_${suffix}`,
+      commandId: `human_admission_unjudged_${suffix}`,
+      nodeId: `voice_node_unjudged_${suffix}`,
+      createdAt: "2026-08-11T10:00:00.000Z",
+      transcript: "呃，我觉得可以",
+      expectedDocumentEpoch: 0,
+      admittedAtMs: 100,
+      repairLocale: "zh-CN",
+    });
+    const candidate = (repairLeaseId: string) => ({
+      repairLeaseId,
+      outcome: "candidate" as const,
+      text: "我觉得可以。",
+      source: "rules" as const,
+      createdAt: "2026-08-11T10:00:00.100Z",
+    });
+
+    const unjudged = admit("1");
+    if (!("repairLeaseId" in unjudged)) throw new Error("repair lease missing");
+    const revision = store.getState().tree.revision;
+    expect(store.getState().settleHumanTranscriptRepair(candidate(unjudged.repairLeaseId)))
+      .toMatchObject({ status: "rejected", errorCode: "INVALID_REPAIR" });
+    expect(store.getState().tree.revision).toBe(revision);
+    expect(store.getState().tree.nodes.voice_node_unjudged_1.text).toBe("呃，我觉得可以。");
+
+    // Once the repair runtime has supplied it, the same candidate is judged.
+    judge = adjudicateAdmissionRepair;
+    const judged = admit("2");
+    if (!("repairLeaseId" in judged)) throw new Error("repair lease missing");
+    expect(store.getState().settleHumanTranscriptRepair(candidate(judged.repairLeaseId)))
+      .toMatchObject({ status: "committed" });
+    expect(store.getState().tree.nodes.voice_node_unjudged_2.text).toBe("我觉得可以。");
+  });
+
   it("applies one captured spoken Wiki basis before admission", () => {
     const basis = confirmedWikiBasis("spoken", "code x", "Codex", 1);
     const store = createMatterStore("root", {
-      materialLexical: createWikiMaterialLexicalPort(() => basis),
+      materialLexical: createWikiMaterialLexicalPort(() => basis, () => canonicalizeWikiText),
     });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
@@ -232,6 +310,7 @@ describe("Matter store", () => {
     });
     let nowMs = 100;
     const store = createMatterStore("root", {
+      admissionRepair: judgeRepair,
       materialLexical,
       monotonicNow: () => nowMs,
     });
@@ -373,7 +452,7 @@ describe("Matter store", () => {
 
   it("keeps repair capabilities distinct when admission command ids repeat", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
 
@@ -425,7 +504,7 @@ describe("Matter store", () => {
 
   it("revalidates a model delta from the recomputed rule floor", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -459,7 +538,7 @@ describe("Matter store", () => {
 
   it("commits the store-adjudicated model text instead of its transport wrapper", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -492,7 +571,7 @@ describe("Matter store", () => {
   });
 
   it("keeps a stale repair silent and leaves store diagnostics unchanged", () => {
-    const store = createMatterStore("root");
+    const store = createMatterStore("root", { admissionRepair: judgeRepair });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const before = store.getState();
@@ -505,7 +584,7 @@ describe("Matter store", () => {
 
   it("does not revive repair authority when undo and redo restore the same node", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -540,7 +619,7 @@ describe("Matter store", () => {
 
   it("preserves repair authority when an unrelated structural drag commits", () => {
     let nowMs = 100;
-    const store = createMatterStore("expanded", { monotonicNow: () => nowMs });
+    const store = createMatterStore("expanded", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -580,7 +659,7 @@ describe("Matter store", () => {
 
   it("uses the store clock to expire a repair capability", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -613,7 +692,7 @@ describe("Matter store", () => {
 
   it("does not let a caller timestamp extend the store-owned repair lease", () => {
     let nowMs = 100;
-    const store = createMatterStore("root", { monotonicNow: () => nowMs });
+    const store = createMatterStore("root", { admissionRepair: judgeRepair, monotonicNow: () => nowMs });
     const rootId = store.getState().tree.rootId;
     if (rootId === null) throw new Error("root-only fixture root missing");
     const admission = store.getState().admitHumanTranscript({
@@ -646,6 +725,7 @@ describe("Matter store", () => {
   it("restores the admission and repair as two undo steps after hydration", () => {
     let nowMs = 100;
     const source = createMatterStore("root", {
+      admissionRepair: judgeRepair,
       documentRoot: true,
       monotonicNow: () => nowMs,
     });
@@ -678,8 +758,8 @@ describe("Matter store", () => {
 
     const tree = structuredClone(source.getState().tree) as ThoughtTree;
     const history = structuredClone(source.getState().history);
-    const restored = createMatterStore("root", { documentRoot: true });
-    expect(restored.getState().hydrateSnapshot(tree, history)).toMatchObject({ status: "hydrated" });
+    const restored = createMatterStore("root", { admissionRepair: judgeRepair, documentRoot: true });
+    expect(restored.getState().hydrateSnapshot(tree, recovered(history))).toMatchObject({ status: "hydrated" });
     expect(restored.getState().undo()).toMatchObject({ status: "committed" });
     expect(restored.getState().tree.nodes.voice_node_reload.text).toBe("呃，我觉得可以。");
     expect(restored.getState().undo()).toMatchObject({ status: "committed" });
@@ -696,13 +776,78 @@ describe("Matter store", () => {
     const persistedHistory = structuredClone(source.getState().history);
 
     const restored = createMatterStore("root", { documentRoot: true });
-    expect(restored.getState().hydrateSnapshot(persistedTree, persistedHistory)).toMatchObject({
+    expect(restored.getState().hydrateSnapshot(persistedTree, recovered(persistedHistory))).toMatchObject({
       operation: "hydrate",
       status: "hydrated",
+      historyReleased: false,
     });
     expect(restored.getState().history.entries).toHaveLength(1);
     expect(restored.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
     expect(restored.getState().tree.nodes[rootId]?.children).toEqual(childrenBeforeCommit);
+  });
+
+  it("reports a stored journal whose next Undo no longer applies and releases that stack", () => {
+    const source = createMatterStore("root", { documentRoot: true });
+    const rootId = source.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    source.getState().extendMaterial(rootId, branchValues());
+    const persistedHistory = structuredClone(source.getState().history);
+    source.getState().extendMaterial(rootId, branchValues());
+    // The stored tree moved on without its journal: the top inverse is stale.
+    const persistedTree = structuredClone(source.getState().tree) as ThoughtTree;
+
+    const restored = createMatterStore("root", { documentRoot: true });
+    expect(restored.getState().hydrateSnapshot(persistedTree, recovered(persistedHistory))).toMatchObject({
+      status: "hydrated",
+      historyReleased: true,
+    });
+    expect(restored.getState().tree).toEqual(persistedTree);
+    expect(restored.getState().history.entries).toEqual([]);
+  });
+
+  it("carries a storage-side release through hydration even when the rest restores", () => {
+    const source = createMatterStore("root", { documentRoot: true });
+    const rootId = source.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    source.getState().extendMaterial(rootId, branchValues());
+    const persistedTree = structuredClone(source.getState().tree) as ThoughtTree;
+
+    const restored = createMatterStore("root", { documentRoot: true });
+    expect(restored.getState().hydrateSnapshot(
+      persistedTree,
+      recovered(source.getState().history, true),
+    )).toMatchObject({ status: "hydrated", historyReleased: true });
+    expect(restored.getState().history.entries).toHaveLength(1);
+  });
+
+  it("releases an undo stack whose restored step fails at use without changing material", () => {
+    const source = createMatterStore("root", { documentRoot: true });
+    const rootId = source.getState().tree.rootId;
+    if (rootId === null) throw new Error("root-only fixture root missing");
+    source.getState().extendMaterial(rootId, branchValues());
+    source.getState().extendMaterial(rootId, branchValues());
+    const persistedTree = structuredClone(source.getState().tree) as ThoughtTree;
+    const persistedHistory = structuredClone(source.getState().history) as TreeHistory;
+    // Only the top is dry-run on hydration; a deeper damaged step waits.
+    const [oldest, newest] = persistedHistory.entries;
+    if (oldest === undefined || newest === undefined) throw new Error("two steps expected");
+    persistedHistory.entries = [{ ...oldest, inverse: { ...oldest.inverse, expectedTreeId: "another" } }, newest];
+
+    const restored = createMatterStore("root", { documentRoot: true });
+    expect(restored.getState().hydrateSnapshot(persistedTree, recovered(persistedHistory))).toMatchObject({
+      historyReleased: false,
+    });
+    expect(restored.getState().undo()).toMatchObject({ operation: "undo", status: "committed" });
+    const beforeFailure = restored.getState().tree;
+    expect(restored.getState().undo()).toMatchObject({
+      operation: "undo",
+      status: "rejected",
+      errorCode: "HISTORY_UNAVAILABLE",
+    });
+    expect(restored.getState().tree).toBe(beforeFailure);
+    expect(restored.getState().history.entries).toEqual([]);
+    expect(restored.getState().history.redoEntries).toHaveLength(1);
+    expect(restored.getState().redo()).toMatchObject({ operation: "redo", status: "committed" });
   });
 
   it("creates isolated deterministic sessions", () => {
@@ -1058,6 +1203,29 @@ describe("Matter store", () => {
     expect(store.getState().tree.nodes[values.nodeId].text).toBe(text);
   });
 
+  it("tells untouched material from the person's change across relocalization, hydration, and import", () => {
+    const store = createMatterStore();
+    const untouched = () => store.getState().tree === store.getState().untouchedTree;
+    expect(untouched()).toBe(true);
+    store.getState().localizeSeededMaterial("de-DE", relocalizeSeededSession);
+    expect(untouched()).toBe(true);
+
+    store.getState().extendMaterial(SEEDED_DOCUMENT_NODE_IDS.root, branchValues());
+    expect(untouched()).toBe(false);
+    // Relocalizing after the person's change never makes it untouched again.
+    store.getState().localizeSeededMaterial("en-US", relocalizeSeededSession);
+    expect(untouched()).toBe(false);
+    store.getState().undo();
+    expect(untouched()).toBe(false);
+
+    const stored = store.getState().tree as ThoughtTree;
+    expect(store.getState().hydrateSnapshot(stored)).toMatchObject({ status: "hydrated" });
+    expect(untouched()).toBe(true);
+    store.getState().extendMaterial(SEEDED_DOCUMENT_NODE_IDS.root, branchValues());
+    expect(store.getState().switchDocument(stored)).toMatchObject({ status: "switched" });
+    expect(untouched()).toBe(true);
+  });
+
   it.each([
     ["throws", (() => { throw new Error("interaction copy chunk unavailable"); })],
     ["returns no options", (() => [])],
@@ -1332,6 +1500,7 @@ describe("Matter store", () => {
       operation: "hydrate",
       status: "hydrated",
       revision: storedTree.revision,
+      historyReleased: false,
     });
     expect(store.getState().tree).toEqual(storedTree);
     expect(store.getState().history.entries).toEqual([]);
@@ -1373,6 +1542,10 @@ describe("Matter store", () => {
     });
   });
 });
+
+function recovered(history: unknown, released = false) {
+  return { history: structuredClone(history) as TreeHistory, released };
+}
 
 let branchSequence = 0;
 function branchValues() {

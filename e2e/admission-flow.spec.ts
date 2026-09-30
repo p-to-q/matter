@@ -70,6 +70,8 @@ for (const viewport of [
     const feedback = page.locator(".admission-feedback");
     await expect(feedback).toBeVisible();
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    // The enter moves the box by a few pixels; measure where it settles.
+    await settleTransientSurface(feedback);
     const feedbackBox = await feedback.boundingBox();
     const anchorBox = await page.locator('[data-thought-id="thought_fixture_root"]').boundingBox();
     expect(feedbackBox).not.toBeNull();
@@ -238,6 +240,7 @@ for (const viewport of [
     await expect(feedback).toBeVisible();
     await expect(feedback).toHaveAttribute("data-admission-anchor-node-id", "thought_fixture_root");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+    await settleTransientSurface(feedback);
 
     const feedbackBox = await feedback.boundingBox();
     const rootBox = await root.boundingBox();
@@ -359,7 +362,7 @@ test("modal chrome cancels raw Voice but holds a stopped admission until materia
     markTranscriptionFulfilled = resolve;
   });
   let transcriptionRequested = false;
-  await page.route("**/api/transcribe", async (route) => {
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
     transcriptionRequested = true;
     await transcriptionGate;
     const response = await route.fetch();
@@ -408,9 +411,87 @@ test("modal chrome cancels raw Voice but holds a stopped admission until materia
   // the visible change until modal ownership and its opening pointer are gone.
   await expect(page.locator(".admission-feedback")).toHaveCount(0);
   await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount);
+  await page.evaluate(() => {
+    const seen: string[] = [];
+    (window as Window & { __matterReturnedFeedback?: string[] }).__matterReturnedFeedback = seen;
+    new MutationObserver(() => {
+      const box = document.querySelector<HTMLElement>(".admission-feedback");
+      if (box !== null) seen.push(`${box.dataset.presence}:${box.dataset.phase}`);
+    }).observe(document.body, { attributes: true, childList: true, subtree: true });
+  });
   await dialog.getByRole("button", { name: "关闭: 模型 API" }).click();
   await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount + 1);
   await expect(settings).toBeFocused();
+  // Work that finished as the paper returned was never shown again: no box
+  // re-presents over the new passage just to hold and fade a stale label.
+  await page.waitForTimeout(700);
+  expect(await page.evaluate(() =>
+    (window as Window & { __matterReturnedFeedback?: string[] }).__matterReturnedFeedback ?? [],
+  )).toEqual([]);
+  await expect(page.locator(".admission-feedback")).toHaveCount(0);
+});
+
+test("an archive Replace refuses while submitted words are in flight, then replaces once they land", async ({ page }) => {
+  let releaseTranscription!: () => void;
+  const transcriptionGate = new Promise<void>((resolve) => {
+    releaseTranscription = resolve;
+  });
+  let transcriptionRequested = false;
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
+    transcriptionRequested = true;
+    await transcriptionGate;
+    const response = await route.fetch();
+    await route.fulfill({ response });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await prewarmAdmissionRouteModules(page);
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const initialNodeCount = await page.locator("[data-thought-id]").count();
+  const sidebar = page.locator("aside.material-files");
+  const archiveButton = sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.archive, exact: true });
+
+  // A backup of the material as it is now.
+  await archiveButton.click();
+  let archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  const download = page.waitForEvent("download");
+  await archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveExportCopy }).click();
+  const backupPath = await (await download).path();
+  if (backupPath === null) throw new Error("Archive download did not produce a local file.");
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.close, exact: true }).click();
+
+  // The person speaks and presses Stop; the words are submitted but not yet in material.
+  const voiceTool = page.locator('[data-tool-id="voice"]');
+  await voiceTool.click();
+  const recording = page.locator('.admission-feedback[data-phase="recording"]');
+  await expect(recording).toBeVisible({ timeout: FIXTURE_RECORDING_START_TIMEOUT_MS });
+  await page.waitForTimeout(350);
+  await recording.getByRole("button", { name: "停止录音", exact: true }).click();
+  await expect.poll(() => transcriptionRequested).toBe(true);
+
+  // Replacing the document now would silently drop those words: it refuses.
+  await archiveButton.click();
+  archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await archive.getByLabel(fixtureUiCopy.materialFiles.archiveChooseMaterialArchive).setInputFiles(backupPath);
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveConfirmReplace);
+  await archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveReplace, exact: true }).click();
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveErrorBusy);
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount);
+
+  // The words land as material once the paper is back.
+  releaseTranscription();
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.close, exact: true }).click();
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount + 1, { timeout: 15_000 });
+  await expect(page.locator(".admission-feedback")).toHaveCount(0, { timeout: 5_000 });
+
+  // With nothing in progress, the same Replace is the person's explicit choice.
+  await archiveButton.click();
+  archive = sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel });
+  await archive.getByLabel(fixtureUiCopy.materialFiles.archiveChooseMaterialArchive).setInputFiles(backupPath);
+  await expect(archive).toContainText(fixtureUiCopy.materialFiles.archiveConfirmOlder);
+  await archive.getByRole("button", { name: fixtureUiCopy.materialFiles.archiveReplace, exact: true }).click();
+  await expect(sidebar.getByRole("region", { name: fixtureUiCopy.materialFiles.archivePanel })).toHaveCount(0);
+  await expect(page.locator("[data-thought-id]")).toHaveCount(initialNodeCount);
 });
 
 test("a transcription outage keeps material unchanged and Record again can recover", async ({ page }) => {
@@ -423,7 +504,7 @@ test("a transcription outage keeps material unchanged and Record again can recov
   const outageFulfilled = new Promise<void>((resolve) => {
     markOutageFulfilled = resolve;
   });
-  await page.route("**/api/transcribe", async (route) => {
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
     transcriptionRequests += 1;
     if (transcriptionRequests === 1) {
       await outageGate;
@@ -511,6 +592,147 @@ test("reduced motion presents repaired text whole without a reveal sequence", as
   }))).toBe(true);
   await expect(admitted.getByRole("button", { name: repairedTranscript, exact: true })).toHaveCount(1);
 });
+
+test("a finished admission fades in place without moving the passage it admitted", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const initialIds = await page.locator('[data-thought-id^="thought_"]').evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("data-thought-id")));
+  await page.evaluate((knownIds) => {
+    type PresenceTrace = Array<Readonly<{ stage: string; close: string; phase: string }>>;
+    const runtime = window as Window & {
+      __matterAdmissionPresence?: PresenceTrace;
+      __matterAdmittedTops?: number[];
+    };
+    const trace: PresenceTrace = [];
+    const admittedTops: number[] = [];
+    runtime.__matterAdmissionPresence = trace;
+    runtime.__matterAdmittedTops = admittedTops;
+    let admittedId: string | null = null;
+    const record = () => {
+      const box = document.querySelector<HTMLElement>(".admission-feedback");
+      const entry = box === null
+        ? { stage: "absent", close: "", phase: "" }
+        : {
+            stage: box.dataset.presence ?? "",
+            close: box.dataset.presenceClose ?? "",
+            phase: box.dataset.phase ?? "",
+          };
+      const last = trace[trace.length - 1];
+      if (last?.stage !== entry.stage || last.close !== entry.close || last.phase !== entry.phase) {
+        trace.push(entry);
+      }
+      if (admittedId !== null) return;
+      const admitted = Array.from(document.querySelectorAll<HTMLElement>('[data-thought-id^="thought_"]'))
+        .find((node) => !knownIds.includes(node.dataset.thoughtId ?? null));
+      if (admitted === undefined) return;
+      admittedId = admitted.dataset.thoughtId ?? null;
+      // First settled paint of the new passage, then its position once the
+      // recording box has gone: the lane release must not move it.
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        admittedTops.push(admitted.getBoundingClientRect().top);
+      }));
+    };
+    new MutationObserver(record).observe(document.body, {
+      attributeFilter: ["data-presence", "data-presence-close", "data-phase"],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+  }, initialIds);
+
+  const voiceTool = page.locator('[data-tool-id="voice"]');
+  await voiceTool.click();
+  const recording = page.locator('.admission-feedback[data-phase="recording"]');
+  await expect(recording).toBeVisible({ timeout: FIXTURE_RECORDING_START_TIMEOUT_MS });
+  await page.waitForTimeout(350);
+  await recording.getByRole("button", { name: "停止录音", exact: true }).click();
+  await expect(page.locator('[data-thought-id^="thought_"]')).toHaveCount(initialIds.length + 1);
+  // The leaving copy is never announced or operable, and it is gone after its exit.
+  await expect(page.getByRole("button", { name: "停止录音", exact: true })).toHaveCount(0);
+  await expect(page.locator(".admission-feedback")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(() =>
+    (window as Window & { __matterAdmittedTops?: number[] }).__matterAdmittedTops?.length ?? 0,
+  )).toBeGreaterThan(0);
+
+  const { trace, tops, finalTop } = await page.evaluate((knownIds) => {
+    const runtime = window as Window & {
+      __matterAdmissionPresence?: Array<Readonly<{ stage: string; close: string; phase: string }>>;
+      __matterAdmittedTops?: number[];
+    };
+    const admitted = Array.from(document.querySelectorAll<HTMLElement>('[data-thought-id^="thought_"]'))
+      .find((node) => !knownIds.includes(node.dataset.thoughtId ?? null));
+    return {
+      trace: runtime.__matterAdmissionPresence ?? [],
+      tops: runtime.__matterAdmittedTops ?? [],
+      finalTop: admitted?.getBoundingClientRect().top ?? null,
+    };
+  }, initialIds);
+  const firstLeaving = trace.findIndex(({ stage }) => stage === "holding" || stage === "exiting");
+  expect(firstLeaving).toBeGreaterThan(0);
+  expect(trace.slice(0, firstLeaving).every(({ stage }) => stage === "present" || stage === "absent"))
+    .toBe(true);
+  // Finished work leaves as finished work, then unmounts; it never vanishes
+  // straight from the live surface.
+  expect(trace.slice(firstLeaving, -1).every(({ close }) => close === "finished")).toBe(true);
+  expect(trace[trace.length - 1]?.stage).toBe("absent");
+  expect(finalTop).not.toBeNull();
+  expect(Math.abs(finalTop! - tops[0]!)).toBeLessThan(1);
+});
+
+test("Record again after an unrelated edit re-anchors the turn instead of dropping it", async ({ page }) => {
+  let transcriptionRequests = 0;
+  await page.route((url) => url.pathname.endsWith("/api/transcribe"), async (route) => {
+    transcriptionRequests += 1;
+    if (transcriptionRequests === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        headers: { "Cache-Control": "no-store" },
+        body: JSON.stringify({
+          error: {
+            code: "TRANSCRIPTION_UNAVAILABLE",
+            message: "Synthetic transcription outage.",
+            retryable: true,
+          },
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const initialNodeCount = await page.locator('[data-thought-id^="thought_"]').count();
+  const voiceTool = page.locator('[data-tool-id="voice"]');
+  await voiceTool.click();
+  let recording = page.locator('.admission-feedback[data-phase="recording"]');
+  await expect(recording).toBeVisible({ timeout: FIXTURE_RECORDING_START_TIMEOUT_MS });
+  await page.waitForTimeout(350);
+  await recording.getByRole("button", { name: "停止录音", exact: true }).click();
+  const failure = page.locator('.admission-feedback[data-phase="error"]');
+  await expect(failure).toContainText("没能把这段录音变成文字。");
+
+  // Any committed edit advances the revision the failed attempt was frozen at.
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
+  await expect(page.locator('[data-thought-id^="thought_"]')).toHaveCount(initialNodeCount + 1);
+  await expect(failure).toBeVisible();
+
+  await failure.getByRole("button", { name: "重新录音", exact: true }).click();
+  recording = page.locator('.admission-feedback[data-phase="recording"]');
+  await expect(recording).toBeVisible({ timeout: FIXTURE_RECORDING_START_TIMEOUT_MS });
+  await page.waitForTimeout(350);
+  await recording.getByRole("button", { name: "停止录音", exact: true }).click();
+  await expect(page.locator('[data-thought-id^="thought_"]')).toHaveCount(initialNodeCount + 2);
+  expect(transcriptionRequests).toBe(2);
+});
+
+async function settleTransientSurface(surface: import("@playwright/test").Locator): Promise<void> {
+  await surface.evaluate((element) => Promise.all(
+    element.getAnimations().map((animation) => animation.finished),
+  ));
+}
 
 async function setDocumentVisibility(
   page: import("@playwright/test").Page,

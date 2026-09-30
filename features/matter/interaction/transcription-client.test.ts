@@ -48,6 +48,28 @@ describe("requestTranscription", () => {
     });
   });
 
+  it("declares the purpose in the URL as well as in the form it must match", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      void input;
+      void init;
+      return Response.json({
+        protocolVersion: "0.2",
+        interactionId: "voice_1",
+        attempt: 1,
+        transcript: "换一种更轻的说法。",
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await request({ purpose: "swap-direction" });
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    const sent = new URL(String(url), "http://localhost");
+    expect(sent.pathname).toMatch(/\/api\/transcribe$/u);
+    expect(sent.searchParams.getAll("purpose")).toEqual(["swap-direction"]);
+    expect((init?.body as FormData).get("purpose")).toBe("swap-direction");
+  });
+
   it("applies semantic punctuation even when a text-only adapter omits it", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json({
       protocolVersion: "0.2",

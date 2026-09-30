@@ -1,9 +1,13 @@
 # Matter deployment handoff
 
-Status: **live — the root-seeded browser preview is deployed and all three model
-gates are open on `matter.ptoq.io`. The required abuse- and spend-control
-receipts in issue #34 are still outstanding, so this remains an unverified live
-exposure rather than a completed release boundary.**
+Status: **live — the root-seeded browser preview is deployed on
+`matter.ptoq.io` with the three managed model gates (label, repair, inquiry)
+enabled; Elastic and Text Swap are public surfaces that only a user Model API
+lease may supply, and Production reports them `unavailable` until issue #104
+closes (see [`release-readiness.md`](release-readiness.md)). The required
+abuse- and spend-control receipts in issue #34 are still outstanding, so this
+remains an unverified live exposure rather than a completed release
+boundary.**
 
 The deployment owner enabled labels, transcript repair, and inquiry together on
 2026-08-08, ahead of the staged order below, so that the deployed origin matches
@@ -247,7 +251,7 @@ These are hard ownership boundaries, not claimed production SLOs:
 
 | Surface | Scenario/provider | Route/browser | Safe floor | Shared answer cache |
 | --- | ---: | ---: | --- | --- |
-| thought label | 12 s | 14 s / 16 s | deterministic label already visible | 256 accepted labels, 10 min, complete normalized-input fingerprint + prompt version |
+| thought label | 12 s | 14 s / 16 s | deterministic label already visible | 256 accepted labels, 10 min, SHA-256 of credential scope + complete normalized input + prompt version |
 | transcript repair | 6–8 s | 9.5 s / 11 s | deterministic repair rules | none |
 | Ask Matter | 16 s | 18 s / 20 s | restore the submitted question | none |
 | Elastic | 12 s | 14 s / 16 s | exact passage unchanged | none |
@@ -269,12 +273,16 @@ for a candidate whose station explicitly declares `ENABLE_THINKING=true|false`.
 The scenario may narrow that declaration to `false`, but an undeclared relay
 receives no extra field and must not be assumed to have disabled thinking.
 
-The label cache stores only an adjudicated label behind two 32-bit FNV-style
-digests plus the exact serialized byte length; this is a non-cryptographic cache
-key, not an integrity boundary. It stores no node text, prompt, provider,
+The label cache stores only an adjudicated label behind a SHA-256 digest of the
+credential scope and the complete label question, so distinct questions do not
+share an entry in practice. Every hit is still judged by the label scenario's
+complete adjudicator before it is served, so even a colliding entry cannot show
+a label the fresh path would refuse. It stores no node text, prompt, provider,
 identity, or credential, and a browser repeats current-material validation. Its
-complete-input-fingerprint single flight is the only cross-request model
-coalescing. Audio,
+single flight is the only cross-request model coalescing, and it joins only a
+byte-identical scoped question, never a matching digest, because a joiner
+receives the answer without adjudicating it again; that exact key lives only
+while its one provider call is pending. Audio,
 transcript, repair, question, inquiry answer, lineage, Elastic output, and Text
 Swap output are never cached or coalesced. Every model/audio browser-to-Matter
 POST and the Matter-to-provider POST explicitly uses no-store transport and
@@ -291,7 +299,8 @@ ownership for those SLO measurements remains the external issue #34 boundary.
 ### Content-zero model performance receipt — current contract
 
 Preview.39 introduced this receipt; Preview.47 extends its closed schema with
-completion-settlement counters. This table is the complete current contract,
+completion-settlement counters, and the next release adds the declared
+`rejectionReason` code to rejected terminals. This table is the complete current contract,
 not a retroactive claim about older log lines. Health proves the
 deployed version and configured capability only; the deployment operator must
 inspect the retained server-log receipt before claiming that this event was
@@ -323,6 +332,7 @@ The event and field set is closed:
 | `candidateRejections` | integer `0..255` | Transport-complete answers rejected by explicit-action scenario policy before a later candidate was tried; never provider-health evidence. |
 | `candidateUnknownTerminators` | integer `0..255` | Modifier count for explicit stop vocabulary this build does not recognize; it accompanies a refused attempt. |
 | `candidateMissingTerminators` | integer `0..255` | Modifier count for accepted compatibility responses that omitted stop metadata; it accompanies an answered attempt. |
+| `rejectionReason` | present only when `outcome` is `rejected`: one code from that scenario's declared adjudication vocabulary, or `UNDECLARED` | Why adjudication refused the terminal answer, so inquiry, repair, and label can explain `MODEL_REJECTED` in production. The harness admits only declared codes and the logger re-checks a bare ASCII identifier of at most 48 characters; answer, material, and provider text cannot fit. |
 
 This table is the complete schema only for `matter.scenario-performance`.
 Elastic and provider-gated Text Swap retain the separate existing

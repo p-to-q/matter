@@ -114,14 +114,148 @@ describe("Wiki automatic term collection", () => {
     ]);
   });
 
-  it("marks an oversized admission censored instead of aging the ledger", () => {
-    const text = Array.from({ length: 33 }, (_, index) =>
-      `material${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`)
-      .join(" ");
+  it("scores a partial scan in text order and reports only the scripts it scanned", () => {
+    const words = Array.from({ length: 33 }, (_, index) =>
+      `material${String.fromCharCode(97 + Math.floor(index / 26))}${String.fromCharCode(97 + index % 26)}`);
+    const result = collectCommittedWikiTermsResult({
+      locale: "en-US",
+      channel: "spoken",
+      text: [...words, "材料"].join(" "),
+    });
+
+    expect(result.status).toBe("partial");
+    expect(result.events.map((event) => event.canonical)).toEqual(words.slice(0, 32));
+    expect(result.scannedScripts).toEqual(["latin"]);
+  });
+
+  it("collects Latin words of Chinese and Japanese turns in the en-US ledger", () => {
+    const result = collectCommittedWikiTermsResult({
+      locale: "zh-CN",
+      channel: "spoken",
+      text: "我们用OpenAI研究morphogenesis",
+    });
+
+    expect(result.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        locale: "en-US",
+        canonical: "OpenAI",
+        producer: "shape-specific-v1",
+      }),
+      expect.objectContaining({
+        locale: "en-US",
+        canonical: "morphogenesis",
+        producer: "locale-segment-v1",
+      }),
+      expect.objectContaining({ locale: "zh-CN", canonical: "研究" }),
+    ]));
+    expect(result.events.some((event) =>
+      event.locale === "zh-CN" && /\p{Script=Latin}/u.test(event.canonical))).toBe(false);
+    expect(result).toMatchObject({ scannedScripts: ["latin", "han"], routedScripts: ["latin"] });
+    expect(collectCommittedWikiTerms({
+      locale: "ja-JP",
+      channel: "spoken",
+      text: "カタカナとGitHub",
+    })).toEqual(expect.arrayContaining([
+      expect.objectContaining({ locale: "ja-JP", canonical: "カタカナ" }),
+      expect.objectContaining({ locale: "en-US", canonical: "GitHub" }),
+    ]));
+  });
+
+  it("applies English stop words to routed Latin words", () => {
+    expect(collectCommittedWikiTermsResult({
+      locale: "zh-CN",
+      channel: "spoken",
+      text: "with的",
+    })).toMatchObject({ status: "ok", events: [], routedScripts: ["latin"] });
+  });
+
+  it("never collects a full-width spelling or a protected routed word", () => {
+    for (const text of ["ＯｐｅｎＡＩ的模型", "代码`OpenAI`里", "看https://example.com/OpenAI"]) {
+      expect(collectCommittedWikiTermsResult({
+        locale: "zh-CN",
+        channel: "spoken",
+        text,
+      }).events.filter((event) => event.locale === "en-US")).toEqual([]);
+    }
+    // A width variant the producer declined is not an opportunity either.
+    expect(collectCommittedWikiTermsResult({
+      locale: "zh-CN",
+      channel: "spoken",
+      text: "ＯｐｅｎＡＩ",
+    })).toEqual({ status: "ok", events: [], scannedScripts: [], routedScripts: [] });
+  });
+
+  it("never collects a full-width Latin spelling in any locale", () => {
+    // Width is decided by the word's script, not by the ledger it belongs to.
+    for (const [locale, text] of [
+      ["en-US", "ＯｐｅｎＡＩ"],
+      ["en-US", "ｍｏｒｐｈｏｇｅｎｅｓｉｓ"],
+      ["de-DE", "ＫＦＣ"],
+      ["de-DE", "Ｍｏｒｐｈｏｇｅｎｅｓｅ"],
+    ] as const) {
+      for (let turn = 0; turn < 2; turn += 1) {
+        expect(collectCommittedWikiTermsResult({ locale, channel: "spoken", text }))
+          .toEqual({ status: "ok", events: [], scannedScripts: [], routedScripts: [] });
+      }
+    }
+    // Its half-width spelling beside it is still collected, and still an opportunity.
     expect(collectCommittedWikiTermsResult({
       locale: "en-US",
       channel: "spoken",
-      text,
-    })).toEqual({ status: "censored", events: [] });
+      text: "ＯｐｅｎＡＩ OpenAI",
+    })).toMatchObject({
+      events: [expect.objectContaining({ locale: "en-US", canonical: "OpenAI" })],
+      scannedScripts: ["latin"],
+    });
+  });
+
+  it("never collects from a full-width literal in a Latin-script turn", () => {
+    for (const locale of ["en-US", "de-DE"] as const) {
+      for (const text of [
+        "｀ｍｏｒｐｈｏｇｅｎｅｓｉｓ｀",
+        "｀OpenAI｀",
+        "ｈｔｔｐｓ：／／ｅｘａｍｐｌｅ．ｃｏｍ／Morphogenesis",
+        "src／Morphogenesis／index．ts",
+      ]) {
+        expect(collectCommittedWikiTerms({ locale, channel: "spoken", text })).toEqual([]);
+      }
+    }
+    expect(collectCommittedWikiTerms({
+      locale: "en-US",
+      channel: "spoken",
+      text: "（Morphogenesis）",
+    })).toEqual([expect.objectContaining({ canonical: "Morphogenesis" })]);
+  });
+
+  it("keeps English and German turns in their own ledgers", () => {
+    expect(collectCommittedWikiTerms({
+      locale: "de-DE",
+      channel: "spoken",
+      text: "GitHub",
+    })).toEqual([expect.objectContaining({ locale: "de-DE", canonical: "GitHub" })]);
+    expect(collectCommittedWikiTermsResult({
+      locale: "en-US",
+      channel: "spoken",
+      text: "GitHub",
+    })).toMatchObject({ routedScripts: [] });
+  });
+
+  it("reports eligible unprotected scripts as the comparable opportunity", () => {
+    expect(collectCommittedWikiTermsResult({
+      locale: "en-US",
+      channel: "spoken",
+      text: "Morphogenesis 材料 `カタカナ`",
+    })).toMatchObject({ status: "ok", scannedScripts: ["latin", "han"] });
+    expect(collectCommittedWikiTermsResult({
+      locale: "en-US",
+      channel: "spoken",
+      text: "Morphogenesis 材料",
+      eligibleRanges: [{ start: 14, end: 16 }],
+    })).toMatchObject({ status: "ok", events: [], scannedScripts: ["han"] });
+    expect(collectCommittedWikiTermsResult({
+      locale: "en-US",
+      channel: "spoken",
+      text: "",
+    })).toEqual({ status: "censored", events: [], scannedScripts: [] });
   });
 });

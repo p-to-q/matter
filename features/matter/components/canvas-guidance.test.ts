@@ -1,17 +1,24 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type {
   AdmissionAnchor,
   AdmissionErrorCode,
   AdmissionInteractionState,
 } from "../runtime/admission-interaction";
+import { admissionFeedbackActions } from "./admission-feedback-copy";
 import {
   CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT,
   localizeCanvasGuidance,
+  localizeOutcome,
+  localizeParkedRelease,
+  outcomeGuidanceId,
   projectCanvasGuidance,
   type CanvasGuidanceInput,
   type CanvasLanguageGuidanceState,
   type CanvasMaterialGuidanceState,
 } from "./canvas-guidance";
+import { CANVAS_LANGUAGE_OPTIONS } from "./canvas-preferences";
+import type { MaterialOutcome } from "./outcome-line";
 
 const ANCHOR: AdmissionAnchor = {
   kind: "child",
@@ -49,12 +56,18 @@ function attempt(state: AdmissionAttemptPayload): AdmissionAttempt {
 }
 
 describe("canvas guidance projection", () => {
+  it("keeps every locale's guidance table complete instead of spreading another language", () => {
+    const source = readFileSync(new URL("./canvas-guidance.ts", import.meta.url), "utf8");
+    expect(source).not.toMatch(/Object\.freeze\(\{\s*\.\.\.GUIDANCE_COPY/u);
+    expect(source.match(/\} satisfies Readonly<Record<CanvasActionGuidanceId, string>>\);/gu)).toHaveLength(5);
+  });
+
   it.each([
     [attempt({ phase: "requesting" }), "allow-microphone", "action", "Allow microphone access."],
     [attempt({ phase: "recording", startedAtMs: 20 }), "speak-recording", "action", "Speak your thought."],
     [attempt({ phase: "stopping", reason: "person" }), "wait-recording", "progress", "Wait for recording to finish."],
     [attempt({ phase: "transcribing" }), "wait-transcription", "progress", "Wait while voice becomes material."],
-    [attempt({ phase: "committing" }), "wait-commit", "progress", "Wait while the thought is placed."],
+    [attempt({ phase: "committing", transcript: "thought" }), "wait-commit", "progress", "Wait while the thought is placed."],
   ] as const)("projects admission %s before every material handle", (admission, id, kind, text) => {
     expect(projectCanvasGuidance(input({
       admission,
@@ -87,6 +100,93 @@ describe("canvas guidance projection", () => {
   );
 
   it.each([
+    ["unavailable", "text-swap-unavailable", "Not rewritten. Text unchanged."],
+    ["stale", "text-swap-stale", "Passage changed. Not rewritten."],
+  ] as const)("reports a released %s rewrite in place of the next hint", (reason, id, text) => {
+    const outcome: MaterialOutcome = { owner: "rewrite", reason };
+    expect(projectCanvasGuidance(input({
+      outcome,
+      language: { kind: "lasso-ready" },
+    }))).toEqual({ id, kind: "recovery", text });
+    expect(outcomeGuidanceId(outcome)).toBe(id);
+    expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+    // Live voice still owns the line.
+    expect(projectCanvasGuidance(input({
+      outcome,
+      admission: attempt({ phase: "recording", startedAtMs: 1 }),
+    })).id).toBe("speak-recording");
+    for (const language of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      expect(localizeCanvasGuidance({ id, kind: "recovery", text }, language).text)
+        .not.toBe(text);
+    }
+    expect(localizeOutcome(outcome, "en-US")).toBe(text);
+    expect(localizeOutcome(outcome, "zh-CN"))
+      .toBe(localizeCanvasGuidance({ id, kind: "recovery", text }, "zh-CN").text);
+  });
+
+  it("says once that Wiki could not record an explicit choice", () => {
+    const text = "Wiki could not save that.";
+    const outcome: MaterialOutcome = { owner: "wiki", reason: "unsaved" };
+    expect(projectCanvasGuidance(input({
+      outcome,
+      language: { kind: "lasso-ready" },
+    }))).toEqual({ id: "wiki-unsaved", kind: "recovery", text });
+    expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+    // Live voice keeps the line first; the outcome waits rather than hiding.
+    expect(projectCanvasGuidance(input({
+      outcome,
+      admission: attempt({ phase: "recording", startedAtMs: 1 }),
+    })).id).toBe("speak-recording");
+    for (const language of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      const localized = localizeOutcome(outcome, language);
+      expect(localized).not.toBe(text);
+      expect(localized.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+    }
+    expect(localizeOutcome(outcome, "en-US")).toBe(text);
+  });
+
+  it("says a refused Wiki restore on the line instead of a timed notice at the word", () => {
+    const outcome: MaterialOutcome = { owner: "wiki", reason: "passage-changed" };
+    expect(projectCanvasGuidance(input({ outcome }))).toEqual({
+      id: "wiki-passage-changed",
+      kind: "recovery",
+      text: "Passage changed. Not restored.",
+    });
+    expect(localizeOutcome(outcome, "zh-CN")).toBe("段落已变化，未恢复。");
+    for (const language of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      expect(localizeOutcome(outcome, language)).not.toBe(localizeOutcome(outcome, "en-US"));
+    }
+  });
+
+  it("says the shown outcome ahead of a parked result, then the parked result", () => {
+    const outcome: MaterialOutcome = { owner: "wiki", reason: "unsaved" };
+    expect(projectCanvasGuidance(input({
+      outcome,
+      expansion: { kind: "parked" },
+      rewrite: { kind: "parked" },
+    })).id).toBe("wiki-unsaved");
+    expect(projectCanvasGuidance(input({
+      expansion: { kind: "parked" },
+      rewrite: { kind: "parked" },
+    })).id).toBe("expansion-parked");
+  });
+
+  it("asks to place or discard held words instead of dismissing the recording", () => {
+    expect(projectCanvasGuidance(input({
+      admission: attempt({
+        phase: "error",
+        errorCode: "STALE_TARGET",
+        submitted: true,
+        transcript: "held words",
+      }),
+    }))).toEqual({
+      id: "place-held-words",
+      kind: "recovery",
+      text: "Place or discard these words.",
+    });
+  });
+
+  it.each([
     [0.6, 60],
     [1, 100],
     [1.8, 180],
@@ -99,6 +199,63 @@ describe("canvas guidance projection", () => {
       percent,
       text: `${percent}%`,
     });
+  });
+
+  it.each([
+    [{ kind: "parked" } as const, undefined, "expansion-parked", "Expansion waits for its passage."],
+    [undefined, { owner: "expansion", reason: "unavailable" } as const, "expansion-unavailable", "Not expanded. Text unchanged."],
+    [undefined, { owner: "expansion", reason: "stale" } as const, "expansion-stale", "Passage changed. Not expanded."],
+  ])(
+    "keeps a submitted expansion's %o / %o state ahead of lasso guidance",
+    (expansion, outcome, id, text) => {
+      expect(projectCanvasGuidance(input({
+        expansion,
+        outcome,
+        language: { kind: "selected", stretch: { kind: "adjusted", amount: 0.4 } },
+      }))).toEqual({ id, kind: "recovery", text });
+      expect(text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+    },
+  );
+
+  it("says why a parked Point-and-Talk result keeps its owner busy", () => {
+    expect(projectCanvasGuidance(input({
+      rewrite: { kind: "parked" },
+      language: { kind: "lasso-ready" },
+    }))).toEqual({
+      id: "text-swap-parked",
+      kind: "recovery",
+      text: "Rewording waits for its passage.",
+    });
+    expect(localizeCanvasGuidance(
+      projectCanvasGuidance(input({ rewrite: { kind: "parked" } })),
+      "de-DE",
+    ).text).toBe("Die Umformulierung wartet auf ihre Passage.");
+  });
+
+  it("keeps live voice guidance ahead of an expansion outcome", () => {
+    expect(projectCanvasGuidance(input({
+      admission: attempt({ phase: "recording", startedAtMs: 20 }),
+      expansion: { kind: "parked" },
+    })).id).toBe("speak-recording");
+  });
+
+  it("localizes the expansion announcement and its explicit release", () => {
+    expect(localizeOutcome({ owner: "expansion", reason: "unavailable" }, "en-US"))
+      .toBe("Not expanded. Text unchanged.");
+    expect(localizeOutcome({ owner: "expansion", reason: "stale" }, "zh-CN"))
+      .toBe("段落已变化，未展开。");
+    expect(localizeParkedRelease("en-US")).toBe("Discard");
+    expect(localizeParkedRelease("zh-CN")).toBe("丢弃");
+    expect(localizeParkedRelease("zh-TW")).toBe("丟棄");
+    expect(localizeParkedRelease("ja-JP")).toBe("破棄");
+  });
+
+  it("names releasing held work with one word in every locale", () => {
+    // A parked result and held admission words are both work kept for the
+    // person; one Discard means one consequence wherever it appears.
+    for (const { value: language } of CANVAS_LANGUAGE_OPTIONS) {
+      expect(localizeParkedRelease(language)).toBe(admissionFeedbackActions(language).discard);
+    }
   });
 
   it("keeps urgent interaction guidance ahead of the Pan readout", () => {
@@ -237,6 +394,7 @@ describe("canvas guidance projection", () => {
       "use-recording-browser": true,
       "record-again": true,
       "dismiss-stale-recording": true,
+      "place-held-words": true,
       "speak-root": true,
       "close-lasso": true,
       "begin-stretch": true,
@@ -244,10 +402,18 @@ describe("canvas guidance projection", () => {
       "set-degree": true,
       "apply-stretch": true,
       "wait-expansion": true,
+      "expansion-parked": true,
+      "text-swap-parked": true,
+      "expansion-unavailable": true,
+      "expansion-stale": true,
       "circle-selection": true,
       "unfold-thought": true,
       "speak-child": true,
       "select-thought": true,
+      "text-swap-unavailable": true,
+      "text-swap-stale": true,
+      "wiki-unsaved": true,
+      "wiki-passage-changed": true,
     }) as Array<Exclude<ReturnType<typeof projectCanvasGuidance>["id"], "canvas-zoom">>;
 
     for (const id of states) {

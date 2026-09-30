@@ -1,16 +1,29 @@
 import {
   findProtectedWikiSpans,
+  findWidthAwareProtectedWikiSpans,
   isWikiRangeEligible,
   normalizeWikiEligibleRanges,
   wikiRangeOverlapsProtected,
 } from "./canonicalize-wiki-text";
 import { isWikiCanonical } from "./wiki-invariants";
-import type { WikiTermEvidenceProducer } from "./wiki-learning-policy";
 import {
-  MAX_WIKI_OBSERVATIONS_PER_BATCH,
+  compareWikiTermProducerPrecedence,
+  type WikiTermEvidenceProducer,
+} from "./wiki-learning-policy";
+import {
+  MAX_WIKI_OBSERVATIONS_PER_LEDGER,
   type WikiObserveEvidenceEvent,
 } from "./wiki-model";
-import type { WikiAdmissionObservation } from "./wiki-admission";
+import type {
+  WikiAdmissionObservation,
+  WikiAdmissionProducerResult,
+} from "./wiki-admission";
+import { wikiScriptClassesFromMask, wikiScriptMask } from "./wiki-script";
+import {
+  isWikiLatinScriptLocale,
+  routeWikiWord,
+  wikiLatinRouteLocale,
+} from "./wiki-script-routing";
 import type { MatterLocale } from "../config/locales";
 
 const LATIN = /^[\p{Script=Latin}\p{M}]+$/u;
@@ -79,28 +92,51 @@ export function collectCommittedWikiTerms(
   return collectCommittedWikiTermsResult(request, enabledProducers).events;
 }
 
-export type WikiTermCollectionResult = Readonly<{
-  status: "ok" | "censored";
-  events: readonly WikiObserveEvidenceEvent[];
-}>;
+export type WikiTermCollectionResult = WikiAdmissionProducerResult;
 
+const CENSORED_COLLECTION: WikiTermCollectionResult = Object.freeze({
+  status: "censored",
+  events: Object.freeze([]),
+  scannedScripts: Object.freeze([]),
+});
+
+/**
+ * Scans eligible words in text order. When one more distinct term would
+ * exceed the per-ledger bound, scanning stops before that word and the result
+ * is `partial`: what was scanned still counts, and nothing beyond it may be
+ * treated as absent.
+ *
+ * Each word is classified in the ledger its script routes to, so a Latin word
+ * inside a Chinese or Japanese turn is an `en-US` term under English stop words
+ * and shape rules. A Latin word written in full width, in any turn, is neither
+ * a vote nor an opportunity: a collected canonical becomes rewrite output, so
+ * it must be a spelling the person produced, and width folding is for reading
+ * only. Counting it as an absence would age the very term it spells.
+ */
 export function collectCommittedWikiTermsResult(
   request: WikiAdmissionObservation,
   enabledProducers?: ReadonlySet<WikiTermEvidenceProducer>,
 ): WikiTermCollectionResult {
   if (request.text.length === 0 || !wikiTermSegmenterConforms()) {
-    return Object.freeze({ status: "censored", events: Object.freeze([]) });
+    return CENSORED_COLLECTION;
   }
   const eligibleRanges = normalizeWikiEligibleRanges(
     request.eligibleRanges,
     request.text.length,
   );
-  if (eligibleRanges === null) {
-    return Object.freeze({ status: "censored", events: Object.freeze([]) });
-  }
-  const protectedSpans = findProtectedWikiSpans(request.text, "evidence");
+  if (eligibleRanges === null) return CENSORED_COLLECTION;
+  // A literal protected across widths during matching is no evidence either.
+  const protectedSpans = isWikiLatinScriptLocale(request.locale)
+    ? findWidthAwareProtectedWikiSpans(request.text, "evidence")
+    : findProtectedWikiSpans(request.text, "evidence");
+  const routedProtectedSpans = wikiLatinRouteLocale(request.locale) === null
+    ? protectedSpans
+    : findWidthAwareProtectedWikiSpans(request.text, "evidence");
   const segmenter = wordSegmenter(request.locale);
   const events = new Map<string, WikiObserveEvidenceEvent>();
+  let scannedScripts = 0;
+  let routedScripts = 0;
+  let partial = false;
 
   for (const segment of segmenter.segment(request.text)) {
     if (!segment.isWordLike) continue;
@@ -109,31 +145,41 @@ export function collectCommittedWikiTermsResult(
     if (!isWikiRangeEligible(start, end, eligibleRanges, 0) ||
         wikiRangeOverlapsProtected(start, end, protectedSpans, 0)) continue;
     const canonical = segment.segment.normalize("NFC");
-    const producer = classifyTerm(request.locale, canonical);
-    if (producer === null || !isWikiCanonical(canonical) ||
-        (enabledProducers !== undefined && !enabledProducers.has(producer))) continue;
-    const event: WikiObserveEvidenceEvent = Object.freeze({
-      type: "observe-evidence",
-      locale: request.locale,
-      canonical,
-      source: "recent-material",
-      producer,
-    });
-    const key = JSON.stringify([event.locale, event.canonical]);
-    const previous = events.get(key);
-    if (previous === undefined || (
-      previous.source === "recent-material" &&
-      previous.producer === "locale-segment-v1" &&
-      producer === "shape-specific-v1"
-    )) events.set(key, event);
-    if (events.size > MAX_WIKI_OBSERVATIONS_PER_BATCH) {
-      return Object.freeze({ status: "censored", events: Object.freeze([]) });
+    const route = routeWikiWord(request.locale, canonical);
+    if (route.widthFolded || (route.routed &&
+        wikiRangeOverlapsProtected(start, end, routedProtectedSpans, 0))) continue;
+    const producer = classifyTerm(route.locale, canonical);
+    if (producer !== null && isWikiCanonical(canonical) &&
+        (enabledProducers === undefined || enabledProducers.has(producer))) {
+      const key = JSON.stringify([route.locale, canonical]);
+      const previous = events.get(key);
+      if (previous === undefined && events.size >= MAX_WIKI_OBSERVATIONS_PER_LEDGER) {
+        partial = true;
+        break;
+      }
+      if (previous === undefined || (
+        previous.source === "recent-material" &&
+        compareWikiTermProducerPrecedence(producer, previous.producer) < 0
+      )) {
+        events.set(key, Object.freeze({
+          type: "observe-evidence",
+          locale: route.locale,
+          canonical,
+          source: "recent-material",
+          producer,
+        }));
+      }
     }
+    const scripts = wikiScriptMask(segment.segment);
+    scannedScripts |= scripts;
+    if (route.routed) routedScripts |= scripts;
   }
   return Object.freeze({
-    status: "ok",
+    status: partial ? "partial" : "ok",
     events: Object.freeze([...events.values()].sort((left, right) =>
       left.canonical.localeCompare(right.canonical, request.locale))),
+    scannedScripts: wikiScriptClassesFromMask(scannedScripts),
+    routedScripts: wikiScriptClassesFromMask(routedScripts),
   });
 }
 

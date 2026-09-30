@@ -5,14 +5,22 @@ import {
   MAX_AUDIO_REQUEST_BYTES,
   MAX_INTERACTION_ID_LENGTH,
   MAX_LOCALE_LENGTH,
+  TRANSCRIPTION_PURPOSE_QUERY_PARAMETER,
   TRANSCRIPTION_SERVER_TIMEOUT_MS,
   isAcceptedAudioType,
+  isTranscriptionPurpose,
   type TranscriptionPurpose,
   type TranscriptionRequest,
 } from "../protocol/transcription-contract";
 import { isMatterLocale } from "../config/locales";
-import { isTimeoutSignal, TranscriptionServerError } from "./transcription-errors";
-import { transcribeRecording } from "./transcriber";
+import { createRequestDeadline, endedOnDeadline, rejectOnAbort } from "./abort-boundary";
+import { TranscriptionServerError } from "./transcription-errors";
+import {
+  assertTranscriptionPurposeAvailable,
+  resolveTranscriptionAdapter,
+  transcribeRecording,
+  type TranscriptionAdapter,
+} from "./transcriber";
 import { hasMultipartFormDataBoundary } from "./content-type";
 import { createPublicRequestAdmission } from "./public-request-admission";
 import { isWellFormedUnicodeText } from "../tree/unicode-text";
@@ -29,13 +37,26 @@ const FIELD_NAMES = new Set([
 ]);
 
 export async function handleTranscriptionRequest(request: Request): Promise<Response> {
+  // A purpose the URL declares is judged before admission accounting: a closed
+  // surface is a deployment fact, not a request, so refusing it must not spend
+  // the caller's rate window and make its next usable request fail too.
+  let declaredPurpose: TranscriptionPurpose | null;
+  try {
+    declaredPurpose = parseDeclaredPurpose(request.url);
+    if (declaredPurpose !== null) assertTranscriptionPurposeAvailable(declaredPurpose);
+  } catch (error) {
+    cancelBody(request.body);
+    throw error;
+  }
   const admission = transcriptionAdmission.admit(request);
   if (!admission.ok) throw transcriptionAdmissionError(admission.reason);
-  const boundary = createRequestBoundary(request.signal);
+  // This deadline starts at route entry and remains authoritative through both
+  // reading the recording and provider transcription.
+  const deadline = createRequestDeadline(request.signal, TRANSCRIPTION_SERVER_TIMEOUT_MS);
   try {
-    return await handleBoundedTranscriptionRequest(request, boundary.signal);
+    return await handleBoundedTranscriptionRequest(request, declaredPurpose, deadline.signal);
   } finally {
-    boundary.dispose();
+    deadline.dispose();
     admission.release();
   }
 }
@@ -48,10 +69,17 @@ export function resetTranscriptionAdmissionForTests(): void {
 
 async function handleBoundedTranscriptionRequest(
   request: Request,
+  declaredPurpose: TranscriptionPurpose | null,
   signal: AbortSignal,
 ): Promise<Response> {
+  let adapter: TranscriptionAdapter;
   let declaredLength: number | null;
   try {
+    // Deployment capability is known before any recording byte is read. An
+    // unavailable deployment must not buffer and parse audio it would discard,
+    // just as a closed declared purpose was refused before admission, before
+    // size or duration could misreport it as a recording fault.
+    adapter = resolveTranscriptionAdapter();
     declaredLength = parseOptionalContentLength(request.headers.get("content-length"));
   } catch (error) {
     cancelBody(request.body);
@@ -87,9 +115,14 @@ async function handleBoundedTranscriptionRequest(
     throw invalidRequest("The transcription protocol version is unsupported.");
   }
   const purpose = requiredString(form, "purpose", 16);
-  if (purpose !== "admission" && purpose !== "direction" && purpose !== "swap-direction") {
+  if (!isTranscriptionPurpose(purpose)) {
     throw invalidRequest("The transcription purpose is invalid.");
   }
+  if (declaredPurpose !== null && declaredPurpose !== purpose) {
+    throw invalidRequest("The transcription purpose does not match its request.");
+  }
+  // Every later field check describes a recording this surface may not take.
+  if (declaredPurpose === null) assertTranscriptionPurposeAvailable(purpose);
   const locale = requiredString(form, "locale", MAX_LOCALE_LENGTH);
   if (!isMatterLocale(locale)) {
     throw invalidRequest("The transcription locale is invalid.");
@@ -141,13 +174,13 @@ async function handleBoundedTranscriptionRequest(
     protocolVersion: PROTOCOL_VERSION,
     interactionId,
     attempt,
-    purpose: purpose as TranscriptionPurpose,
+    purpose,
     locale,
     durationMs,
     audio: audioValue,
   };
   throwIfRequestInterrupted(signal);
-  return Response.json(await transcribeRecording(parsed, signal), {
+  return Response.json(await transcribeRecording(parsed, signal, adapter), {
     headers: { "Cache-Control": "no-store" },
   });
 }
@@ -165,7 +198,7 @@ async function readBoundedBody(
     cancelReader(reader);
     throw requestInterruptionError(signal);
   }
-  const interruption = rejectOnAbort(signal);
+  const interruption = rejectOnAbort(signal, () => requestInterruptionError(signal));
   const bytes = new BoundedByteAccumulator(MAX_AUDIO_REQUEST_BYTES);
   let completed = false;
   try {
@@ -192,52 +225,12 @@ async function readBoundedBody(
   return bytes.snapshot().buffer;
 }
 
-function createRequestBoundary(requestSignal: AbortSignal): {
-  signal: AbortSignal;
-  dispose: () => void;
-} {
-  // This deadline starts at route entry and remains authoritative through both
-  // request admission and provider transcription.
-  const controller = new AbortController();
-  const cancel = () => controller.abort(new DOMException("Cancelled", "AbortError"));
-  if (requestSignal.aborted) cancel();
-  else requestSignal.addEventListener("abort", cancel, { once: true });
-  const timeout = setTimeout(
-    () => controller.abort(new DOMException("Timed out", "TimeoutError")),
-    TRANSCRIPTION_SERVER_TIMEOUT_MS,
-  );
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timeout);
-      requestSignal.removeEventListener("abort", cancel);
-    },
-  };
-}
-
-function rejectOnAbort(signal: AbortSignal): {
-  promise: Promise<never>;
-  dispose: () => void;
-} {
-  let rejectPromise!: (error: TranscriptionServerError) => void;
-  const promise = new Promise<never>((_resolve, reject) => {
-    rejectPromise = reject;
-  });
-  const reject = () => rejectPromise(requestInterruptionError(signal));
-  if (signal.aborted) reject();
-  else signal.addEventListener("abort", reject, { once: true });
-  return {
-    promise,
-    dispose: () => signal.removeEventListener("abort", reject),
-  };
-}
-
 function throwIfRequestInterrupted(signal: AbortSignal): void {
   if (signal.aborted) throw requestInterruptionError(signal);
 }
 
 function requestInterruptionError(signal: AbortSignal): TranscriptionServerError {
-  return isTimeoutSignal(signal)
+  return endedOnDeadline(signal)
     ? new TranscriptionServerError(
         "TRANSCRIPTION_TIMEOUT",
         "Speech transcription timed out.",
@@ -319,6 +312,21 @@ function requiredPositiveSafeInteger(form: FormData, field: string): number {
     throw invalidRequest(`The ${field} field is invalid.`);
   }
   return parsed;
+}
+
+/**
+ * The optional URL declaration of the purpose. It may occur at most once and
+ * must name a purpose exactly; the multipart field is still required and must
+ * agree with it, so the URL can refuse early but never select a surface alone.
+ */
+function parseDeclaredPurpose(url: string): TranscriptionPurpose | null {
+  const values = new URL(url).searchParams.getAll(TRANSCRIPTION_PURPOSE_QUERY_PARAMETER);
+  if (values.length === 0) return null;
+  const [value] = values;
+  if (values.length !== 1 || !isTranscriptionPurpose(value)) {
+    throw invalidRequest("The transcription purpose is invalid.");
+  }
+  return value;
 }
 
 function parseOptionalContentLength(value: string | null): number | null {

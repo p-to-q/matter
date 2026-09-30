@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   admissionCaptureIsActive,
+  admissionHoldsSubmittedWords,
+  admissionHoldsTranscript,
   createAdmissionInteractionState,
   reduceAdmissionInteraction,
   type AdmissionAnchor,
@@ -51,6 +53,41 @@ function transcribing(): AdmissionInteractionState {
     attempt: 1,
   }).state;
 }
+
+describe("submitted spoken words", () => {
+  it("counts words from Stop until material holds them, and held words after a failed commit", () => {
+    const stopping = reduceAdmissionInteraction(recording(), { type: "stop" }).state;
+    const held = reduceAdmissionInteraction(committing("the words I said"), {
+      type: "commit-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "STALE_TARGET",
+    }).state;
+    const failedTranscription = reduceAdmissionInteraction(transcribing(), {
+      type: "transcription-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "TRANSCRIPTION_FAILED",
+    }).state;
+    const committed = reduceAdmissionInteraction(committing(), {
+      type: "commit-succeeded",
+      token: "voice_1",
+      attempt: 1,
+    }).state;
+
+    expect([stopping, transcribing(), committing(), held].map(admissionHoldsSubmittedWords))
+      .toEqual([true, true, true, true]);
+    // Live capture is not yet submitted; a failed transcription kept no words;
+    // committed words are material.
+    expect([
+      createAdmissionInteractionState(),
+      start().state,
+      recording(),
+      failedTranscription,
+      committed,
+    ].map(admissionHoldsSubmittedWords)).toEqual([false, false, false, false, false]);
+  });
+});
 
 describe("admission interaction reducer", () => {
   it("locks the shared canvas only for live microphone capture", () => {
@@ -143,7 +180,13 @@ describe("admission interaction reducer", () => {
       transcript: "  an unfinished thought  ",
     });
 
-    expect(result.state).toEqual({ phase: "committing", token: "voice_1", attempt: 1, anchor: CHILD });
+    expect(result.state).toEqual({
+      phase: "committing",
+      token: "voice_1",
+      attempt: 1,
+      anchor: CHILD,
+      transcript: "an unfinished thought",
+    });
     expect(result.effects).toEqual([
       {
         type: "commit-admission",
@@ -259,7 +302,11 @@ describe("admission interaction reducer", () => {
       attempt: 1,
       errorCode: "MICROPHONE_UNAVAILABLE",
     }).state;
-    const retried = reduceAdmissionInteraction(failed, { type: "retry" });
+    const retried = reduceAdmissionInteraction(failed, {
+      type: "retry",
+      revision: 4,
+      targetAvailable: true,
+    });
 
     expect(retried).toEqual({
       state: { phase: "requesting", token: "voice_1", attempt: 2, anchor: CHILD },
@@ -300,7 +347,11 @@ describe("admission interaction reducer", () => {
       attempt: 1,
       errorCode: "MICROPHONE_UNAVAILABLE",
     }).state;
-    const retried = reduceAdmissionInteraction(failed, { type: "retry" }).state;
+    const retried = reduceAdmissionInteraction(failed, {
+      type: "retry",
+      revision: 4,
+      targetAvailable: true,
+    }).state;
     const retriedRecording = reduceAdmissionInteraction(retried, {
       type: "permission-granted",
       token: "voice_1",
@@ -328,6 +379,226 @@ describe("admission interaction reducer", () => {
     }
   });
 
+  it("re-anchors a retry to the current revision instead of dropping the turn", () => {
+    const failed = reduceAdmissionInteraction(transcribing(), {
+      type: "transcription-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "TRANSCRIPTION_FAILED",
+    }).state;
+    const retried = reduceAdmissionInteraction(failed, {
+      type: "retry",
+      revision: 9,
+      targetAvailable: true,
+    });
+    const anchor = { ...CHILD, baseRevision: 9 };
+    expect(retried).toEqual({
+      state: { phase: "requesting", token: "voice_1", attempt: 2, anchor },
+      effects: [{ type: "request-microphone", token: "voice_1", attempt: 2, anchor }],
+    });
+    if (retried.state.phase === "idle") throw new Error("retry missing");
+    expect(Object.isFrozen(retried.state.anchor)).toBe(true);
+  });
+
+  it("turns a retry against a vanished parent into a visible stale target, never idle", () => {
+    const failed = reduceAdmissionInteraction(start().state, {
+      type: "permission-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "MICROPHONE_UNAVAILABLE",
+    }).state;
+    const stale = reduceAdmissionInteraction(failed, {
+      type: "retry",
+      revision: 5,
+      targetAvailable: false,
+    });
+    expect(stale.state).toEqual({
+      phase: "error",
+      token: "voice_1",
+      attempt: 1,
+      anchor: CHILD,
+      errorCode: "STALE_TARGET",
+      submitted: false,
+    });
+    expect(stale.effects).toEqual([]);
+    const again = reduceAdmissionInteraction(stale.state, {
+      type: "retry",
+      revision: 5,
+      targetAvailable: false,
+    });
+    expect(again.state).toBe(stale.state);
+    expect(reduceAdmissionInteraction(stale.state, {
+      type: "retry",
+      revision: 6,
+      targetAvailable: true,
+    }).state).toMatchObject({ phase: "requesting", attempt: 2, anchor: { baseRevision: 6 } });
+  });
+
+  it("keeps submitted words through any failed commit, bounded to one node", () => {
+    const stale = reduceAdmissionInteraction(committing("the words I said"), {
+      type: "commit-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "STALE_TARGET",
+    });
+    expect(stale.state).toEqual({
+      phase: "error",
+      token: "voice_1",
+      attempt: 1,
+      anchor: CHILD,
+      errorCode: "STALE_TARGET",
+      submitted: true,
+      transcript: "the words I said",
+    });
+    expect(stale.effects).toEqual([
+      { type: "cleanup-operation", token: "voice_1", attempt: 1, reason: "failed" },
+    ]);
+    expect(admissionHoldsTranscript(stale.state)).toBe(true);
+
+    const rejected = reduceAdmissionInteraction(committing("the words I said"), {
+      type: "commit-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "COMMIT_REJECTED",
+    }).state;
+    expect(rejected).toMatchObject({
+      errorCode: "COMMIT_REJECTED",
+      submitted: true,
+      transcript: "the words I said",
+    });
+    expect(reduceAdmissionInteraction(committing("the words I said"), {
+      type: "commit-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "INTERNAL_FAILURE",
+    }).state).toMatchObject({ transcript: "the words I said" });
+    // Words before a commit are not yet held; failures there hold nothing.
+    expect(reduceAdmissionInteraction(transcribing(), {
+      type: "transcription-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "TRANSCRIPTION_FAILED",
+    }).state).not.toHaveProperty("transcript");
+    const oversized = reduceAdmissionInteraction(committing("念".repeat(2_001)), {
+      type: "commit-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "STALE_TARGET",
+    }).state;
+    expect(oversized).not.toHaveProperty("transcript");
+  });
+
+  it("places held words only at an explicit target and only once", () => {
+    const held = reduceAdmissionInteraction(committing("held words"), {
+      type: "commit-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "STALE_TARGET",
+    }).state;
+    // Recording again would replace the held words behind the person's back.
+    expect(reduceAdmissionInteraction(held, {
+      type: "retry",
+      revision: 5,
+      targetAvailable: true,
+    }).state).toBe(held);
+    expect(reduceAdmissionInteraction(held, {
+      type: "place",
+      anchor: { ...ROOT, treeId: "another_tree" },
+    }).state).toBe(held);
+
+    const target = { kind: "child" as const, treeId: "tree_1", baseRevision: 7, parentNodeId: "document" };
+    const placed = reduceAdmissionInteraction(held, { type: "place", anchor: target });
+    expect(placed).toEqual({
+      state: {
+        phase: "committing",
+        token: "voice_1",
+        attempt: 2,
+        anchor: target,
+        transcript: "held words",
+      },
+      effects: [{
+        type: "commit-admission",
+        token: "voice_1",
+        attempt: 2,
+        anchor: target,
+        transcript: "held words",
+      }],
+    });
+    // The failed attempt can no longer settle the placement.
+    expect(reduceAdmissionInteraction(placed.state, {
+      type: "commit-succeeded",
+      token: "voice_1",
+      attempt: 1,
+    }).state).toBe(placed.state);
+    expect(reduceAdmissionInteraction(placed.state, { type: "place", anchor: target }).state)
+      .toBe(placed.state);
+
+    const withoutWords = reduceAdmissionInteraction(start().state, {
+      type: "permission-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "MICROPHONE_DENIED",
+    }).state;
+    expect(reduceAdmissionInteraction(withoutWords, { type: "place", anchor: target }).state)
+      .toBe(withoutWords);
+    expect(reduceAdmissionInteraction(held, { type: "dismiss" }))
+      .toEqual({ state: { phase: "idle" }, effects: [] });
+  });
+
+  it("makes a lost parent during capture visible and leaves submitted work to commit revalidation", () => {
+    for (const state of [start().state, recording()]) {
+      const lost = reduceAdmissionInteraction(state, { type: "target-lost" });
+      expect(lost.state).toMatchObject({
+        phase: "error",
+        errorCode: "STALE_TARGET",
+        submitted: false,
+      });
+      expect(lost.effects).toEqual([
+        { type: "cleanup-operation", token: "voice_1", attempt: 1, reason: "failed" },
+      ]);
+    }
+    for (const state of [
+      reduceAdmissionInteraction(recording(), { type: "stop" }).state,
+      transcribing(),
+      committing(),
+    ]) {
+      const result = reduceAdmissionInteraction(state, { type: "target-lost" });
+      expect(result.state).toBe(state);
+      expect(result.effects).toEqual([]);
+    }
+  });
+
+  it("releases only unsubmitted capture for modal chrome and hidden pages", () => {
+    for (const state of [start().state, recording()]) {
+      for (const type of ["release-capture", "suspend"] as const) {
+        expect(reduceAdmissionInteraction(state, { type })).toEqual({
+          state: { phase: "idle" },
+          effects: [{ type: "cancel-operation", token: "voice_1", attempt: 1, reason: "suspended" }],
+        });
+      }
+    }
+    const stopping = reduceAdmissionInteraction(recording(), { type: "stop" }).state;
+    for (const state of [stopping, transcribing(), committing()]) {
+      expect(reduceAdmissionInteraction(state, { type: "suspend" }).state).toBe(state);
+      expect(reduceAdmissionInteraction(state, { type: "release-capture" }).state).toBe(state);
+    }
+    const unsubmitted = reduceAdmissionInteraction(start().state, {
+      type: "permission-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "MICROPHONE_DENIED",
+    }).state;
+    const submitted = reduceAdmissionInteraction(transcribing(), {
+      type: "transcription-failed",
+      token: "voice_1",
+      attempt: 1,
+      errorCode: "TRANSCRIPTION_FAILED",
+    }).state;
+    expect(reduceAdmissionInteraction(unsubmitted, { type: "release-capture" }).state).toBe(unsubmitted);
+    expect(reduceAdmissionInteraction(unsubmitted, { type: "suspend" }).state).toEqual({ phase: "idle" });
+    expect(reduceAdmissionInteraction(submitted, { type: "suspend" }).state).toBe(submitted);
+  });
+
   it("is serializable in every phase and never stores browser resources", () => {
     const states = [
       createAdmissionInteractionState(),
@@ -337,6 +608,12 @@ describe("admission interaction reducer", () => {
       reduceAdmissionInteraction(recording(), { type: "stop" }).state,
       transcribing(),
       committing(),
+      reduceAdmissionInteraction(committing(), {
+        type: "commit-failed",
+        token: "voice_1",
+        attempt: 1,
+        errorCode: "STALE_TARGET",
+      }).state,
     ];
     for (const state of states) {
       expect(JSON.parse(JSON.stringify(state))).toEqual(state);

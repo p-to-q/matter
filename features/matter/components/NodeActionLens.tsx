@@ -1,5 +1,7 @@
 "use client";
 
+// Loads with this lazy chunk; nothing in the initial graph renders these classes.
+import "./NodeActionLens.css";
 import {
   useCallback,
   useEffect,
@@ -15,8 +17,9 @@ import {
 import type { NavigationState } from "../runtime/navigation";
 import type { ThoughtTree } from "../tree/model";
 import type { MatterLocale } from "../config/locales";
-import { MatterAiIcon, MinusIcon, PlusIcon } from "./icons";
+import { MatterAiIcon, MinusIcon, PlusIcon, WikiChangeIcon } from "./icons";
 import { nodeActionLensCopy } from "./node-action-lens-copy";
+import { useEscapeLayer } from "./escape-layers";
 import {
   projectNodeHandleMetrics,
   projectNodeHandlePosition,
@@ -47,6 +50,13 @@ type LensPlacement = Readonly<{
   }>;
 }>;
 
+/** One word Wiki changed in a passage, as the lens may offer it for review. */
+export type NodeActionWikiReview = Readonly<{ id: string; heard: string; canonical: string }>;
+
+/** A passage offers at most this many Wiki reviews; a tap on the word reaches the rest. */
+export const MAX_NODE_ACTION_WIKI_REVIEWS = 3;
+const NO_WIKI_REVIEWS: readonly NodeActionWikiReview[] = Object.freeze([]);
+
 export type NodeActionLensProps = Readonly<{
   activeNodeIds: ReadonlySet<string>;
   canvasRef: RefObject<HTMLDivElement | null>;
@@ -57,11 +67,15 @@ export type NodeActionLensProps = Readonly<{
   interaction: "idle" | "pending";
   locale: MatterLocale;
   navigation: NavigationState;
-  onOpenPointTalk: (nodeId: string) => void;
+  /** `origin` is the AI mark's centre in client pixels: the field grows from it. */
+  onOpenPointTalk: (nodeId: string, origin: Readonly<{ x: number; y: number }> | null) => void;
+  onOpenWikiReview?: (occurrenceId: string) => void;
   onToggleHeldAside: (nodeId: string) => void;
   pointTalkEligibleNodeIds: ReadonlySet<string>;
   positioningRef: RefObject<HTMLElement | null>;
   tree: ThoughtTree;
+  /** Live, disclosed Wiki changes by passage: the keyboard path to each takeover. */
+  wikiReviews?: ReadonlyMap<string, readonly NodeActionWikiReview[]>;
 }>;
 
 const CLOSE_DELAY_MS = 200;
@@ -81,10 +95,12 @@ export function NodeActionLens({
   locale,
   navigation,
   onOpenPointTalk,
+  onOpenWikiReview,
   onToggleHeldAside,
   pointTalkEligibleNodeIds,
   positioningRef,
   tree,
+  wikiReviews,
 }: NodeActionLensProps) {
   const copy = nodeActionLensCopy(locale);
   const [coarse, setCoarse] = useState(false);
@@ -92,12 +108,23 @@ export function NodeActionLens({
   const [chromeSuppressed, setChromeSuppressed] = useState(false);
   const [target, setTarget] = useState<LensTarget | null>(null);
   const [placement, setPlacement] = useState<LensPlacement | null>(null);
+  // Escape dismisses the selected passage's lens until that passage is
+  // pressed or selected again; a selection alone never brings it back.
+  const [dismissedSelectionNodeId, setDismissedSelectionNodeId] = useState<string | null>(null);
+  // Wiki reviews are the keyboard's and touch's path to a changed word. A fine
+  // pointer taps the word itself, so its lens never grows over that word.
+  const [keyboardNodeId, setKeyboardNodeId] = useState<string | null>(null);
+  const keyboardNodeIdRef = useRef<string | null>(null);
   const lensRef = useRef<HTMLDivElement>(null);
   const targetElementRef = useRef<HTMLElement | null>(null);
   const pendingKeyboardEntryRef = useRef<string | null>(null);
   const dismissedFocusNodeIdRef = useRef<string | null>(null);
   const closeTimerRef = useRef<number | null>(null);
 
+  const noteKeyboardEntry = useCallback((nodeId: string | null) => {
+    keyboardNodeIdRef.current = nodeId;
+    setKeyboardNodeId(nodeId);
+  }, []);
   const clearCloseTimer = useCallback(() => {
     if (closeTimerRef.current === null) return;
     window.clearTimeout(closeTimerRef.current);
@@ -109,7 +136,8 @@ export function NodeActionLens({
     pendingKeyboardEntryRef.current = null;
     setTarget(null);
     setPlacement(null);
-  }, [clearCloseTimer]);
+    noteKeyboardEntry(null);
+  }, [clearCloseTimer, noteKeyboardEntry]);
   const scheduleClose = useCallback(() => {
     clearCloseTimer();
     closeTimerRef.current = window.setTimeout(close, CLOSE_DELAY_MS);
@@ -185,7 +213,9 @@ export function NodeActionLens({
       if (!enabled || chromeIsSuppressed()) return;
       const candidate = materialTarget(event.target);
       if (candidate?.nodeId === dismissedFocusNodeIdRef.current) return;
-      if (candidate !== null) reveal(candidate, "focus");
+      if (candidate === null) return;
+      reveal(candidate, "focus");
+      noteKeyboardEntry(isFocusVisible(candidate.element) ? candidate.nodeId : null);
     };
     const focusOut = (event: FocusEvent) => {
       const from = materialTarget(event.target);
@@ -201,10 +231,25 @@ export function NodeActionLens({
       event.preventDefault();
       dismissedFocusNodeIdRef.current = null;
       pendingKeyboardEntryRef.current = candidate.nodeId;
+      // A first keyboard entry may add Wiki reviews and re-place the lens;
+      // focus then waits for that placement instead of a button about to go.
+      const entered = keyboardNodeIdRef.current === candidate.nodeId;
+      noteKeyboardEntry(candidate.nodeId);
       reveal(candidate, "focus");
-      focusPendingKeyboardEntry(candidate.nodeId);
+      if (entered) focusPendingKeyboardEntry(candidate.nodeId);
     };
-    const pointerDown = () => close();
+    // A press on a passage keeps that passage's lens: the click selects it,
+    // and the selection holds the lens once the pointer leaves. A press on
+    // anything else closes the pointer's lens.
+    const pointerDown = (event: PointerEvent) => {
+      const candidate = materialTarget(event.target);
+      if (candidate === null) {
+        close();
+        return;
+      }
+      setDismissedSelectionNodeId(null);
+      if (enabled && !chromeIsSuppressed() && event.pointerType !== "touch") reveal(candidate, "pointer");
+    };
     const reconcileCurrentTarget = () => {
       const focused = materialTarget(document.activeElement);
       const hovered = window.matchMedia("(pointer: coarse)").matches
@@ -243,13 +288,18 @@ export function NodeActionLens({
       canvas.removeEventListener("pointerdown", pointerDown);
       chromeObserver.disconnect();
     };
-  }, [activeNodeIds, canvasRef, clearCloseTimer, close, documentRef, enabled, focusPendingKeyboardEntry, heldAsideRootIds, scheduleClose]);
+  }, [activeNodeIds, canvasRef, clearCloseTimer, close, documentRef, enabled, focusPendingKeyboardEntry, heldAsideRootIds, noteKeyboardEntry, scheduleClose]);
 
+  // The selected passage keeps its lens for every pointer: a fine pointer's
+  // click selects the passage it will act on, so the lens must not depend on
+  // the pointer staying over it or on a later hover.
   const selectedTarget = useMemo<LensTarget | null>(
-    () => coarse && navigation.selectedNodeId !== null && activeNodeIds.has(navigation.selectedNodeId)
+    () => navigation.selectedNodeId !== null &&
+        navigation.selectedNodeId !== dismissedSelectionNodeId &&
+        activeNodeIds.has(navigation.selectedNodeId)
       ? { kind: "active", nodeId: navigation.selectedNodeId, source: "selection" }
       : null,
-    [activeNodeIds, coarse, navigation.selectedNodeId],
+    [activeNodeIds, dismissedSelectionNodeId, navigation.selectedNodeId],
   );
   const retainedTarget = target !== null && tree.nodes[target.nodeId] !== undefined && (
     target.kind === "active" ? activeNodeIds.has(target.nodeId) : heldAsideRootIds.has(target.nodeId)
@@ -262,9 +312,15 @@ export function NodeActionLens({
       ? retainedTarget?.kind === "held-root" || retainedTarget?.source === "focus"
         ? retainedTarget
         : selectedTarget
-      : retainedTarget;
+      : retainedTarget ?? selectedTarget;
 
-  const actionCount = activeTarget === null ? 0 : 2;
+  // Wiki reviews grow only a touch selection's or keyboard's lens: a fine
+  // pointer taps the changed word itself.
+  const reviews = activeTarget?.kind === "active" && onOpenWikiReview !== undefined &&
+      ((activeTarget.source === "selection" && coarse) || keyboardNodeId === activeTarget.nodeId)
+    ? (wikiReviews?.get(activeTarget.nodeId) ?? NO_WIKI_REVIEWS).slice(0, MAX_NODE_ACTION_WIKI_REVIEWS)
+    : NO_WIKI_REVIEWS;
+  const actionCount = activeTarget === null ? 0 : 2 + reviews.length;
   const currentPlacement = placement !== null && activeTarget !== null &&
     placement.owner.actionCount === actionCount &&
     placement.owner.coarse === coarse &&
@@ -373,23 +429,30 @@ export function NodeActionLens({
   useLayoutEffect(() => {
     if (currentPlacement === null || activeTarget === null || pendingKeyboardEntryRef.current !== activeTarget.nodeId) return;
     focusPendingKeyboardEntry(activeTarget.nodeId);
-  }, [activeTarget, currentPlacement, focusPendingKeyboardEntry]);
+  }, [activeTarget, currentPlacement, focusPendingKeyboardEntry, keyboardNodeId]);
+
+  const lensVisible = activeTarget !== null && currentPlacement !== null && actionCount > 0;
+  // A paper surface: chrome or a panel that covers the paper outranks it.
+  useEscapeLayer(lensVisible, "paper", () => {
+    if (activeTarget === null) return false;
+    // Only a lens that holds keyboard focus hands it back to its passage.
+    const focusWasInside = lensRef.current?.contains(document.activeElement) === true;
+    dismissedFocusNodeIdRef.current = activeTarget.nodeId;
+    if (activeTarget.nodeId === navigation.selectedNodeId) {
+      setDismissedSelectionNodeId(activeTarget.nodeId);
+    }
+    close();
+    if (focusWasInside) {
+      canvasRef.current?.querySelector<HTMLElement>(
+        `[data-thought-text-id="${CSS.escape(activeTarget.nodeId)}"]`,
+      )?.focus();
+    }
+    return true;
+  });
 
   if (activeTarget === null || currentPlacement === null || actionCount === 0) return null;
 
-  const restoreTargetFocus = () => {
-    canvasRef.current?.querySelector<HTMLElement>(
-      `[data-thought-text-id="${CSS.escape(activeTarget.nodeId)}"]`,
-    )?.focus();
-  };
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      dismissedFocusNodeIdRef.current = activeTarget.nodeId;
-      close();
-      restoreTargetFocus();
-      return;
-    }
     if (!["ArrowDown", "ArrowUp", "ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
     if (buttons.length === 0) return;
@@ -448,8 +511,12 @@ export function NodeActionLens({
         className="node-action-lens__button node-action-lens__button--ai"
         data-node-action="point-talk"
         disabled={!pointTalkEnabled}
-        onClick={() => {
-          onOpenPointTalk(activeTarget.nodeId);
+        onClick={(event) => {
+          const mark = event.currentTarget.getBoundingClientRect();
+          onOpenPointTalk(activeTarget.nodeId, Object.freeze({
+            x: mark.left + mark.width / 2,
+            y: mark.top + mark.height / 2,
+          }));
           close();
         }}
         title={copy.rewriteShort}
@@ -472,8 +539,33 @@ export function NodeActionLens({
       >
         {activeTarget.kind === "active" ? <MinusIcon /> : <PlusIcon />}
       </button>
+      {reviews.map((review) => (
+        <button
+          aria-label={copy.wikiReview(review.heard, review.canonical)}
+          className="node-action-lens__button"
+          data-node-action="wiki-review"
+          key={review.id}
+          onClick={() => {
+            close();
+            onOpenWikiReview?.(review.id);
+          }}
+          tabIndex={-1}
+          title={copy.wikiReviewShort}
+          type="button"
+        >
+          <WikiChangeIcon />
+        </button>
+      ))}
     </div>
   );
+}
+
+function isFocusVisible(element: HTMLElement): boolean {
+  try {
+    return element.matches(":focus-visible");
+  } catch {
+    return false;
+  }
 }
 
 function measureFirstLineInkRect(element: HTMLElement) {

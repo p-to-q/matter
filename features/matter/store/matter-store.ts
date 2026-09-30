@@ -12,7 +12,7 @@ import {
   LEGACY_MATTER_DOCUMENT_TITLE,
   normalizeMatterInitialDocument,
 } from "../config/initial-document";
-import type { TreeHistoryLimits } from "../tree/history";
+import { MATTER_HISTORY_LIMITS, type TreeHistoryLimits } from "../tree/history";
 import {
   clearSelection,
   createNavigationState,
@@ -26,6 +26,7 @@ import {
 import {
   commitHumanAdmission,
   commitHumanAdmissionRepair,
+  commitDeliveredSessionCommand,
   commitHumanRemoval,
   commitSessionCommand,
   redoSession,
@@ -39,24 +40,20 @@ import {
   ADMISSION_REPAIR_WINDOW_MS,
   type AdmissionRepairValues,
 } from "../runtime/admission-repair";
-import {
-  adjudicateRepair,
-  normalizeRepairInput,
-} from "../material/transcript-repair";
-import {
-  canonicalSpokenExpressionBase,
-  decorateSpokenExpression,
-} from "../runtime/expressive-transcript";
-import { repairAdmittedTranscriptWords } from "../runtime/transcript-punctuation";
+import type { AdmissionRepairAdjudicator } from "../runtime/admission-repair-adjudication";
 import { moveNodeToParentCommand, type MoveNodeValues } from "../runtime/move";
 import type { HumanRemovalValues } from "../runtime/removal";
+import {
+  humanTextRangeRestorationCommand,
+  type HumanTextRangeRestorationValues,
+} from "../runtime/text-range-restoration";
 import { createTreeHistory } from "../tree/history";
-import { MAX_NODE_TEXT_CODE_UNITS, validateThoughtTree } from "../tree/invariants";
-import type { ThoughtTree } from "../tree/model";
+import { validateThoughtTree } from "../tree/invariants";
+import type { ThoughtNode, ThoughtTree } from "../tree/model";
 import { normalizeDocumentTree } from "../tree/document-root";
 import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/title";
 import { deriveMaterialTitle } from "../material/material-files";
-import { recoverPersistedHistory } from "../persistence/history-recovery";
+import { attachRecoveredHistory, type RecoveredHistory } from "../persistence/history-recovery";
 import {
   type TransformEnvelope,
   type TransformPlan,
@@ -73,7 +70,16 @@ import {
   prepareRepairIngress,
   prepareTransformIngress,
   prepareTextSwapIngress,
+  type MaterialIngressStage,
+  type MaterialLexicalOccurrences,
+  type TextReplacementCommand,
 } from "../application/material-ingress";
+import {
+  IDENTITY_MATERIAL_LEXICAL_OCCURRENCE_PORT,
+  publishCommittedLexicalOccurrences,
+  type MaterialLexicalOccurrencePort,
+  type MaterialLexicalOccurrencePublication,
+} from "../application/material-lexical-occurrence-port";
 import {
   captureMaterialLexicalSession,
   IDENTITY_MATERIAL_LEXICAL_PORT,
@@ -87,32 +93,12 @@ import {
   type MaterialLexicalObservationPort,
 } from "../application/material-lexical-observation-port";
 
-const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = Object.freeze({
-  // Durable history must not silently discard an old inverse. Browser storage
-  // remains the physical limit and surfaces a recoverable save error instead.
-  maxEntries: Number.MAX_SAFE_INTEGER,
-  maxRetainedInverseBytes: Number.MAX_SAFE_INTEGER,
-});
-
-function locallyDecorateAdjudicatedRepair(
-  verdict: ReturnType<typeof adjudicateRepair>,
-  locale: string,
-  sampleSeed: string,
-  expectedText: string,
-): Readonly<{ ok: true; text: string; changed: boolean }> | Readonly<{ ok: false }> {
-  if (!verdict.ok || !verdict.changed) return Object.freeze({ ok: false as const });
-  const text = decorateSpokenExpression({
-    text: verdict.text,
-    locale,
-    maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
-    sampleSeed,
-  });
-  return Object.freeze({
-    ok: true as const,
-    text,
-    changed: text !== expectedText,
-  });
-}
+// Undo keeps the newest 1,000 steps within 32 MiB of exact inverses across
+// both stacks and releases older ones; the byte bound admits every legal
+// inverse, so a valid change is never refused. Archive export is long-term
+// recovery. Only an abnormal release (an unreadable or no longer applicable
+// step) is announced; reaching the bound is ordinary editing.
+const HISTORY_LIMITS: Readonly<TreeHistoryLimits> = MATTER_HISTORY_LIMITS;
 
 type NavigationOperation = "select" | "clear-selection" | "focus" | "show-full" | "toggle-fold";
 
@@ -134,8 +120,23 @@ export type NavigationReceipt =
     };
 
 export type HydrationReceipt =
-  | { operation: "hydrate"; status: "hydrated"; revision: number }
-  | { operation: "hydrate"; status: "rejected"; revision: number; errorCode: "TREE_INVARIANT_VIOLATION" };
+  | {
+      operation: "hydrate";
+      status: "hydrated";
+      revision: number;
+      /** Stored undo steps existed but could not be restored with this material. */
+      historyReleased: boolean;
+    }
+  | {
+      operation: "hydrate";
+      status: "rejected";
+      revision: number;
+      /**
+       * `MATERIAL_CHANGED`: the store no longer holds the tree the caller read
+       * before loading, so replacing it would drop a commit made meanwhile.
+       */
+      errorCode: "TREE_INVARIANT_VIOLATION" | "MATERIAL_CHANGED";
+    };
 
 export type DocumentSwitchReceipt =
   | { operation: "switch-document"; status: "switched"; treeId: string; revision: number }
@@ -151,7 +152,9 @@ export type SeedLocalizationReceipt = Readonly<{
   operation: "localize-seed";
   status: "localized" | "unchanged" | "rejected";
   revision: number;
-  errorCode?: "SEED_LOCALIZATION_INVALID_TREE" | "SEED_LOCALIZATION_INVALID_HISTORY";
+  errorCode?: "SEED_LOCALIZATION_INVALID_TREE";
+  /** A stack whose next step no longer matched the localized seed was released. */
+  historyReleased?: boolean;
 }>;
 
 export type AdmissionCommitReceipt = Extract<RuntimeReceipt, { status: "committed" }> &
@@ -173,28 +176,21 @@ export type AdmissionRepairCommittedChange = Readonly<{
   after: Readonly<{ text: string; updatedAt: string }>;
 }>;
 
-export type TransformCommittedChange = Readonly<{
+type MaterialTextMotion = "grow" | "settle";
+
+type MaterialTextChange<Motion extends MaterialTextMotion> = Readonly<{
   id: string;
   treeId: string;
   documentEpoch: number;
   nodeId: string;
   committedRevision: number;
-  motionHint: "grow";
+  motionHint: Motion;
   before: Readonly<{ text: string; updatedAt: string }>;
   after: Readonly<{ text: string; updatedAt: string }>;
 }>;
 
-export type TextSwapCommittedChange = Readonly<{
-  id: string;
-  treeId: string;
-  documentEpoch: number;
-  nodeId: string;
-  committedRevision: number;
-  motionHint: "settle";
-  before: Readonly<{ text: string; updatedAt: string }>;
-  after: Readonly<{ text: string; updatedAt: string }>;
-}>;
-
+export type TransformCommittedChange = MaterialTextChange<"grow">;
+export type TextSwapCommittedChange = MaterialTextChange<"settle">;
 export type MaterialTextCommittedChange = TransformCommittedChange | TextSwapCommittedChange;
 
 /**
@@ -216,13 +212,15 @@ export type TransformCommitReceipt = Extract<RuntimeReceipt, { status: "committe
 export type TextSwapCommitReceipt = Extract<RuntimeReceipt, { status: "committed" }> &
   Readonly<{ textSwapChange: TextSwapCommittedChange }>;
 
-export type TextSwapStaleReceipt = Readonly<{
+/** A turn whose document or exact target changed first; nothing was published. */
+export type MaterialTurnStaleReceipt = Readonly<{
   operation: "commit";
   status: "stale";
   revision: number;
 }>;
 
-export type TransformStaleReceipt = TextSwapStaleReceipt;
+export type TextSwapStaleReceipt = MaterialTurnStaleReceipt;
+export type TransformStaleReceipt = MaterialTurnStaleReceipt;
 
 export type AdmissionRepairSettlement =
   | Readonly<{ repairLeaseId: string; outcome: "discarded" }>
@@ -269,6 +267,13 @@ export type MatterStoreReceipt =
 
 type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   documentEpoch: number;
+  /**
+   * The material this document instance began as (the seed, a hydrated row,
+   * or an imported archive), carried forward by seed relocalization only while
+   * nothing else changed it. `tree !== untouchedTree` exactly when the person,
+   * or a turn they submitted, changed this document instance.
+   */
+  untouchedTree: ThoughtTree;
   lastError: MatterStoreError | null;
   lastReceipt: ObservableMatterStoreReceipt | null;
   extendMaterial: (
@@ -284,6 +289,10 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   admitHumanTranscript: (anchor: AdmissionAnchor, values: MatterAdmissionValues) => AdmissionStoreReceipt;
   settleHumanTranscriptRepair: (settlement: AdmissionRepairSettlement) => AdmissionRepairStoreReceipt;
   removeSelected: (values: HumanRemovalValues) => MatterStoreReceipt;
+  /** Restores one exact range as an ordinary, undoable human text change. */
+  restoreHumanTextRange: (values: HumanTextRangeRestorationValues & Readonly<{
+    expectedDocumentEpoch: number;
+  }>) => MatterStoreReceipt;
   moveNode: (values: MoveNodeValues) => MatterStoreReceipt;
   renameDocument: (values: RenameDocumentValues) => MatterStoreReceipt;
   undo: () => MatterStoreReceipt;
@@ -305,7 +314,11 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
   focus: (nodeId: string) => MatterStoreReceipt;
   showFull: () => MatterStoreReceipt;
   toggleFold: (nodeId: string) => MatterStoreReceipt;
-  hydrateSnapshot: (tree: ThoughtTree, history?: unknown) => MatterStoreReceipt;
+  hydrateSnapshot: (
+    tree: ThoughtTree,
+    history?: RecoveredHistory | null,
+    expectedCurrentTree?: ThoughtTree,
+  ) => MatterStoreReceipt;
   switchDocument: (tree: ThoughtTree) => DocumentSwitchReceipt;
   clearError: () => void;
 };
@@ -352,6 +365,13 @@ export function createMatterStore(
     monotonicNow?: () => number;
     materialLexical?: MaterialLexicalPort;
     humanAdmissionObservation?: MaterialLexicalObservationPort;
+    lexicalOccurrences?: MaterialLexicalOccurrencePort;
+    /**
+     * The store's authority over a late repair candidate. It loads with the
+     * repair port, so it is present before any candidate can exist; a
+     * settlement it cannot judge is refused and the admitted words stand.
+     */
+    admissionRepair?: () => AdmissionRepairAdjudicator | null;
   }> = {},
 ): MatterStore {
   assertFixedHistoryLimits(HISTORY_LIMITS);
@@ -363,6 +383,14 @@ export function createMatterStore(
   const materialLexical = options.materialLexical ?? IDENTITY_MATERIAL_LEXICAL_PORT;
   const humanAdmissionObservation = options.humanAdmissionObservation ??
     IDENTITY_MATERIAL_LEXICAL_OBSERVATION_PORT;
+  const lexicalOccurrences = options.lexicalOccurrences ??
+    IDENTITY_MATERIAL_LEXICAL_OCCURRENCE_PORT;
+  const readAdmissionRepair = options.admissionRepair ?? noAdmissionRepair;
+  // Published only after the state update returns, so a consumer always reads
+  // the committed tree and can never re-enter an unfinished Zustand update.
+  const publishOccurrences = (publication: MaterialLexicalOccurrencePublication | null) => {
+    if (publication !== null) publishCommittedLexicalOccurrences(lexicalOccurrences, publication);
+  };
   const fixture = createSeededDocument(initialDocument);
   const initialTitle = options.initialTitle ?? (
     initialDocument === "empty" ? EMPTY_MATTER_DOCUMENT_TITLE : undefined
@@ -379,6 +407,7 @@ export function createMatterStore(
   const internalStore = createStore<MatterStoreInternalState>()((set) => freezeState({
     tree: initialDomain.tree,
     documentEpoch: 0,
+    untouchedTree: initialDomain.tree,
     history: initialDomain.history,
     navigation: initialDomain.navigation,
     lastError: null,
@@ -451,11 +480,15 @@ export function createMatterStore(
           operation: "localize-seed",
           status: "localized",
           revision: localized.tree.revision,
+          historyReleased: localized.historyReleased,
         });
+        const tree = protectValue(localized.tree);
         return freezeState({
           ...current,
-          tree: protectValue(localized.tree),
+          tree,
           history: protectValue(localized.history),
+          // Relocalizing untouched seed copy is not a change the person made.
+          untouchedTree: current.tree === current.untouchedTree ? tree : current.untouchedTree,
         });
       });
       if (receipt === undefined) {
@@ -469,6 +502,7 @@ export function createMatterStore(
       const committedObservation: { current: MaterialLexicalObservation | null } = {
         current: null,
       };
+      let occurrencePublicationAfterCommit: MaterialLexicalOccurrencePublication | null = null;
       set((current) => {
         const leaseAdmittedAtMs = monotonicNow();
         pruneExpiredRepairLeases(repairLeases, leaseAdmittedAtMs);
@@ -540,6 +574,13 @@ export function createMatterStore(
               text: prepared.admittedText,
             }),
           });
+          occurrencePublicationAfterCommit = occurrencePublication(
+            "admission",
+            result.state.tree.id,
+            current.documentEpoch,
+            result.state.tree.nodes[values.nodeId],
+            prepared.lexicalOccurrences,
+          );
         }
         if (
           result.ok &&
@@ -594,11 +635,15 @@ export function createMatterStore(
           committedObservation.current.committed,
         );
       }
+      // After the observation, so a consumer counting further admissions never
+      // counts the admission that carried the occurrence.
+      publishOccurrences(occurrencePublicationAfterCommit);
       return requireSynchronousReceipt(receipt);
     },
 
     settleHumanTranscriptRepair: (settlement) => {
       let receipt: AdmissionRepairStoreReceipt | undefined;
+      let occurrencePublicationAfterCommit: MaterialLexicalOccurrencePublication | null = null;
       set((current) => {
         const settledAtMs = monotonicNow();
         const lease = repairLeases.get(settlement.repairLeaseId);
@@ -623,36 +668,16 @@ export function createMatterStore(
           receipt = silentRepairRejection(current.tree.revision, "INVALID_REPAIR");
           return current;
         }
-        const ruleWords = repairAdmittedTranscriptWords(lease.expectedText, lease.locale);
-        const ruleFloor = decorateSpokenExpression({
-          text: ruleWords,
-          locale: lease.locale,
-          maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
-          sampleSeed: lease.interactionId,
-        });
-        const modelWords = settlement.source === "model"
-          ? canonicalSpokenExpressionBase({
-              text: settlement.text,
+        const adjudicate = readAdmissionRepair();
+        const adjudicated = adjudicate === null
+          ? Object.freeze({ ok: false as const })
+          : adjudicate({
+              expectedText: lease.expectedText,
               locale: lease.locale,
-              maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
               sampleSeed: lease.interactionId,
-            })
-          : undefined;
-        const adjudicated = settlement.source === "rules"
-          ? settlement.text === ruleFloor
-            ? Object.freeze({ ok: true as const, text: settlement.text, changed: settlement.text !== lease.expectedText })
-            : Object.freeze({ ok: false as const })
-          : modelWords === undefined
-            ? Object.freeze({ ok: false as const })
-            : locallyDecorateAdjudicatedRepair(adjudicateRepair(
-              // Rules and model are one candidate, not two model edits. The
-              // recomputed floor is trusted only because the rules branch above
-              // is pure and exact; the model receives authority solely over its
-              // bounded delta from that floor. Expression is stripped and
-              // re-proven locally before the model delta is judged.
-              normalizeRepairInput({ text: ruleWords, locale: lease.locale }),
-              modelWords,
-            ), lease.locale, lease.interactionId, lease.expectedText);
+              source: settlement.source,
+              text: settlement.text,
+            });
         if (!adjudicated.ok || !adjudicated.changed) {
           receipt = silentRepairRejection(current.tree.revision, "INVALID_REPAIR");
           return current;
@@ -695,6 +720,13 @@ export function createMatterStore(
         if (!result.ok) return current;
         const afterNode = result.state.tree.nodes[lease.nodeId];
         if (afterNode === undefined) return current;
+        occurrencePublicationAfterCommit = occurrencePublication(
+          "repair",
+          lease.treeId,
+          lease.documentEpoch,
+          afterNode,
+          prepared.lexicalOccurrences,
+        );
         const baseReceipt = result.receipt;
         receipt = Object.freeze({
           ...baseReceipt,
@@ -722,6 +754,7 @@ export function createMatterStore(
           lastReceipt: protectValue(baseReceipt),
         });
       });
+      publishOccurrences(occurrencePublicationAfterCommit);
       return requireSynchronousReceipt(receipt);
     },
 
@@ -729,6 +762,48 @@ export function createMatterStore(
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
         const result = commitHumanRemoval(runtimeState(current), values, HISTORY_LIMITS);
+        receipt = result.receipt;
+        const domain = protectDomain(result.state);
+        return freezeState({
+          ...current,
+          ...domain,
+          lastError: domain.lastError,
+          lastReceipt: protectValue(receipt),
+        });
+      });
+      return requireSynchronousReceipt(receipt);
+    },
+
+    restoreHumanTextRange: (values) => {
+      let receipt: MatterStoreReceipt | undefined;
+      set((current) => {
+        const translated = values.expectedDocumentEpoch === current.documentEpoch
+          ? humanTextRangeRestorationCommand(current.tree, values)
+          : Object.freeze({
+              ok: false as const,
+              error: Object.freeze({
+                code: "REVISION_CONFLICT" as const,
+                message: "The material document changed before the restoration.",
+              }),
+            });
+        if (!translated.ok) {
+          const error: MatterStoreError = translated.error;
+          receipt = {
+            operation: "commit",
+            status: "rejected",
+            revision: current.tree.revision,
+            errorCode: error.code,
+          };
+          return freezeState({
+            ...current,
+            lastError: protectValue(error),
+            lastReceipt: protectValue(receipt),
+          });
+        }
+        // Lexical authority never touches a restoration: re-canonicalizing
+        // would rewrite exactly the form the person chose to keep.
+        const result = commitSessionCommand(runtimeState(current), translated.command, HISTORY_LIMITS);
+        pruneStaleRepairLeases(repairLeases, result.state.tree, current.documentEpoch);
         receipt = result.receipt;
         const domain = protectDomain(result.state);
         return freezeState({
@@ -776,7 +851,7 @@ export function createMatterStore(
     undo: () => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
-        const result = undoSession(runtimeState(current));
+        const result = undoSession(runtimeState(current), HISTORY_LIMITS);
         pruneStaleRepairLeases(repairLeases, result.state.tree, current.documentEpoch);
         receipt = result.receipt;
         const domain = protectDomain(result.state);
@@ -793,7 +868,7 @@ export function createMatterStore(
     redo: () => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
-        const result = redoSession(runtimeState(current));
+        const result = redoSession(runtimeState(current), HISTORY_LIMITS);
         pruneStaleRepairLeases(repairLeases, result.state.tree, current.documentEpoch);
         receipt = result.receipt;
         const domain = protectDomain(result.state);
@@ -808,161 +883,53 @@ export function createMatterStore(
     },
 
     commitTransform: (envelope, plan, expectedDocumentEpoch, nowMs) => {
-      let receipt: TransformStoreReceipt | undefined;
+      let outcome: MaterialTurnOutcome<"grow"> | undefined;
       set((current) => {
-        if (
-          !Number.isSafeInteger(expectedDocumentEpoch) ||
-          expectedDocumentEpoch < 0 ||
-          expectedDocumentEpoch !== current.documentEpoch
-        ) {
-          receipt = Object.freeze({
-            operation: "commit",
-            status: "stale",
-            revision: current.tree.revision,
-          });
-          return current;
-        }
-        const beforeNode = current.tree.nodes[envelope.selection.nodeId];
-        const lexicalSession = captureMaterialLexicalSession(materialLexical);
-        const translated = prepareTransformIngress({
-          tree: current.tree,
-          envelope,
-          rawPlan: plan,
-          lexicalSession,
-          source: "agent",
-          nowMs,
-        });
-        if (!translated.ok && translated.reason === "STALE") {
-          receipt = Object.freeze({
-            operation: "commit",
-            status: "stale",
-            revision: current.tree.revision,
-          });
-          return current;
-        }
-        if (!translated.ok) {
-          receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
-          return freezeState({
-            ...current,
-            lastError: { code: "INVALID_COMMAND", message: "The material changed before this turn could commit." },
-            lastReceipt: receipt,
-          });
-        }
-        const result = commitSessionCommand(runtimeState(current), translated.command, HISTORY_LIMITS);
-        const baseReceipt = result.receipt;
-        if (!result.ok || beforeNode === undefined) {
-          receipt = baseReceipt;
-          const domain = protectDomain(result.state);
-          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
-        }
-        const afterNode = result.state.tree.nodes[envelope.selection.nodeId];
-        if (afterNode === undefined) {
-          receipt = baseReceipt;
-          const domain = protectDomain(result.state);
-          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
-        }
-        receipt = Object.freeze({
-          ...baseReceipt,
-          transformChange: Object.freeze({
-            id: translated.plan.action.id,
-            treeId: envelope.treeId,
-            documentEpoch: current.documentEpoch,
-            nodeId: envelope.selection.nodeId,
-            committedRevision: result.state.tree.revision,
-            motionHint: "grow" as const,
-            before: Object.freeze({
-              text: beforeNode.text,
-              updatedAt: beforeNode.updatedAt,
-            }),
-            after: Object.freeze({
-              text: afterNode.text,
-              updatedAt: afterNode.updatedAt,
-            }),
+        const settled = commitMaterialTurn(current, {
+          expectedDocumentEpoch,
+          motionHint: "grow",
+          stage: "transform",
+          prepare: (tree) => prepareTransformIngress({
+            tree,
+            envelope,
+            rawPlan: plan,
+            lexicalSession: captureMaterialLexicalSession(materialLexical),
+            source: "agent",
+            nowMs,
           }),
         });
-        const domain = protectDomain(result.state);
-        return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
+        outcome = settled.outcome;
+        return settled.state;
       });
-      return requireSynchronousReceipt(receipt);
+      const settled = requireSynchronousOutcome(outcome);
+      if (settled.status !== "committed") return settled.receipt;
+      publishOccurrences(settled.occurrences);
+      return Object.freeze({ ...settled.receipt, transformChange: settled.change });
     },
 
     commitTextSwap: (envelope, plan, expectedDocumentEpoch, nowMs) => {
-      let receipt: TextSwapStoreReceipt | undefined;
+      let outcome: MaterialTurnOutcome<"settle"> | undefined;
       set((current) => {
-        if (
-          !Number.isSafeInteger(expectedDocumentEpoch) ||
-          expectedDocumentEpoch < 0 ||
-          expectedDocumentEpoch !== current.documentEpoch
-        ) {
-          receipt = Object.freeze({
-            operation: "commit",
-            status: "stale",
-            revision: current.tree.revision,
-          });
-          return current;
-        }
-        const beforeNode = current.tree.nodes[envelope.selection.nodeId];
-        const lexicalSession = captureMaterialLexicalSession(materialLexical);
-        const translated = prepareTextSwapIngress({
-          tree: current.tree,
-          envelope,
-          rawPlan: plan,
-          lexicalSession,
-          source: "agent",
-          nowMs,
-        });
-        if (!translated.ok && translated.reason === "STALE") {
-          receipt = Object.freeze({
-            operation: "commit",
-            status: "stale",
-            revision: current.tree.revision,
-          });
-          return current;
-        }
-        if (!translated.ok) {
-          receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
-          return freezeState({
-            ...current,
-            lastError: { code: "INVALID_COMMAND", message: "The material changed before this wording change could commit." },
-            lastReceipt: receipt,
-          });
-        }
-        const result = commitSessionCommand(runtimeState(current), translated.command, HISTORY_LIMITS);
-        const baseReceipt = result.receipt;
-        if (!result.ok || beforeNode === undefined) {
-          receipt = baseReceipt;
-          const domain = protectDomain(result.state);
-          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
-        }
-        const afterNode = result.state.tree.nodes[envelope.selection.nodeId];
-        if (afterNode === undefined) {
-          receipt = baseReceipt;
-          const domain = protectDomain(result.state);
-          return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
-        }
-        receipt = Object.freeze({
-          ...baseReceipt,
-          textSwapChange: Object.freeze({
-            id: translated.plan.action.id,
-            treeId: envelope.treeId,
-            documentEpoch: current.documentEpoch,
-            nodeId: envelope.selection.nodeId,
-            committedRevision: result.state.tree.revision,
-            motionHint: "settle" as const,
-            before: Object.freeze({
-              text: beforeNode.text,
-              updatedAt: beforeNode.updatedAt,
-            }),
-            after: Object.freeze({
-              text: afterNode.text,
-              updatedAt: afterNode.updatedAt,
-            }),
+        const settled = commitMaterialTurn(current, {
+          expectedDocumentEpoch,
+          motionHint: "settle",
+          stage: "text-swap",
+          prepare: (tree) => prepareTextSwapIngress({
+            tree,
+            envelope,
+            rawPlan: plan,
+            lexicalSession: captureMaterialLexicalSession(materialLexical),
+            source: "agent",
+            nowMs,
           }),
         });
-        const domain = protectDomain(result.state);
-        return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(baseReceipt) });
+        outcome = settled.outcome;
+        return settled.state;
       });
-      return requireSynchronousReceipt(receipt);
+      const settled = requireSynchronousOutcome(outcome);
+      if (settled.status !== "committed") return settled.receipt;
+      publishOccurrences(settled.occurrences);
+      return Object.freeze({ ...settled.receipt, textSwapChange: settled.change });
     },
 
     select: (nodeId) => {
@@ -1037,9 +1004,20 @@ export function createMatterStore(
       return requireSynchronousReceipt(receipt);
     },
 
-    hydrateSnapshot: (tree, persistedHistory) => {
+    hydrateSnapshot: (tree, persistedHistory, expectedCurrentTree) => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
+        // Compare-and-swap against the material the caller last saw. A commit
+        // that landed after it read storage stays; the caller holds a conflict.
+        if (expectedCurrentTree !== undefined && current.tree !== expectedCurrentTree) {
+          receipt = {
+            operation: "hydrate",
+            status: "rejected",
+            revision: current.tree.revision,
+            errorCode: "MATERIAL_CHANGED",
+          };
+          return freezeState({ ...current, lastReceipt: protectValue(receipt) });
+        }
         const normalizedTree = options.documentRoot === true
           ? normalizeForDocumentModel(tree, options.initialTitle)
           : tree;
@@ -1057,18 +1035,25 @@ export function createMatterStore(
           };
           return freezeState({ ...current, lastError: protectValue(error), lastReceipt: protectValue(receipt) });
         }
-        const recoveredHistory = recoverPersistedHistory(
+        const recovered = attachRecoveredHistory(
           normalizedTree,
           persistedHistory,
           HISTORY_LIMITS,
         );
         repairLeases.clear();
-        receipt = { operation: "hydrate", status: "hydrated", revision: normalizedTree.revision };
+        receipt = {
+          operation: "hydrate",
+          status: "hydrated",
+          revision: normalizedTree.revision,
+          historyReleased: recovered.released,
+        };
+        const hydratedTree = protectValue(normalizedTree);
         return freezeState({
           ...current,
           documentEpoch: current.documentEpoch + 1,
-          tree: protectValue(normalizedTree),
-          history: protectValue(recoveredHistory),
+          tree: hydratedTree,
+          untouchedTree: hydratedTree,
+          history: protectValue(recovered.history),
           navigation: protectValue(createNavigationState()),
           lastError: null,
           lastReceipt: protectValue(receipt),
@@ -1108,10 +1093,12 @@ export function createMatterStore(
           treeId: normalizedTree.id,
           revision: normalizedTree.revision,
         };
+        const switchedTree = protectValue(normalizedTree);
         return freezeState({
           ...current,
           documentEpoch: current.documentEpoch + 1,
-          tree: protectValue(normalizedTree),
+          tree: switchedTree,
+          untouchedTree: switchedTree,
           history: protectValue(createTreeHistory()),
           navigation: protectValue(createNavigationState()),
           lastError: null,
@@ -1151,6 +1138,152 @@ function runtimeState(state: MatterStoreInternalState): RuntimeState {
     // is not part of the pure session boundary.
     lastError: null,
   };
+}
+
+type MaterialTurn<Motion extends MaterialTextMotion> = Readonly<{
+  expectedDocumentEpoch: number;
+  motionHint: Motion;
+  stage: Extract<MaterialIngressStage, "transform" | "text-swap">;
+  /**
+   * Strict ingress for this turn's contract; it prepares but never commits,
+   * and it admits only a replacement of the passage the turn addressed.
+   */
+  prepare: (tree: ThoughtTree) =>
+    | Readonly<{
+        ok: true;
+        command: TextReplacementCommand;
+        plan: Readonly<{ action: Readonly<{ id: string }> }>;
+        lexicalOccurrences: MaterialLexicalOccurrences | null;
+      }>
+    | Readonly<{ ok: false; reason: "STALE" | "INVALID_PLAN" }>;
+}>;
+
+type MaterialTurnOutcome<Motion extends MaterialTextMotion> =
+  | Readonly<{
+      status: "committed";
+      receipt: Extract<RuntimeReceipt, { status: "committed" }>;
+      change: MaterialTextChange<Motion>;
+      /** Transient; the action publishes it after its state update returns. */
+      occurrences: MaterialLexicalOccurrencePublication | null;
+    }>
+  | Readonly<{ status: "stale"; receipt: MaterialTurnStaleReceipt }>
+  | Readonly<{ status: "rejected"; receipt: Extract<RuntimeReceipt, { status: "rejected" }> }>;
+
+/**
+ * The one commit path for a delivered Elastic or Text Swap result. A document
+ * change or target conflict is stale and publishes nothing; a result the
+ * contract rejects is a rejected commit with a protected diagnostic; a valid
+ * result is one delivered command, so it never ends a replayable redo future.
+ */
+function commitMaterialTurn<Motion extends MaterialTextMotion>(
+  current: MatterStoreInternalState,
+  turn: MaterialTurn<Motion>,
+): Readonly<{ state: MatterStoreInternalState; outcome: MaterialTurnOutcome<Motion> }> {
+  const revision = current.tree.revision;
+  const stale = Object.freeze({
+    state: current,
+    outcome: Object.freeze({
+      status: "stale" as const,
+      receipt: Object.freeze({ operation: "commit" as const, status: "stale" as const, revision }),
+    }),
+  });
+  if (
+    !Number.isSafeInteger(turn.expectedDocumentEpoch) ||
+    turn.expectedDocumentEpoch < 0 ||
+    turn.expectedDocumentEpoch !== current.documentEpoch
+  ) return stale;
+  const prepared = turn.prepare(current.tree);
+  if (!prepared.ok && prepared.reason === "STALE") return stale;
+  if (!prepared.ok) {
+    const error: MatterStoreError = protectValue({
+      code: "INVALID_COMMAND",
+      message: "The turn result does not satisfy its material contract.",
+    });
+    const receipt = protectValue({
+      operation: "commit" as const,
+      status: "rejected" as const,
+      revision,
+      errorCode: error.code,
+    });
+    return Object.freeze({
+      state: freezeState({ ...current, lastError: error, lastReceipt: receipt }),
+      outcome: Object.freeze({ status: "rejected" as const, receipt }),
+    });
+  }
+  const { mutation } = prepared.command;
+  const result = commitDeliveredSessionCommand(runtimeState(current), prepared.command, HISTORY_LIMITS);
+  const domain = protectDomain(result.state);
+  const receipt = protectValue(result.receipt);
+  const state = freezeState({
+    ...current,
+    ...domain,
+    lastError: domain.lastError,
+    lastReceipt: receipt,
+  });
+  if (!result.ok) {
+    return Object.freeze({
+      state,
+      outcome: Object.freeze({ status: "rejected" as const, receipt: result.receipt }),
+    });
+  }
+  return Object.freeze({
+    state,
+    outcome: Object.freeze({
+      status: "committed" as const,
+      receipt: result.receipt,
+      // The engine accepted exactly this memento pair, so it is the change.
+      change: Object.freeze({
+        id: prepared.plan.action.id,
+        treeId: current.tree.id,
+        documentEpoch: current.documentEpoch,
+        nodeId: mutation.nodeId,
+        committedRevision: result.state.tree.revision,
+        motionHint: turn.motionHint,
+        before: Object.freeze({ text: mutation.expectedText, updatedAt: mutation.expectedUpdatedAt }),
+        after: Object.freeze({ text: mutation.text, updatedAt: mutation.updatedAt }),
+      }),
+      occurrences: occurrencePublication(
+        turn.stage,
+        current.tree.id,
+        current.documentEpoch,
+        result.state.tree.nodes[mutation.nodeId],
+        prepared.lexicalOccurrences,
+      ),
+    }),
+  });
+}
+
+/**
+ * Pairs attributed edits with the committed node they address. Nothing is
+ * published unless the committed text is exactly the text the edits measured.
+ */
+function occurrencePublication(
+  stage: MaterialIngressStage,
+  treeId: string,
+  documentEpoch: number,
+  node: ThoughtNode | undefined,
+  occurrences: MaterialLexicalOccurrences | null,
+): MaterialLexicalOccurrencePublication | null {
+  if (occurrences === null || node === undefined || node.text !== occurrences.nodeText) {
+    return null;
+  }
+  return Object.freeze({
+    treeId,
+    documentEpoch,
+    nodeId: node.id,
+    nodeUpdatedAt: node.updatedAt,
+    stage,
+    channel: occurrences.channel,
+    locale: occurrences.locale,
+    edits: occurrences.edits,
+  });
+}
+
+function requireSynchronousOutcome<Outcome>(outcome: Outcome | undefined): Outcome {
+  if (outcome === undefined) {
+    throw new Error("The Zustand state updater did not execute synchronously.");
+  }
+  return outcome;
 }
 
 function normalizeForDocumentModel(tree: ThoughtTree, initialTitle?: string): ThoughtTree {
@@ -1391,4 +1524,8 @@ function protectUnknown(
 
 function freezeState(state: MatterStoreInternalState): MatterStoreInternalState {
   return Object.freeze(state);
+}
+
+function noAdmissionRepair(): AdmissionRepairAdjudicator | null {
+  return null;
 }

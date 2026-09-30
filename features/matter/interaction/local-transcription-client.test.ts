@@ -162,6 +162,46 @@ describe("local transcription audio projection", () => {
     expect(workers[0]?.terminate).not.toHaveBeenCalled();
   });
 
+  it("keeps a running transcription's worker across a back-forward-cache hide", async () => {
+    const workers: FakeWorker[] = [];
+    const pageWindow = Object.assign(new EventTarget(), {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    const pageDocument = new EventTarget() as EventTarget & {
+      visibilityState: DocumentVisibilityState;
+    };
+    pageDocument.visibilityState = "visible";
+    vi.stubGlobal("window", pageWindow);
+    vi.stubGlobal("document", pageDocument);
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+
+    const transcript = transcribeLocally(request(new AbortController().signal, "bfcache"));
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+    workers[0]?.emit({ id: "bfcache:1:1", status: "started" });
+
+    // The page enters the back-forward cache with its memory intact; the
+    // words already being transcribed must survive until it is shown again.
+    pageDocument.visibilityState = "hidden";
+    pageWindow.dispatchEvent(Object.assign(new Event("pagehide"), { persisted: true }));
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+    pageDocument.visibilityState = "visible";
+    pageWindow.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: true }));
+    workers[0]?.emit({ id: "bfcache:1:1", status: "complete", text: "缓存返回后的转写。" });
+
+    await expect(transcript).resolves.toBe("缓存返回后的转写。");
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+    // A real unload still retires it.
+    pageWindow.dispatchEvent(new Event("pagehide"));
+    expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
+  });
+
   it("bounds a worker code graph that never becomes ready", async () => {
     vi.useFakeTimers();
     const workers: FakeWorker[] = [];
@@ -185,6 +225,116 @@ describe("local transcription audio projection", () => {
 
     await assertion;
     expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it("never lets a warm-up timeout discard a submitted recording", async () => {
+    vi.useFakeTimers();
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: FakeAudioContext,
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+    const preparation = prepareLocalTranscription();
+    const preparationTimedOut = expect(preparation).rejects.toEqual(
+      new LocalTranscriptionError("timeout"),
+    );
+    // The person stops before a slow network has delivered the worker graph.
+    const transcript = transcribeLocally(request(new AbortController().signal, "slow-graph"));
+    let settled = false;
+    void transcript.then(() => { settled = true; }, () => { settled = true; });
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+
+    await vi.advanceTimersByTimeAsync(LOCAL_TRANSCRIPTION_PREPARE_TIMEOUT_MS);
+
+    await preparationTimedOut;
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+    expect(settled).toBe(false);
+    workers[0]?.emit({ status: "ready" });
+    workers[0]?.emit({ id: "slow-graph:1:1", status: "started" });
+    workers[0]?.emit({ id: "slow-graph:1:1", status: "complete", text: "慢网络也没有丢。" });
+    await expect(transcript).resolves.toBe("慢网络也没有丢。");
+    expect(workers).toHaveLength(1);
+  });
+
+  it("retires a never-ready lease once the request it carried times out", async () => {
+    vi.useFakeTimers();
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", { AudioContext: FakeAudioContext, clearTimeout, setTimeout });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+    const preparation = prepareLocalTranscription().catch((error: unknown) => error);
+    const first = transcribeLocally(request(new AbortController().signal, "hung"))
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(LOCAL_TRANSCRIPTION_PREPARE_TIMEOUT_MS);
+    expect(await preparation).toEqual(new LocalTranscriptionError("timeout"));
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(await first).toEqual(new LocalTranscriptionError("timeout"));
+    expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
+
+    // The next recording gets a fresh lease instead of queueing on the stall.
+    const second = transcribeLocally(request(new AbortController().signal, "again"));
+    await vi.waitFor(() => expect(workers).toHaveLength(2));
+    await vi.waitFor(() => expect(workers[1]?.postMessage).toHaveBeenCalledTimes(1));
+    workers[1]?.emit({ status: "ready" });
+    workers[1]?.emit({ id: "again:1:2", status: "started" });
+    workers[1]?.emit({ id: "again:1:2", status: "complete", text: "新的租约。" });
+    await expect(second).resolves.toBe("新的租约。");
+  });
+
+  it("retires an overdue never-ready lease when its request is withdrawn", async () => {
+    vi.useFakeTimers();
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", { AudioContext: FakeAudioContext, clearTimeout, setTimeout });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+    const preparation = prepareLocalTranscription().catch(() => undefined);
+    const controller = new AbortController();
+    const pending = transcribeLocally(request(controller.signal, "withdrawn"))
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(LOCAL_TRANSCRIPTION_PREPARE_TIMEOUT_MS);
+    await preparation;
+
+    controller.abort();
+    expect(await pending).toEqual(new LocalTranscriptionError("failed"));
+    expect(workers[0]?.terminate).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a still-loading lease when a queued request is withdrawn before its warm-up bound", async () => {
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", { AudioContext: FakeAudioContext, clearTimeout, setTimeout });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() {
+        super();
+        workers.push(this);
+      }
+    });
+    const controller = new AbortController();
+    const pending = transcribeLocally(request(controller.signal, "early"))
+      .catch((error: unknown) => error);
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+    controller.abort();
+    expect(await pending).toEqual(new LocalTranscriptionError("failed"));
+    expect(workers[0]?.terminate).not.toHaveBeenCalled();
+    expect(workers[0]?.postMessage).toHaveBeenLastCalledWith({ type: "cancel", id: "early:1:1" });
   });
 
   it("downmixes channels and resamples without changing duration", () => {
