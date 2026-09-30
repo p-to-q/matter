@@ -175,7 +175,8 @@ The `exportFile` boundary (`features/matter/persistence/wiki-runtime.ts`) has no
 module-level recovery (one-shot user action); chunk failure returns
 `{ ok: false, code: "EXPORT_FAILED" }` directly. The `material-files-copy`
 boundary (`features/matter/components/MatterApp.tsx`) returns
-`{ ok: false, message: "" }` on chunk failure.
+`{ ok: false, message: <locale archiveErrorAction floor> }` on chunk failure,
+using a synchronous per-locale one-sentence fallback for all five locales.
 
 Two lazy boundaries carry authority and so state their ordering:
 

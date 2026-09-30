@@ -1,8 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CHUNK_RECOVERY } from "./chunk-recovery";
+import { CHUNK_RECOVERY, type ChunkRecoveryHost } from "./chunk-recovery";
 import { createTestRecoveryHost } from "./chunk-recovery-test-host";
 
+// Holds the recovery host for the current test. Injected at module init via
+// the vi.mock below, so no test-only setter export is needed.
+let _testHost: ChunkRecoveryHost | null = null;
+
+vi.mock("./chunk-recovery", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./chunk-recovery")>();
+  return {
+    ...actual,
+    createChunkRecovery: (retry: () => void) =>
+      actual.createChunkRecovery(retry, _testHost),
+  };
+});
+
 afterEach(() => {
+  _testHost = null;
   vi.doUnmock("../material/seeded-branch-copy");
   vi.resetModules();
 });
@@ -26,13 +40,10 @@ describe("Seeded branch copy loader", () => {
 
   it("sets failed receipt and stays on five-locale floor when chunk rejects", async () => {
     const clock = createTestRecoveryHost();
+    _testHost = clock.host;
     vi.doMock("../material/seeded-branch-copy", () => { throw new Error("offline"); });
-    const {
-      readSeededBranchCopyLoadStatus,
-      subscribeSeededBranchCopyResolver,
-      _setSeededBranchCopyRecoveryHost,
-    } = await import("./seeded-branch-copy-loader");
-    _setSeededBranchCopyRecoveryHost(clock.host);
+    const { readSeededBranchCopyLoadStatus, subscribeSeededBranchCopyResolver } =
+      await import("./seeded-branch-copy-loader");
 
     const received: unknown[] = [];
     const cleanup = subscribeSeededBranchCopyResolver((r) => received.push(r));
@@ -47,13 +58,10 @@ describe("Seeded branch copy loader", () => {
 
   it("retries on a recovery signal and delivers to all active subscribers", async () => {
     const clock = createTestRecoveryHost();
+    _testHost = clock.host;
     vi.doMock("../material/seeded-branch-copy", () => { throw new Error("offline"); });
-    const {
-      readSeededBranchCopyLoadStatus,
-      subscribeSeededBranchCopyResolver,
-      _setSeededBranchCopyRecoveryHost,
-    } = await import("./seeded-branch-copy-loader");
-    _setSeededBranchCopyRecoveryHost(clock.host);
+    const { readSeededBranchCopyLoadStatus, subscribeSeededBranchCopyResolver } =
+      await import("./seeded-branch-copy-loader");
 
     const receivedA: unknown[] = [];
     const receivedB: unknown[] = [];
@@ -79,13 +87,10 @@ describe("Seeded branch copy loader", () => {
 
   it("retries after the backoff elapses", async () => {
     const clock = createTestRecoveryHost();
+    _testHost = clock.host;
     vi.doMock("../material/seeded-branch-copy", () => { throw new Error("offline"); });
-    const {
-      readSeededBranchCopyLoadStatus,
-      subscribeSeededBranchCopyResolver,
-      _setSeededBranchCopyRecoveryHost,
-    } = await import("./seeded-branch-copy-loader");
-    _setSeededBranchCopyRecoveryHost(clock.host);
+    const { readSeededBranchCopyLoadStatus, subscribeSeededBranchCopyResolver } =
+      await import("./seeded-branch-copy-loader");
 
     const received: unknown[] = [];
     const cleanup = subscribeSeededBranchCopyResolver((r) => received.push(r));
@@ -106,13 +111,10 @@ describe("Seeded branch copy loader", () => {
 
   it("releases timers and listeners when the last subscriber unsubscribes", async () => {
     const clock = createTestRecoveryHost();
+    _testHost = clock.host;
     vi.doMock("../material/seeded-branch-copy", () => { throw new Error("offline"); });
-    const {
-      readSeededBranchCopyLoadStatus,
-      subscribeSeededBranchCopyResolver,
-      _setSeededBranchCopyRecoveryHost,
-    } = await import("./seeded-branch-copy-loader");
-    _setSeededBranchCopyRecoveryHost(clock.host);
+    const { readSeededBranchCopyLoadStatus, subscribeSeededBranchCopyResolver } =
+      await import("./seeded-branch-copy-loader");
 
     const cleanupA = subscribeSeededBranchCopyResolver(() => undefined);
     await vi.dynamicImportSettled();

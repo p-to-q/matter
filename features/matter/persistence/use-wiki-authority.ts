@@ -4,7 +4,6 @@ import { useEffect } from "react";
 import {
   createChunkRecovery,
   type ChunkRecovery,
-  type ChunkRecoveryHost,
 } from "../interaction/chunk-recovery";
 
 // Chunk recovery for the lazy wiki-runtime-core import in this hook. The
@@ -13,7 +12,7 @@ import {
 // A load failure arms backoff + recovery signals; the authority starts as soon
 // as the chunk loads, whether through a timed retry or a recovery signal.
 let _authorityStatus: "pending" | "ok" | "failed" = "pending";
-let _authorityRecovery: ChunkRecovery = createChunkRecovery(retryAuthorityLoad);
+const _authorityRecovery: ChunkRecovery = createChunkRecovery(retryAuthorityLoad);
 
 function retryAuthorityLoad(): void {
   void import("./wiki-runtime-core")
@@ -37,16 +36,6 @@ function retryAuthorityLoad(): void {
  */
 export const readWikiAuthorityLoadStatus = (): "pending" | "ok" | "failed" =>
   _authorityStatus;
-
-/**
- * Replaces the module-level chunk recovery with one that uses the given host.
- * For tests only — call before mounting the hook to inject a deterministic host.
- */
-export function _setWikiAuthorityRecoveryHost(
-  host: ChunkRecoveryHost | null,
-): void {
-  _authorityRecovery = createChunkRecovery(retryAuthorityLoad, host);
-}
 
 /** Hydrates local lexical authority without adding permanent product chrome. */
 export function useWikiAuthority() {

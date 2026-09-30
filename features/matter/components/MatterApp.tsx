@@ -34,6 +34,17 @@ import type { MaterialFilesCopy } from "./material-files-copy";
 import type { MatterLocale } from "../config/locales";
 import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
 
+// Synchronous per-locale floor used in archiveFailure's catch arm when the
+// material-files-copy chunk cannot load. Values match archiveErrorAction from
+// each locale's MaterialFilesCopy to keep the floor consistent.
+const ARCHIVE_ERROR_ACTION_FLOOR: Readonly<Record<string, string>> = Object.freeze({
+  "en-US": "Archive action could not finish.",
+  "zh-CN": "归档操作未能完成。",
+  "zh-TW": "封存操作未能完成。",
+  "ja-JP": "アーカイブの操作を完了できませんでした。",
+  "de-DE": "Die Archivaktion konnte nicht abgeschlossen werden.",
+});
+
 // Archive bytes move only after a Files-panel gesture. The transport and its
 // snapshot encoder load after first paint, and the zip codec when Archive
 // opens, so neither Export nor a chosen file waits on a code fetch.
@@ -379,9 +390,13 @@ async function archiveFailure(code: string, language: MatterLocale) {
       message: archiveMessage(code, materialFilesCopy(language)),
     });
   } catch {
-    // The copy chunk failed to load. Return a safe empty message; the caller
-    // still resolves to { ok: false } so no gesture is silently swallowed.
-    return Object.freeze({ ok: false as const, message: "" });
+    // The copy chunk failed to load. Return the per-locale archiveErrorAction
+    // floor so the caller still resolves to { ok: false } with a readable
+    // one-sentence message, never a blank string.
+    return Object.freeze({
+      ok: false as const,
+      message: ARCHIVE_ERROR_ACTION_FLOOR[language] ?? "Archive action could not finish.",
+    });
   }
 }
 

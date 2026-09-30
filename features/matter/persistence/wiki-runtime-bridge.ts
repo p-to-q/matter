@@ -3,7 +3,6 @@ import type { WikiOccurrenceOutcome } from "../wiki/wiki-learning-policy";
 import {
   createChunkRecovery,
   type ChunkRecovery,
-  type ChunkRecoveryHost,
 } from "../interaction/chunk-recovery";
 import {
   isMatterWikiAutomaticCollectionEnabled,
@@ -36,7 +35,7 @@ export {
 // import the same chunk. A load failure arms backoff + recovery signals; a
 // subsequent recovery attempt warms the chunk so the next caller proceeds.
 let _coreStatus: "pending" | "ok" | "failed" = "pending";
-let _coreRecovery: ChunkRecovery = createChunkRecovery(retryCoreLoad);
+const _coreRecovery: ChunkRecovery = createChunkRecovery(retryCoreLoad);
 
 function retryCoreLoad(): void {
   void import("./wiki-runtime-core").then(
@@ -54,17 +53,6 @@ function retryCoreLoad(): void {
  */
 export const readWikiRuntimeCoreLoadStatus = (): "pending" | "ok" | "failed" =>
   _coreStatus;
-
-/**
- * Replaces the module-level chunk recovery with one that uses the given host.
- * For tests only — call before the first observeMatterWikiEvidence or
- * settleMatterWikiOccurrence invocation to inject a deterministic host.
- */
-export function _setWikiRuntimeCoreRecoveryHost(
-  host: ChunkRecoveryHost | null,
-): void {
-  _coreRecovery = createChunkRecovery(retryCoreLoad, host);
-}
 
 /** A successful human turn may wake the local runtime, but never waits for it. */
 export function observeMatterWikiEvidence(

@@ -10,7 +10,6 @@
 import {
   createChunkRecovery,
   type ChunkRecovery,
-  type ChunkRecoveryHost,
 } from "./chunk-recovery";
 import type { SeededBranchTextResolver } from "../material/seeded-material-core";
 
@@ -18,7 +17,7 @@ let _status: "pending" | "ok" | "failed" = "pending";
 // Set of active setter callbacks; one per mounted consumer (e.g. MatterApp).
 // A backoff retry reaches every subscriber simultaneously.
 const _setters = new Set<(resolver: SeededBranchTextResolver) => void>();
-let _recovery: ChunkRecovery = createChunkRecovery(loadChunk);
+const _recovery: ChunkRecovery = createChunkRecovery(loadChunk);
 
 function loadChunk(): void {
   void import("../material/seeded-branch-copy").then(
@@ -45,17 +44,6 @@ function loadChunk(): void {
  */
 export const readSeededBranchCopyLoadStatus = (): "pending" | "ok" | "failed" =>
   _status;
-
-/**
- * Replaces the module-level chunk recovery with one that uses the given host.
- * For tests only — call before the first subscribeSeededBranchCopyResolver
- * invocation to inject a deterministic host.
- */
-export function _setSeededBranchCopyRecoveryHost(
-  host: ChunkRecoveryHost | null,
-): void {
-  _recovery = createChunkRecovery(loadChunk, host);
-}
 
 /**
  * Registers a setter that will receive the richer resolver when the chunk
