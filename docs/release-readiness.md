@@ -1,6 +1,13 @@
 # Release readiness
 
-## Preview.64 candidate — material trust and addressable Wiki
+## Preview.64 deployed receipt — material trust and addressable Wiki
+
+Merged to `main` through PR #124 as merge commit
+`73837834` on 2026-09-30 (PR-head CI `check` green on `64817c6`).
+Production `https://matter.ptoq.io/api/health` then read back
+`appVersion: "0.2.0-preview.64"`, `status: "ok"`, with `transformTurn` and
+`textSwap` still `unavailable` pending issue #104; merged-main CI run
+`36656434014` was started on the merge commit.
 
 The source on `claude/material-trust` identifies `0.2.0-preview.64`: the
 campaign in [`../plans/active-tree-material.md`](../plans/active-tree-material.md)

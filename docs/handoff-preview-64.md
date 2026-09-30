@@ -8,14 +8,14 @@ up without the conversation that produced it. The contract documents remain the
 authority; this note is the map into them.
 
 ```text
-Status:     done in source; PR open; merge → Production once CI is green
+Status:     merged (7383783, 2026-09-30); Production reads 0.2.0-preview.64
 Scope:      admission, turns, keyboard/Escape, persistence/history, Wiki,
             server robustness, runtime budget, contract documents
 Validation: npm run check (3,735 unit tests, qualify:wiki 9/9, architecture
             677 files no leak/cycle, docs, build, runtime budget 385.6/396 KiB
             gzip); npm run test:e2e 240 passed; CI e2e 237 passed
 Risks:      see "Open items and risks" below
-Next:       grant the workflow scope and push `ci-timeout-pending`, then merge
+Next:       Preview.65 plan (Wiki made whole, capability tiers, housekeeping)
 ```
 
 ## Why this campaign existed
@@ -108,10 +108,7 @@ close path.
 ## Open items and risks
 
 - **CI job ceiling.** The serial e2e matrix runs ≈11.5 min on the hosted runner;
-  with the other steps the job exceeds the 15-minute `timeout-minutes`. The fix
-  (25 minutes, commit on local branch `ci-timeout-pending`) needs a GitHub token
-  with the `workflow` scope: `gh auth refresh -h github.com -s workflow`, then
-  cherry-pick and push.
+  the job's `timeout-minutes` was raised from 15 to 25 in `ae676a9`.
 - **Production AI** still reads `unavailable` until issue #104 installs the
   provider-session key ring; no tag or GitHub prerelease is created for
   Preview.64 until #104 and the strict pool probe (#52) pass.
