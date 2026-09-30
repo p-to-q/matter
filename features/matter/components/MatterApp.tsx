@@ -27,11 +27,23 @@ import {
   type SeededBranchTextResolver,
 } from "../material/seeded-material-core";
 import type { SeededSessionRelocalizer } from "../material/seeded-session-localization";
+import { subscribeSeededBranchCopyResolver } from "../interaction/seeded-branch-copy-loader";
 import { useWikiAuthority } from "../persistence/use-wiki-authority";
 import { useStoragePersistence } from "../persistence/use-storage-persistence";
 import type { MaterialFilesCopy } from "./material-files-copy";
 import type { MatterLocale } from "../config/locales";
 import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
+
+// Synchronous per-locale floor used in archiveFailure's catch arm when the
+// material-files-copy chunk cannot load. Values match archiveErrorAction from
+// each locale's MaterialFilesCopy to keep the floor consistent.
+const ARCHIVE_ERROR_ACTION_FLOOR: Readonly<Record<string, string>> = Object.freeze({
+  "en-US": "Archive action could not finish.",
+  "zh-CN": "归档操作未能完成。",
+  "zh-TW": "封存操作未能完成。",
+  "ja-JP": "アーカイブの操作を完了できませんでした。",
+  "de-DE": "Die Archivaktion konnte nicht abgeschlossen werden.",
+});
 
 // Archive bytes move only after a Files-panel gesture. The transport and its
 // snapshot encoder load after first paint, and the zip codec when Archive
@@ -99,19 +111,12 @@ export function MatterApp() {
   const [seededSessionRelocalizer, setSeededSessionRelocalizer] =
     useState<SeededSessionRelocalizer | null>(null);
   useEffect(() => {
-    let active = true;
-    void import("../material/seeded-branch-copy").then(
-      ({ seededBranchTexts }) => {
-        if (active) branchTextResolverRef.current = seededBranchTexts;
-      },
-      () => {
-        // Branch remains a synchronous, local action on the closed five-locale
-        // floor if its richer interaction-only copy chunk cannot be loaded.
-      },
-    );
-    return () => {
-      active = false;
-    };
+    // Branch remains a synchronous, local action on the closed five-locale
+    // floor if the richer copy chunk cannot be loaded; the recovery arms a
+    // retry so any later recovery signal may still deliver the richer text.
+    return subscribeSeededBranchCopyResolver((resolver) => {
+      branchTextResolverRef.current = resolver;
+    });
   }, []);
   useEffect(() => {
     if (seededSessionRelocalizer !== null) return;
@@ -374,13 +379,25 @@ function isHistoryUnavailable(receipt: MatterStoreReceipt): boolean {
 
 // A failure is reported only in answer to an archive gesture made in the Files
 // panel, whose lazy chunk already holds this copy, so the import resolves
-// without a network fetch. The copy stays out of the initial graph.
+// without a network fetch. The copy stays out of the initial graph. If the
+// chunk itself cannot load (e.g. a deployment moved on), a content-free empty
+// message is returned so the calling gesture can still resolve without hanging.
 async function archiveFailure(code: string, language: MatterLocale) {
-  const { materialFilesCopy } = await import("./material-files-copy");
-  return Object.freeze({
-    ok: false as const,
-    message: archiveMessage(code, materialFilesCopy(language)),
-  });
+  try {
+    const { materialFilesCopy } = await import("./material-files-copy");
+    return Object.freeze({
+      ok: false as const,
+      message: archiveMessage(code, materialFilesCopy(language)),
+    });
+  } catch {
+    // The copy chunk failed to load. Return the per-locale archiveErrorAction
+    // floor so the caller still resolves to { ok: false } with a readable
+    // one-sentence message, never a blank string.
+    return Object.freeze({
+      ok: false as const,
+      message: ARCHIVE_ERROR_ACTION_FLOOR[language] ?? "Archive action could not finish.",
+    });
+  }
 }
 
 function archiveMessage(code: string, copy: MaterialFilesCopy): string {
