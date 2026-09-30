@@ -17,6 +17,31 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-09-30 — N1: normalization owner, provisional-edit withhold, join fix, per-gap resilience, near-silence guard
+
+Changed: locale-bound normalization runs exactly once per admission in
+`prepareAdmissionIngress` (the single owner); the locale-less second pass in
+`admissionToTreeCommand` is removed. Provisional Wiki edits are withheld when
+the occurrence registry is full and attribution is impossible; confirmed edits
+are applied unmarked. Web Speech final-result concatenation and restart joins
+insert one space only when both adjacent characters are word characters of a
+spaced script (Latin/Cyrillic/Greek/digits); CJK and kana boundaries get no
+space. Malformed Whisper chunks (null end timestamp) drop only the adjacent gap,
+not all pauses. On-device transcription rejects near-silent audio (all 20 ms
+RMS frames below 0.001) before invoking the model, returning `no-speech`.
+
+Why: the locale-less second normalization pass could add spurious punctuation
+marks on already-normalized text, breaking Wiki rule attribution. Provisional
+edits that cannot be settled should never reach material silently. Web Speech
+restarts concatenated without spacing, producing run-together words for Latin
+script. One malformed Whisper chunk discarded all acoustic pause evidence.
+Whisper hallucinates on silent recordings, producing spurious admissions.
+
+Forecloses: normalization inside `admissionToTreeCommand`; applying provisional
+Wiki edits without an attributable occurrence when the registry is full;
+inserting spaces between CJK/kana/hangul boundaries in Web Speech joins;
+discarding all pauses when any single Whisper chunk has a null end timestamp.
+
 ## 2026-09-30 — the Point and Talk field leaves only for a named, visible reason
 
 Changed: the field has exactly five close reasons — the person's close,

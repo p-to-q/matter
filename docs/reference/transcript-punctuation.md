@@ -77,6 +77,21 @@ of copying the whole string per insertion. Literal masking first rejects text
 that cannot contain a protected form, so the comprehensive URL/code/identifier
 grammar is not repeatedly attempted against ordinary all-CJK speech.
 
+### Normalization ownership
+
+Locale-bound normalization (`normalizeAdmittedTranscript` with the document
+locale) runs exactly once per admission, as the first step of
+`prepareAdmissionIngress`, before any Wiki canonicalization or tree command is
+built. `admission-driver.ts` is the single owner: it calls normalization at
+line 552 after anchoring and before the dry-run. All other callers of
+`admissionToTreeCommand` must supply already-normalized text; the runtime
+function no longer normalizes.
+
+The second pass that was previously applied with locale "und" inside
+`admissionToTreeCommand` has been removed. Because the locale-bound pass is
+idempotent on already-normalized text, calling it twice (driver → ingress, for
+paths that bypass the driver) is safe and produces no spurious marks.
+
 ### Trusted timing
 
 The pinned local Whisper export does not contain the cross-attention outputs
@@ -104,6 +119,14 @@ word gaps must additionally land beside whitespace, so a provider sub-token
 cannot split a contraction or hyphenated word. Malformed, unsorted, duplicate,
 empty, non-finite, or non-reconstructing evidence is rejected as one unit before
 PCM analysis and the text continues through semantic-only punctuation.
+
+Per-gap validation replaces all-or-nothing chunk type-checking. Each consecutive
+chunk pair is checked independently: a gap is skipped when either of its
+bounding timestamps is absent or non-finite, but valid gaps in the same
+utterance are still admitted. This means one malformed Whisper chunk with a
+null end timestamp (e.g. the last segment of a transformers.js result) drops
+only the gap that would have needed that timestamp; earlier valid gaps survive
+and can still contribute acoustic pause evidence.
 
 Browser Web Speech exposes `transcript` and `isFinal`, not word-level acoustic
 time. Callback delay, result grouping, session restart, upload time, and total

@@ -70,6 +70,16 @@ decoding has no deadline of its own, so this lifetime begins before decode: a
 malformed recording that never settles returns the same recoverable timeout as
 a slow worker, without ever constructing that worker.
 
+After decoding, a pre-transcription RMS energy check runs before the Whisper
+worker is invoked. The 16 kHz audio is divided into 20 ms frames; if every
+frame's RMS energy is below 0.001 (approximately 40 dB below a full-scale
+signal), the recording is classified as near-silent and a `no-speech` failure
+is returned immediately without sending audio to the model. Whisper hallucinates
+recognizable text on silent recordings, so this guard prevents spurious
+admissions without requiring a separate VAD model. The check reuses the same
+`frameEnergies` function that the pause-evidence module uses for its
+acoustic-silence corroboration.
+
 ## Admission boundary
 
 The admission voice control has a target only in the full material view. A truly
@@ -243,6 +253,14 @@ events inert. On an explicit stop, the committed candidate is the confirmed
 final text followed by the latest interim hypothesis when the browser did not
 emit a final result before ending. It is bounded by the same node-text limit as
 every other admission before it can reach the command translator.
+
+When the browser emits multiple final results (e.g. after a recognition restart),
+they are concatenated with exactly one space between them when both adjacent
+boundaries are word characters of a spaced script (Latin, Cyrillic, Greek, or
+ASCII digits). No space is inserted when either boundary is a CJK, kana, or
+Hangul character, or when either side is empty. Interim text is joined to the
+accumulated final text by the same rule before preview and before the final
+committed transcript is formed.
 
 Stable failures distinguish unsupported capture, denied or missing microphone,
 recording failure, malformed or unsupported audio, empty speech, timeout,
