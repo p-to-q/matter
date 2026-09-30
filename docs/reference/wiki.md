@@ -996,10 +996,26 @@ policy and scoring versions, all units, gates, weights, precedence, and
 occurrence-outcome constants, the policy source digest, the exact
 qualification catalog, corpus digest, and result digest. Any change to those
 inputs invalidates `npm run qualify:wiki` until the expected replay is
-deliberately requalified: rerun the controlled harnesses, confirm every
-manifest scenario and producer decision still matches, then record the
-reported digests. The manifest owns the expected outcomes; a requalification
-may never edit an expectation to match an unexplained result.
+deliberately requalified. Two commands support this mechanically:
+
+- `npm run qualify:wiki -- --check` re-runs both qualification harnesses,
+  diffs the computed identities against the committed constants in
+  `features/matter/wiki/wiki-qualified-*.ts`, prints which fields changed
+  (field name, committed value, computed value), and exits non-zero if any
+  drift is found.
+- `npm run qualify:wiki -- --print-update` re-runs both harnesses and, if
+  every manifest scenario and every producer decision passes, rewrites the
+  digest constants in `wiki-qualified-learning-policy.ts`
+  (`policySourceDigest`, `corpus.corpusDigest`, `resultDigest`,
+  `producerQualificationDigest`) and `wiki-qualified-producer-releases.ts`
+  (`MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES`) in place, preserving
+  formatting. It exits non-zero and names the failing scenario or producer
+  without writing anything if any check fails.
+
+Running `--print-update` twice is a no-op: the updater is deterministic and
+the second run writes identical bytes. The manifest owns the expected
+outcomes; a requalification may never edit an expectation to match an
+unexplained result.
 
 Interaction evaluation is a separate labelled corpus. One exact applied
 occurrence reaches exactly one terminal state:

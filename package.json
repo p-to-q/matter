@@ -30,7 +30,7 @@
     "probe:local-ai": "node scripts/probe-local-ai.mjs",
     "probe:material-origin": "node scripts/probe-material-origin.mjs",
     "eval:language": "vitest run scripts/material-language-eval.test.mjs",
-    "qualify:wiki": "env MATTER_RUN_WIKI_QUALIFICATION=1 vitest run features/matter/wiki/wiki-qualified-producer-releases.test.ts features/matter/wiki/wiki-qualified-learning-policy.test.ts --reporter=verbose --maxWorkers=1"
+    "qualify:wiki": "node scripts/wiki/qualify-wiki.mjs"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
