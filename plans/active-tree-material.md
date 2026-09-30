@@ -105,6 +105,30 @@ the loading and voice slices run beside it.
 | F1b capability manifest | `runtime/capability-manifest.ts` holds only build-checkable facts: `id`, `sentinel`, `tier` (`core \| gesture \| on-use \| background \| asset`), and `budgetGzip`. Triggers stay in their owning code. The runtime-artifact check proves each sentinel sits in exactly one chunk, that the chunk is initial only for `core`, and that it is within budget; a planted violation must fail. Every dynamic `import()` targets a manifest module. `deploymentId` is set. A stale-version line ("Matter was updated — reload when ready") appears only on a health-version mismatch and only while material is idle. |
 | D1a principle 7 | Two or three sentences on evidence, early activation, and owning our semantics, plus the product sentence. `changes.md` supersessions are written in the same merge as the code they describe. |
 
+Freeze corrections from the W0/W1/W3a design review (2026-09-30). These are
+binding and amend the rows above:
+1. The `Intl.Segmenter` real-word test applies to Han and kana only. A Latin
+   letter run is always one segment. Latin real words are the folded
+   canonicals of lexemes, plus term evidence with support ≥ 4.
+2. Load may still write V7 (a fresh profile, or a migration from records
+   1–6). Only V8 is never written on load. The database and storage schema
+   versions do not change.
+3. "While a strike exists" is scoped per ledger × channel × form, never
+   globally.
+4. Maturity counts kept settlements on confirmed rules too, with at most three
+   maturity writes per rule. This amends "neutral outcomes cost no write".
+5. Legacy producers age on any scan of their ledger. Only the new
+   producer-family key narrows aging.
+6. A rename from Wiki… consult retargets the occurrence's attribution before
+   it settles.
+7. The `imported` tier and the CJK real-word path are unreachable until W6
+   and W2 ship. Preview.65's first hearing is Latin only
+   (`latin-internal-edit-v2`).
+8. The Han↔Latin boundary applies only to CJK own-locale turns. `segment`
+   rules segment the whole capped text once, lazily.
+9. `firstHearing.enabled` stays false on any branch that does not already
+   contain N1's withhold rule.
+
 C0 cleanup, owner-approved:
 
 | Area | Action |
