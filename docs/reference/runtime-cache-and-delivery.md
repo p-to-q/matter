@@ -142,6 +142,41 @@ component renders; a rule that styles the shell on a lazy element's presence
 stays global. Webpack resolves a chunk only after its stylesheet has loaded, so
 no unstyled frame appears.
 
+### Loader failure rule
+
+No lazy boundary may swallow a `import()` rejection silently. Every failing
+boundary must:
+
+1. **Resolve to its documented degraded behaviour.** The core loop continues
+   without the enhancement; calls that depended on the chunk degrade
+   gracefully (e.g. `observeMatterWikiEvidence` is a no-op, `exportFile`
+   returns `{ ok: false, code: "EXPORT_FAILED" }`).
+2. **Leave a content-free receipt.** An exported getter returns a stable status
+   code that tests and diagnostics can read without user-visible chrome.
+3. **Retry on recovery signals.** Each failing boundary armed with
+   `createChunkRecovery` (from `features/matter/interaction/chunk-recovery.ts`)
+   uses 1 s backoff doubling to 30 s, up to six timed retries, then
+   online/visible/next-demand recovery signals. Timers and listeners are
+   released when no subscriber remains.
+
+The `deferred-persistence-controller` has its own independent grace
+(0.5/1/2 s → `PERSISTENCE_ENGINE_UNAVAILABLE`) and is not wired to
+`ChunkRecovery`.
+
+**Receipt inventory** — each getter returns `"pending" | "ok" | "failed"`:
+
+| Getter | Module | Degraded behaviour on `"failed"` |
+| --- | --- | --- |
+| `readWikiRuntimeCoreLoadStatus()` | `features/matter/persistence/wiki-runtime-bridge.ts` | `observeMatterWikiEvidence` is a no-op; `settleMatterWikiOccurrence` returns `"failed"` |
+| `readWikiAuthorityLoadStatus()` | `features/matter/persistence/use-wiki-authority.ts` | Wiki stays on identity / last-good basis; authority never starts |
+| `readSeededBranchCopyLoadStatus()` | `features/matter/interaction/seeded-branch-copy-loader.ts` | Branch keeps the synchronous five-locale floor |
+
+The `exportFile` boundary (`features/matter/persistence/wiki-runtime.ts`) has no
+module-level recovery (one-shot user action); chunk failure returns
+`{ ok: false, code: "EXPORT_FAILED" }` directly. The `material-files-copy`
+boundary (`features/matter/components/MatterApp.tsx`) returns
+`{ ok: false, message: "" }` on chunk failure.
+
 Two lazy boundaries carry authority and so state their ordering:
 
 - The Wiki basis publication hands out a publishing port only together with
