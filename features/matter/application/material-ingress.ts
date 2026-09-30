@@ -6,6 +6,7 @@ import {
   type AdmissionValues,
 } from "../runtime/admission";
 import type { NavigationState } from "../runtime/navigation";
+import { normalizeAdmittedTranscript } from "../runtime/transcript-punctuation";
 import {
   admissionRepairToTreeCommand,
   type AdmissionRepairError,
@@ -178,13 +179,21 @@ export type PrepareTransformResult =
 export function prepareAdmissionIngress(
   input: PrepareAdmissionInput,
 ): PrepareAdmissionResult {
+  // Locale-bound normalization: the admission-driver is the primary owner and
+  // normalizes before calling commit. This pass is idempotent when the text is
+  // already normalized; it is the sole normalization when the store is called
+  // directly (e.g. from tests or the repair path).
+  const normalizedTranscript = normalizeAdmittedTranscript(input.values.transcript, input.locale);
+  const values: AdmissionValues = normalizedTranscript !== input.values.transcript
+    ? { ...input.values, transcript: normalizedTranscript }
+    : input.values;
   // Lexical authority cannot rescue or make cheap an invalid source. The first
   // translation also fixes the normalized material text that matching sees.
   const raw = admissionToTreeCommand(
     input.tree,
     input.navigation,
     input.anchor,
-    input.values,
+    values,
   );
   if (!raw.ok) return raw;
   const rawAdmittedText = readAdmissionText(raw);
@@ -208,7 +217,7 @@ export function prepareAdmissionIngress(
     input.tree,
     input.navigation,
     input.anchor,
-    { ...input.values, transcript: canonical.text },
+    { ...values, transcript: canonical.text },
   );
   const admittedText = translated.ok ? readAdmissionText(translated) : null;
   if (!translated.ok || admittedText === null) {
@@ -222,11 +231,18 @@ export function prepareAdmissionIngress(
     });
   }
 
-  // Admission normalizes its transcript again. Edits address the admitted
-  // node only when that second pass left the canonical text untouched.
-  const occurrences = admittedText === canonical.text
-    ? attributeOccurrences("spoken", input.locale, admittedText, canonical, 0)
-    : null;
+  // Invariant: under Task N1, admittedText === canonical.text always holds;
+  // this branch guards against future normalization divergence re-emerging.
+  if (admittedText !== canonical.text) {
+    return Object.freeze({
+      ok: true,
+      command: raw.command,
+      admittedText: rawAdmittedText,
+      receipt: withheldReceipt("admission", input.lexicalSession),
+      lexicalOccurrences: null,
+    });
+  }
+  const occurrences = attributeOccurrences("spoken", input.locale, admittedText, canonical, 0);
   return Object.freeze({
     ok: true,
     command: translated.command,

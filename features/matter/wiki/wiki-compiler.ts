@@ -6,6 +6,7 @@ import {
   type WikiBoundary,
   type WikiChannel,
   type WikiMatchRule,
+  type WikiRuleAuthority,
 } from "./wiki-model";
 import {
   MATTER_LOCALES,
@@ -30,6 +31,9 @@ export type CompiledWikiRule = Readonly<{
   canonical: string;
   sourceIndex: number;
   graphemeLength: number;
+  /** Authority carried from the source WikiMatchRule. Provisional rules are
+   * withheld when the occurrence registry cannot attribute the edit. */
+  authority: WikiRuleAuthority;
 }>;
 
 export type CompiledWikiTrieNode = Readonly<{
@@ -129,6 +133,7 @@ export function compileWikiRules(
       form: rule.form,
       canonical: rule.canonical,
       sourceIndex,
+      authority: rule.authority,
     }));
   }
 

@@ -45,6 +45,32 @@ describe("normalizeAdmittedTranscript", () => {
     const transcript = "a".repeat(2_000);
     expect(normalizeAdmittedTranscript(transcript, "en-US")).toBe(transcript);
   });
+
+  it("is idempotent: a second pass with the owner locale produces no further changes", () => {
+    const inputs = [
+      { text: "I remember that day", locale: "en-US" as const },
+      { text: "我记得那天", locale: "zh-CN" as const },
+      { text: "ありがとう", locale: "ja-JP" as const },
+      { text: "Das ist gut", locale: "de-DE" as const },
+    ];
+    for (const { text, locale } of inputs) {
+      const once = normalizeAdmittedTranscript(text, locale);
+      expect(normalizeAdmittedTranscript(once, locale)).toBe(once);
+    }
+  });
+
+  it("a locale-bound pass followed by a locale-less pass is idempotent", () => {
+    // Prove that the admission-driver (locale-bound) owner can be followed by
+    // any legacy call with 'und' without further modification.
+    const inputs = [
+      { text: "I remember that day", locale: "en-US" as const },
+      { text: "我记得那天", locale: "zh-CN" as const },
+    ];
+    for (const { text, locale } of inputs) {
+      const owned = normalizeAdmittedTranscript(text, locale);
+      expect(normalizeAdmittedTranscript(owned, "und")).toBe(owned);
+    }
+  });
 });
 
 describe("repairAdmittedTranscript", () => {

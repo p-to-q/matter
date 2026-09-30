@@ -512,6 +512,23 @@ canonicalization withheld rather than being refused. The content-free ingress re
 lists `lexicalEdits: { start, end, occurrence }[]`; the heard form travels
 only in the transient prepared value.
 
+When the occurrence registry cannot attribute an edit — because the registry is
+full of committed occurrences and cannot mint a new token — the edit's
+disposition depends on its rule authority:
+
+- A **confirmed** rule (human-approved alias) is applied as an ordinary
+  corrected word without a mark. The correction still reaches the person; only
+  the occurrence settlement record is absent.
+- A **provisional** rule (machine-inferred, not yet confirmed) is **withheld**
+  entirely. Applying a provisional change that cannot be settled would produce
+  a hidden rewrite with no disclosure path and no way to record consent. The
+  person therefore sees the heard form, unchanged.
+
+The same withhold applies in the second-normalization path (`prepareAdmissionIngress`)
+when attribution is impossible. `CompiledWikiRule` now carries an `authority`
+field (`"confirmed" | "provisional"`) propagated from `WikiMatchRule` through
+the compiler, so `MaterialIngress` can inspect it at the edit-mapping step.
+
 After a successful commit whose committed node still equals the text those
 edits measured, the store calls one narrow port,
 `publishCommittedLexicalOccurrences({ treeId, documentEpoch, nodeId,
