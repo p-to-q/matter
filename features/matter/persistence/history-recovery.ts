@@ -139,4 +139,3 @@ function readableTop(
   }
   return Object.freeze({ entries: entries.reverse(), released: false });
 }
-

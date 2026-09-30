@@ -5,7 +5,7 @@ Current phase: 4 — first-release integration. Phase 1 is proven; Phase 2's
 slices are proven in fixture mode, with their deployed live-mode path still
 owed by the Phase 4 receipt; Phase 3 is proven except its deferred
 active-document pointer. Public Elastic and Text Swap surfaces may use a user
-lease; managed promotion stays off.  
+lease; managed promotion stays off.\
 Destination: the first usable public release at `ptoq.io/matter`
 
 This is the only roadmap. It ends at the first release; it is not a forecast of
