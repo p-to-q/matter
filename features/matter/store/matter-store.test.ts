@@ -296,7 +296,9 @@ describe("Matter store", () => {
       transcript: "a thought",
       expectedDocumentEpoch: 0,
     })).toMatchObject({ status: "committed" });
-    expect(store.getState().tree.nodes.voice_node_wiki_loading.text).toBe("a thought.");
+    // Store locale defaults to zh-CN; locale-bound normalization (Task 1) now
+    // applies zh-CN sentence-end punctuation even to Latin-script text.
+    expect(store.getState().tree.nodes.voice_node_wiki_loading.text).toBe("a thought。");
     expect(store.getState().history.entries).toHaveLength(1);
   });
 

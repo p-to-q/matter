@@ -50,8 +50,10 @@ describe("MaterialIngress admission preparation", () => {
     const anchored = createAdmissionAnchor(tree, navigation);
     if (!anchored.ok) throw new Error(anchored.error.code);
     const values = admissionValues("  an unfinished thought  ");
-
-    const direct = admissionToTreeCommand(tree, navigation, anchored.anchor, values);
+    // admissionToTreeCommand no longer normalizes (Task 1). Use the expected
+    // normalized output to build the direct reference command.
+    const directValues = admissionValues("an unfinished thought.");
+    const direct = admissionToTreeCommand(tree, navigation, anchored.anchor, directValues);
     const prepared = prepareAdmissionIngress({
       tree,
       navigation,
@@ -182,7 +184,9 @@ describe("MaterialIngress admission preparation", () => {
     });
     expect(prepared).toMatchObject({ ok: true, admittedText: "Codex." });
 
-    const raw = admissionToTreeCommand(tree, navigation, anchored.anchor, admissionValues("a ".repeat(16)));
+    // admissionToTreeCommand no longer normalizes. Use pre-normalized text
+    // (trimmed trailing space + period) to match what prepareAdmissionIngress produces.
+    const raw = admissionToTreeCommand(tree, navigation, anchored.anchor, admissionValues(`${"a ".repeat(15)}a.`));
     if (!raw.ok) throw new Error(raw.error.code);
     expect(prepareAdmissionIngress({
       tree,
