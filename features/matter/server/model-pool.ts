@@ -8,6 +8,7 @@ import {
   type CompletionDisposition,
   type UnusableCompletionCode,
 } from "./completion-outcome";
+import { imageChatTransport, imageGenerationsTransport } from "./image-transport";
 import { parseOpenAiChatCompletion } from "./openai-chat-completion";
 import {
   withAdapterOwnedHealth,
@@ -16,6 +17,7 @@ import {
   type ScenarioCall,
   type ScenarioCandidateEvent,
 } from "./harness";
+import { MAX_IMAGE_BYTES } from "../protocol/image-contract";
 import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
 
 /**
@@ -96,6 +98,20 @@ export type PoolLimits = Readonly<{
   maxResponseBytes: number;
   failuresBeforeCooldown: number;
   cooldownMs: number;
+  /**
+   * How many candidates one request may start. Unset means every healthy one,
+   * which is right for text: a second relay is a cheap retry and the point of
+   * ordered fallback.
+   *
+   * It is wrong for anything a relay bills per generation. A relay that
+   * generated, billed, and then returned something unusable — a link instead of
+   * bytes, a refusal after rendering — would otherwise be followed by a second
+   * paid generation on the next candidate, and a timeout after the relay has
+   * already finished is indistinguishable from a failure before it started.
+   * Setting this to 1 makes "one generation per request" a property of the pool
+   * rather than a convention operators must remember when ordering stations.
+   */
+  maxCandidateAttempts?: number;
 }>;
 
 export const DEFAULT_POOL_LIMITS: PoolLimits = Object.freeze({
@@ -161,6 +177,46 @@ export function readModelPool(
 ): readonly PoolCandidate[] {
   const namespace = poolNamespace(environment);
   if (namespace === null) return Object.freeze([]);
+
+  const candidates: PoolCandidate[] = [];
+  for (const entry of readStations(environment, namespace)) {
+    const enableThinkingValue = environment[`${entry.prefix}_ENABLE_THINKING`];
+    const enableThinking = parseOptionalBoolean(enableThinkingValue);
+    // A present but misspelled capability must not silently become absence:
+    // strict relays can reject an unsupported field, while thinking-capable
+    // models can change latency and output shape when the reviewed value drifts.
+    if (enableThinkingValue !== undefined && enableThinking === null) continue;
+    for (const model of entry.models) {
+      candidates.push(Object.freeze({
+        station: entry.station,
+        baseUrl: entry.baseUrl,
+        apiKey: entry.apiKey,
+        model,
+        ...(enableThinking === null ? {} : { enableThinking }),
+      }));
+    }
+  }
+  return Object.freeze(candidates);
+}
+
+type StationEntry = Readonly<{
+  station: string;
+  /** Environment variable prefix that owns this station's remaining fields. */
+  prefix: string;
+  baseUrl: string;
+  apiKey: string;
+  models: readonly string[];
+}>;
+
+/**
+ * The per-station grammar shared by every namespace. A station that is missing
+ * a field, or whose base URL is neither HTTPS nor loopback, is dropped here so
+ * no reader can see a half-configured relay.
+ */
+function readStations(
+  environment: Readonly<Record<string, string | undefined>>,
+  namespace: "MODEL" | "LABEL" | "IMAGE",
+): readonly StationEntry[] {
   const stations = [...new Set(
     (environment[`MATTER_${namespace}_POOL`] ?? "")
       .split(",")
@@ -168,7 +224,7 @@ export function readModelPool(
       .filter((entry) => /^[A-Za-z0-9_-]{1,32}$/.test(entry)),
   )];
 
-  const candidates: PoolCandidate[] = [];
+  const entries: StationEntry[] = [];
   for (const station of stations) {
     const prefix = `MATTER_${namespace}_${station.toUpperCase().replaceAll("-", "_")}`;
     const baseUrl = environment[`${prefix}_BASE_URL`]?.trim();
@@ -179,27 +235,89 @@ export function readModelPool(
         .map((model) => model.trim())
         .filter((model) => model.length > 0),
     )];
-    const enableThinkingValue = environment[`${prefix}_ENABLE_THINKING`];
-    const enableThinking = parseOptionalBoolean(enableThinkingValue);
     if (baseUrl === undefined || apiKey === undefined) continue;
     if (!isHttpsOrLocal(baseUrl)) continue;
     if (apiKey.length === 0 || models.length === 0) continue;
-    // A present but misspelled capability must not silently become absence:
-    // strict relays can reject an unsupported field, while thinking-capable
-    // models can change latency and output shape when the reviewed value drifts.
-    if (enableThinkingValue !== undefined && enableThinking === null) continue;
-    for (const model of models) {
+    entries.push(Object.freeze({
+      station,
+      prefix,
+      baseUrl: baseUrl.replace(/\/+$/u, ""),
+      apiKey,
+      models: Object.freeze(models),
+    }));
+  }
+  return entries;
+}
+
+/**
+ * Reads the image stations from a namespace the chat reader never looks at.
+ *
+ * ```text
+ * MATTER_IMAGE_POOL=draw-chat,draw-images
+ * MATTER_IMAGE_DRAW_CHAT_BASE_URL=https://…/v1
+ * MATTER_IMAGE_DRAW_CHAT_API_KEY=…
+ * MATTER_IMAGE_DRAW_CHAT_MODELS=gemini-3.1-flash-image
+ * MATTER_IMAGE_DRAW_CHAT_SHAPE=chat          # chat | images
+ * ```
+ *
+ * The separation is the point: `readModelPool` hands every station to every
+ * chat scenario, so an image relay placed there would be sent label and inquiry
+ * requests with chat model names. A relay that serves both shapes is declared
+ * as two stations, one per shape. A missing or unknown SHAPE skips the station
+ * rather than guessing a wire profile, and transports are attached here because
+ * no environment variable may inject one.
+ */
+export function readImagePool(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): readonly PoolCandidate[] {
+  const candidates: PoolCandidate[] = [];
+  for (const entry of readStations(environment, "IMAGE")) {
+    const transport = IMAGE_SHAPE_TRANSPORTS.get(environment[`${entry.prefix}_SHAPE`]?.trim() ?? "");
+    if (transport === undefined) continue;
+    for (const model of entry.models) {
       candidates.push(Object.freeze({
-        station,
-        baseUrl: baseUrl.replace(/\/+$/u, ""),
-        apiKey,
+        station: entry.station,
+        baseUrl: entry.baseUrl,
+        apiKey: entry.apiKey,
         model,
-        ...(enableThinking === null ? {} : { enableThinking }),
+        transport,
       }));
     }
   }
   return Object.freeze(candidates);
 }
+
+const IMAGE_SHAPE_TRANSPORTS: ReadonlyMap<string, PoolTransport> = new Map([
+  ["chat", imageChatTransport],
+  ["images", imageGenerationsTransport],
+]);
+
+const base64Length = (bytes: number): number => Math.ceil(bytes / 3) * 4;
+// The JSON or markdown wrapper around the data URL; a response that needs more
+// than this beside a maximal image is not the reviewed wire shape.
+const IMAGE_ENVELOPE_SLACK_BYTES = 64 * 1_024;
+
+/**
+ * Pool limits for the image scenario. The default 32 KiB ceiling is untouched
+ * for every other scenario; this one is sized from the image contract so the
+ * two cannot drift apart.
+ */
+export const IMAGE_POOL_LIMITS: PoolLimits = Object.freeze({
+  // Images take 11–30 s. Below this a further attempt cannot finish.
+  minimumAttemptMs: 10_000,
+  // One long attempt is not split: two short attempts would both fail.
+  maxAttemptShare: 0.95,
+  // The image transports ignore the token budget; the type requires a positive
+  // number, so the smallest one keeps it from meaning anything.
+  maxOutputTokens: 1,
+  maxResponseBytes: base64Length(MAX_IMAGE_BYTES) + IMAGE_ENVELOPE_SLACK_BYTES,
+  failuresBeforeCooldown: 2,
+  cooldownMs: 60_000,
+  // One generation per request. A relay can bill and then return something
+  // unusable, and a timeout may follow a finished render, so trying the next
+  // candidate after any failure can pay twice for one picture.
+  maxCandidateAttempts: 1,
+});
 
 function poolNamespace(
   environment: Readonly<Record<string, string | undefined>>,
@@ -245,12 +363,15 @@ export function createPoolAdapter(
     let lastRejection: CandidateRejectedError | null = null;
     let lastNonRejectionError: unknown = null;
     let sawNonRejectionFailure = false;
+    let attemptsStarted = 0;
     for (let index = 0; index < ordered.length; index += 1) {
       const candidate = ordered[index]!;
       if (hasDrainingAttempt(healthKey(input.scenario, candidate))) {
         skippedDraining = true;
         continue;
       }
+      // A candidate skipped for draining never started, so it does not count.
+      if (limits.maxCandidateAttempts !== undefined && attemptsStarted >= limits.maxCandidateAttempts) break;
       assertDrainCapacity();
       const remaining = deadlineAtMs - now();
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
@@ -260,8 +381,13 @@ export function createPoolAdapter(
       const isLast = !ordered.slice(index + 1).some((later) => (
         !hasDrainingAttempt(healthKey(input.scenario, later))
       ));
-      const attemptMs = isLast ? remaining : Math.min(remaining, attemptCeilingMs);
+      // When the cap makes this the last attempt it may spend everything left:
+      // nothing behind it needs a share of the deadline.
+      const cappedHere = limits.maxCandidateAttempts !== undefined
+        && attemptsStarted + 1 >= limits.maxCandidateAttempts;
+      const attemptMs = isLast || cappedHere ? remaining : Math.min(remaining, attemptCeilingMs);
       attempted = true;
+      attemptsStarted += 1;
       try {
         const text = await completeOnce(candidate, input, signal, limits, attemptMs, fetchImpl);
         recordOutcome(candidate, input.scenario, "answered", limits, now);

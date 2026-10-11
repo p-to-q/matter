@@ -12,6 +12,7 @@ const HEALTH_SURFACES = [
   "inquiry",
   "transformTurn",
   "textSwap",
+  "imageGeneration",
   "archiveExportImport",
 ];
 const SURFACE_STATES = new Set([
@@ -87,6 +88,12 @@ export function inspectDeploymentHealth(value, expectedVersion, profile = "mater
   }
   if (value.surfaces.voiceAdmission !== "available") {
     failures.push("Public voice admission is not available.");
+  }
+  // The surface costs real money per generation and has no distributed rate
+  // control yet, so every shipped profile is closed. Declaring it here is what
+  // turns an accidental `live` into a failed release check.
+  if (value.surfaces.imageGeneration !== "unavailable") {
+    failures.push(`Image generation must be unavailable for ${profile}.`);
   }
   const expectedMaterialStates = {
     "browser-preview": Object.freeze({ transformTurn: "unavailable", textSwap: "unavailable" }),

@@ -10,10 +10,12 @@ export const MAX_IMAGE_PASSAGE_CODE_POINTS = 2_000;
 export const MAX_IMAGE_DIRECTION_CODE_POINTS = 240;
 export const MAX_IMAGE_ID_LENGTH = 128;
 // Server-owned; bounds the brief the text scenario returns before any image call.
-// Deliberately tight: the brief is one visual subject, about twenty English words
-// or forty Han characters. A hostile passage echoed back through the brief step
-// is almost always longer than that, so the bound refuses it before any image
-// money is spent, at no cost to a legitimate subject line.
+// Deliberately tight: the brief is one visual subject. The bound is in code
+// points, so it admits about twenty English words but up to this many Han
+// characters, which is generous for Han and tight for English. A hostile passage
+// echoed back through the brief step is usually longer than a subject line, so
+// the bound refuses it before any image money is spent, at no cost to a
+// legitimate subject.
 export const MAX_IMAGE_BRIEF_CODE_POINTS = 120;
 
 export const IMAGE_MEDIA_TYPES = Object.freeze(["image/jpeg", "image/png", "image/webp"] as const);
@@ -36,6 +38,18 @@ export type ImageResultMeta = Readonly<{
   height: number;
   contentHash: string;
 }>;
+
+/**
+ * Wire names for the image response's companion metadata. The route answers
+ * with the image's own bytes, so the media type is the `Content-Type` and the
+ * byte length is `Content-Length`; only what the body cannot say lives here.
+ * One owner, so the route and every future reader cannot drift apart.
+ */
+export const IMAGE_RESPONSE_HEADERS = Object.freeze({
+  width: "x-matter-image-width",
+  height: "x-matter-image-height",
+  sha256: "x-matter-image-sha256",
+} as const);
 
 // Server-owned; adjudicated before any image call; never crosses the wire.
 export type ImageBrief = Readonly<{

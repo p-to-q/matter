@@ -170,22 +170,39 @@ a person already paid for. If the counter shows escapes are common after the
 brief step, that is evidence to act on — not a reason to start throwing away
 finished work.
 
-## What the harness is
+## What the two prompts are
 
-The prompt is assembled by `composePrompt`, with no new mechanism:
+There are two, and they are built differently on purpose.
 
-```text
-STYLE       the frozen constant above, received by the scenario
-MANDATE     one square illustration of the passage below
-FIXED       the style; exactly one image; no lettering inside the image
-NEVER       words, logos, borders, other colours, photographic rendering
-<material>  the addressed passage, fenced — reference, never instruction
-<intent>    the person's optional bounded direction, under INTENT_IS_BOUNDED
-```
+**The brief prompt** goes to a text model and is assembled by `composePrompt`
+like every other text scenario: a mandate, what is fixed, what must never
+happen, the passage fenced as reference under `REFERENCE_NOT_INSTRUCTION`, and
+the person's optional direction in the intent block under `INTENT_IS_BOUNDED`.
+Fencing works there because a text model has an instruction hierarchy. Its
+answer is adjudicated deterministically before anything else happens.
 
-The person's direction is bounded by the same layer that already governs a Text
-Swap direction, so it may steer the subject and cannot restyle the output or
-widen the operation.
+**The image prompt** is not built with `composePrompt` and contains exactly two
+things: the frozen style constant and the one adjudicated brief line. A section
+scaffold is wrong for a renderer, which treats every word as something to draw —
+a heading such as "what this scenario never does" can come back as lettering.
+The passage and the direction are absent because the function that builds the
+prompt has no parameter that could carry them.
+
+## What the guarantee is, and is not
+
+The passage is never sent to the renderer. A brief *derived from* the passage
+is, and that is the residual risk, stated plainly because an earlier version of
+this note claimed more.
+
+The brief adjudicator is a lexical floor, not a proof. It admits only a short
+single line in Latin letters, Han, digits and punctuation — which closes other
+scripts and letter-lookalike substitutions — and it refuses colour, medium,
+style, typography and renderer-addressed wording in English and Chinese, plus
+the plainest forms in a few other Latin-script languages. A hostile passage that
+talks the text model into a well-formed line made only of words outside those
+lists can still steer a picture, and no wordlist can close that. What bounds the
+damage is that it costs one generation and produces one picture a person can
+discard, with the gate closed until an edge rule and a provider budget exist.
 
 ## Not a separate port — a transport on the existing pool
 
@@ -206,8 +223,10 @@ environment variable can inject one, so the wire profile stays reviewed.
 The decisive argument is what a separate module would silently lose. None of
 these is inherited by a new fetch path:
 
-- the base-URL check that rejects plain HTTP off loopback, private ranges and
-  IPv6 literals;
+- the base-URL check, which refuses plain HTTP anywhere but loopback. It does
+  not refuse a private-range or IPv6-literal host reached over HTTPS: those are
+  operator-configured, so the boundary here is trust in the operator, not a
+  network filter;
 - `redirect: "error"`, which is what closes SSRF through an open redirect;
 - `cache: "no-store"`;
 - the per-attempt abort and its raced timeout boundary;
@@ -222,6 +241,104 @@ capability is a transport and a scenario inside the existing pool, with its own
 `maxResponseBytes`, its own deadline, and its own scenario id — which also keeps
 its candidate health separate, because health is already keyed per scenario.
 
+## Configuration: a parallel namespace, not a station in the chat pool
+
+An earlier version of this note put an image station inside
+`MATTER_MODEL_POOL`. Reading the pool showed why that is wrong: `readModelPool`
+hands every station to every scenario, so an image relay in that list would be
+sent `inquiry` and `label` chat requests carrying chat model names. Excluding it
+would mean filtering inside the chat path, which is exactly the code this change
+should leave alone.
+
+Image stations therefore live in a namespace the chat reader never reads:
+
+```text
+MATTER_IMAGE_POOL=draw-chat,draw-images
+MATTER_IMAGE_DRAW_CHAT_BASE_URL=https://relay.example/v1
+MATTER_IMAGE_DRAW_CHAT_API_KEY=…
+MATTER_IMAGE_DRAW_CHAT_MODELS=<a chat-shaped image model>
+MATTER_IMAGE_DRAW_CHAT_SHAPE=chat
+```
+
+The chat path cannot see an image relay, so that failure is unrepresentable
+rather than filtered. A relay that serves both response shapes on one base URL is
+declared as two stations, one per `SHAPE`, because the shape selects the
+reviewed transport and the probe showed a model works on only one of them. A
+missing or unknown `SHAPE` skips the station, the same fail-closed rule a
+misspelled `ENABLE_THINKING` already gets. Transports are attached in code and
+never read from the environment.
+
+The pool module is shared, so the global drain cap is shared too: one stalled
+relay cannot be multiplied across chat and image together. Candidate health is
+already keyed per scenario, so an image relay's cooldown cannot cool a chat
+relay.
+
+## Distribution and cost
+
+Every limit this operation inherits is process-local. The scenario governors,
+candidate health, the drain cap and the admission windows all live in one
+serverless instance's memory, and instances share none of it. For text that is an
+acceptable approximation because a call costs a fraction of a cent. For an image
+it is not, because a generation is paid for by the platform and costs roughly
+three to thirteen cents.
+
+What follows is deliberately limited to what is known.
+
+*There is no global spend ceiling in this repository, and none should be
+inferred.* The deployment documents say so explicitly: per-instance admission
+numbers are not evidence of distributed control, and they must not be multiplied
+by an unknown replica count to produce one. Spend protection is external — a
+distributed edge rule and a provider budget with alerts, tracked as issues #34
+and #68 — and neither exists yet. Therefore the control that actually holds is
+that the gate ships closed, and the image route joins the list of routes that
+need an edge rule before it may be opened. The per-instance policy (three
+requests per window, two concurrent) is a courtesy that limits a single warm
+instance, not a budget.
+
+*A timed-out generation is money spent for nothing.* Cancelling our request does
+not cancel a relay's generation, and a relay may bill an image it finished after
+we gave up. A deadline set too tight therefore wastes spend and delivers nothing,
+and one set too loose holds a person's request open. The current forty-second
+provider deadline sits about a third above the slowest of roughly a dozen
+observations, which is a thin margin for a tail nobody has measured. The
+scenario performance receipt records elapsed time for exactly this reason, and
+the deadline is the one number to retune from real percentiles after a closed
+trial rather than from this sample.
+
+*There is no retry, and no second paid attempt.* The guarantee has two owners,
+because two different mechanisms could otherwise pay twice. A policy-refused
+picture settles on the floor because the scenario declares `settle-floor`. And
+the image pool is capped at one candidate per request by
+`IMAGE_POOL_LIMITS.maxCandidateAttempts`, because the pool's ordinary fallback
+would otherwise follow any failure — an unusable completion, an HTTP error, a
+timeout after a finished render — with a second paid generation on the next
+relay. The cap is unset for text, where a second relay is a cheap retry. A
+client is only told a failure is retryable when it cost almost nothing: a text
+step that refused, or a request shed before any relay was contacted.
+
+*Duplicate submission is not defended at S1 because S1 has no control.* A
+double press would buy two images; a text label avoids this by coalescing, and an
+image cannot, because two generations of the same request are different pictures.
+The obligation therefore moves to the control that eventually calls this route:
+one in-flight request per node on the client, with the request id the envelope
+already carries. It is recorded here so it is not rediscovered after a bill.
+
+*Sizes are well inside every ceiling.* Thirteen real images measured 348 to 793
+KB as JPEG at 1024 square, so about 1.06 MB as base64 at the largest. The pool's
+read ceiling is derived from the contract's two-mebibyte image bound rather than
+declared a second time, and the platform's response limit is larger than either.
+
+*The text step shares the chat pool.* Its candidate health and governor are keyed
+per scenario, so image traffic cannot cool a chat relay, but the drain cap is one
+shared resource, so a stalled relay cannot be multiplied across both.
+
+*Who pays is an open decision, and the code does not assume it.* This surface is
+managed: the platform pays. A person supplying their own provider is how the
+chat surfaces can be paid for, and the user-provider registry refuses image
+models outright; the lease resolver's type excludes the image scenarios so that
+cannot change by accident. Letting a person bring an image provider is a
+separate product and security decision, not a configuration.
+
 ## Gates it needs
 
 - a scenario-level authority switch, off by default, in the shape of the
@@ -235,6 +352,8 @@ its candidate health separate, because health is already keyed per scenario.
 - a cheap brief adjudication before the image call — length bound, no colour,
   medium, rendering or lettering terms, no imperative — because that is where a
   hostile passage is stopped without spending a generation;
-- the palette measurement as a counted operational scalar, never as a rejector;
+- the palette measurement stays a later, counted operational scalar and is not
+  part of S1: it needs pixel decoding, which means an image library on the
+  server, and the brief step is what actually guards the style;
 - no re-encoding anywhere in the path, so the provider's C2PA manifest survives;
 - a fully lazy chunk and a route that never prerenders.

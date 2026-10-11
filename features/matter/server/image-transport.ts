@@ -24,13 +24,8 @@ const IMAGES_SIZE = "1024x1024";
 const HEADER_WINDOW = 64;
 const DATA_URL_HEADER = /^data:image\/([a-z0-9][a-z0-9.+-]{0,31});base64,/u;
 const BASE64_PAYLOAD = /^[A-Za-z0-9+/]+={0,2}$/u;
-
-const OUTPUT_FORMAT_MEDIA_TYPE: Readonly<Record<string, string>> = Object.freeze({
-  png: "png",
-  jpeg: "jpeg",
-  jpg: "jpeg",
-  webp: "webp",
-});
+// 16 base64 characters decode to the 12 bytes the WebP signature needs.
+const SNIFF_BASE64_CHARACTERS = 16;
 
 export const imageChatTransport: PoolTransport = createImageTransport("chat");
 export const imageGenerationsTransport: PoolTransport = createImageTransport("images");
@@ -89,8 +84,13 @@ function parseImagesGeneration(payload: unknown): PoolParsedCompletion {
     const encoded = first.b64_json;
     if (typeof encoded === "string" && encoded.length > 0) {
       if (encoded.startsWith("data:")) return fromDataUrl(encoded);
-      const mediaType = imageMediaType(first.output_format ?? payload.output_format);
-      if (mediaType === undefined || !isCanonicalBase64(encoded)) return unusable("unknown-terminator");
+      if (!isCanonicalBase64(encoded)) return unusable("unknown-terminator");
+      // The bytes are the only authority on what the image is. A relay's
+      // `output_format` is advisory: when it agrees with the bytes it adds
+      // nothing, and when it disagrees or names a format we do not know,
+      // believing it would discard a picture the platform has already paid for.
+      const mediaType = sniffBase64MediaType(encoded);
+      if (mediaType === undefined) return unusable("unknown-terminator");
       return usable(`data:image/${mediaType};base64,${encoded}`);
     }
     // A link's lifetime is the relay's. It is refused, never fetched or returned.
@@ -101,11 +101,25 @@ function parseImagesGeneration(payload: unknown): PoolParsedCompletion {
   }
 }
 
-function imageMediaType(hint: unknown): string | undefined {
-  if (hint === undefined || hint === null) return "png";
-  if (typeof hint !== "string") return undefined;
-  const key = hint.trim().toLowerCase();
-  return Object.hasOwn(OUTPUT_FORMAT_MEDIA_TYPE, key) ? OUTPUT_FORMAT_MEDIA_TYPE[key] : undefined;
+/**
+ * Classifies by magic number from a 12-byte prefix (16 base64 characters). This
+ * decodes a sliver to name a type; it is not pixel work and alters no byte.
+ * `Buffer.from(..., "base64")` never throws, and a short prefix simply fails
+ * every length-guarded match.
+ */
+function sniffBase64MediaType(encoded: string): string | undefined {
+  const head = Buffer.from(encoded.slice(0, SNIFF_BASE64_CHARACTERS), "base64");
+  if (matchesAt(head, 0, [0xff, 0xd8, 0xff])) return "jpeg";
+  if (matchesAt(head, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "png";
+  if (matchesAt(head, 0, [0x52, 0x49, 0x46, 0x46]) && matchesAt(head, 8, [0x57, 0x45, 0x42, 0x50])) {
+    return "webp";
+  }
+  return undefined;
+}
+
+function matchesAt(data: Uint8Array, offset: number, expected: readonly number[]): boolean {
+  return offset + expected.length <= data.length &&
+    expected.every((value, index) => data[offset + index] === value);
 }
 
 /**

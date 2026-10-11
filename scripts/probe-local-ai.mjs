@@ -28,6 +28,7 @@ const HEALTH_TIMEOUT_MS = 5_000;
 const SURFACES = Object.freeze(["repair", "label", "inquiry", "transform", "text-swap"]);
 const HEALTH_SURFACE_KEYS = Object.freeze([
   "archiveExportImport",
+  "imageGeneration",
   "inquiry",
   "localPersistence",
   "material",
@@ -353,7 +354,8 @@ function isHealthSurfaces(value) {
     HEALTH_STATES.has(value.transcriptRepair) &&
     HEALTH_STATES.has(value.inquiry) &&
     HEALTH_STATES.has(value.transformTurn) &&
-    HEALTH_STATES.has(value.textSwap);
+    HEALTH_STATES.has(value.textSwap) &&
+    HEALTH_STATES.has(value.imageGeneration);
 }
 
 function requireLocalAiDemoProfile(surfaces) {

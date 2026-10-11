@@ -134,6 +134,40 @@ test("keeps offline Wiki qualification inventory out of browser artifacts", () =
   );
 });
 
+test("reports a prerendered image route, which would serve without its gate", async () => {
+  const root = await mkdtemp(join(tmpdir(), "matter-runtime-artifact-image-"));
+  try {
+    await Promise.all([
+      mkdir(join(root, ".next/server/app"), { recursive: true }),
+      mkdir(join(root, ".next/static"), { recursive: true }),
+      mkdir(join(root, "public/matter-ui"), { recursive: true }),
+    ]);
+    // The reader budgets these four files by name, so they must exist.
+    for (const asset of ["ptoq-logo.png", "shadows-loop.mp4", "shadows-loop.webm", "shadows-poster.jpg"]) {
+      await writeFile(join(root, "public/matter-ui", asset), asset);
+    }
+    await writeFile(join(root, ".next/server/app/index.html"), "<html></html>");
+    await writeFile(
+      join(root, ".next/prerender-manifest.json"),
+      JSON.stringify({
+        routes: {
+          "/": { compute: "static", initialRevalidateSeconds: false },
+          "/api/image": { compute: "static", initialRevalidateSeconds: false },
+        },
+      }),
+    );
+
+    const metrics = await readRuntimeArtifact(root);
+    assert.deepEqual(metrics.prerenderedApiRoutes, ["/api/image"]);
+    assert.match(
+      inspectRuntimeArtifact(metrics).failures.join("\n"),
+      /\/api\/image was prerendered/u,
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("reads root and server traces while budgeting every public asset", async () => {
   const root = await mkdtemp(join(tmpdir(), "matter-runtime-artifact-"));
   try {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PROTOCOL_VERSION } from "../tree/model";
 import {
   IMAGE_REQUEST_VERSION,
+  IMAGE_RESPONSE_HEADERS,
   MAX_IMAGE_BYTES,
   MAX_IMAGE_BRIEF_CODE_POINTS,
   MAX_IMAGE_DIRECTION_CODE_POINTS,
@@ -330,5 +331,17 @@ describe("image/1 contract", () => {
       expect(parseImageBrief({ text: "\u{1F984}".repeat(MAX_IMAGE_BRIEF_CODE_POINTS) })).not.toBeNull();
       expect(parseImageBrief({ text: "\u{1F984}".repeat(MAX_IMAGE_BRIEF_CODE_POINTS + 1) })).toBeNull();
     });
+  });
+});
+
+describe("image/1 response header names", () => {
+  it("are lowercase, distinct, and namespaced to Matter", () => {
+    const names = Object.values(IMAGE_RESPONSE_HEADERS);
+    expect(new Set(names).size).toBe(names.length);
+    for (const name of names) expect(name).toMatch(/^x-matter-image-[a-z0-9]+$/);
+  });
+
+  it("carry only what Content-Type and Content-Length cannot", () => {
+    expect(Object.keys(IMAGE_RESPONSE_HEADERS).sort()).toEqual(["height", "sha256", "width"]);
   });
 });

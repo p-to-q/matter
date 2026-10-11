@@ -37,4 +37,23 @@ export const MODEL_DEADLINES = Object.freeze({
     clientMs: 16_000,
     platformSeconds: 25,
   }),
+  /**
+   * An image request runs two model calls in sequence inside one route: a text
+   * step that turns the passage into a brief, then the renderer. Every other
+   * surface has one provider call, so the route budget here must cover both
+   * plus a margin, not just the longer of the two.
+   *
+   * Measured renderer latency was 11 to 30 seconds across a small sample, so
+   * `providerMs` leaves about a third of headroom over the slowest observation.
+   * That is a thin margin for a tail nobody has measured, and the whole lattice
+   * is kept inside sixty seconds on purpose: a `maxDuration` above the
+   * deployment plan's ceiling fails at deploy rather than at run time.
+   */
+  image: Object.freeze({
+    briefMs: 8_000,
+    providerMs: 40_000,
+    routeMs: 50_000,
+    clientMs: 53_000,
+    platformSeconds: 60,
+  }),
 });

@@ -1,6 +1,7 @@
 import packageMetadata from "../../../package.json";
 import { DEFAULT_MATTER_BASE_PATH, normalizeMatterBasePath } from "../config/base-path";
 import { PROTOCOL_VERSION } from "../tree/model";
+import { imageSurfaceConfigured, imageSurfaceMode } from "./image-surface";
 import { materialModelSurfaceAuthorized } from "./material-model-surface";
 import { readModelPool } from "./model-pool";
 import { providerSessionAvailable } from "./provider-session-crypto";
@@ -38,6 +39,12 @@ export type MatterHealth = Readonly<{
     inquiry: MatterHealthSurface;
     transformTurn: MatterHealthSurface;
     textSwap: MatterHealthSurface;
+    /**
+     * Ships closed and has no control. Never `user-configurable`: a person's
+     * provider session is not a supply for a surface that costs real money per
+     * generation, so only an operator's configuration can open it.
+     */
+    imageGeneration: MatterHealthSurface;
     archiveExportImport: "available";
   }>;
 }>;
@@ -65,6 +72,7 @@ export function healthSnapshot(): MatterHealth {
       inquiry: inquirySurface(),
       transformTurn: transformTurnSurface(),
       textSwap: textSwapSurface(),
+      imageGeneration: imageGenerationSurface(),
       archiveExportImport: "available",
     }),
   });
@@ -106,6 +114,20 @@ function transformTurnSurface(): MatterHealthSurface {
 function textSwapSurface(): MatterHealthSurface {
   if (!materialModelSurfaceAuthorized("matter-text-swap")) return "unavailable";
   return userSupplySurface(process.env.MATTER_TEXT_SWAP_ADAPTER);
+}
+
+/**
+ * Deliberately not `userSupplySurface` or `adapterSurface`: the first would
+ * answer `user-configurable` whenever a provider session exists, and the second
+ * counts the chat pool alone. The mode and the configuration both come from
+ * `image-surface`, the one owner shared with the route. `available` reports
+ * configuration only, never that a relay answered.
+ */
+function imageGenerationSurface(): MatterHealthSurface {
+  const mode = imageSurfaceMode(process.env);
+  if (mode === "off") return "unavailable";
+  if (mode === "fixture") return "fixture";
+  return imageSurfaceConfigured(process.env) ? "available" : "unavailable";
 }
 
 function userSupplySurface(configured: string | undefined): MatterHealthSurface {

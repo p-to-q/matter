@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { readFileSync } from "node:fs";
+import { maxDuration as imagePlatformSeconds } from "../../../app/api/image/route";
 import { maxDuration as inquiryPlatformSeconds } from "../../../app/api/inquiry/route";
 import { maxDuration as labelPlatformSeconds } from "../../../app/api/label/route";
 import { maxDuration as repairPlatformSeconds } from "../../../app/api/repair/route";
@@ -23,6 +24,9 @@ import {
 } from "../protocol/repair-contract";
 import { TEXT_SWAP_CLIENT_TIMEOUT_MS } from "../protocol/text-swap-contract";
 import { TRANSFORM_CLIENT_TIMEOUT_MS } from "../protocol/transform-contract";
+import { IMAGE_BRIEF_SCENARIO } from "../server/image-brief-harness";
+import { IMAGE_SCENARIO } from "../server/image-harness";
+import { IMAGE_ROUTE_TIMEOUT_MS } from "../server/image-route";
 import { INQUIRY_PROVIDER_DEADLINE_MS } from "../server/inquiry-harness";
 import { LABEL_SCENARIO_DEADLINE_MS } from "../server/label-harness";
 import { TEXT_SWAP_PROVIDER_TIMEOUT_MS } from "../server/text-swap-harness";
@@ -44,6 +48,19 @@ describe("model delivery deadline lattice", () => {
     expect(platformSeconds * 1_000 - client).toBeGreaterThanOrEqual(4_000);
   });
 
+  it("keeps attributable margins for image across both of its sequential model calls", () => {
+    const { briefMs, providerMs, routeMs, clientMs, platformSeconds } = MODEL_DEADLINES.image;
+    // The brief step and the renderer run one after the other inside one route,
+    // so the route must outlast their sum, not merely the longer of the two.
+    expect(routeMs - (briefMs + providerMs)).toBeGreaterThanOrEqual(1_000);
+    expect(routeMs - providerMs).toBeGreaterThanOrEqual(1_000);
+    expect(clientMs - routeMs).toBeGreaterThanOrEqual(1_000);
+    expect(platformSeconds * 1_000 - clientMs).toBeGreaterThanOrEqual(4_000);
+    expect(IMAGE_ROUTE_TIMEOUT_MS).toBe(routeMs);
+    expect(IMAGE_BRIEF_SCENARIO.budget({ locale: "en-US", passage: "p", direction: "" }).deadlineMs).toBe(briefMs);
+    expect(IMAGE_SCENARIO.budget({ locale: "en-US", brief: { text: "b" } }).deadlineMs).toBe(providerMs);
+  });
+
   it("keeps aliases and the repair authority lease on their real owners", () => {
     expect(LABEL_SCENARIO_DEADLINE_MS).toBe(MODEL_DEADLINES.label.providerMs);
     expect(ADMISSION_REPAIR_WINDOW_MS).toBe(MODEL_DEADLINES.repair.authorityLeaseMs);
@@ -56,6 +73,7 @@ describe("model delivery deadline lattice", () => {
     expect(inquiryPlatformSeconds).toBe(MODEL_DEADLINES.inquiry.platformSeconds);
     expect(transformPlatformSeconds).toBe(MODEL_DEADLINES.transform.platformSeconds);
     expect(textSwapPlatformSeconds).toBe(MODEL_DEADLINES.textSwap.platformSeconds);
+    expect(imagePlatformSeconds).toBe(MODEL_DEADLINES.image.platformSeconds);
 
     for (const [path, seconds] of [
       ["../../../app/api/repair/route.ts", repairPlatformSeconds],
@@ -63,6 +81,7 @@ describe("model delivery deadline lattice", () => {
       ["../../../app/api/inquiry/route.ts", inquiryPlatformSeconds],
       ["../../../app/api/turn/route.ts", transformPlatformSeconds],
       ["../../../app/api/text-swap/route.ts", textSwapPlatformSeconds],
+      ["../../../app/api/image/route.ts", imagePlatformSeconds],
     ] as const) {
       const source = readFileSync(new URL(path, import.meta.url), "utf8");
       expect(source).toContain(`export const maxDuration = ${seconds};`);

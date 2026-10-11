@@ -61,6 +61,7 @@ const HEALTH = {
     inquiry: "available",
     transformTurn: "user-configurable",
     textSwap: "user-configurable",
+    imageGeneration: "unavailable",
     archiveExportImport: "available",
   },
 };
@@ -247,6 +248,35 @@ test("requires both public material surfaces to remain user-configurable", () =>
       "Material model surface textSwap must be user-configurable for material-user-provider.",
     ],
   );
+});
+
+test("requires image generation to ship closed in every profile", () => {
+  for (const profile of ["browser-preview", "elastic-live", "material-user-provider"]) {
+    const base = structuredClone(HEALTH);
+    if (profile === "browser-preview") {
+      base.surfaces.transformTurn = "unavailable";
+      base.surfaces.textSwap = "unavailable";
+    } else if (profile === "elastic-live") {
+      base.surfaces.transformTurn = "available";
+      base.surfaces.textSwap = "unavailable";
+    }
+    assert.deepEqual(inspectDeploymentHealth(base, HEALTH.appVersion, profile), []);
+
+    for (const state of ["available", "fixture", "user-configurable"]) {
+      const open = structuredClone(base);
+      open.surfaces.imageGeneration = state;
+      assert.deepEqual(inspectDeploymentHealth(open, HEALTH.appVersion, profile), [
+        `Image generation must be unavailable for ${profile}.`,
+      ]);
+    }
+
+    const missing = structuredClone(base);
+    delete missing.surfaces.imageGeneration;
+    assert.deepEqual(inspectDeploymentHealth(missing, HEALTH.appVersion, profile), [
+      "Health surface imageGeneration is missing or invalid.",
+      `Image generation must be unavailable for ${profile}.`,
+    ]);
+  }
 });
 
 test("rejects the superseded paired material-live profile", () => {

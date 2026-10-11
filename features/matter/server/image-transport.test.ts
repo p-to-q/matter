@@ -6,6 +6,17 @@ const PAYLOAD = Buffer.from("not really pixels, but a valid base64 body").toStri
 const JPEG_URL = `data:image/jpeg;base64,${PAYLOAD}`;
 const PNG_URL = `data:image/png;base64,${PAYLOAD}`;
 
+const JPEG_MAGIC = [0xff, 0xd8, 0xff, 0xe0];
+const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+const WEBP_MAGIC = [0x52, 0x49, 0x46, 0x46, 0x10, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50];
+
+function body(magic: readonly number[], length = 64): string {
+  return Buffer.from([...magic, ...new Array<number>(Math.max(0, length - magic.length)).fill(7)])
+    .toString("base64");
+}
+
+const SNIFFED_PNG = body(PNG_MAGIC);
+
 function chat(content: unknown, extra: Record<string, unknown> = {}): unknown {
   return { choices: [{ message: { role: "assistant", content }, finish_reason: "stop", ...extra }] };
 }
@@ -49,30 +60,93 @@ describe("image transports", () => {
     });
 
     it("reads the images-shaped b64_json as the same kind of string", () => {
-      const parsed = imageGenerationsTransport.parseCompletion({ data: [{ b64_json: PAYLOAD }] });
-      expect(parsed).toEqual({ content: PNG_URL, disposition: "complete" });
+      const parsed = imageGenerationsTransport.parseCompletion({ data: [{ b64_json: SNIFFED_PNG }] });
+      expect(parsed).toEqual({
+        content: `data:image/png;base64,${SNIFFED_PNG}`,
+        disposition: "complete",
+      });
+    });
+
+    it("names a hintless payload by its first bytes instead of assuming PNG", () => {
+      for (const [magic, mediaType] of [
+        [JPEG_MAGIC, "jpeg"], [PNG_MAGIC, "png"], [WEBP_MAGIC, "webp"],
+      ] as const) {
+        const encoded = body(magic);
+        expect(imageGenerationsTransport.parseCompletion({ data: [{ b64_json: encoded }] }))
+          .toEqual({ content: `data:image/${mediaType};base64,${encoded}`, disposition: "complete" });
+        expect(imageGenerationsTransport.parseCompletion({ data: [{ b64_json: encoded }], output_format: null }).content)
+          .toBe(`data:image/${mediaType};base64,${encoded}`);
+      }
+    });
+
+    it("sniffs a payload that is exactly as long as its signature, padding included", () => {
+      const webp = Buffer.from(WEBP_MAGIC).toString("base64");
+      expect(imageGenerationsTransport.parseCompletion({ data: [{ b64_json: webp }] }).content)
+        .toBe(`data:image/webp;base64,${webp}`);
+      const jpeg = Buffer.from([0xff, 0xd8, 0xff]).toString("base64");
+      expect(jpeg.endsWith("=") || jpeg.length === 4).toBe(true);
+      expect(imageGenerationsTransport.parseCompletion({ data: [{ b64_json: jpeg }] }).content)
+        .toBe(`data:image/jpeg;base64,${jpeg}`);
+    });
+
+    it("refuses a hintless payload whose first bytes name no supported image", () => {
+      for (const bytes of [
+        Buffer.from("not really pixels, but a valid base64 body"),
+        Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>"),
+        Buffer.from("GIF89a-----------"),
+        Buffer.from([...PNG_MAGIC.slice(0, 7), 0x0b, 1, 2, 3, 4, 5]),
+        Buffer.from([...WEBP_MAGIC.slice(0, 8), 0x57, 0x41, 0x56, 0x45]),
+        Buffer.alloc(64),
+      ]) {
+        refused(imageGenerationsTransport, { data: [{ b64_json: bytes.toString("base64") }] });
+      }
+    });
+
+    it("refuses, without throwing, a hintless payload too short to carry a signature", () => {
+      for (const short of [
+        Buffer.from([0xff]).toString("base64"),
+        Buffer.from([0xff, 0xd8]).toString("base64"),
+        Buffer.from(PNG_MAGIC.slice(0, 7)).toString("base64"),
+        Buffer.from(WEBP_MAGIC.slice(0, 11)).toString("base64"),
+      ]) {
+        expect(() => imageGenerationsTransport.parseCompletion({ data: [{ b64_json: short }] })).not.toThrow();
+        refused(imageGenerationsTransport, { data: [{ b64_json: short }] });
+      }
+    });
+
+    it("lets the bytes win over a hint that disagrees with them", () => {
+      // The hint is advisory. Believing a wrong one would declare the wrong type,
+      // fail the byte gate's own type check, and discard a billed picture.
+      expect(
+        imageGenerationsTransport.parseCompletion({
+          data: [{ b64_json: body(JPEG_MAGIC), output_format: "png" }],
+        }).content,
+      ).toBe(`data:image/jpeg;base64,${body(JPEG_MAGIC)}`);
+      expect(
+        imageGenerationsTransport.parseCompletion({
+          data: [{ b64_json: SNIFFED_PNG }], output_format: "webp",
+        }).content,
+      ).toBe(`data:image/png;base64,${SNIFFED_PNG}`);
+    });
+
+    it("does not discard a good image because of a hint it cannot read", () => {
+      for (const hint of ["tiff", "auto", "svg+xml", "constructor", 7, null, { toString: () => "png" }]) {
+        expect(
+          imageGenerationsTransport.parseCompletion({ data: [{ b64_json: SNIFFED_PNG, output_format: hint }] }).content,
+        ).toBe(`data:image/png;base64,${SNIFFED_PNG}`);
+      }
+    });
+
+    it("never lets a hint make non-image bytes usable", () => {
+      refused(imageGenerationsTransport, { data: [{ b64_json: PAYLOAD, output_format: "png" }] });
+      refused(imageGenerationsTransport, { data: [{ b64_json: PAYLOAD, output_format: "jpeg" }] });
     });
 
     it("yields an identical string for both shapes of the same image", () => {
-      const a = imageChatTransport.parseCompletion(chat(`![image](${PNG_URL})`));
-      const b = imageGenerationsTransport.parseCompletion({ data: [{ b64_json: PAYLOAD }] });
+      const a = imageChatTransport.parseCompletion(chat(`![image](data:image/png;base64,${SNIFFED_PNG})`));
+      const b = imageGenerationsTransport.parseCompletion({ data: [{ b64_json: SNIFFED_PNG }] });
+      expect(b.content).toBeDefined();
       expect(a.content).toBe(b.content);
-    });
-
-    it("honours an output_format hint and refuses an unknown one", () => {
-      expect(
-        imageGenerationsTransport.parseCompletion({
-          data: [{ b64_json: PAYLOAD }],
-          output_format: "webp",
-        }).content,
-      ).toBe(`data:image/webp;base64,${PAYLOAD}`);
-      expect(
-        imageGenerationsTransport.parseCompletion({
-          data: [{ b64_json: PAYLOAD, output_format: "jpg" }],
-        }).content,
-      ).toBe(`data:image/jpeg;base64,${PAYLOAD}`);
-      refused(imageGenerationsTransport, { data: [{ b64_json: PAYLOAD, output_format: "svg+xml" }] });
-      refused(imageGenerationsTransport, { data: [{ b64_json: PAYLOAD, output_format: "constructor" }] });
     });
 
     it("accepts a markdown image with surrounding prose or a bare data URL", () => {
@@ -91,9 +165,9 @@ describe("image transports", () => {
 
     it("prefers the bytes when both bytes and a URL are present, and never returns the URL", () => {
       const parsed = imageGenerationsTransport.parseCompletion({
-        data: [{ b64_json: PAYLOAD, url: "https://cdn.example/x.png" }],
+        data: [{ b64_json: SNIFFED_PNG, url: "https://cdn.example/x.png" }],
       });
-      expect(parsed.content).toBe(PNG_URL);
+      expect(parsed.content).toBe(`data:image/png;base64,${SNIFFED_PNG}`);
     });
 
     it("refuses a non-image data URL", () => {

@@ -15,3 +15,6 @@ next-env.d.ts
 tmp/
 /studio/film/artifacts/
 omi/
+
+# Vitest 5 writes a reporter cache here on every run.
+.vitest/

@@ -17,6 +17,47 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — an image is drawn from a brief, never from the passage
+
+Changed: a gated `POST /api/image` turns an addressed passage into one image in
+two server-side steps. A text scenario reads the passage and returns one short
+visual subject; the renderer receives only the frozen style plus that adjudicated
+line. The route answers with the relay's own bytes, unmodified, and ships closed:
+`MATTER_IMAGE_ADAPTER` is `off` in `vercel.json` and unset is closed in
+production. Image relays live in a parallel `MATTER_IMAGE_*` pool namespace that
+the chat reader never sees, and run as a `PoolTransport` inside the existing
+pool rather than as a second fetch path. `PoolLimits` gains an optional
+`maxCandidateAttempts`, unset for text and one for images. No control, no
+durable material, and no tree mutation: S1 only.
+
+Why: an image model has no instruction hierarchy. A probe put a hostile passage
+in the subject position of the complete style prompt and the model complied
+fully, down to lettering the word it was told to write, so the style cannot be
+guaranteed by wording and the passage must never reach the renderer. The defence
+therefore sits in the cheap text step, where fencing is evidenced, rather than on
+the finished picture, which a person or the platform has already paid for. A
+separate fetch path would have silently lost seven inherited protections, so the
+transport lives in the pool. And because a relay can bill a generation and then
+return something unusable, the pool's ordinary fallback to a second candidate
+could pay twice for one picture, which is why the cap is a pool limit and not a
+convention about station order.
+
+Verified against real relay output rather than only fixtures: thirteen images
+all pass the byte gate with their provenance manifest intact and the bytes
+identical to what the relay sent, and truncated copies of all thirteen are
+refused. Review found and this change closed: a brief gate that admitted other
+scripts and letter lookalikes, a media type guessed from a hint instead of the
+bytes, and a renderer that could outlive the route and bill an image nobody
+received.
+
+Forecloses: sending a person's passage to a renderer, a second outbound fetch
+path outside the reviewed pool, a retry or fallback after a billed generation,
+telling a client a billed failure is retryable, accepting a provider link as a
+result, modifying provider bytes, and opening the gate before a distributed edge
+rule and a provider budget exist. The brief adjudicator is a lexical floor, not
+a proof; a hostile passage that persuades the text model into a clean line made
+of unlisted words can still steer a picture, and that residual is accepted.
+
 ## 2026-10-03 — material outlives the model
 
 Changed: Matter's long direction now makes the rooted material, rather than a

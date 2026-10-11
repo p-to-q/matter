@@ -105,6 +105,27 @@ test("rejects material surface and managed-adapter drift", () => {
   );
 });
 
+test("pins the image surface closed so a deployment cannot ship it live by accident", async () => {
+  assert.equal(DEDICATED_DOMAIN_RUNTIME_SHAPE.MATTER_IMAGE_ADAPTER, "off");
+  const committed = JSON.parse(await readFile("vercel.json", "utf8"));
+  assert.equal(committed.env.MATTER_IMAGE_ADAPTER, "off");
+
+  for (const value of ["live", "fixture"]) {
+    const opened = validConfig();
+    opened.env.MATTER_IMAGE_ADAPTER = value;
+    assert.match(
+      inspectVercelConfig(opened).join("\n"),
+      new RegExp(`env MATTER_IMAGE_ADAPTER is "${value}", expected "off"`),
+    );
+  }
+
+  // Dropping the key is not a closed surface here: unset means a fixture
+  // outside production, so the declaration itself must be present.
+  const dropped = validConfig();
+  delete dropped.env.MATTER_IMAGE_ADAPTER;
+  assert.match(inspectVercelConfig(dropped).join("\n"), /env is missing MATTER_IMAGE_ADAPTER/);
+});
+
 test("does not require the build-inlined public flags at runtime", () => {
   const config = validConfig();
   assert.ok(!("NEXT_PUBLIC_MATTER_BROWSER_SPEECH_ENABLED" in config.env));

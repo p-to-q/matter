@@ -38,7 +38,9 @@ export type MatterScenarioId =
   | "matter-thought-label"
   | "matter-inquiry"
   | "matter-transform"
-  | "matter-text-swap";
+  | "matter-text-swap"
+  | "matter-image-brief"
+  | "matter-image";
 
 /**
  * Provider-pool transport facts, deliberately stripped of candidate identity.
@@ -671,6 +673,8 @@ function safeScenarioId(value: MatterScenarioId): MatterScenarioId | "unknown" {
     case "matter-inquiry":
     case "matter-transform":
     case "matter-text-swap":
+    case "matter-image-brief":
+    case "matter-image":
       return value;
     default:
       return "unknown";

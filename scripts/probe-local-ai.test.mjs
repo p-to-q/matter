@@ -190,6 +190,7 @@ test("checks the expected health identity before issuing at most five posts", as
     inquiry: "available",
     transformTurn: "fixture",
     textSwap: "available",
+    imageGeneration: "unavailable",
     archiveExportImport: "available",
   };
   const json = (value, status = 200) => new Response(JSON.stringify(value), {
@@ -303,6 +304,7 @@ test("does not mistake an all-fixture development server for the AI demo profile
         inquiry: "unavailable",
         transformTurn: "fixture",
         textSwap: "fixture",
+        imageGeneration: "unavailable",
         archiveExportImport: "available",
       },
     }), { headers: { "content-type": "application/json", "cache-control": "no-store" } }),
@@ -339,6 +341,7 @@ test("rejects a route response without no-store before classifying it", async ()
             inquiry: "available",
             transformTurn: "fixture",
             textSwap: "available",
+            imageGeneration: "unavailable",
             archiveExportImport: "available",
           },
         }), { headers: { "content-type": "application/json", "cache-control": "no-store" } });
@@ -421,9 +424,33 @@ function localAiHealthResponse() {
       inquiry: "available",
       transformTurn: "fixture",
       textSwap: "available",
+      imageGeneration: "unavailable",
       archiveExportImport: "available",
     },
   }), {
     headers: { "content-type": "application/json", "cache-control": "no-store" },
   });
 }
+
+test("rejects a target whose health omits the image generation surface", async () => {
+  await assert.rejects(() => probeLocalAi("http://127.0.0.1:3000/matter", {
+    runId: "testrun",
+    fetchImpl: async () => new Response(JSON.stringify({
+      status: "ok",
+      protocolVersion: "0.2",
+      appVersion: CURRENT_APP_VERSION,
+      basePath: "/matter",
+      surfaces: {
+        material: "available",
+        localPersistence: "available",
+        voiceAdmission: "available",
+        thoughtLabel: "fixture",
+        transcriptRepair: "available",
+        inquiry: "available",
+        transformTurn: "fixture",
+        textSwap: "available",
+        archiveExportImport: "available",
+      },
+    }), { headers: { "content-type": "application/json", "cache-control": "no-store" } }),
+  }), /does not match the expected Matter version and base path/);
+});

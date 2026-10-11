@@ -16,7 +16,16 @@ export type RequestModelResolution = Readonly<{
   cacheScope: string;
 }>;
 
-const SCENARIO_GATES: Readonly<Record<MatterScenarioId, string>> = Object.freeze({
+/**
+ * The image scenarios are deliberately absent. This resolver exists to splice a
+ * person's own chat provider into a public chat surface, and the user-provider
+ * registry refuses image models outright. Image generation has its own pool
+ * namespace and its own gate, and a person's lease must never reach it by a
+ * type that merely happened to include it.
+ */
+export type LeasedScenarioId = Exclude<MatterScenarioId, "matter-image-brief" | "matter-image">;
+
+const SCENARIO_GATES: Readonly<Record<LeasedScenarioId, string>> = Object.freeze({
   "matter-transcript-repair": "MATTER_REPAIR_ADAPTER",
   "matter-thought-label": "MATTER_LABEL_ADAPTER",
   "matter-inquiry": "MATTER_INQUIRY_ADAPTER",
@@ -27,7 +36,7 @@ const SCENARIO_GATES: Readonly<Record<MatterScenarioId, string>> = Object.freeze
 // These surfaces are already part of the public product. A valid user lease
 // may supply their provider even when Matter's managed adapter is intentionally
 // disabled. Material mutations carry a separate product-surface gate below.
-const USER_PROVIDER_PUBLIC_SCENARIOS: ReadonlySet<MatterScenarioId> = new Set([
+const USER_PROVIDER_PUBLIC_SCENARIOS: ReadonlySet<LeasedScenarioId> = new Set([
   "matter-transcript-repair",
   "matter-thought-label",
   "matter-inquiry",
@@ -36,7 +45,7 @@ const USER_PROVIDER_PUBLIC_SCENARIOS: ReadonlySet<MatterScenarioId> = new Set([
 /** Couples each scenario to its existing public capability gate. */
 export function resolveScenarioRequestModelAdapter(
   request: Request,
-  scenario: MatterScenarioId,
+  scenario: LeasedScenarioId,
   options: Readonly<{
     fallback: ScenarioAdapter | null;
     limits: PoolLimits;
