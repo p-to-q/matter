@@ -17,6 +17,21 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — the active working projection is one function, and it is the shipped one
+
+Changed: `projectActiveViewContext(view, activeNodeIds)` replaces the inline
+filter in the Material root and the `projectActiveWorkingContext` helper that only
+tests called. The view is the first term, as `reference/working-context.md`
+already said.
+
+Why: the reference named one pure authority, but the tested projector derived
+active material from the tree alone while production derived it from the current
+view. A model could have been tested against material that focus and fold would
+have withheld. Now the tests exercise the code that ships, including a focus view
+and a folded view that had no coverage.
+
+Forecloses: deriving the working projection from the tree without a view.
+
 ## 2026-10-12 — Wave 1 decided; an unclassified image failure is never retryable
 
 Changed: the five research packets are recorded in the handoff's Wave 1

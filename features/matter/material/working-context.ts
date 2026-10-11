@@ -123,39 +123,22 @@ export function isNodeHeldAside(
 }
 
 /**
- * Projects the complete active material tree in authored preorder. A held
- * root and every descendant are absent; their depth is never recomputed, so
- * the retained structure stays truthful when a sibling branch is omitted.
+ * The active working projection: the current view, in its own order and with
+ * its own depth, minus whatever the working context withholds. The view is the
+ * first term on purpose — focus and fold change what is addressed, so a
+ * projection derived from the tree alone would hand a model material the person
+ * is not looking at. Depth is the view's, never recomputed here, so retained
+ * structure stays truthful when a sibling branch is omitted.
  */
-export function projectActiveWorkingContext(
-  tree: ThoughtTree,
-  heldAsideNodeIds: HeldAsideNodeIds = EMPTY_HELD_ASIDE,
+export function projectActiveViewContext(
+  view: readonly Readonly<{ node: Readonly<{ id: string }>; depth: number }>[],
+  activeNodeIds: ReadonlySet<string>,
 ): readonly WorkingContextNode[] {
-  const held = reconcileHeldAsideNodeIds(tree, heldAsideNodeIds);
-  const active: WorkingContextNode[] = [];
-  const root = tree.rootId === null ? undefined : tree.nodes[tree.rootId];
-  const stack = root === undefined
-    ? []
-    : [{ nodeId: root.id, depth: isDocumentRoot(tree, root.id) ? -1 : 0 }];
-  const visited = new Set<string>();
-
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (current === undefined || visited.has(current.nodeId)) continue;
-    visited.add(current.nodeId);
-    const node = tree.nodes[current.nodeId];
-    if (node === undefined) continue;
-    if (held.has(node.id)) continue;
-    if (!isDocumentRoot(tree, node.id)) {
-      active.push(Object.freeze({ nodeId: node.id, depth: current.depth }));
-    }
-    for (let index = node.children.length - 1; index >= 0; index -= 1) {
-      const childId = node.children[index];
-      if (childId !== undefined) stack.push({ nodeId: childId, depth: current.depth + 1 });
-    }
-  }
-
-  return Object.freeze(active);
+  return Object.freeze(
+    view
+      .filter(({ node }) => activeNodeIds.has(node.id))
+      .map(({ node, depth }) => Object.freeze({ nodeId: node.id, depth })),
+  );
 }
 
 /**

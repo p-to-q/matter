@@ -152,6 +152,7 @@ import { projectInquiryContext } from "../material/inquiry-context";
 import {
   createHeldAsideNodeIds,
   isNodeHeldAside,
+  projectActiveViewContext,
   projectWorkingContext,
   reconcileHeldAsideNodeIds,
   restoreHeldAsideLineage,
@@ -827,9 +828,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     ? `${layoutDocumentKey}:${measureRevision}:viewport-research`
     : `${layoutDocumentKey}:${measureRevision}`;
   const activeWorkingProjection = useMemo(
-    () => projection
-      .filter(({ node }) => workingContext.activeNodeIds.has(node.id))
-      .map(({ node, depth }) => Object.freeze({ nodeId: node.id, depth })),
+    () => projectActiveViewContext(projection, workingContext.activeNodeIds),
     [projection, workingContext.activeNodeIds],
   );
   const completePublication = published?.key === publicationKey ? published : null;

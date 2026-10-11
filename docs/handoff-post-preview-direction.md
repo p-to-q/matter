@@ -384,20 +384,29 @@ representation. So the first slice is not a receipt:
   test-only twin. The first slice makes them one function.
 
 ```text
-Outcome:    one pure `projectMaterial` returns today's InquiryContext byte for byte
-            for `selection` and `tree`, plus parentId, siblingIndex and a focus
-            `lineage` address; the shipped derivation and the tested one are the
-            same function
-Boundary:   `material/` and the two call sites in RootedMaterial.tsx; no protocol,
-            storage, Archive, Copy, or prompt change
-Invariants: wire bytes identical to today; no address widens; nothing outside
-            `material/` is imported and no Wiki import appears; depth keeps one
-            meaning per mode
-Proof:      golden fixtures byte-equal to current InquiryContext for both scopes;
-            a focus-address fixture; a fold fixture; the stored-scope mapping test
-Non-goals:  a receipt, a digest, a new wire scope, a stored-row migration, a
-            structured Copy, merging the transform and text-swap lineage types
+Outcome:    the active working projection is one pure function,
+            `projectActiveViewContext(view, activeNodeIds)`, called by the shipped
+            Material root and by every test; the test-only twin that derived the
+            projection from the tree alone is deleted
+Boundary:   `material/working-context.ts`, its two test files, and the one call
+            site in RootedMaterial.tsx; no protocol, storage, Archive, Copy, or
+            prompt change
+Invariants: wire bytes identical to today; the view is the first term, so focus
+            and fold decide what is addressed; depth is the view's, never
+            recomputed; nothing outside `material/` is imported
+Proof:      the shipped path now has unit tests (view order and depth, focus
+            view, folded view, frozen result, inputs unmutated); the existing
+            InquiryContext goldens run through the shared function; mutating the
+            filter or the depth fails them
+Non-goals:  parentId, siblingIndex, a `lineage` address, a receipt, a digest, a
+            new wire scope, a stored-row migration, a structured Copy, merging
+            the transform and text-swap lineage types
 ```
+
+Status: **built** (2026-10-12). The first draft of this block also added
+`parentId`, `siblingIndex` and a focus `lineage` address. They were cut because no
+consumer reads them and an unread field is an undeclared contract; they return
+with the first receipt that needs them.
 
 Contrary evidence kept: nothing in the repository shows a user-observed failure
 from lost structure; the lineage fields double as the stale check, so unifying

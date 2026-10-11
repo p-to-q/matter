@@ -64,7 +64,7 @@ pure material helpers perform its transitions and projection. It resets on
 hydration, import, and document switch. It never enters `ThoughtTree`, tree
 history, IndexedDB material snapshots, exports, archives, or network envelopes.
 
-One pure projection is the authority for every consumer:
+One pure projection (`projectActiveViewContext`) is the authority for every consumer:
 
 ```text
 current view projection
