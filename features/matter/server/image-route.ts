@@ -232,7 +232,9 @@ function unavailable(retryable = true): ImageServerError {
 }
 
 function cancelledError(): ImageServerError {
-  return new ImageServerError("IMAGE_FAILED", "The image request was cancelled.", true, 499);
+  // The caller left, possibly after a relay had already been paid; there is no
+  // one to invite a retry, and a later one must not assume the first was free.
+  return new ImageServerError("IMAGE_FAILED", "The image request was cancelled.", false, 499);
 }
 
 const REQUEST_POLICY: BoundedRequestPolicy = Object.freeze({

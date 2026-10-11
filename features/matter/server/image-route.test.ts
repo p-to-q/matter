@@ -217,6 +217,14 @@ describe("image route cancellation and deadlines", () => {
     const response = await pending;
     expect(response.status).toBe(499);
     expect(imageSignal?.aborted).toBe(true);
+    // The renderer may have been paid before the caller left.
+    expect(await response.json()).toMatchObject({ error: { retryable: false } });
+  });
+
+  it("never invites a retry after a failure nobody classified", async () => {
+    const response = imageErrorResponse(new Error("something unexpected"));
+    expect(response.status).toBe(500);
+    expect(await response.json()).toMatchObject({ error: { code: "IMAGE_FAILED", retryable: false } });
   });
 
   it("settles inside the platform limit when the text step never answers", async () => {

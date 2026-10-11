@@ -17,6 +17,24 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — Wave 1 decided; an unclassified image failure is never retryable
+
+Changed: the five research packets are recorded in the handoff's Wave 1
+synthesis. Decided there: the stored Inquiry vocabulary is mapped, not migrated;
+a receipt carries canonical text only; Branch stays in the main rail until human
+child creation has another home; an image pointer lives on the node, not in text;
+no image label before the lifecycle exists. In code, a cancelled image request and
+an unclassified image failure now answer `retryable: false`.
+
+Why: the text-pointer shape would spend 145 of 2,000 code units and invite lasso,
+Text Swap and Wiki to touch a hash. A failure nobody classified may have come
+after a relay billed, and a caller that left may have been paid for; neither may
+invite a second paid attempt.
+
+Forecloses: an unclassified image failure being retried by a client, and S2 using
+text as the pointer carrier. The earlier S2 line that said "a text pointer" is
+superseded.
+
 ## 2026-10-12 — the index marks the path above the active passage
 
 Changed: while browsing, the index underlines the ancestors of the active

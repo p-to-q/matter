@@ -45,7 +45,9 @@ export function invalidImageRequest(message: string): ImageServerError {
 export function imageErrorResponse(error: unknown): Response {
   const known = error instanceof ImageServerError
     ? error
-    : new ImageServerError("IMAGE_FAILED", "Matter could not draw this passage just now.", true, 500);
+    // Unknown means unknown cost: a failure nobody classified may have come after
+    // a relay billed, so it never invites a second paid attempt.
+    : new ImageServerError("IMAGE_FAILED", "Matter could not draw this passage just now.", false, 500);
   return Response.json(known.envelope(), {
     status: known.status,
     headers: { "Cache-Control": "no-store" },

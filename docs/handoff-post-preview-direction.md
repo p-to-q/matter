@@ -78,15 +78,15 @@ handoff instead separates the decisions, research, and eventual proof.
 | Help with real-life problems while preserving agency | accepted direction | `product.md`, `principles.md` | corrected owner intent |
 | Material outlives the model | accepted principle | `product.md`, `principles.md`, `changes.md` | corrected owner intent or a proven contradiction |
 | Rooted tree is material authority | frozen current contract | `material.md`, `architecture.md` | a separately promoted durable material concept |
-| Three Inquiry addresses | specified, not implemented | active plan | stored-record migration or explicit lossy mapping decision |
-| Shared material context projection | working hypothesis | this handoff only | C0 research and an independent contradiction review |
+| Three Inquiry addresses | specified, not implemented; stored vocabulary decided (map, no migration) | active plan, Wave 1 synthesis | the C0 first slice proves byte-equal wire output |
+| Shared material context projection | first slice frozen, not promoted | Wave 1 synthesis | owner promotion and an independent contradiction review |
 | Context receipt | open candidate | `open.md` | purpose, privacy, format, clipping, and compatibility decisions |
 | Lineage-aware index and canvas | open candidate | `open.md` | I0 interaction state table and accessibility proof plan |
-| Main-rail Branch removal | open candidate | `open.md` | explicit Preview/demo composition boundary and replacement decision |
-| Local/private intelligence runtime | accepted direction, no capability claim | `product.md`, `principles.md` | L0 device, security, integrity, cancellation, and offline receipts |
-| Generated media as material | open candidate | `open.md` | M0 address, asset, undo, persistence, export, and privacy contract |
+| Main-rail Branch removal | blocked: no human child-creation path without it | Wave 1 synthesis | a decided replacement for child creation, a named Preview flag, and eight e2e specs migrated |
+| Local/private intelligence runtime | accepted direction, no capability claim; one headless probe proposed | Wave 1 synthesis | the probe receipt; nothing qualifies yet |
+| Generated media as material | S1 shipped closed; S2 engine shape decided (pointer on node) | Wave 1 synthesis, `reference/generated-image.md` | slice 1 (tree and codec, dark) and the owner's spend decision |
 | Local lexical authority (Wiki) | shipped, record V7 | `reference/wiki.md`, `surfaces.md` | nothing to advance; it is the baseline C0 and L0 must read |
-| Wiki settle inside a context receipt | open question raised here | this handoff only | whether a receipt carries only the canonical form or discloses that a settle occurred |
+| Wiki settle inside a context receipt | decided: canonical text only | Wave 1 synthesis | none unless a receipt is ever promoted |
 | Replicated computation or sync | conditional research only | `open.md` | observed cross-device or collaboration need |
 
 ## Program plan
@@ -298,25 +298,31 @@ Non-goals:  a visible control, durable material, an image cache, polling
             provenance signing
 ```
 
-**S2 — the material lifecycle**
+**S2 — the material lifecycle** (audited 2026-10-12; slices below)
 
 ```text
 Outcome:    an accepted image is durable, pointer-undoable material that survives
             export, reimport, and the absence of its own bytes
-Boundary:   one `TreeMutation` pair carrying a text pointer; a content-addressed
-            blob store; the archive's third path shape; one frontmatter key; the
-            `IndexedDB` version step
-Invariants: the tree carries a pointer and never bytes, so the inverse carries a
-            hash and the history byte reasoning holds unchanged; a document whose
-            bytes are absent still opens and says so; collection is
+Boundary:   an optional `ThoughtNode.image` pointer; one self-inverse
+            `replace-image` mutation; a content-addressed `blobs` store in the
+            same database; binary archive entries in a separate channel; the
+            `IndexedDB` version step; a derived availability projection
+Invariants: the tree carries a pointer and never bytes, so undo and redo need no
+            I/O; a document whose bytes are absent still opens and says so;
+            `insert-node` cannot carry an image and `updatedAt` is not bumped by
+            attaching one, so no text lineage check is invalidated; collection is
             orphan-tolerant and never runs on the undo path; the prompt, model
-            identity and parameters are stored beside the bytes because the image
-            cannot be re-derived; provider metadata survives export
-Proof:      propose, preview, accept, undo, redo, export, reimport; the
-            missing-blob state rendered; deletion and explicit compaction; quota
-            refusal; archive determinism preserved
+            and parameters are stored beside the bytes because the image cannot
+            be re-derived; the engine is expand-then-contract, so the version
+            step ships dark before any writer exists; bytes are never re-encoded
+Proof:      attach, replace and detach with exact inverses; undo and redo with
+            `indexedDB` undefined; codec determinism; hostile archive entries
+            (hash, sniff, size, orphan, bomb); quota refusal on the blob blocks
+            the commit; propose, preview, Keep, undo, redo, reload, export,
+            reimport; the three missing states rendered; archive determinism
 Non-goals:  reference counting, base64 anywhere in the archive, a verification
-            badge, collaboration, and any second durable material authority
+            badge, collaboration, several images per passage, and any second
+            durable material authority
 ```
 
 A bounded probe of one operator-supplied relay, the illustration style the
@@ -348,6 +354,145 @@ I0 ─┘       └─> L0 research
 C0 + L0 ──────> M0 research
 observed cross-device need ──> S0 research
 ```
+
+### Wave 1 synthesis — 2026-10-12
+
+Five read-only researchers (C0, I0, S2 engine, image control, L0) reported
+against the code. Where a memo contradicts an earlier line of this handoff, the
+contradiction is recorded here rather than averaged away.
+
+**C0 — recommendation adopted, narrowed.** The premise was partly wrong: native
+Copy produces no Markdown at all (node text joined by blank lines), and Inquiry's
+`tree` scope is not structurally lossy, because preorder plus truthful `depth`
+encodes parent and sibling order exactly. Archive is already the lossless
+representation. So the first slice is not a receipt:
+
+- *Stored vocabulary — decided:* **map, do not migrate.** `basis.scope` has no
+  reader outside its validator, `recordSchemaVersion` is the literal `1`, and one
+  unknown value fails the whole tree record (up to twenty exchanges) for a
+  rolled-back build or stale tab. The wire keeps `selection | tree`; `lineage` and
+  `working-tree` both map to `tree` until a reader needs the distinction. This
+  retires owner question 3.
+- *Wiki — decided:* a receipt carries **canonical text only** and never says a
+  settle occurred. The occurrence registry is in memory, bounded to five minutes,
+  and holds no text; a durable flag would be a new per-node annotation and would
+  make the receipt non-deterministic across reloads. At most one static sentence
+  at the version level.
+- *Finding:* the tested projector (`projectActiveWorkingContext`) is called only
+  from tests; production derives the working nodes inline in `RootedMaterial.tsx`.
+  A reference doc that says "one pure projection is the authority" describes a
+  test-only twin. The first slice makes them one function.
+
+```text
+Outcome:    one pure `projectMaterial` returns today's InquiryContext byte for byte
+            for `selection` and `tree`, plus parentId, siblingIndex and a focus
+            `lineage` address; the shipped derivation and the tested one are the
+            same function
+Boundary:   `material/` and the two call sites in RootedMaterial.tsx; no protocol,
+            storage, Archive, Copy, or prompt change
+Invariants: wire bytes identical to today; no address widens; nothing outside
+            `material/` is imported and no Wiki import appears; depth keeps one
+            meaning per mode
+Proof:      golden fixtures byte-equal to current InquiryContext for both scopes;
+            a focus-address fixture; a fold fixture; the stored-scope mapping test
+Non-goals:  a receipt, a digest, a new wire scope, a stored-row migration, a
+            structured Copy, merging the transform and text-swap lineage types
+```
+
+Contrary evidence kept: nothing in the repository shows a user-observed failure
+from lost structure; the lineage fields double as the stale check, so unifying
+them with Inquiry risks weakening it; wire parsers use exact keys, so each added
+field is a protocol bump.
+
+**I0 — Branch stays; the index line ships.** The packet's own gate fails: Branch
+is the only visible way to create a human-initiated child under a selected
+passage. Voice does not cover it, because a selected passage routes fixed Voice
+to Point and Talk by design. Removing Branch breaks eight e2e specs (sixteen
+locators) and four unit files and leaves no human path to depth beyond level
+one. Slice A shipped as `ad29808`: the index underlines the ancestors of the
+active passage (static, no weight or plate, `aria-selected` stays with the
+target). Canvas connectors are deferred: nothing in `tree-layout.md` allows a
+persistent connector, only an operation-scoped one, and the 2,000-node receipt
+(`elementCount ≤ 4700`, long task `< 100 ms`) must be measured with the path
+present. The real blocker is a decision: where child creation lives once Branch
+leaves (a deliberate "below" target on selected Voice, which contradicts
+`product.md`, or a Control Fog action).
+
+**L0 — keep open; authorize one headless probe.** Path C (a hashed local GGUF
+served by a child `llama-server`) is the only path that gives hash pinning, a
+stated device floor, and Chinese and Japanese coverage together. Chrome's Prompt
+API lists no Chinese and has no pin; WebLLM's integrity check does not cover the
+weight shards; the repository's own Whisper work shows export fragility. The
+web product's rejection of loopback and private addresses is unchanged, and
+`isHttpsOrLocal` is operator configuration that must not be copied into a client
+path. Loopback is not a boundary (DNS rebinding, permissive default CORS).
+
+```text
+Outcome:    a maintainer-only receipt that one pinned small GGUF, served by a
+            child llama-server, passes Matter's strict classifiers offline
+Boundary:   a headless script and corpus; no desktop shell, no product route,
+            no model-pool.ts change
+Invariants: web rejection of loopback and private addresses untouched; no byte of
+            tree beyond the admitted text reaches the runtime; claims limited to
+            the inference path of the receipt
+Proof:      artifact sha256; offline cold start with zero egress; cancel-to-idle
+            bound; canary no-leak; per-language over-correction and latency;
+            digests committed with --check, on the qualify:wiki pattern
+Non-goals:  an Electron or Tauri choice, WebGPU or Prompt API adapters, the image
+            path, a user-facing "offline" or "private" label, hosted replacement
+```
+
+Reversal: Chinese or Japanese repair over-corrects even constrained (narrow L0 to
+labels and inquiry), or a disconnect does not free the slot. Licences were read
+from model-card headers only.
+
+**Image control — no label before S2; picture is its own owner.** The control is
+a sibling `PictureTurn` and driver, not a mode of the text-swap driver (which
+refuses a second submitted turn). The preview is the Point and Talk bubble
+re-presented at the passage with plain-text Keep and Discard; nothing is durable
+until Keep. An inline arm step carries the cost and privacy statement and doubles
+as the mis-tap guard. Present-but-unavailable is rejected, consistent with the
+earlier call: render nothing until a health read says `available`. Recorded
+client rules the server must support:
+
+- offer Try again only for 429, a 503 shed, or a brief refusal; a network error or
+  our own timeout is ambiguous and non-retryable, unlike text swap;
+- one picture in flight globally (the server admits three per window, two
+  concurrent per instance);
+- cancel copy is "Stop waiting", never "Cancel drawing", because a relay
+  generation is not cancelled by the client;
+- the accessible name must contain the visible text; alt text is a neutral
+  truthful name in the person's locale, never the model-authored brief.
+
+**S2 engine — one disagreement with this handoff, resolved.** The earlier S2
+shape said "a text pointer". The audit rejects it: a pointer in text spends about
+145 of the 2,000 code units, lasso would offer it as selectable language, and
+Text Swap or Wiki could rewrite a hex run. The decided shape is an optional
+`ThoughtNode.image`, with the fields of S1's `ImageResultMeta`
+(`mediaType, byteLength, width, height, contentHash`). Width and height are
+required so the missing-bytes box keeps its size. Three design flaws the audit
+found are now part of the design: export currently runs "always from memory", so
+the session needs a bounded in-memory byte cache; "missing bytes" is three states
+(absent, damaged, unavailable), derived and never stored; and the handoff named no
+bound on images per document, so the pointer's size field enforces one in the
+tree validator.
+
+Ordered slices (each ships green before the next):
+
+1. tree and codec, dark: pointer, `replace-image`, codec round trip, history
+   recovery whitelist;
+2. storage expand: database v7 with an empty `blobs` store, tolerant readers
+   (stamp 1 and 2), writers dark;
+3. archive binary entries plus the shared pure byte sniffer (extracted from
+   `server/image-bytes.ts`, which imports `node:crypto`);
+4. the availability projection and its surfaces in five locales;
+5. the accept path, the first producer, with the session byte cache and quota
+   refusal;
+6. compaction and the provenance sidecar.
+
+Largest risk: rollback after v7 makes every document superseded in an older
+build, images or not. That is accepted precedent (`virtual-file-system.md`) and
+dark-first shipping is the mitigation; it belongs in the rollback plan.
 
 ### Freeze — serial and owner-selected
 
@@ -486,9 +631,17 @@ clear; it does not continue to accumulate projects.
 
 ## Next owner decision
 
-When a research budget returns, the owner may dispatch bounded Wave 1 with one
-integrator and at most three read-only researchers. If only one packet is
-affordable, start with **C0 — Context and receipt**, because it resolves the
-shared semantic seam without choosing a provider, renderer, media model,
-desktop shell, or sync system. Until that authorization, this handoff is
-complete and no Builder should be dispatched.
+Wave 1 and the S2 and image-control audits are done. Nothing here is a
+Builder dispatch until the owner promotes a block. Ordered by what unblocks the
+most, the proposed promotions are:
+
+1. **C0 first slice** (`projectMaterial`, byte-equal, `material/` only): no
+   product change, and it removes a test-only twin of production code.
+2. **S2 slice 1** (pointer, `replace-image`, codec; dark): no storage, archive
+   or UI, and no producer.
+3. **L0 headless probe**: a maintainer script, no product claim.
+
+Owed regardless: spend control before the image gate opens (issues #34 and
+#68), who pays for pictures, where human child creation lives once Branch
+leaves, and native review of the five control labels (zh-CN 生图, zh-TW 生圖,
+ja-JP 描く, en-US Draw, de-DE Zeichnen are unreviewed).
