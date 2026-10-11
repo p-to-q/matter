@@ -228,6 +228,98 @@ decode UTF-8; the `IndexedDB` version step and its terminal-state story; the
 mutation pair and its exact inverse; and the reading of "every committed
 generative change is pointer-undoable" for a change whose payload is a hash.
 
+*The transport is already relay-neutral, and the local road speaks it.*
+`POST /v1/images/generations` with `{model, prompt, n, size}` returning
+`data[].b64_json` is a de-facto multi-vendor contract: OpenAI defines it,
+Together serves it natively, Google serves it on a compatibility path, a
+self-hosted LiteLLM proxy fans it out, and — decisively — `stable-diffusion.cpp`'s
+`sd-server`, Xinference and LocalAI serve it locally today. So an image port is
+the same operator-configured base URL and key the chat pool already uses, and
+the committed on-device road needs no second contract. Synchronous and base64
+only: an expiring URL is a fracture (ten minutes at one vendor, an hour at
+another), and the two async-only vendors are reachable synchronously through a
+gateway, so Matter never teaches a pool to poll.
+
+*Two vendors are excluded on terms, not on capability.* One grants no ownership
+of output at all; another takes a perpetual, sublicensable licence over inputs
+and outputs to train its models. For a product whose pitch is that a person's
+own writing stays theirs, those terms disqualify a vendor from the core more
+firmly than any latency number. Self-hosted weights carry their own cliffs: one
+popular open model is non-commercial, and another's community licence ends at a
+revenue threshold.
+
+*The image cannot be re-derived, and that is a contract requirement.* There is no
+`seed` parameter on the leading image API and determinism is not guaranteed
+across gateways. "Material outlives the model" therefore obliges Matter to store
+the prompt, the model identity, and the full parameter set beside the bytes. This
+is the second independent reason the image is material rather than a derived
+record: a label can be recomputed, and this cannot be, by construction.
+
+*Marking is law now, and re-encoding breaks it.* Machine-readable marking of
+synthetic output has applied in the EU since 2 August 2026. The duty falls on the
+provider, so vendors already embed C2PA or an invisible watermark with no off
+switch — but a resize or re-encode is likely to destroy the C2PA manifest while
+the invisible watermark survives. Preserving provider metadata is a product
+requirement, not a nicety.
+
+### Proposed slices — not promoted
+
+Two slices, in order. Only the owner may move either into the active plan.
+
+**S1 — image capability behind a closed port, with no control**
+
+```text
+Outcome:    one bounded image operation exists server-side, reachable by fixture
+            and by an operator-configured relay, returning validated bytes and a
+            content-addressed pointer; nothing becomes durable and no control appears
+Boundary:   a sixth scenario whose model answer is still only `{ text }`; one new
+            route mirroring the bounded-bytes pattern that `/api/transcribe`
+            already proves; an image port reading `{base}/v1/images/generations`;
+            a fully lazy chunk; one `API_ROUTES` entry so it never prerenders
+Invariants: the model returns only `{ text }` and never a plan; the chat pool's
+            32 KiB response ceiling and 1,200-token bound are untouched; no tree
+            mutation, snapshot, archive, history, or Wiki contact; bytes bounded
+            well under the platform's 4.5 MB body limit by capping at 1024-1536 px
+            and preferring webp or jpeg; synchronous transports only
+Proof:      fixture round-trip; byte-ceiling refusal; deadline and cancellation;
+            `check:architecture` still reports no provider leak; the runtime
+            artifact budget unchanged because the chunk is lazy
+Non-goals:  a visible control, durable material, polling transports, URL returns,
+            raising any chat-pool ceiling, and provenance signing
+```
+
+**S2 — the material lifecycle**
+
+```text
+Outcome:    an accepted image is durable, pointer-undoable material that survives
+            export, reimport, and the absence of its own bytes
+Boundary:   one `TreeMutation` pair carrying a text pointer; a content-addressed
+            blob store; the archive's third path shape; one frontmatter key; the
+            `IndexedDB` version step
+Invariants: the tree carries a pointer and never bytes, so the inverse carries a
+            hash and the history byte reasoning holds unchanged; a document whose
+            bytes are absent still opens and says so; collection is
+            orphan-tolerant and never runs on the undo path; the prompt, model
+            identity and parameters are stored beside the bytes because the image
+            cannot be re-derived; provider metadata survives export
+Proof:      propose, preview, accept, undo, redo, export, reimport; the
+            missing-blob state rendered; deletion and explicit compaction; quota
+            refusal; archive determinism preserved
+Non-goals:  reference counting, base64 anywhere in the archive, a verification
+            badge, collaboration, and any second durable material authority
+```
+
+The `生图` label belongs to S2, not S1. A visible control that cannot act is
+still a product claim about an unbuilt capability, which principle 8 exists to
+prevent; the lens already has a present-but-unavailable pattern, so shipping it
+early would be cheap and still wrong. Recorded as the owner's call.
+
+One shortcut was considered and rejected for the core: one gateway can already
+emit images through `/chat/completions` with an output-modality field, which
+would need no new route. It would also require raising the chat pool's response
+ceiling by more than fifty times and changing its return type — fracturing the
+one seam S1 exists to protect. It stays a noted alternative, not the path.
+
 **S0 — Replicated computation.** Start only when observed multi-device or
 collaboration demand cannot be met by explicit export. Compare ordered event and
 snapshot approaches, Croquet, Automerge, Yjs, and problem-shaped industry sync.
