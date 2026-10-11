@@ -831,9 +831,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const publicationKey = viewportRenderer
     ? `${layoutDocumentKey}:${measureRevision}:viewport-research`
     : `${layoutDocumentKey}:${measureRevision}`;
-  const activeWorkingProjection = useMemo(
-    () => projectActiveViewContext(projection, workingContext.activeNodeIds),
+  // The active view's two inputs, once: Inquiry reads them as a projection and
+  // the Receipt download as a working-tree address, so both see the same view.
+  const activeTreeReceiptBasis = useMemo(
+    () => Object.freeze({ view: projection, activeNodeIds: workingContext.activeNodeIds }),
     [projection, workingContext.activeNodeIds],
+  );
+  const activeWorkingProjection = useMemo(
+    () => projectActiveViewContext(activeTreeReceiptBasis.view, activeTreeReceiptBasis.activeNodeIds),
+    [activeTreeReceiptBasis],
   );
   const completePublication = published?.key === publicationKey ? published : null;
   const completeLayout = completePublication?.layout ?? null;
@@ -3803,6 +3809,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         <span className="matter-brand__product">matter</span>
       </header>
       <MaterialFilesWithLabels
+        activeWorkingTree={activeTreeReceiptBasis}
         archive={indexArchive}
         documentEpoch={props.documentEpoch}
         interactionPending={interactionPending || lasso.active}

@@ -207,8 +207,9 @@
 .material-files__archive-confirm button:first-child { text-align: center; }
 
 /* Copy bar, only while selecting. */
-.material-files__footer { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 3px 0; padding-top: 6px; border-top: 1px solid var(--index-line); color: var(--index-faint); animation: material-selection-enter 120ms ease both; }
-.material-files__copy-status { overflow: hidden; padding-left: 7px; font: 9px/1 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.material-files__footer { display: flex; min-height: 38px; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; margin: 5px 3px 0; padding-top: 6px; border-top: 1px solid var(--index-line); color: var(--index-faint); animation: material-selection-enter 120ms ease both; }
+.material-files__copy-status { flex: 1 1 7em; min-width: 7em; overflow: hidden; padding-left: 7px; font: 9px/1 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.material-files__copy-actions { display: flex; flex: none; margin-left: auto; gap: 5px; }
 .material-files__copy { display: flex; height: 30px; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 8px; background: rgba(22,29,39,.07); color: var(--index-ink); font: 9px/1 var(--mono); cursor: pointer; transition: background 120ms ease; }
 .material-files__copy svg { width: 13px; height: 13px; }
 

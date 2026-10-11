@@ -17,6 +17,25 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — a person can copy passages with their context, and download the whole receipt
+
+Changed: the Files panel's select mode has "Copy with context" beside Copy, and the
+Archive panel has "Receipt (.md)". Copy with context writes a context receipt of the
+selected passages with their real parent and order; the download is the whole active
+working tree (what the AI sees: view minus fold minus held-aside), named
+`matter-receipt-<tree id head>-r<revision>.md`. Native Copy is unchanged and still
+the literal join; the Archive ZIP is unchanged. One module is now the only place a
+selection reaches the clipboard, and both forms report the same node ids to Wiki once
+and only after the clipboard accepted the write. The receipt form hands the clipboard
+a promise inside the gesture (`ClipboardItem`), because it needs an async digest and
+Safari honours a clipboard write only during the gesture.
+
+Why: the receipt only matters if a person can ask for it, and asking must be explicit
+so Copy never becomes a place where structure leaks into plain text.
+
+Forecloses: a context-bearing default Copy, and a download that names held-aside
+material or how much of it exists.
+
 ## 2026-10-12 — the brief step was measured against a real model; quoted text is refused
 
 Changed: a gated live eval runs the brief step over 22 passages in five locales

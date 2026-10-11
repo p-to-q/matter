@@ -1,3 +1,4 @@
+// Native review pending: copyWithContext, copiedWithContext and archiveReceipt* in zh-CN, zh-TW, ja-JP and de-DE.
 import { MATTER_LOCALE, type MatterLocale } from "../config/locales";
 
 const ENGLISH_PLURAL = new Intl.PluralRules(MATTER_LOCALE.english);
@@ -18,6 +19,9 @@ export type MaterialFilesCopy = Readonly<{
   archivePanel: string;
   archiveExportCopy: string;
   archiveImportCopy: string;
+  /** Visible label of the readable-outline download; it is not a backup. */
+  archiveReceiptDownload: string;
+  archiveReceiptDescription: string;
   archiveRepairLocalStorage: string;
   archiveReloadStoredMaterial: string;
   archiveRetrySaving: string;
@@ -80,7 +84,9 @@ export type MaterialFilesCopy = Readonly<{
   close: string;
   closeSearch: string;
   copied: string;
+  copiedWithContext: string;
   copy: string;
+  copyWithContext: string;
   copySelectedThoughts: (count: number) => string;
   copyUnavailable: string;
   done: string;
@@ -127,6 +133,8 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   archivePanel: "Material archive",
   archiveExportCopy: "Export a copy",
   archiveImportCopy: "Import a copy",
+  archiveReceiptDownload: "Receipt (.md)",
+  archiveReceiptDescription: "A readable Markdown outline with each passage's parent and order — not a backup",
   archiveRepairLocalStorage: "Repair local storage",
   archiveReloadStoredMaterial: "Reload stored material",
   archiveRetrySaving: "Retry saving",
@@ -188,7 +196,9 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   close: "Close",
   closeSearch: "Close search",
   copied: "Copied",
+  copiedWithContext: "Copied with context",
   copy: "Copy",
+  copyWithContext: "Copy with context",
   copySelectedThoughts: (count) =>
     `Copy ${count} selected ${counted(ENGLISH_PLURAL, count, "thought", "thoughts")}`,
   copyUnavailable: "Copy unavailable",
@@ -238,6 +248,8 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   archivePanel: "材料归档",
   archiveExportCopy: "导出副本",
   archiveImportCopy: "导入副本",
+  archiveReceiptDownload: "回执 (.md)",
+  archiveReceiptDescription: "可读的 Markdown 大纲，含每段的上级与顺序，不是备份",
   archiveRepairLocalStorage: "修复本地存储",
   archiveReloadStoredMaterial: "重新载入已存材料",
   archiveRetrySaving: "重新保存",
@@ -297,7 +309,9 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   close: "关闭",
   closeSearch: "关闭搜索",
   copied: "已复制",
+  copiedWithContext: "已复制，附上下文",
   copy: "复制",
+  copyWithContext: "复制并附上下文",
   copySelectedThoughts: (count) => `复制已选的 ${count} 段想法`,
   copyUnavailable: "暂时无法复制",
   done: "完成",
@@ -344,6 +358,8 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   archivePanel: "材料封存",
   archiveExportCopy: "匯出副本",
   archiveImportCopy: "匯入副本",
+  archiveReceiptDownload: "回執 (.md)",
+  archiveReceiptDescription: "可讀的 Markdown 大綱，含每段的上層與順序，不是備份",
   archiveRepairLocalStorage: "修復本機儲存",
   archiveReloadStoredMaterial: "重新載入已存材料",
   archiveRetrySaving: "重新儲存",
@@ -403,7 +419,9 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   close: "關閉",
   closeSearch: "關閉搜尋",
   copied: "已複製",
+  copiedWithContext: "已複製，附上下文",
   copy: "複製",
+  copyWithContext: "複製並附上下文",
   copySelectedThoughts: (count) => `複製已選的 ${count} 段想法`,
   copyUnavailable: "暫時無法複製",
   done: "完成",
@@ -450,6 +468,8 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   archivePanel: "素材のアーカイブ",
   archiveExportCopy: "コピーを書き出す",
   archiveImportCopy: "コピーを読み込む",
+  archiveReceiptDownload: "レシート (.md)",
+  archiveReceiptDescription: "各段落の親と順序を含む読みやすい Markdown。バックアップではありません",
   archiveRepairLocalStorage: "端末内ストレージを修復",
   archiveReloadStoredMaterial: "保存済みの素材を再読み込み",
   archiveRetrySaving: "保存を再試行",
@@ -509,7 +529,9 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   close: "閉じる",
   closeSearch: "検索を閉じる",
   copied: "コピーしました",
+  copiedWithContext: "文脈つきでコピーしました",
   copy: "コピー",
+  copyWithContext: "文脈つきでコピー",
   copySelectedThoughts: (count) => `選択した${count}件の考えをコピー`,
   copyUnavailable: "コピーできません",
   done: "完了",
@@ -556,6 +578,8 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   archivePanel: "Materialarchiv",
   archiveExportCopy: "Kopie exportieren",
   archiveImportCopy: "Kopie importieren",
+  archiveReceiptDownload: "Beleg (.md)",
+  archiveReceiptDescription: "Lesbare Markdown-Gliederung mit Elternteil und Reihenfolge jeder Passage — keine Sicherung",
   archiveRepairLocalStorage: "Lokalen Speicher reparieren",
   archiveReloadStoredMaterial: "Gespeichertes Material neu laden",
   archiveRetrySaving: "Speichern erneut versuchen",
@@ -617,7 +641,9 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   close: "Schließen",
   closeSearch: "Suche schließen",
   copied: "Kopiert",
+  copiedWithContext: "Mit Kontext kopiert",
   copy: "Kopieren",
+  copyWithContext: "Mit Kontext kopieren",
   copySelectedThoughts: (count) =>
     `${count} ${counted(GERMAN_PLURAL, count, "ausgewählten Gedanken", "ausgewählte Gedanken")} kopieren`,
   copyUnavailable: "Kopieren nicht verfügbar",

@@ -20,8 +20,8 @@ import {
   projectMaterialFileOutline,
   projectMaterialFileSubtree,
   projectMaterialFiles,
-  serializeMaterialSelection,
 } from "../material/material-files";
+import { receiptFileName, renderActiveTreeReceipt, type ActiveWorkingTree } from "../material/receipt-actions";
 import { createNavigationState, type NavigationState } from "../runtime/navigation";
 import type { ThoughtTree } from "../tree/model";
 import type { MaterialFileRow } from "../material/material-files";
@@ -38,6 +38,8 @@ import {
 import { isCancelEscape, isCommitEnter, isImeKeydown } from "./composition-safe-keys";
 import { useEscapeLayer } from "./escape-layers";
 import { materialFilesCopy, type MaterialFilesCopy } from "./material-files-copy";
+import { copyMaterialSelection, type MaterialCopyForm } from "./material-copy-action";
+import { downloadLocalBytes } from "./download-local-bytes";
 import {
   isTerminalDurability,
   projectArchiveNote,
@@ -61,6 +63,11 @@ export type MaterialFilesProps = Readonly<{
    * local file-picker, confirmation, and busy/error presentation.
    */
   archive?: MaterialArchiveActions;
+  /**
+   * The active view the model sees, derived once by the composition root. The
+   * Receipt download renders exactly this; without it the action is absent.
+   */
+  activeWorkingTree?: ActiveWorkingTree;
   documentEpoch: number;
   interactionPending: boolean;
   /**
@@ -116,7 +123,7 @@ export type MaterialFilesProps = Readonly<{
   }>;
 }>;
 
-type CopyState = "idle" | "copied" | "failed";
+type CopyState = "idle" | "copied" | "copied-with-context" | "failed";
 
 /** Long enough to be deliberate on touch, short enough not to feel stuck. */
 const LONG_PRESS_MS = 480;
@@ -781,19 +788,17 @@ export function MaterialFiles(props: MaterialFilesProps) {
     props.onToggleHeldAside?.(nodeId);
   };
 
-  const copySelection = async () => {
-    const result = serializeMaterialSelection(props.tree, currentSelectedIds);
-    if (!result.ok || navigator.clipboard?.writeText === undefined) {
-      settleCopyState("failed", copyResetRef, setCopyState);
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(result.text);
-      settleCopyState("copied", copyResetRef, setCopyState);
-      props.onMaterialCopied?.(new Set(currentSelectedIds));
-    } catch {
-      settleCopyState("failed", copyResetRef, setCopyState);
-    }
+  const copySelection = async (form: MaterialCopyForm) => {
+    const documentEpoch = props.documentEpoch;
+    const outcome = await copyMaterialSelection({
+      form,
+      tree: props.tree,
+      nodeIds: currentSelectedIds,
+      clipboard: navigator.clipboard,
+      stillCurrent: () => liveDocumentEpochRef.current === documentEpoch,
+      onCopied: props.onMaterialCopied,
+    });
+    if (outcome !== null) settleCopyState(outcome, copyResetRef, setCopyState);
   };
 
   // A document boundary must not race a live voice/lasso operation. The panel
@@ -870,6 +875,23 @@ export function MaterialFiles(props: MaterialFilesProps) {
     } finally {
       if (liveDocumentEpochRef.current === documentEpoch) setArchivePhase("idle");
     }
+  };
+
+  // A readable outline of the active view, rendered here from the one address
+  // the composition root derived; Export a copy stays the lossless archive.
+  const downloadReceipt = async () => {
+    if (props.activeWorkingTree === undefined || archiveBusy) return;
+    const documentEpoch = props.documentEpoch;
+    const { id, revision } = props.tree;
+    setArchiveError(null);
+    clearArchiveNotices();
+    const markdown = await renderActiveTreeReceipt(props.tree, props.activeWorkingTree);
+    if (liveDocumentEpochRef.current !== documentEpoch) return;
+    if (markdown === null) {
+      setArchiveError(actionErrorMessage(copy));
+      return;
+    }
+    downloadLocalBytes(new TextEncoder().encode(markdown), receiptFileName(id, revision), "text/markdown");
   };
 
   const repairCorruptStorage = async () => {
@@ -1168,6 +1190,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
               persistenceStatus.errorCode === "PERSISTENCE_ENGINE_UNAVAILABLE"
             }
             terminal={terminalDurability}
+            onDownloadReceipt={props.activeWorkingTree === undefined ? undefined : () => void downloadReceipt()}
             onClose={closeArchive}
             onExport={() => void exportArchive()}
             onPickImport={() => archiveInputRef.current?.click()}
@@ -1485,20 +1508,32 @@ export function MaterialFiles(props: MaterialFilesProps) {
             <span aria-live="polite" className="material-files__copy-status">
               {copyState === "copied"
                 ? copy.copied
-                : copyState === "failed"
-                  ? copy.copyUnavailable
-                  : copy.selectedCount(selectedCount)}
+                : copyState === "copied-with-context"
+                  ? copy.copiedWithContext
+                  : copyState === "failed"
+                    ? copy.copyUnavailable
+                    : copy.selectedCount(selectedCount)}
             </span>
-            <button
-              aria-label={copy.copySelectedThoughts(selectedCount)}
-              className="material-files__copy"
-              disabled={selectedCount === 0 || props.interactionPending}
-              onClick={() => void copySelection()}
-              type="button"
-            >
-              <CopyIcon />
-              <span>{copy.copy}</span>
-            </button>
+            <span className="material-files__copy-actions">
+              <button
+                className="material-files__copy"
+                disabled={selectedCount === 0 || props.interactionPending}
+                onClick={() => void copySelection("context")}
+                type="button"
+              >
+                <span>{copy.copyWithContext}</span>
+              </button>
+              <button
+                aria-label={copy.copySelectedThoughts(selectedCount)}
+                className="material-files__copy"
+                disabled={selectedCount === 0 || props.interactionPending}
+                onClick={() => void copySelection("text")}
+                type="button"
+              >
+                <CopyIcon />
+                <span>{copy.copy}</span>
+              </button>
+            </span>
           </footer>
         ) : null}
         {/* Local identity stays a quiet, non-account presentation. Its one
@@ -1662,6 +1697,7 @@ function ArchivePanel({
   retryable,
   terminal,
   onClose,
+  onDownloadReceipt,
   onExport,
   onPickImport,
   onReplace,
@@ -1688,6 +1724,7 @@ function ArchivePanel({
   /** A newer schema or cleared storage leaves only Export and a page reload. */
   terminal: boolean;
   onClose: () => void;
+  onDownloadReceipt?: () => void;
   onExport: () => void;
   onPickImport: () => void;
   onReplace: () => void;
@@ -1719,6 +1756,11 @@ function ArchivePanel({
         ) : (
           <button disabled={busy} onClick={onPickImport} type="button">
             {copy.archiveImportCopy}
+          </button>
+        )}
+        {onDownloadReceipt === undefined ? null : (
+          <button disabled={busy} onClick={onDownloadReceipt} title={copy.archiveReceiptDescription} type="button">
+            {copy.archiveReceiptDownload}
           </button>
         )}
       </div>
