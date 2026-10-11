@@ -309,6 +309,11 @@ Non-goals:  reference counting, base64 anywhere in the archive, a verification
             badge, collaboration, and any second durable material authority
 ```
 
+A bounded probe of one operator-supplied relay, the illustration style the
+owner selected, and the exact harness and gates are recorded in
+[`reference/generated-image.md`](reference/generated-image.md). It names no
+chosen provider and carries no credential.
+
 The `生图` label belongs to S2, not S1. A visible control that cannot act is
 still a product claim about an unbuilt capability, which principle 8 exists to
 prevent; the lens already has a present-but-unavailable pattern, so shipping it

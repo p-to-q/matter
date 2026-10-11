@@ -36,6 +36,7 @@ the contract documents.
 | [`agent-boundary.md`](agent-boundary.md) | model authority and provider boundary |
 | [`prompt-harness.md`](prompt-harness.md) **binding** | how any Matter prompt is built, budgeted, and judged |
 | [`local-ai-demo.md`](local-ai-demo.md) | running and verifying the bounded localhost AI surface without changing production authority |
+| [`generated-image.md`](generated-image.md) | probe findings for one image relay, the selected illustration style, the harness shape, and the gates a bounded image operation needs |
 | [`wiki.md`](wiki.md) **binding** | local lexical authority, evidence, occurrence disclosure and settlement, script routing, commit, privacy, and recovery boundaries |
 | [`../../studio/film/README.md`](../../studio/film/README.md) | recording the private blank-to-material Matter film with DOM-bound camera cues and closed publication fixtures |
 | [`action-lasso-provider-research.md`](action-lasso-provider-research.md) | submitted-operation ownership, complete-path lasso accuracy, and a closed private-provider session |
