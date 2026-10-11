@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { RootedMaterial } from "./RootedMaterial";
+import { PictureBytesContext } from "./picture-bytes-context";
+import { usePictureBytesSource } from "./use-picture-bytes-source";
 import { useMatterStore, useWikiOccurrences } from "./use-matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
 import { admissionHoldsSubmittedWords } from "../runtime/admission-interaction";
@@ -60,6 +62,7 @@ const loadArchiveTransport = () => Promise.all([
 
 export function MatterApp() {
   useWikiAuthority();
+  const pictureBytes = usePictureBytesSource();
   const tree = useMatterStore((state) => state.tree);
   const documentEpoch = useMatterStore((state) => state.documentEpoch);
   const history = useMatterStore((state) => state.history);
@@ -309,6 +312,7 @@ export function MatterApp() {
     return materialTurnResult(receipt, "textSwapChange" in receipt ? receipt.textSwapChange : null);
   }, [commitTextSwap]);
   return (
+    <PictureBytesContext.Provider value={pictureBytes}>
     <RootedMaterial
       canUndo={history.entries.length > 0}
       canRedo={history.redoEntries.length > 0}
@@ -352,6 +356,7 @@ export function MatterApp() {
       tree={tree}
       wikiOccurrences={wikiOccurrences}
     />
+    </PictureBytesContext.Provider>
   );
 }
 

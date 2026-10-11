@@ -5,9 +5,30 @@ import { MAX_NODES_PER_TREE } from "../tree/invariants";
 export type MaterialHeightMeasurement = Readonly<{
   columnWidth: number;
   height: number;
+  /** `pictureLayoutKey` of the passage's pointer at measurement time. */
+  picture: string | null;
   root: boolean;
   text: string;
 }>;
+
+/** Everything besides height that a measurement is a measurement of. */
+export type MaterialHeightSubject = Readonly<Omit<MaterialHeightMeasurement, "height">>;
+
+/**
+ * A measured height belongs to the text, the column, the passage's role, and
+ * the picture it carried. A key that left the picture out would keep a height
+ * from before an attach, a replacement, or an undo.
+ */
+export function materialHeightIsReusable(
+  cached: MaterialHeightMeasurement | undefined,
+  subject: MaterialHeightSubject,
+): cached is MaterialHeightMeasurement {
+  return cached !== undefined &&
+    cached.columnWidth === subject.columnWidth &&
+    cached.root === subject.root &&
+    cached.text === subject.text &&
+    cached.picture === subject.picture;
+}
 
 export type MaterialHeightCacheBasis = Readonly<{
   documentEpoch: number;

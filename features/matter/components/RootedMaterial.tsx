@@ -136,12 +136,16 @@ import {
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import type { CanvasLanguage } from "./canvas-preferences";
 import {
+  materialHeightIsReusable,
   materialLayoutDocumentKey,
   reconcileMaterialHeightCache,
   retainMaterialHeight,
   type MaterialHeightCacheBasis,
   type MaterialHeightMeasurement,
+  type MaterialHeightSubject,
 } from "./material-height-cache";
+import { PassagePicture } from "./PassagePicture";
+import { pictureLayoutKey } from "./passage-picture-box";
 import {
   canMoveNodeToParent,
   createNodeMovePolicy,
@@ -2595,6 +2599,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
       locale: props.locale,
       styleEpoch: measureRevision,
     });
+    // The typography ledger measures text alone, so a passage that carries a
+    // picture would be published too short. Fail closed until it learns the box.
+    if (projection.some((item) => item.node.image !== undefined)) {
+      failViewportCandidate(canvas, "picture-unsupported");
+      return;
+    }
     const token = authority.begin(publicationKey);
     if (token === null) {
       failViewportCandidate(canvas, "typography-not-ready");
@@ -2808,10 +2818,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
       const element = elements[index];
       const root = item.parentId === null;
       const cachedHeight = measuredHeightCacheRef.current.get(item.node.id);
-      const heightCacheHit = cachedHeight !== undefined &&
-        cachedHeight.columnWidth === columnWidth &&
-        cachedHeight.root === root &&
-        cachedHeight.text === item.node.text;
+      const subject = {
+        columnWidth,
+        picture: pictureLayoutKey(item.node.image),
+        root,
+        text: item.node.text,
+      } satisfies MaterialHeightSubject;
+      const heightCacheHit = materialHeightIsReusable(cachedHeight, subject);
       // Viewport transforms must never leak camera scale into world geometry.
       // `offsetHeight` is the untransformed CSS box height; bounding rects are
       // screen-space and would apply zoom once here and again on publication.
@@ -2840,10 +2853,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
       }
       if (!heightCacheHit) {
         retainMaterialHeight(measuredHeightCacheRef.current, item.node.id, Object.freeze({
-          columnWidth,
+          ...subject,
           height,
-          root,
-          text: item.node.text,
         }));
       }
       const baseNode = {
@@ -4405,6 +4416,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
                 ? <span className="spatial-thought__label">{materialText}</span>
                 : materialText}
             </button>
+            {node.image === undefined ? null : <PassagePicture locale={locale} pointer={node.image} />}
             {isTransformPending && transformStatus.announce ? (
               <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
                 {transformStatus.text}

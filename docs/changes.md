@@ -17,6 +17,26 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — a passage that carries a picture shows it, or says honestly that it cannot
+
+Changed: a passage with an image pointer renders a picture box after its text,
+sized from the pointer alone (aspect ratio, width up to 320 px) so layout does not
+move when bytes arrive, are missing, or are damaged. Bytes come from the session
+cache, then the blob store, and the four-state availability projection decides what
+shows; a placeholder names its state in all five locales, and the resident image's
+alt is a neutral per-locale name, never model text. An object URL exists only
+inside the component that shows it and is revoked on unmount or pointer change. The
+measured-height cache is keyed by the picture, so attaching, replacing or undoing
+re-measures the passage. The `/performance` research renderer fails closed on a
+tree with pictures rather than publish a short height.
+
+Why: the tree holds a pointer, never bytes, so every device that opens the document
+must be able to say what it has. A box fixed from the pointer keeps the page still,
+and an invented height would put every passage after it in the wrong place.
+
+Forecloses: deriving a picture's box from the loaded image, an alt text taken from
+the brief, and keying passage geometry by text alone.
+
 ## 2026-10-12 — Keep is a store action: one undoable human step, stale by mementos
 
 Changed: `attachPicture` commits a `replace-image` as an ordinary human step.
