@@ -17,6 +17,21 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — image byte structure is judged by one browser-safe function
+
+Changed: sniffing, dimension reading, and truncation detection moved out of the
+server gate into `protocol/image-structure.ts` (`inspectImageStructure`). It takes
+decoded bytes, uses no Node API, and the server gate now calls it after its own
+data-URL, base64 and size work. Server behaviour and every refusal reason are
+unchanged.
+
+Why: the archive is about to accept image bytes in the browser, where the first
+binary input must be judged by the same rule as the route that produced it, not a
+second copy that can drift. `protocol/` already serves code that both the browser
+and the route run.
+
+Forecloses: a second implementation of "what counts as a valid generated image".
+
 ## 2026-10-12 — a node may carry an image pointer; nothing yet creates one
 
 Changed: `ThoughtNode.image` is an optional, strictly parsed pointer
