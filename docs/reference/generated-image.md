@@ -58,18 +58,37 @@ Square 1:1 hand-drawn ink illustration on a pure white background.
 Black brush-marker line work: thick, confident, gestural strokes with visibly
 uneven weight and dry-brush roughness at the ends, as if drawn fast with a
 chisel-tip felt pen. Lines overshoot and do not always close.
-Exactly one accent colour family — cyan blue, from a pale wash (#B8F2FE) through
-mid cyan (#29ABE2) to deep teal (#017D97) — laid in as flat, opaque marker
-blocks with hard edges that deliberately overshoot or fall short of the ink
-lines, leaving bare white paper showing through.
+Exactly one accent colour family — cyan blue, from a pale wash (#B8F2FE)
+through mid sea cyan (#6BDFF2) to deep teal (#017D97) — laid in as flat,
+opaque marker blocks with hard edges that deliberately overshoot or fall short
+of the ink lines, leaving bare white paper showing through.
 No other colours. No gradient, no soft airbrush, no photographic shading, no
 texture overlay, no frame, no background scenery, no text, no logo.
-Any person is drawn simply, with hair indicated by a few strokes and no facial
-features at all. Generous empty white space.
+Let one thing in the drawing run past the edge of whatever was meant to hold
+it, and leave the picture unresolved rather than explained.
+If a person appears, they are drawn simply, with hair indicated by a few
+strokes and no facial features at all. Generous empty white space.
 Subject:
 ```
 
-Two findings from testing it. Naming the square format in the prose is what
+Three corrections earned by testing, and one lesson about the prompt itself.
+
+*The mid tone is aqua, not sky blue.* The first draft used `#29ABE2`, whose blue
+channel dominates its green, and the result read as too deep. Sampling the
+reference showed its mid tones are a family where green and blue are nearly
+equal — `#65E2FF`, `#63DFF9`, `#68DDF1` — which is why the owner described the
+colour as sea-like. `#6BDFF2` is that family.
+
+*One sentence carries the thought, and a section destroys it.* The picture's job
+in the product is to hold thinking rather than close it, so the drawing has to
+stay as unfinished as the passage. An attempt to specify this properly — a
+paragraph on the escape device, another on vitality, worked examples of fish,
+pots and mechanisms — produced exactly the wrong thing: the texture flattened,
+the line went thin and neat, and the model reused the worked examples as
+subjects. One sentence does the work that the paragraph ruined. The prompt is a
+style, and a style tolerates very little explanation.
+
+Two further findings. Naming the square format in the prose is what
 produced a square; the chat path accepts no size parameter. And asking for a
 figure with "no facial features" alone produced a blank oval that reads as
 eerie — adding "hair indicated by a few strokes" fixes it, which is also what
