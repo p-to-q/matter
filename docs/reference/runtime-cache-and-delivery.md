@@ -200,6 +200,11 @@ regression contract, not a claim that this release invented a new cache hit.
 
 ## Mechanical budgets
 
+The root reader supports both the standard `server/app/index.html` output and
+the adapter's source-owned `server/route-cache` output, using the pinned Next
+cache-key function. Metadata image budgets include both layouts. A missing
+root in both layouts remains a build failure.
+
 `npm run check:runtime` reads the completed production artifact and fails when:
 
 - `/` is no longer a permanent static prerender or an API route is prerendered;

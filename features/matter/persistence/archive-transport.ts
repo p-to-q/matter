@@ -32,7 +32,8 @@ const MAX_PATH_DEPTH = 34;
 // A stored ZIP repeats every file path in local and central headers. This bound
 // admits every supported logical bundle while ruling out arbitrarily large input.
 const MAX_ARCHIVE_BYTES = MAX_BUNDLE_BYTES + (MAX_BUNDLE_FILES * (MAX_PATH_BYTES + 76)) + 22;
-const ARCHIVE_MTIME = new Date(Date.UTC(1980, 0, 1));
+// ZIP stores local calendar fields; UTC midnight falls into 1979 west of UTC.
+const ARCHIVE_MTIME = new Date(1980, 0, 1);
 
 type Fflate = typeof import("fflate");
 

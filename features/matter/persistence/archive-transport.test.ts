@@ -197,7 +197,7 @@ function zip(files: Record<string, string | Uint8Array>): Uint8Array {
   return zipSync(Object.fromEntries(Object.entries(files).map(([path, value]) => [
     path,
     typeof value === "string" ? encoder.encode(value) : value,
-  ])), { mtime: new Date(Date.UTC(1980, 0, 1)) });
+  ])), { mtime: new Date(1980, 0, 1) });
 }
 
 function rewriteZipUncompressedSize(bytes: Uint8Array, size: number): Uint8Array {
