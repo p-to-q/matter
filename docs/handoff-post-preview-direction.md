@@ -266,26 +266,36 @@ requirement, not a nicety.
 
 Two slices, in order. Only the owner may move either into the active plan.
 
-**S1 — image capability behind a closed port, with no control**
+**S1 — image capability behind a closed gate, with no control**
 
 ```text
-Outcome:    one bounded image operation exists server-side, reachable by fixture
-            and by an operator-configured relay, returning validated bytes and a
-            content-addressed pointer; nothing becomes durable and no control appears
-Boundary:   a sixth scenario whose model answer is still only `{ text }`; one new
-            route mirroring the bounded-bytes pattern that `/api/transcribe`
-            already proves; an image port reading `{base}/v1/images/generations`;
-            a fully lazy chunk; one `API_ROUTES` entry so it never prerenders
-Invariants: the model returns only `{ text }` and never a plan; the chat pool's
-            32 KiB response ceiling and 1,200-token bound are untouched; no tree
-            mutation, snapshot, archive, history, or Wiki contact; bytes bounded
-            well under the platform's 4.5 MB body limit by capping at 1024-1536 px
-            and preferring webp or jpeg; synchronous transports only
-Proof:      fixture round-trip; byte-ceiling refusal; deadline and cancellation;
-            `check:architecture` still reports no provider leak; the runtime
-            artifact budget unchanged because the chunk is lazy
-Non-goals:  a visible control, durable material, polling transports, URL returns,
-            raising any chat-pool ceiling, and provenance signing
+Outcome:    a person's addressed passage can become one in-style image on the
+            server, reachable by fixture and by an operator-configured relay.
+            Nothing becomes durable, nothing is cached, and no control appears
+Boundary:   two scenarios on the existing harness — a brief scenario returning
+            only { text }, and an image scenario whose PoolTransport overrides
+            completionUrl, serialize, parseCompletion and acceptsResponse; one
+            image station in the existing pool namespace; one route; one gate
+            switch, off by default; a fully lazy chunk
+Invariants: the person's passage reaches only the brief scenario, never the
+            image relay; the brief is adjudicated before any image call, so a
+            hostile passage costs a text call and not a generation; the image
+            scenario passes its own maxResponseBytes and leaves the 32 KiB
+            default untouched for every other scenario; no tree mutation, no
+            snapshot, no archive, no history, no Wiki contact; every outbound
+            protection is inherited from the pool rather than reimplemented —
+            base-URL rejection, redirect: "error", cache: "no-store", the raced
+            abort, the Content-Length fast-fail, the bounded accumulator, the
+            drain lease, and per-scenario candidate health
+Proof:      fixture round-trip for both scenarios; a hostile passage settles on
+            the floor at the brief step with no image call made; byte-ceiling
+            refusal; deadline and cancellation; check:architecture still reports
+            no provider leak; the new route listed in API_ROUTES and absent from
+            the prerender manifest; the runtime artifact budget unchanged
+Non-goals:  a visible control, durable material, an image cache, polling
+            transports, accepting a provider URL as the result, raising any
+            shared pool ceiling, a second fetch path outside the pool, and
+            provenance signing
 ```
 
 **S2 — the material lifecycle**

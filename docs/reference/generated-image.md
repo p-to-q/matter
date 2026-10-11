@@ -187,13 +187,48 @@ The person's direction is bounded by the same layer that already governs a Text
 Swap direction, so it may steer the subject and cannot restyle the output or
 widen the operation.
 
+## Not a separate port — a transport on the existing pool
+
+An earlier reading of this said the image path needs its own port, because one
+image is about twenty-eight times the chat pool's 32 KiB response ceiling. The
+ceiling part is true; the conclusion was wrong, and reading the pool settled it.
+
+`maxResponseBytes` is not global. It arrives in the `PoolLimits` a caller hands
+to the pool adapter, and one scenario already passes a smaller ceiling than the
+default. A larger one costs nothing to anybody else.
+
+And `PoolTransport` exists for exactly this. A transport may override
+`completionUrl`, `authHeaders`, `serialize`, `parseCompletion`,
+`acceptsResponse`, and even `fetch` — which is every seam an image relay needs,
+including the two return shapes this probe found. It is code-supplied only; no
+environment variable can inject one, so the wire profile stays reviewed.
+
+The decisive argument is what a separate module would silently lose. None of
+these is inherited by a new fetch path:
+
+- the base-URL check that rejects plain HTTP off loopback, private ranges and
+  IPv6 literals;
+- `redirect: "error"`, which is what closes SSRF through an open redirect;
+- `cache: "no-store"`;
+- the per-attempt abort and its raced timeout boundary;
+- the `Content-Length` fast-fail and the streaming bounded accumulator;
+- the drain lease and the global cap on draining attempts, which is what stops
+  one stalled relay from being multiplied by later requests;
+- ordered candidates, health scoring and cooldown.
+
+Rebuilding seven protections to avoid raising one number is the wrong trade, and
+a reimplementation is where one of them quietly goes missing. The image
+capability is a transport and a scenario inside the existing pool, with its own
+`maxResponseBytes`, its own deadline, and its own scenario id — which also keeps
+its candidate health separate, because health is already keyed per scenario.
+
 ## Gates it needs
 
 - a scenario-level authority switch, off by default, in the shape of the
   existing per-surface adapter switches;
 - the shared public-request admission perimeter — origin, rate, concurrency;
-- its own response-byte ceiling, sized for an image rather than for text, and
-  enforced by the existing bounded-byte accumulator;
+- its own `maxResponseBytes` in the `PoolLimits` it hands the pool, sized for an
+  image rather than for text, so the default ceiling is untouched for everyone else;
 - its own deadline above the measured 30 s, and no automatic retry;
 - an adjudicator that checks decodability, an allowlisted media type, dimension
   bounds and byte bounds, and that rejects anything else to the floor;
