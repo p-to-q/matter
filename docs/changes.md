@@ -17,6 +17,20 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — Keep is a store action: one undoable human step, stale by mementos
+
+Changed: `attachPicture` commits a `replace-image` as an ordinary human step.
+It is stale when the document epoch moved, the passage is gone, its clock differs,
+or it already holds a different picture; an unrelated edit elsewhere does not make
+it stale. The engine's own refusal is reported as rejected, not stale. Text and
+`updatedAt` are untouched, and Undo and Redo move the pointer without any I/O.
+
+Why: the person paid for the picture, so a revision bump from an edit in another
+branch must not throw it away, while a changed or already-illustrated passage must,
+because the picture was drawn for different material.
+
+Forecloses: deciding picture staleness by tree revision.
+
 ## 2026-10-12 — the picture turn has a client, a state machine, and a Keep order; nothing calls them
 
 Changed: `requestPicture` makes one attempt at `/api/image` and accepts only bytes

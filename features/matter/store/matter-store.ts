@@ -51,6 +51,7 @@ import { createTreeHistory } from "../tree/history";
 import { validateThoughtTree } from "../tree/invariants";
 import type { ThoughtNode, ThoughtTree } from "../tree/model";
 import { normalizeDocumentTree } from "../tree/document-root";
+import { attachPictureCommand, type AttachPictureValues } from "../runtime/picture-commit";
 import { renameDocumentCommand, type RenameDocumentValues } from "../runtime/title";
 import { deriveMaterialTitle } from "../material/material-files";
 import { attachRecoveredHistory, type RecoveredHistory } from "../persistence/history-recovery";
@@ -254,6 +255,7 @@ export type ObservableMatterStoreReceipt =
 export type AdmissionStoreReceipt = RuntimeReceipt | AdmissionCommitReceipt;
 export type AdmissionRepairStoreReceipt = RuntimeReceipt | AdmissionRepairCommitReceipt;
 export type TransformStoreReceipt = RuntimeReceipt | TransformCommitReceipt | TransformStaleReceipt;
+export type PictureStoreReceipt = RuntimeReceipt | MaterialTurnStaleReceipt;
 export type TextSwapStoreReceipt = RuntimeReceipt | TextSwapCommitReceipt | TextSwapStaleReceipt;
 export type MatterStoreReceipt =
   | ObservableMatterStoreReceipt
@@ -309,6 +311,14 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
     expectedDocumentEpoch: number,
     nowMs: number,
   ) => TextSwapStoreReceipt;
+  /**
+   * Keeps one picture on a passage as an ordinary undoable human step. A changed
+   * document, passage, or picture is stale and publishes nothing.
+   */
+  attachPicture: (
+    values: AttachPictureValues,
+    expectedDocumentEpoch: number,
+  ) => PictureStoreReceipt;
   select: (nodeId: string) => MatterStoreReceipt;
   clearSelection: () => MatterStoreReceipt;
   focus: (nodeId: string) => MatterStoreReceipt;
@@ -930,6 +940,31 @@ export function createMatterStore(
       if (settled.status !== "committed") return settled.receipt;
       publishOccurrences(settled.occurrences);
       return Object.freeze({ ...settled.receipt, textSwapChange: settled.change });
+    },
+
+    attachPicture: (values, expectedDocumentEpoch) => {
+      let receipt: PictureStoreReceipt | undefined;
+      set((current) => {
+        const stale = (): MatterStoreInternalState => {
+          receipt = Object.freeze({
+            operation: "commit" as const,
+            status: "stale" as const,
+            revision: current.tree.revision,
+          });
+          return current;
+        };
+        if (
+          !Number.isSafeInteger(expectedDocumentEpoch) ||
+          expectedDocumentEpoch !== current.documentEpoch
+        ) return stale();
+        const built = attachPictureCommand(current.tree, values);
+        if (!built.ok) return stale();
+        const result = commitSessionCommand(runtimeState(current), built.command, HISTORY_LIMITS);
+        receipt = result.receipt;
+        const domain = protectDomain(result.state);
+        return freezeState({ ...current, ...domain, lastError: domain.lastError, lastReceipt: protectValue(result.receipt) });
+      });
+      return requireSynchronousReceipt(receipt);
     },
 
     select: (nodeId) => {
