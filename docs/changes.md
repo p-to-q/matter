@@ -17,6 +17,23 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — a picture turn has a driver, a one-in-flight gate, and a health-gated availability read
+
+Changed: `PictureDriver` owns one picture turn on one passage: it sends the
+passage's current text once, goes stale (and stops waiting) if that passage or the
+document changes, holds an arrival while the page is hidden, never accepts on its
+own, and drops any late response. Keep uses the basis mementos, not the live
+node. A gate allows one picture in flight across the whole app. The availability
+read treats anything but the server's literal `available` as unavailable, so the
+control can render nothing until the surface is genuinely open.
+
+Why: the server admits three a window and two at once per instance, but a person
+is one, and a second draw is a second charge. A control that appears for a gate
+that is closed is a promise nothing keeps.
+
+Forecloses: more than one picture in flight, a driver that accepts for the person,
+and treating fixture or user-configurable as an open public surface.
+
 ## 2026-10-12 — a passage that carries a picture shows it, or says honestly that it cannot
 
 Changed: a passage with an image pointer renders a picture box after its text,

@@ -31,6 +31,8 @@ export type PictureServerErrorCode = (typeof PICTURE_SERVER_ERROR_CODES)[number]
 
 export type PictureFailureReason =
   | "aborted"
+  // Raised by the driver before anything is sent: one picture in flight per person.
+  | "another-picture-in-flight"
   | "timeout"
   | "network"
   | "invalid-response"

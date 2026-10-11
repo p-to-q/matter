@@ -259,6 +259,20 @@ describe("picture turn reducer", () => {
       expect(reducePictureTurn(failed, { type: "arm" }).state.priorAttemptMayHaveBeenBilled).toBe(false);
     });
 
+    it("is not set by a refusal to send because another picture is in flight: nothing was sent", () => {
+      const refused = run([
+        ...toDrawing,
+        { type: "failed", requestId: REQUEST, reason: "another-picture-in-flight", retryable: true },
+      ]);
+      expect(refused).toMatchObject({
+        phase: "failed-retryable",
+        reason: "another-picture-in-flight",
+        priorAttemptMayHaveBeenBilled: false,
+      });
+      expect(reducePictureTurn(refused, { type: "arm" }).state)
+        .toMatchObject({ phase: "arming", priorAttemptMayHaveBeenBilled: false });
+    });
+
     it("is not set by leaving the arm step, a stale arm, or discarding", () => {
       expect(run([{ type: "arm" }, { type: "back" }]).priorAttemptMayHaveBeenBilled).toBe(false);
       expect(run([{ type: "arm" }, { type: "stale" }]).priorAttemptMayHaveBeenBilled).toBe(false);
