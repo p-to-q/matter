@@ -11,6 +11,8 @@ bottom.
 
 ## Deployment blocker: Vercel rejects next 16.3.8
 
+Tracked as [p-to-q/matter#130](https://github.com/p-to-q/matter/issues/130).
+
 Every Vercel build since `main` took `next` 16.3.8 (#128) has failed, production
 included; matter.ptoq.io still serves the last good Preview.64 build. A bisect on
 preview deployments (2026-10-12) deployed 16.3.4, 16.3.5, 16.3.6 and 16.3.7 and
