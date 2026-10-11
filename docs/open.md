@@ -9,6 +9,20 @@ bottom.
 
 ---
 
+## Deployment blocker: Vercel rejects next 16.3.8
+
+Every Vercel build since `main` took `next` 16.3.8 (#128) has failed, production
+included; matter.ptoq.io still serves the last good Preview.64 build. A bisect on
+preview deployments (2026-10-12) deployed 16.3.4, 16.3.5, 16.3.6 and 16.3.7 and
+failed only 16.3.8, so the cause is in that release (its fixes touch image
+optimization, metadata image routes, and SSG/ISR cache handling). `next build
+--webpack` and `check:runtime` pass locally with the Vercel build environment, so
+the failure is on the platform side of the build and its log is needed.
+
+Promotion: read the failing deployment's log (`npx vercel inspect <deployment>
+--logs`), fix the cause, and redeploy. Until then production runs a `next` with
+the 16.3.8 advisories unpatched; pinning 16.3.7 deploys but does not fix them.
+
 ## Post-preview material-runtime candidates
 
 These candidates share one direction but are not one project. Their research

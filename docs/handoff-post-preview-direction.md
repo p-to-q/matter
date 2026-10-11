@@ -642,7 +642,34 @@ clear; it does not continue to accumulate projects.
 - Stop if a planning document presents a hypothesis as a current capability,
   release promise, open-source commitment, or implementation authorization.
 
-## Next owner decision
+## Decisions taken under delegation — 2026-10-12
+
+The owner asked the maintainer to make reasonable decisions and report them.
+Each can be reversed by saying so; none opens a paid or public surface.
+
+1. **Spend and payer.** The image gate stays closed in production
+   (`MATTER_IMAGE_ADAPTER=off`). The picture control is health-gated and renders
+   nothing until a health read says `available`, so building it opens nothing.
+   When opened, it is operator-funded and per-instance admitted; it does not open
+   to the public before an edge rule and a provider budget exist (#34, #68).
+2. **Child creation.** Branch stays in the main rail. Reopen only with a decided
+   replacement, because removing it leaves no human path past level one.
+3. **Picture control.** The arm step is always shown (it is also the mis-tap
+   guard); waiting copy says "Stop waiting"; one picture in flight globally; a
+   passage edited while drawing makes the picture stale; an arrived picture whose
+   passage the person left is parked with Discard; the typed field is not a
+   picture direction in v1; alt text is a neutral, truthful name in the person's
+   locale. The five labels (zh-CN 生图, zh-TW 生圖, ja-JP 描く, en-US Draw, de-DE
+   Zeichnen) stay provisional until a native speaker reviews them, and ship only
+   behind the health gate.
+4. **Release.** `claude/preview-65` is not merged to `main`: database v7 would
+   reach production profiles immediately and cannot be rolled back without
+   superseding every document. Security fixes went to `main` alone (PR #129). Cutting
+   Preview.65 is a release decision with a deployment receipt, not a merge.
+5. **L0.** Not started: the probe downloads a multi-gigabyte model and a binary,
+   and a download is the owner's to approve.
+
+## Next owner decision (superseded where decided above)
 
 Wave 1 and the S2 and image-control audits are done. Nothing here is a
 Builder dispatch until the owner promotes a block. Ordered by what unblocks the
