@@ -149,12 +149,10 @@ export function useTextSwap<TCommitted>(
     } else if (pendingSinceRef.current?.requestId !== pendingRequestId) {
       pendingSinceRef.current = Object.freeze({ requestId: pendingRequestId, atMs: monotonicNow() });
     }
-    // Close the window for the rest of the dwell, then re-evaluate once.
-    refreshDeliveryWindow();
-    const remainingMs = pendingDwellRemainingMs(pendingSinceRef.current, minimumPendingMs, monotonicNow());
-    if (remainingMs === 0) return;
-    const timer = window.setTimeout(refreshDeliveryWindow, remainingMs);
-    return () => window.clearTimeout(timer);
+    return schedulePendingDwellRefresh(
+      () => pendingDwellRemainingMs(pendingSinceRef.current, minimumPendingMs, monotonicNow()),
+      refreshDeliveryWindow,
+    );
   }, [minimumPendingMs, pendingRequestId, refreshDeliveryWindow]);
 
   useLayoutEffect(() => {
@@ -294,6 +292,23 @@ export function pendingDwellRemainingMs(
 ): number {
   if (pendingSince === null || !(minimumPendingMs > 0)) return 0;
   return Math.max(0, pendingSince.atMs + minimumPendingMs - nowMs);
+}
+
+/** Re-arm early timers so a fractional dwell cannot hold a resolved turn forever. */
+export function schedulePendingDwellRefresh(
+  remainingMs: () => number,
+  refresh: () => void,
+): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const evaluate = () => {
+    refresh();
+    const remaining = remainingMs();
+    timer = remaining > 0 ? setTimeout(evaluate, Math.ceil(remaining)) : null;
+  };
+  evaluate();
+  return () => {
+    if (timer !== null) clearTimeout(timer);
+  };
 }
 
 function toScope<TCommitted>(

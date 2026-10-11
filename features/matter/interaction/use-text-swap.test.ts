@@ -1,12 +1,48 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
 import {
   createTextSwapBasis,
   createTextSwapEnvelope,
   pendingDwellRemainingMs,
+  schedulePendingDwellRefresh,
 } from "./use-text-swap";
 
 describe("Text Swap pending dwell", () => {
+  it("opens delivery after an early timer without another pointer or render", () => {
+    vi.useFakeTimers();
+    let nowMs = 1_000;
+    const remaining = () => pendingDwellRemainingMs({ atMs: 1_000 }, 600, nowMs);
+    const windows: boolean[] = [];
+    const cancel = schedulePendingDwellRefresh(remaining, () => windows.push(remaining() === 0));
+    try {
+      nowMs = 1_599.6;
+      vi.advanceTimersByTime(600);
+      expect(windows.at(-1)).toBe(false);
+      nowMs = 1_600;
+      vi.advanceTimersByTime(1);
+      expect(windows.at(-1)).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      cancel();
+      vi.useRealTimers();
+    }
+  });
+
+  it("cancels the dwell refresh when its request owner leaves", () => {
+    vi.useFakeTimers();
+    const refresh = vi.fn();
+    const cancel = schedulePendingDwellRefresh(() => 600, refresh);
+    try {
+      refresh.mockClear();
+      cancel();
+      vi.runAllTimers();
+      expect(refresh).not.toHaveBeenCalled();
+    } finally {
+      cancel();
+      vi.useRealTimers();
+    }
+  });
+
   it("holds delivery until a request has been pending the minimum time", () => {
     const since = { atMs: 1_000 };
     expect(pendingDwellRemainingMs(since, 600, 1_000)).toBe(600);
