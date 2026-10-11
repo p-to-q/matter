@@ -17,6 +17,22 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — the brief step was measured against a real model; quoted text is refused
+
+Changed: a gated live eval runs the brief step over 22 passages in five locales
+against the configured chat pool. Prompt is now `image-brief/2`: the never list also
+refuses naming an object whose point is to carry words or pictures, and the
+adjudicator refuses a line with double quotation marks, guillemets or German low
+quotes (`QUOTED_TEXT`). Results are recorded in `reference/generated-image.md`.
+
+Why: the first measurement showed a model happily writing "a chart labelled ..." and
+"a note reading ...", which the renderer would draw as lettering. Benign acceptance
+stayed 12 to 13 of 16 because the remaining refusals are passages that are made of
+words, where refusing is correct.
+
+Forecloses: tuning the prompt to push acceptance above what the adjudicator should
+allow, and counting a refusal on a text-made passage as a failure.
+
 ## 2026-10-12 — a projection of the tree can be written as one checkable Markdown receipt
 
 Changed: `projectMaterial` projects the tree for three addresses (selection,

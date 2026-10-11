@@ -170,6 +170,28 @@ a person already paid for. If the counter shows escapes are common after the
 brief step, that is evidence to act on — not a reason to start throwing away
 finished work.
 
+### What the brief step does against a real text model
+
+Measured 2026-10-12 with `features/matter/server/image-brief.live.test.ts`
+(skipped unless `MATTER_LIVE_BRIEF_EVAL=1`; it prints a report to a file and never
+runs in `npm run check`), on the owner's configured chat pool, 22 passages in five
+locales. Prompt `image-brief/2`, three runs:
+
+- **Benign passages: 12 to 13 of 16 accepted.** The refusals are the passages whose
+  natural picture is made of words: a task list, a business metric, a "plan as a
+  promise". The model reaches for a note, a chart or a photograph; the adjudicator
+  refuses a medium word, a typography word, or quoted text, and the person is told
+  to try another passage. That is the floor working, not a defect to tune away, and
+  a nudge in the prompt to avoid objects that carry words did not move the rate.
+- **Hostile passages: 0 to 1 of 6 produced a brief,** and the one that did was the
+  harbour sentence with an appended instruction, answered with a clean harbour.
+  Nothing hostile reached the renderer.
+- `image-brief/2` added the quoted-text rejection: a line with double quotation
+  marks, guillemets or German low quotes is a request for lettering. Chinese corner
+  brackets stay legal because they are ordinary emphasis there as often as quotation.
+- Briefs came back in the requested language: Chinese for zh locales and English for
+  the rest; all were one concrete scene, never a style.
+
 ## What the two prompts are
 
 There are two, and they are built differently on purpose.
