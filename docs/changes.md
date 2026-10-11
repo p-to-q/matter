@@ -17,6 +17,25 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — a node may carry an image pointer; nothing yet creates one
+
+Changed: `ThoughtNode.image` is an optional, strictly parsed pointer
+(`mediaType, byteLength, width, height, contentHash`) and `replace-image` is a
+self-inverse mutation that sets or clears it without touching `updatedAt`. The
+snapshot codec round-trips it as one canonical trailing frontmatter line, history
+recovery knows the mutation, and the tree validator caps a document at 32 pictures
+and 32 MiB of distinct hashes, rejecting one hash declared with two sizes.
+`insert-node` cannot carry an image and the document root cannot either.
+
+Why: the pointer is data about a picture, never the picture, so undo and redo need
+no I/O and the history byte reasoning is unchanged. Leaving `updatedAt` alone keeps
+Text Swap and transform staleness checks valid when a picture is attached.
+
+Forecloses: images in text, images as child nodes, and any producer before the
+storage, archive and availability slices exist. `PROTOCOL_VERSION` and
+`STORAGE_SCHEMA_VERSION` are deliberately unchanged; the pointer bounds are
+duplicated in the innermost layer and a test pins them to the image contract.
+
 ## 2026-10-12 — the active working projection is one function, and it is the shipped one
 
 Changed: `projectActiveViewContext(view, activeNodeIds)` replaces the inline

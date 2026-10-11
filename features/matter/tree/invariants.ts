@@ -4,6 +4,7 @@ import {
   type ThoughtNode,
   type ThoughtTree,
 } from "./model";
+import { MAX_TREE_IMAGE_BYTES, MAX_TREE_IMAGE_NODES, parseImagePointer } from "./image-pointer";
 import { isWellFormedUnicodeText } from "./unicode-text";
 
 export const MAX_NODE_TEXT_CODE_UNITS = 2_000;
@@ -57,6 +58,14 @@ export function validateThoughtNode(
   }
   if (candidate.role === "document-root" && candidate.text !== "") {
     return failure("TREE_INVARIANT_VIOLATION", `Document root ${candidate.id} must have empty text.`);
+  }
+  if (Object.hasOwn(candidate, "image")) {
+    if (candidate.role === "document-root") {
+      return failure("TREE_INVARIANT_VIOLATION", `Document root ${candidate.id} cannot carry an image.`);
+    }
+    if (parseImagePointer(candidate.image) === null) {
+      return failure("TREE_INVARIANT_VIOLATION", `Node ${candidate.id} has an invalid image pointer.`);
+    }
   }
   if (candidate.role !== "document-root" && candidate.text.trim().length === 0) {
     return failure("TREE_INVARIANT_VIOLATION", `Passage ${candidate.id} must contain non-whitespace text.`);
@@ -144,12 +153,29 @@ export function validateThoughtTree(tree: unknown): TreeValidationResult {
     return failure("TREE_INVARIANT_VIOLATION", "The tree root does not exist.");
   }
   const incoming = new Map<string, number>();
+  // Equal pictures share one stored blob, so the byte cap counts each hash once.
+  const imageBytesByHash = new Map<string, number>();
+  let imageNodes = 0;
+  let imageBytes = 0;
   for (const key of nodeIds) {
     const node = nodes[key];
     const nodeResult = validateThoughtNode(node);
     if (!nodeResult.ok) return nodeResult;
     if (key !== node.id) {
       return failure("TREE_INVARIANT_VIOLATION", `Node record key ${key} differs from its id.`);
+    }
+    if (node.image !== undefined) {
+      imageNodes += 1;
+      const known = imageBytesByHash.get(node.image.contentHash);
+      if (known === undefined) {
+        imageBytesByHash.set(node.image.contentHash, node.image.byteLength);
+        imageBytes += node.image.byteLength;
+      } else if (known !== node.image.byteLength) {
+        return failure("TREE_INVARIANT_VIOLATION", `Image ${node.image.contentHash} has two different sizes.`);
+      }
+      if (imageNodes > MAX_TREE_IMAGE_NODES || imageBytes > MAX_TREE_IMAGE_BYTES) {
+        return failure("BOUND_EXCEEDED", "The tree exceeds the image bound.");
+      }
     }
   }
 

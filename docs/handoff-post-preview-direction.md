@@ -489,7 +489,7 @@ tree validator.
 Ordered slices (each ships green before the next):
 
 1. tree and codec, dark: pointer, `replace-image`, codec round trip, history
-   recovery whitelist;
+   recovery whitelist — **built** (2026-10-12), no producer exists;
 2. storage expand: database v7 with an empty `blobs` store, tolerant readers
    (stamp 1 and 2), writers dark;
 3. archive binary entries plus the shared pure byte sniffer (extracted from

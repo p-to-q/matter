@@ -16,6 +16,7 @@ import {
   validateThoughtNode,
   validateThoughtTree,
 } from "./invariants";
+import { cloneImagePointer, equalImagePointers, parseImagePointer } from "./image-pointer";
 
 type MutationApplication = {
   tree: ThoughtTree;
@@ -38,7 +39,8 @@ function equalNode(left: ThoughtNode, right: ThoughtNode): boolean {
     left.parentId === right.parentId &&
     equalStrings(left.children, right.children) &&
     left.createdAt === right.createdAt &&
-    left.updatedAt === right.updatedAt
+    left.updatedAt === right.updatedAt &&
+    equalImagePointers(left.image, right.image)
   );
 }
 
@@ -47,7 +49,9 @@ function commandFailure(message: string): CommandFailure {
 }
 
 function cloneNode(node: ThoughtNode): ThoughtNode {
-  return { ...node, children: [...node.children] };
+  const clone = { ...node, children: [...node.children] };
+  if (node.image !== undefined) clone.image = cloneImagePointer(node.image);
+  return clone;
 }
 
 function cloneDetachedSubtree(detached: DetachedSubtree): DetachedSubtree {
@@ -214,6 +218,9 @@ function applyMutation(tree: ThoughtTree, mutation: TreeMutation): MutationAppli
     if (!validation.ok) return failure(validation.error.code, validation.error.message);
     if (!parent || Object.hasOwn(tree.nodes, mutation.node.id)) {
       return commandFailure("The insertion parent must exist and the node id must be unused.");
+    }
+    if (Object.hasOwn(mutation.node, "image")) {
+      return commandFailure("An inserted node cannot carry an image.");
     }
     if (mutation.node.parentId !== parent.id || mutation.node.children.length !== 0) {
       return commandFailure("An inserted node must be a leaf attached to its declared parent.");
@@ -426,6 +433,49 @@ function applyMutation(tree: ThoughtTree, mutation: TreeMutation): MutationAppli
         expectedUpdatedAt: mutation.updatedAt,
         text: node.text,
         updatedAt: node.updatedAt,
+      },
+      affectedNodeIds: [node.id],
+    };
+  }
+
+  if (mutation.type === "replace-image") {
+    if (typeof mutation.nodeId !== "string" || !Object.hasOwn(tree.nodes, mutation.nodeId)) {
+      return commandFailure("The image replacement node does not exist.");
+    }
+    const node = tree.nodes[mutation.nodeId];
+    if (node.role === "document-root") {
+      return commandFailure("The document root cannot carry an image.");
+    }
+    if (node.updatedAt !== mutation.expectedUpdatedAt) {
+      return commandFailure("The image replacement memento does not match the node.");
+    }
+    const expectedImage = mutation.expectedImage === null ? null : parseImagePointer(mutation.expectedImage);
+    const image = mutation.image === null ? null : parseImagePointer(mutation.image);
+    if (
+      (mutation.expectedImage !== null && expectedImage === null) ||
+      (mutation.image !== null && image === null)
+    ) {
+      return commandFailure("The image replacement carries an invalid image pointer.");
+    }
+    if (!equalImagePointers(node.image, expectedImage)) {
+      return commandFailure("The image replacement memento does not match the node.");
+    }
+    if (equalImagePointers(image, expectedImage)) {
+      return commandFailure("An image replacement must change the image.");
+    }
+    // The text clock is left alone: an image is not text, and a bumped
+    // updatedAt would invalidate every lineage check that reads it.
+    const nextNode = cloneNode(node);
+    if (image === null) delete nextNode.image;
+    else nextNode.image = image;
+    return {
+      tree: { ...tree, nodes: replaceNodes(tree, { [node.id]: nextNode }) },
+      inverse: {
+        type: "replace-image",
+        nodeId: node.id,
+        expectedUpdatedAt: node.updatedAt,
+        expectedImage: image,
+        image: expectedImage,
       },
       affectedNodeIds: [node.id],
     };
