@@ -134,7 +134,10 @@ test.describe("Point and Talk presence", () => {
     const exiting = stages.find(({ entry }) => entry.startsWith("exiting:yielded"));
     expect(exiting?.fade).toContain(`${POINT_TALK_TIMING.exitMs.yielded / 1_000}s`);
     const gone = stages.find(({ entry, at }) => entry.startsWith("absent") && at > exiting!.at);
-    expect(gone!.at - exiting!.at).toBeGreaterThanOrEqual(POINT_TALK_TIMING.exitMs.yielded - 40);
+    // Stages are sampled by observers, so the measured span can undershoot the CSS
+    // duration by a frame or two on a loaded runner (58 ms was seen for 120). The
+    // bound only has to tell a fade from the modal dialog's 0 ms cut.
+    expect(gone!.at - exiting!.at).toBeGreaterThanOrEqual(POINT_TALK_TIMING.exitMs.yielded - 80);
   });
 
   test("a modal dialog is the one 0 ms cut", async ({ page }) => {
