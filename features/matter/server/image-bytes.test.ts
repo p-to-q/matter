@@ -223,20 +223,38 @@ describe("image bytes: size ceiling", () => {
     expect(refusal(dataUrl(paddedPng(MAX_IMAGE_BYTES + 1)))).toBe("too-large");
   });
 
-  it("refuses an oversize payload before any decode or pattern scan", () => {
+  /**
+   * Proves a refusal never touched a large payload, without a clock. A wall-clock
+   * bound on a 50 MB string failed under CPU contention, and a test that fails
+   * for load rather than for a defect teaches people to ignore it.
+   */
+  function touchesLargeString(run: () => void): boolean {
     const from = vi.spyOn(Buffer, "from");
-    const huge = `data:image/png;base64,${"A".repeat(50 * 1024 * 1024)}`;
-    const started = performance.now();
-    expect(refusal(huge)).toBe("too-large");
-    expect(refusal(`data:image/png;base64,${"!".repeat(50 * 1024 * 1024)}`)).toBe("too-large");
-    expect(performance.now() - started).toBeLessThan(250);
-    expect(from).not.toHaveBeenCalled();
+    const test = vi.spyOn(RegExp.prototype, "test");
+    try {
+      run();
+      const decoded = from.mock.calls.some(([value]) => typeof value === "string" && value.length > 1_000_000);
+      const scanned = test.mock.calls.some(([value]) => typeof value === "string" && value.length > 1_000_000);
+      return decoded || scanned;
+    } finally {
+      from.mockRestore();
+      test.mockRestore();
+    }
+  }
+
+  it("refuses an oversize payload before any decode or pattern scan", () => {
+    expect(touchesLargeString(() => {
+      expect(refusal(`data:image/png;base64,${"A".repeat(50 * 1024 * 1024)}`)).toBe("too-large");
+    })).toBe(false);
+    expect(touchesLargeString(() => {
+      expect(refusal(`data:image/png;base64,${"!".repeat(50 * 1024 * 1024)}`)).toBe("too-large");
+    })).toBe(false);
   });
 
   it("refuses a misaligned huge payload without scanning it", () => {
-    const started = performance.now();
-    expect(refusal(`data:image/png;base64,${"A".repeat(50 * 1024 * 1024 + 1)}`)).toBe("invalid-base64");
-    expect(performance.now() - started).toBeLessThan(250);
+    expect(touchesLargeString(() => {
+      expect(refusal(`data:image/png;base64,${"A".repeat(50 * 1024 * 1024 + 1)}`)).toBe("invalid-base64");
+    })).toBe(false);
   });
 });
 
