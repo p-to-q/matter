@@ -1,17 +1,22 @@
 import type { IDBPDatabase, IDBPObjectStore } from "idb";
-import { bundleToTree, type SnapshotBundle } from "./snapshot-codec";
+import { bundleCarriesImage, bundleToTree, type SnapshotBundle } from "./snapshot-codec";
 import {
-  CLEARED_DATABASE_ERROR,
   createMatterDatabaseHandle,
   retainNewestModelLabels,
+  SNAPSHOT_SCHEMA_VERSION,
   STORAGE_SCHEMA_VERSION,
-  SUPERSEDED_DATABASE_ERROR,
 } from "./matter-database";
 import type {
   MatterDatabase,
   MatterDatabaseLifecycle,
+  SnapshotSchemaVersion,
   StoredSnapshot,
 } from "./matter-database";
+import {
+  CLEARED_DATABASE_ERROR,
+  isQuotaError,
+  SUPERSEDED_DATABASE_ERROR,
+} from "./storage-errors";
 import {
   assembleHistoryJournal,
   emptyHistoryJournal,
@@ -30,8 +35,16 @@ import type { ThoughtTree } from "../tree/model";
 import { MATTER_HISTORY_LIMITS, type TreeHistory } from "../tree/history";
 import { MAX_NODES_PER_TREE } from "../tree/invariants";
 
-export { STORAGE_SCHEMA_VERSION };
-export type { StoredSnapshot };
+export { SNAPSHOT_SCHEMA_VERSION, STORAGE_SCHEMA_VERSION };
+export type { SnapshotSchemaVersion, StoredSnapshot };
+
+/**
+ * The stamp is a property of the bytes a row holds: 2 exactly when a node names
+ * an image, which a build without image support would otherwise call damage.
+ */
+export function snapshotSchemaVersionFor(bundle: SnapshotBundle): SnapshotSchemaVersion {
+  return bundleCarriesImage(bundle) ? SNAPSHOT_SCHEMA_VERSION : STORAGE_SCHEMA_VERSION;
+}
 
 /**
  * `PERSISTENCE_SUPERSEDED` and `PERSISTENCE_CLEARED` are terminal for this
@@ -456,7 +469,7 @@ function snapshotRow(
   journal: PersistedHistoryJournal,
 ): StoredSnapshot {
   return Object.freeze({
-    storageSchemaVersion: STORAGE_SCHEMA_VERSION,
+    storageSchemaVersion: snapshotSchemaVersionFor(bundle),
     treeId,
     treeRevision,
     writeGeneration,
@@ -465,10 +478,10 @@ function snapshotRow(
   });
 }
 
-/** Restores a replaced row exactly, under a newer generation. */
+/** Restores a replaced row exactly, stamp included, under a newer generation. */
 function restoredRow(previous: StoredSnapshot, writeGeneration: number): StoredSnapshot {
   return Object.freeze({
-    storageSchemaVersion: STORAGE_SCHEMA_VERSION,
+    storageSchemaVersion: previous.storageSchemaVersion,
     treeId: previous.treeId,
     treeRevision: previous.treeRevision,
     writeGeneration,
@@ -522,7 +535,7 @@ function decodeStoredSnapshot(value: unknown, treeId: string): RepositoryResult<
   if (isNewerSchema(value)) return superseded();
   if (
     !isPlainRecord(value) ||
-    value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
+    !isReadableSnapshotStamp(value.storageSchemaVersion) ||
     value.treeId !== treeId ||
     !Number.isSafeInteger(value.treeRevision) ||
     !Number.isSafeInteger(value.writeGeneration) ||
@@ -541,7 +554,11 @@ function decodeStoredSnapshot(value: unknown, treeId: string): RepositoryResult<
 function isNewerSchema(value: unknown): boolean {
   return isPlainRecord(value) &&
     Number.isSafeInteger(value.storageSchemaVersion) &&
-    (value.storageSchemaVersion as number) > STORAGE_SCHEMA_VERSION;
+    (value.storageSchemaVersion as number) > SNAPSHOT_SCHEMA_VERSION;
+}
+
+function isReadableSnapshotStamp(value: unknown): value is SnapshotSchemaVersion {
+  return value === STORAGE_SCHEMA_VERSION || value === SNAPSHOT_SCHEMA_VERSION;
 }
 
 function generationOf(value: unknown): unknown {
@@ -556,7 +573,7 @@ function holdsSameMaterial(
 ): boolean {
   if (
     !isPlainRecord(value) ||
-    value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
+    !isReadableSnapshotStamp(value.storageSchemaVersion) ||
     value.treeId !== treeId ||
     value.treeRevision !== treeRevision ||
     !Number.isSafeInteger(value.writeGeneration) ||
@@ -668,14 +685,6 @@ function transactionError(transaction: TransactionLike | null): unknown {
     // Reading `error` on a still-active transaction throws in some engines.
     return null;
   }
-}
-
-/** WebKit reports a full disk as an `UnknownError`, not a quota error. */
-function isQuotaError(error: unknown): boolean {
-  return error instanceof DOMException && (
-    error.name === "QuotaExceededError" ||
-    (error.name === "UnknownError" && /disk is full/iu.test(error.message))
-  );
 }
 
 function isConnectionLost(error: unknown, transaction: TransactionLike | null): boolean {

@@ -29,6 +29,9 @@ const MAX_PATH_BYTES = 2_048;
 const MAX_BUNDLE_BYTES = 18_000_000;
 const CHILD_DIRECTORY = /^(\d{3})-([^/]+)$/u;
 const FRONTMATTER_KEYS = ["id", "createdAt", "updatedAt", "role", "image"] as const;
+const FRONTMATTER_OPEN = "---\n";
+const FRONTMATTER_CLOSE = "\n---\n\n";
+const IMAGE_LINE_PREFIX = "image: ";
 const UTF8 = new TextEncoder();
 
 export function treeToBundle(tree: ThoughtTree): SnapshotBundle {
@@ -172,9 +175,25 @@ export function bundleToTree(bundle: unknown): SnapshotDecodeResult {
   });
 }
 
+/**
+ * Whether any node of the bundle names an image. The image line is always the
+ * last frontmatter line, so the answer is read from the bytes a writer
+ * produced rather than from a decoded tree.
+ */
+export function bundleCarriesImage(bundle: SnapshotBundle): boolean {
+  for (const content of Object.values(bundle.files)) {
+    if (!content.startsWith(FRONTMATTER_OPEN)) continue;
+    const end = content.indexOf(FRONTMATTER_CLOSE, FRONTMATTER_OPEN.length);
+    if (end < 0) continue;
+    const lastLine = content.slice(content.lastIndexOf("\n", end - 1) + 1, end);
+    if (lastLine.startsWith(IMAGE_LINE_PREFIX)) return true;
+  }
+  return false;
+}
+
 function encodeNode(node: ThoughtNode): string {
   const role = node.role === undefined ? "" : `\nrole: ${node.role}`;
-  const image = node.image === undefined ? "" : `\nimage: ${canonicalImageJson(node.image)}`;
+  const image = node.image === undefined ? "" : `\n${IMAGE_LINE_PREFIX}${canonicalImageJson(node.image)}`;
   return `---\nid: ${node.id}\ncreatedAt: ${node.createdAt}\nupdatedAt: ${node.updatedAt}${role}${image}\n---\n\n${node.text}`;
 }
 
@@ -199,11 +218,10 @@ function decodeImage(text: string): ImagePointer | null {
 function decodeNode(content: string):
   | Readonly<{ ok: true; node: ThoughtNode }>
   | Extract<SnapshotDecodeResult, { ok: false }> {
-  const separator = "---\n";
-  if (!content.startsWith(separator)) return failure("INVALID_MARKDOWN", "Material frontmatter is missing.");
-  const end = content.indexOf("\n---\n\n", separator.length);
+  if (!content.startsWith(FRONTMATTER_OPEN)) return failure("INVALID_MARKDOWN", "Material frontmatter is missing.");
+  const end = content.indexOf(FRONTMATTER_CLOSE, FRONTMATTER_OPEN.length);
   if (end < 0) return failure("INVALID_MARKDOWN", "Material frontmatter is not closed.");
-  const lines = content.slice(separator.length, end).split("\n");
+  const lines = content.slice(FRONTMATTER_OPEN.length, end).split("\n");
   if (lines.length < 3 || lines.length > 5) {
     return failure("INVALID_MARKDOWN", "Material frontmatter has missing, duplicate, or unknown keys.");
   }
@@ -221,7 +239,7 @@ function decodeNode(content: string):
   // The image line is always last, so a writer has exactly one byte layout.
   if (
     Array.from(values.keys()).sort().join("|") !== expectedKeys.sort().join("|") ||
-    (values.has("image") && !lines[lines.length - 1].startsWith("image: "))
+    (values.has("image") && !lines[lines.length - 1].startsWith(IMAGE_LINE_PREFIX))
   ) {
     return failure("INVALID_MARKDOWN", "Material frontmatter has missing, duplicate, or unknown keys.");
   }
@@ -242,7 +260,7 @@ function decodeNode(content: string):
       ...(image === null ? {} : { image }),
       createdAt: values.get("createdAt")!,
       updatedAt: values.get("updatedAt")!,
-      text: content.slice(end + "\n---\n\n".length),
+      text: content.slice(end + FRONTMATTER_CLOSE.length),
       parentId: null,
       children: [],
     },

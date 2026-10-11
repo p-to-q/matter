@@ -1,5 +1,6 @@
 import {
-  STORAGE_SCHEMA_VERSION,
+  SNAPSHOT_SCHEMA_VERSION,
+  snapshotSchemaVersionFor,
   type CorruptSnapshotBasis,
   type DocumentRepository,
   type ImportedSnapshotReservation,
@@ -316,9 +317,9 @@ export function createPersistenceController(
     else update({ ...status, upgradeBlocked: event === "upgrade-blocked" });
   });
 
-  const announce = (treeId: string, writeGeneration: number | null) => {
+  const announce = (treeId: string, writeGeneration: number | null, storageSchemaVersion: number) => {
     if (writeGeneration === null) return;
-    options.announceGeneration?.({ treeId, writeGeneration, storageSchemaVersion: STORAGE_SCHEMA_VERSION });
+    options.announceGeneration?.({ treeId, writeGeneration, storageSchemaVersion });
   };
 
   function restoreFullRetention() {
@@ -439,7 +440,7 @@ export function createPersistenceController(
       persistedHistory = pendingDocument.history;
       const shed = retentionLowered(retention, savedRetention);
       retention = savedRetention;
-      announce(tree.id, saved.value.writeGeneration);
+      announce(tree.id, saved.value.writeGeneration, snapshotSchemaVersionFor(bundle));
       const queuedAfterWrite = currentPending();
       update({
         ...status,
@@ -521,7 +522,7 @@ export function createPersistenceController(
 
   const observe = (generation: DocumentGeneration): StoredGenerationDecision => {
     if (!active) return "ignored";
-    if (generation.storageSchemaVersion > STORAGE_SCHEMA_VERSION) {
+    if (generation.storageSchemaVersion > SNAPSHOT_SCHEMA_VERSION) {
       enterTerminal("PERSISTENCE_SUPERSEDED");
       return "superseded";
     }
@@ -695,7 +696,7 @@ export function createPersistenceController(
         errorCode: null,
         historyNotice: null,
       });
-      announce(prepared.tree.id, basis.writeGeneration);
+      announce(prepared.tree.id, basis.writeGeneration, prepared.reservation.imported.storageSchemaVersion);
     },
 
     async discardImportedDocument(prepared) {
@@ -730,7 +731,10 @@ export function createPersistenceController(
       if (prepared.tree.id === activeTreeId && previousGeneration === basis.writeGeneration) {
         basis = Object.freeze({ writeGeneration: rolledBack.value.writeGeneration, journal: basis.journal });
       }
-      announce(prepared.tree.id, rolledBack.value.writeGeneration);
+      const restored = prepared.reservation.previous;
+      if (restored !== null) {
+        announce(prepared.tree.id, rolledBack.value.writeGeneration, restored.storageSchemaVersion);
+      }
       syncDerivedStatus();
       if (active && pending !== null && status.phase !== "error") void drain();
       return null;
@@ -826,7 +830,7 @@ export function createPersistenceController(
       persistedHistory = replacement.history;
       const shed = retentionLowered(retention, replacedRetention);
       retention = replacedRetention;
-      announce(replacement.tree.id, replaced.value.writeGeneration);
+      announce(replacement.tree.id, replaced.value.writeGeneration, snapshotSchemaVersionFor(bundle));
       if (pending === replacement) pending = null;
       const queued = pending;
       update({

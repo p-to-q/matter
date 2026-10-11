@@ -1,8 +1,9 @@
 /**
  * A scripted receipt for the per-step undo journal against Chromium's real
  * IndexedDB: randomized round trip with exact compaction, two racing
- * connections, a put that throws mid-transaction, the v5 to v6 upgrade, an
- * older build's VersionError, and quota shedding at two quotas.
+ * connections, a put that throws mid-transaction, the v5 to v6 and v6 to v7
+ * upgrades, the image blob store, an older build's VersionError, and quota
+ * shedding at two quotas.
  *
  * The Vitest suites use an in-memory double for speed and fault injection;
  * this receipt proves the same repository on the engine it ships to. It is not

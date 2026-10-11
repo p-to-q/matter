@@ -71,7 +71,7 @@ node, plus one record per retained undo step:
 
 ```ts
 type StoredSnapshot = {
-  storageSchemaVersion: 1;
+  storageSchemaVersion: 1 | 2;  // 2 exactly when a node carries an image pointer
   treeId: string;
   treeRevision: number;
   writeGeneration: number;
@@ -185,7 +185,7 @@ prompt on every exit.
 A newer schema is terminal for an older tab. `blocking` closes its connection
 and every later operation reports `PERSISTENCE_SUPERSEDED` without reopening;
 `VersionError` on open means the same, and a row whose `storageSchemaVersion`
-is newer is superseded, never corrupt, so Repair cannot let an older build
+is newer than this build reads (above 2) is superseded, never corrupt, so Repair cannot let an older build
 overwrite it. A deletion from another tab (`blocking` with no new version) is
 `PERSISTENCE_CLEARED`, equally terminal. Such a tab offers only an export from
 memory and a page reload. A superseded tab reloads by itself only while it is
@@ -313,6 +313,21 @@ layout; the repository executes it.
   an adopted row, or a new document starts from full retention again. The tab
   keeps its whole in-memory history, so the notice says older steps will not
   survive a reload.
+
+### Image blobs (database v7)
+
+Database version 7 adds one object store, `blobs`, keyPath `contentHash`, with an
+index on `storedAt`. A row is `{ storageSchemaVersion: 1, contentHash,
+byteLength, mediaType, width, height, bytes: ArrayBuffer, storedAt }`; the key is
+the SHA-256 of `bytes`, and `persistence/image-blob-repository.ts` verifies size
+and hash before it writes. A picture is not derived data: nothing that reclaims
+caches may delete from `blobs`. Only the snapshot row's stamp moves past 1, to 2,
+and only for a row whose bundle carries an image pointer; labels, inquiry
+records, and Wiki keep stamp 1. The upgrade only creates the empty store.
+Release risk, as at v6: once any tab has opened v7, a deployment rolled back to
+a build that stops at v6 or earlier cannot open the database, so every document
+is superseded there (not destroyed) until a v7-aware build is redeployed. A
+rollback plan must say so.
 
 `npm run bench:persistence` records both sides. On 2026-09-29 (Node 22.20), a
 2,000-node tree with 1,050 commits (bounded to 1,000 steps) recovered in 9.35 ms

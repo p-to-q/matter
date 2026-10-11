@@ -17,6 +17,28 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — the database has a place for picture bytes, and nothing writes there yet
+
+Changed: database version 7 adds a `blobs` store keyed by SHA-256, with a
+repository that verifies bytes against their pointer before writing, reports a
+row that exists but cannot be trusted as `damaged` (never `absent`), and treats a
+row from a newer build as superseded. Snapshot rows are stamped 2 exactly when a
+node names an image and 1 otherwise; readers accept 1 and 2, and a restored row
+keeps its stamp so rollback never downgrades it. The global schema version that
+labels, inquiry and Wiki compare with `!==` is unchanged. Derived-storage
+reclaim never touches `blobs`.
+
+Why: a picture is not derived, so cache pressure must never take it, and the
+stamp follows the bytes written so a build that cannot read an image calls the row
+newer rather than corrupt and offers to overwrite it.
+
+Forecloses: opening v7 and then running an older build, which now sees every
+document as superseded, images or not. That is the accepted rollback cost in
+`reference/virtual-file-system.md`, and nothing creates a picture yet, which is
+why it ships first. Known gap: a row whose image was later removed is stamped 1
+while its history may still hold `replace-image`; an older build releases that
+history with its unavailable notice and loses no material.
+
 ## 2026-10-12 — the archive can carry pictures, and never needs them
 
 Changed: an archive may hold `matter/blobs/<sha256>.<jpg|png|webp>` beside the

@@ -4,6 +4,8 @@
  * as the product bundles them, with no test double beneath them.
  */
 import { createIndexedDbDocumentRepository, type SnapshotBasis } from "../features/matter/persistence/document-repository";
+import { createImageBlobRepository } from "../features/matter/persistence/image-blob-repository";
+import { createMatterDatabaseHandle } from "../features/matter/persistence/matter-database";
 import { createSeededDocument } from "../features/matter/material/seeded-document";
 import {
   commitTreeCommand,
@@ -284,14 +286,139 @@ async function versionFiveUpgrade(): Promise<unknown> {
   const inquiry = await request(others.objectStore("inquiryRecords").get("t")) as { writeGeneration?: number } | undefined;
   const wiki = await request(others.objectStore("wiki").get("origin")) as { writeGeneration?: number } | undefined;
   const version = database.version;
+  const blobs = database.objectStoreNames.contains("blobs")
+    ? await request(database.transaction("blobs", "readonly").objectStore("blobs").count())
+    : null;
   database.close();
   const preserved = label?.label === "L" && inquiry?.writeGeneration === 1 && wiki?.writeGeneration === 3;
-  return migrated && version === 6 && preserved ? null : { migrated, version, preserved };
+  return migrated && version === 7 && preserved && blobs === 0 ? null : { migrated, version, preserved, blobs };
+}
+
+async function versionSixUpgrade(): Promise<unknown> {
+  await deleteDatabase();
+  const session = commitStep({ tree: createSeededDocument().tree, history: createTreeHistory() }, "kept");
+  const v6 = await new Promise<IDBDatabase>((resolve, reject) => {
+    const opening = indexedDB.open(DATABASE, 6);
+    opening.onupgradeneeded = () => {
+      const database = opening.result;
+      database.createObjectStore("snapshots", { keyPath: "treeId" });
+      const labels = database.createObjectStore("labels", { keyPath: "key" });
+      labels.createIndex("treeId", "treeId");
+      labels.createIndex("originUpdatedAt", ["origin", "updatedAt"]);
+      database.createObjectStore("inquiryRecords", { keyPath: "treeId" });
+      database.createObjectStore("wiki", { keyPath: "key" });
+      database.createObjectStore("historyEntries", { keyPath: ["treeId", "epoch", "stack", "position"] });
+    };
+    opening.onsuccess = () => resolve(opening.result);
+    opening.onerror = () => reject(opening.error);
+  });
+  const seeding = v6.transaction(["snapshots", "labels"], "readwrite");
+  const row = { storageSchemaVersion: 1, treeId: session.tree.id, treeRevision: session.tree.revision, writeGeneration: 4, bundle: treeToBundle(session.tree) };
+  seeding.objectStore("snapshots").put(row);
+  seeding.objectStore("labels").put({
+    storageSchemaVersion: 1, key: "t n", treeId: "t", nodeId: "n", label: "L", origin: "user", basis: null, updatedAt: TIME,
+  });
+  await new Promise((resolve) => {
+    seeding.oncomplete = resolve;
+  });
+  v6.close();
+
+  const handle = createMatterDatabaseHandle();
+  try {
+    const database = await handle.open();
+    const names = [...database.objectStoreNames].sort();
+    const blobs = database.transaction("blobs", "readonly").objectStore("blobs");
+    const [count, indexes] = await Promise.all([blobs.count(), Promise.resolve([...blobs.indexNames])]);
+    const kept = await database.get("snapshots", session.tree.id);
+    const label = await database.get("labels", "t n");
+    const outcome = {
+      version: database.version,
+      names,
+      blobCount: count,
+      blobIndexes: indexes,
+      rowKept: JSON.stringify(kept) === JSON.stringify(row),
+      labelKept: label?.label === "L",
+    };
+    const expectedNames = ["blobs", "historyEntries", "inquiryRecords", "labels", "snapshots", "wiki"];
+    return outcome.version === 7 && JSON.stringify(names) === JSON.stringify(expectedNames) && count === 0 &&
+      JSON.stringify(indexes) === JSON.stringify(["storedAt"]) && outcome.rowKept && outcome.labelKept
+      ? null
+      : outcome;
+  } finally {
+    handle.close();
+  }
+}
+
+async function imageBlobRoundTrip(): Promise<unknown> {
+  await deleteDatabase();
+  const handle = createMatterDatabaseHandle();
+  const documents = createIndexedDbDocumentRepository();
+  const blobs = createImageBlobRepository(handle);
+  try {
+    const bytes = new Uint8Array(4_096).map((_, index) => (index * 7) % 251).buffer;
+    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    const pointer = {
+      mediaType: "image/png" as const,
+      byteLength: bytes.byteLength,
+      width: 512,
+      height: 512,
+      contentHash: Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+    };
+    const written = await blobs.putImageBlob(pointer, bytes);
+    const again = await blobs.putImageBlob(pointer, bytes);
+    const read = await blobs.getImageBlob(pointer.contentHash);
+    const sameBytes = read.ok && read.value.status === "found" &&
+      new Uint8Array(read.value.blob.bytes).every((byte, index) => byte === new Uint8Array(bytes)[index]) &&
+      read.value.blob.bytes.byteLength === bytes.byteLength;
+    const tampered = bytes.slice(0);
+    new Uint8Array(tampered)[0] ^= 0xff;
+    const refused = await blobs.putImageBlob(pointer, tampered);
+
+    // Derived-storage reclaim must leave pictures alone, in a database that holds both.
+    const database = await handle.open();
+    const labels = database.transaction("labels", "readwrite");
+    for (let index = 0; index < 2_100; index += 1) {
+      labels.objectStore("labels").put({
+        storageSchemaVersion: 1, key: `t n${index}`, treeId: "t", nodeId: `n${index}`, label: "L",
+        origin: "model", basis: "b", updatedAt: new Date(index).toISOString(),
+      });
+    }
+    await labels.done;
+    const reclaimed = await documents.reclaimDerivedStorage();
+    const afterReclaim = await blobs.getImageBlob(pointer.contentHash);
+
+    // A row whose bytes were cut short is damage, and the next verified put repairs it.
+    const damaging = database.transaction("blobs", "readwrite");
+    const stored = await damaging.objectStore("blobs").get(pointer.contentHash);
+    if (stored === undefined) return { stored: "missing" };
+    await damaging.objectStore("blobs").put({ ...stored, bytes: new ArrayBuffer(10) });
+    await damaging.done;
+    const damaged = await blobs.getImageBlob(pointer.contentHash);
+    const repaired = await blobs.putImageBlob(pointer, bytes);
+    const healed = await blobs.getImageBlob(pointer.contentHash);
+    const listed = await blobs.listImageBlobHashes();
+
+    const checks = {
+      written: written.ok && written.value === "written",
+      idempotent: again.ok && again.value === "present",
+      sameBytes,
+      tamperedRefused: !refused.ok && refused.code === "REJECTED",
+      reclaimedLabels: reclaimed,
+      survivedReclaim: afterReclaim.ok && afterReclaim.value.status === "found",
+      damagedReported: damaged.ok && damaged.value.status === "damaged",
+      repaired: repaired.ok && repaired.value === "written" && healed.ok && healed.value.status === "found",
+      listed: listed.ok && listed.value.length === 1 && listed.value[0] === pointer.contentHash,
+    };
+    return Object.values(checks).every(Boolean) ? null : checks;
+  } finally {
+    documents.close();
+    handle.close();
+  }
 }
 
 async function olderBuildRefused(): Promise<unknown> {
   const outcome = await new Promise<string>((resolve) => {
-    const opening = indexedDB.open(DATABASE, 5);
+    const opening = indexedDB.open(DATABASE, 6);
     opening.onsuccess = () => {
       opening.result.close();
       resolve("opened");
@@ -308,6 +435,8 @@ window.__proveJournal = async () => {
     ["twoConnectionRace", twoConnectionRace],
     ["throwingPutAbortsWholeWrite", throwingPutAbortsAll],
     ["versionFiveUpgradePreservesStores", versionFiveUpgrade],
+    ["versionSixUpgradeAddsEmptyBlobStore", versionSixUpgrade],
+    ["imageBlobRoundTripAndReclaimIsolation", imageBlobRoundTrip],
     ["olderBuildRefusedWithVersionError", olderBuildRefused],
   ] as const) {
     const failure = await check();

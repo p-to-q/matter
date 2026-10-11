@@ -25,7 +25,7 @@ test("a pre-v6 inline journal migrates on its first save and still reverses the 
   // Undo is itself a save: the row now carries a manifest instead of the
   // inline journal, and the undone step waits as one redo record.
   await expect.poll(() => page.evaluate(readJournalShape)).toEqual({
-    version: 6,
+    version: 7,
     inline: false,
     manifest: true,
     records: [["redo", 0]],

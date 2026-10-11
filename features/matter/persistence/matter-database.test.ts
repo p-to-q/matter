@@ -116,7 +116,9 @@ describe("Matter database upgrades", () => {
       indexNames: { contains: () => false },
       createIndex,
     };
-    const createObjectStore = vi.fn((name: string) => name === "labels" ? labels : {});
+    const blobIndex = vi.fn();
+    const createObjectStore = vi.fn((name: string) =>
+      name === "labels" ? labels : { createIndex: blobIndex });
     const database = {
       objectStoreNames: { contains: () => false },
       createObjectStore,
@@ -142,6 +144,8 @@ describe("Matter database upgrades", () => {
       ["origin", "updatedAt"],
     );
     expect(createObjectStore).toHaveBeenCalledWith("wiki", { keyPath: "key" });
+    expect(createObjectStore).toHaveBeenCalledWith("blobs", { keyPath: "contentHash" });
+    expect(blobIndex).toHaveBeenCalledExactlyOnceWith("storedAt", "storedAt");
   });
 
   it("adds the Wiki store through the one database version owner", async () => {
@@ -179,7 +183,6 @@ describe("Matter database upgrades", () => {
 
     await handle.open();
     expect(vi.mocked(openDB).mock.calls[0]?.[1]).toBe(MATTER_DATABASE_VERSION);
-    expect(MATTER_DATABASE_VERSION).toBe(6);
     const objectStore = vi.fn(() => ({ indexNames: { contains: () => true } }));
     vi.mocked(openDB).mock.calls[0]?.[2]?.upgrade?.(
       database as never,
@@ -196,9 +199,67 @@ describe("Matter database upgrades", () => {
     expect(objectStore).not.toHaveBeenCalledWith("snapshots");
   });
 
+  it("adds the image blob store at v7 without touching any stored row", async () => {
+    const blobIndex = vi.fn();
+    const createObjectStore = vi.fn().mockReturnValue({ createIndex: blobIndex });
+    const rowAccess = vi.fn();
+    const stores = new Map(["snapshots", "historyEntries", "inquiryRecords", "wiki"].map((name) => [
+      name,
+      new Proxy({}, { get: () => rowAccess }),
+    ]));
+    const database = {
+      objectStoreNames: { contains: (name: string) => name !== "blobs" },
+      createObjectStore,
+      close: vi.fn(),
+    };
+    vi.mocked(openDB).mockResolvedValue(database as never);
+    const handle = createMatterDatabaseHandle();
+
+    await handle.open();
+    expect(MATTER_DATABASE_VERSION).toBe(7);
+    expect(vi.mocked(openDB).mock.calls[0]?.[1]).toBe(7);
+    const objectStore = vi.fn((name: string) =>
+      name === "labels" ? { indexNames: { contains: () => true } } : stores.get(name));
+    vi.mocked(openDB).mock.calls[0]?.[2]?.upgrade?.(
+      database as never,
+      6,
+      7,
+      { objectStore } as never,
+      new Event("upgradeneeded") as IDBVersionChangeEvent,
+    );
+
+    expect(createObjectStore).toHaveBeenCalledExactlyOnceWith("blobs", { keyPath: "contentHash" });
+    expect(blobIndex).toHaveBeenCalledExactlyOnceWith("storedAt", "storedAt");
+    // Only the label indexes are inspected; no other store is opened, so no row moves.
+    expect(objectStore.mock.calls.map(([name]) => name)).toEqual(["labels"]);
+    expect(rowAccess).not.toHaveBeenCalled();
+  });
+
+  it("does not recreate an existing blob store when the upgrade runs again", async () => {
+    const createObjectStore = vi.fn();
+    const database = {
+      objectStoreNames: { contains: () => true },
+      createObjectStore,
+      close: vi.fn(),
+    };
+    vi.mocked(openDB).mockResolvedValue(database as never);
+    const handle = createMatterDatabaseHandle();
+
+    await handle.open();
+    vi.mocked(openDB).mock.calls[0]?.[2]?.upgrade?.(
+      database as never,
+      7,
+      7,
+      { objectStore: vi.fn(() => ({ indexNames: { contains: () => true } })) } as never,
+      new Event("upgradeneeded") as IDBVersionChangeEvent,
+    );
+
+    expect(createObjectStore).not.toHaveBeenCalled();
+  });
+
   it("closes for good when another tab needs a newer version or deletes the database", async () => {
     for (const [blockedVersion, expected] of [
-      [7, { event: "superseded", name: "MatterDatabaseSupersededError" }],
+      [8, { event: "superseded", name: "MatterDatabaseSupersededError" }],
       [null, { event: "cleared", name: "MatterDatabaseClearedError" }],
     ] as const) {
       vi.mocked(openDB).mockReset();
@@ -209,7 +270,7 @@ describe("Matter database upgrades", () => {
 
       await handle.open();
       vi.mocked(openDB).mock.calls[0]?.[2]?.blocking?.(
-        6,
+        7,
         blockedVersion,
         new Event("versionchange") as IDBVersionChangeEvent,
       );

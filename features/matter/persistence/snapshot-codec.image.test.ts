@@ -4,7 +4,7 @@ import { applyTreeCommand } from "../tree/engine";
 import { MAX_TREE_IMAGE_NODES, type ImagePointer } from "../tree/image-pointer";
 import { normalizeDocumentTree } from "../tree/document-root";
 import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
-import { bundleToTree, treeToBundle, type SnapshotBundle } from "./snapshot-codec";
+import { bundleCarriesImage, bundleToTree, treeToBundle, type SnapshotBundle } from "./snapshot-codec";
 
 const PNG: ImagePointer = {
   mediaType: "image/png",
@@ -221,5 +221,20 @@ describe("snapshot codec and image pointers", () => {
       },
     };
     expect(() => treeToBundle(invalid)).toThrow(TypeError);
+  });
+
+  it("reads from the bundle bytes whether any node names an image", () => {
+    const { tree, childId } = pictured();
+    const plain = normalizeDocumentTree(createSeededDocument().tree);
+    const plainBundle = treeToBundle(plain);
+
+    expect(bundleCarriesImage(treeToBundle(tree))).toBe(true);
+    expect(bundleCarriesImage(plainBundle)).toBe(false);
+
+    // Only the frontmatter counts: text that looks like an image line is not a picture.
+    const path = fileOf(plainBundle, childId, plain);
+    const files = { ...plainBundle.files } as Record<string, string>;
+    files[path] = `${files[path]}\n---\n\n${CANONICAL_LINE}\n\n${CANONICAL_LINE}`;
+    expect(bundleCarriesImage({ files } as SnapshotBundle)).toBe(false);
   });
 });

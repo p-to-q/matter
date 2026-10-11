@@ -13,6 +13,8 @@ import type {
 } from "./history-journal";
 import { MAX_NODES_PER_TREE } from "../tree/invariants";
 import type { WikiState } from "../wiki/wiki-model";
+import type { ImagePointerMediaType } from "../tree/image-pointer";
+import { CLEARED_DATABASE_ERROR, SUPERSEDED_DATABASE_ERROR } from "./storage-errors";
 
 /**
  * Opens the one browser database Matter owns.
@@ -25,12 +27,23 @@ import type { WikiState } from "../wiki/wiki-model";
  * outside the snapshot, so the archive remains exactly what a person wrote.
  * `historyEntries` holds one record per retained inverse; it is written only in
  * the same transaction as the snapshot row whose manifest describes it.
+ * `blobs` holds image bytes. Images are person-held material, not a cache:
+ * nothing that clears derived data may touch it.
  */
 
 export const STORAGE_SCHEMA_VERSION = 1 as const;
 
+/**
+ * The newest stamp a snapshot row carries. Only snapshot rows move past
+ * `STORAGE_SCHEMA_VERSION`: a row stamped 2 holds an image pointer, which an
+ * older build must treat as a newer schema rather than as damage. Labels,
+ * inquiries, and Wiki compare against `STORAGE_SCHEMA_VERSION` exactly.
+ */
+export const SNAPSHOT_SCHEMA_VERSION = 2 as const;
+export type SnapshotSchemaVersion = typeof STORAGE_SCHEMA_VERSION | typeof SNAPSHOT_SCHEMA_VERSION;
+
 export type StoredSnapshot = Readonly<{
-  storageSchemaVersion: typeof STORAGE_SCHEMA_VERSION;
+  storageSchemaVersion: SnapshotSchemaVersion;
   treeId: string;
   treeRevision: number;
   writeGeneration: number;
@@ -108,6 +121,18 @@ export type StoredInquiryRecord = Readonly<{
   exchanges: readonly StoredInquiryExchange[];
 }>;
 
+/** The bytes behind an image pointer, keyed by the SHA-256 the pointer names. */
+export type StoredImageBlob = Readonly<{
+  storageSchemaVersion: 1;
+  contentHash: string;
+  byteLength: number;
+  mediaType: ImagePointerMediaType;
+  width: number;
+  height: number;
+  bytes: ArrayBuffer;
+  storedAt: string;
+}>;
+
 export const WIKI_RECORD_KEY = "origin" as const;
 export const WIKI_RECORD_SCHEMA_VERSION = 7 as const;
 
@@ -145,10 +170,15 @@ export interface MatterDatabase extends DBSchema {
     key: typeof WIKI_RECORD_KEY;
     value: StoredWikiRecord;
   };
+  blobs: {
+    key: string;
+    value: StoredImageBlob;
+    indexes: { storedAt: string };
+  };
 }
 
 const DATABASE_NAME = "ptoq-matter";
-export const MATTER_DATABASE_VERSION = 6;
+export const MATTER_DATABASE_VERSION = 7;
 /** Two maximum documents stay warm; manual names are not part of this cache. */
 export const MAX_CACHED_MODEL_LABELS = MAX_NODES_PER_TREE * 2;
 
@@ -168,8 +198,7 @@ export function labelKey(treeId: string, nodeId: string): string {
  */
 export type MatterDatabaseLifecycle = "upgrade-blocked" | "upgrade-ready" | "superseded" | "cleared";
 
-export const SUPERSEDED_DATABASE_ERROR = "MatterDatabaseSupersededError";
-export const CLEARED_DATABASE_ERROR = "MatterDatabaseClearedError";
+export { CLEARED_DATABASE_ERROR, SUPERSEDED_DATABASE_ERROR };
 
 export type MatterDatabaseHandle = Readonly<{
   open: () => Promise<IDBPDatabase<MatterDatabase>>;
@@ -254,6 +283,9 @@ export function createMatterDatabaseHandle(options: Readonly<{
             db.createObjectStore("historyEntries", {
               keyPath: ["treeId", "epoch", "stack", "position"],
             });
+          }
+          if (!db.objectStoreNames.contains("blobs")) {
+            db.createObjectStore("blobs", { keyPath: "contentHash" }).createIndex("storedAt", "storedAt");
           }
         },
         blocked() {
