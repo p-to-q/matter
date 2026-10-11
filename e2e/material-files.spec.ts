@@ -71,6 +71,31 @@ async function expectIndexCameraMotion(
   await expect(world).toHaveAttribute("data-e2e-index-camera-transition", "transform");
 }
 
+test("the index marks the path above the active passage without selecting it", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const rows = page.locator("aside.material-files .material-file");
+  const deepIndex = await rows.evaluateAll((elements) =>
+    elements.findIndex((element) => Number((element as HTMLElement).style.getPropertyValue("--material-file-depth")) >= 2));
+  if (deepIndex < 0) throw new Error("index path fixture needs a passage two levels down");
+  await rows.nth(deepIndex).locator(".material-file__open").click();
+
+  const active = rows.nth(deepIndex);
+  await expect(active).toHaveAttribute("data-active", "true");
+  await expect(active).not.toHaveAttribute("data-in-lineage", "true");
+
+  const path = page.locator("aside.material-files .material-file[data-in-lineage='true']");
+  await expect.poll(() => path.count()).toBeGreaterThan(0);
+  for (const row of await path.all()) {
+    await expect(row).not.toHaveAttribute("aria-selected", "true");
+    await expect(row).not.toHaveAttribute("aria-current", "page");
+    await expect(row.locator(".material-file__title")).toHaveCSS("text-decoration-line", "underline");
+  }
+  await expect(active.locator(".material-file__title")).toHaveCSS("text-decoration-line", "none");
+});
+
 test("an index passage lands at the browser's visual centre, including a repeated click", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");

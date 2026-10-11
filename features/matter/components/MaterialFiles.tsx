@@ -46,6 +46,7 @@ import {
 import { projectMaterialFileGuideEdges, projectMaterialFileGuideSegments } from "./material-file-guides";
 import { projectMaterialFileTerminalMarkerIds } from "./material-file-terminal-markers";
 import {
+  materialFileAncestorIds,
   projectMaterialFileTreeSemantics,
   pruneMaterialFileNodeIds,
   resolveMaterialFileTreeKey,
@@ -659,15 +660,10 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const corrupt = persistenceStatus.errorCode === "PERSISTENCE_CORRUPT";
   const durability = projectDurabilityLine(persistenceStatus, showSaving, copy);
   const terminalDurability = isTerminalDurability(persistenceStatus);
-  const activeLineageIds = useMemo(() => {
-    const lineage = new Set<string>();
-    let current = activeNodeId === null ? null : props.tree.nodes[activeNodeId]?.parentId ?? null;
-    while (current !== null && !lineage.has(current)) {
-      lineage.add(current);
-      current = props.tree.nodes[current]?.parentId ?? null;
-    }
-    return lineage;
-  }, [activeNodeId, props.tree.nodes]);
+  const activeLineageIds = useMemo(
+    () => materialFileAncestorIds(props.tree.nodes, activeNodeId),
+    [activeNodeId, props.tree.nodes],
+  );
 
   const openNode = (nodeId: string) => {
     if (props.navigation.mode === "focus") props.onFocusNode(nodeId);

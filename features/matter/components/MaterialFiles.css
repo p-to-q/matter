@@ -97,6 +97,11 @@
 .material-files:not([data-mode="browse"]) .material-file__open { grid-column: 1 / -1; padding-left: 10px; }
 .material-file__title { max-width: 100%; overflow: hidden; font: 400 13px/1.35 var(--matter-face); letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
 .material-file[data-active="true"] .material-file__title { font-weight: 600; }
+/* The path above the active passage, marked without weight or plate (both are
+   taken by active and lasso) and without colour alone: ancestors are branches
+   and already read at full ink. Browsing only; static, so reduced motion needs
+   no exception, and a text decoration survives forced colours. */
+.material-files[data-mode="browse"] .material-file[data-in-lineage="true"] .material-file__title { text-decoration: underline; text-decoration-color: rgba(22,29,39,.3); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .material-file__path { max-width: 100%; overflow: hidden; color: var(--index-faint); font: 10px/1.2 var(--mono); text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
 .material-file__structure-control,
 .material-file__context-space { position: relative; z-index: 1; display: grid; width: var(--material-file-action-width); height: var(--index-row); place-items: center; padding: 0; border: 0; background: transparent; color: inherit; }

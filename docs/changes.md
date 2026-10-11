@@ -17,6 +17,23 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — the index marks the path above the active passage
+
+Changed: while browsing, the index underlines the ancestors of the active
+passage, quietly and statically. The ancestor set is one pure function
+(`materialFileAncestorIds`) that was already computed inline and already emitted
+as `data-in-lineage` with no reader. Ancestors never receive `aria-selected` or
+`aria-current`; those stay with the target.
+
+Why: a passage was a point with no visible line back to the root, and the line is
+already known. An underline was chosen because weight and plate are taken by
+active and lasso, colour alone is invisible on rows that are already full ink,
+and a text decoration needs no animation exception and survives forced colours.
+
+Forecloses: reading the mark as "what the model receives". It is navigation
+only; an operation's basis is shown during that operation, not here. Canvas
+connectors are not part of this change and need a 2,000-node measurement first.
+
 ## 2026-10-12 — an image is drawn from a brief, never from the passage
 
 Changed: a gated `POST /api/image` turns an addressed passage into one image in

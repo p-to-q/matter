@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { MaterialFileRow } from "../material/material-files";
 import {
+  materialFileAncestorIds,
   projectMaterialFileTreeSemantics,
   pruneMaterialFileNodeIds,
   resolveMaterialFileTreeKey,
@@ -73,3 +74,29 @@ function row(
     directMatch: true,
   };
 }
+
+describe("material file ancestor path", () => {
+  const nodes = {
+    root: { parentId: null },
+    a: { parentId: "root" },
+    b: { parentId: "a" },
+    sibling: { parentId: "a" },
+  };
+
+  it("names every ancestor and never the node itself or its siblings", () => {
+    expect([...materialFileAncestorIds(nodes, "b")]).toEqual(["a", "root"]);
+    expect(materialFileAncestorIds(nodes, "b").has("b")).toBe(false);
+    expect(materialFileAncestorIds(nodes, "b").has("sibling")).toBe(false);
+  });
+
+  it("is empty for nothing active, the top node, or an unknown id", () => {
+    expect(materialFileAncestorIds(nodes, null).size).toBe(0);
+    expect(materialFileAncestorIds(nodes, "root").size).toBe(0);
+    expect(materialFileAncestorIds(nodes, "gone").size).toBe(0);
+  });
+
+  it("terminates on a malformed parent cycle", () => {
+    const cyclic = { x: { parentId: "y" }, y: { parentId: "x" } };
+    expect([...materialFileAncestorIds(cyclic, "x")].sort()).toEqual(["x", "y"]);
+  });
+});
