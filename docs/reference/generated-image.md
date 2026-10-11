@@ -120,24 +120,55 @@ way out — which is the same conclusion this repository already reached for tex
 stated in `prompt-harness.md` as adjudication being the guarantee while the
 prompt is only the odds. For images the gap is simply much wider.
 
-A deterministic palette check separates the two cases with a large margin. Every
-pixel is classified as white ground, ink (dark or near-neutral), cyan family, or
-off-palette; the share of off-palette pixels is the signal.
+A deterministic palette check separates the two cases with a large margin.
+Classifying every pixel as white ground, ink, cyan family, or off-palette, three
+in-style results measured **0.0%** off-palette while the hijacked one measured
+**14.8%** and contained no cyan at all. Two independent signals, both computable
+from a downscaled copy without a model.
 
-| image | white | ink | cyan | off-palette |
-| --- | --- | --- | --- | --- |
-| three in-style results | 66-81% | 9-14% | 9-21% | **0.0%** |
-| the hijacked result | 37% | 48% | **0.0%** | **14.8%** |
+**But checking the finished image is the wrong lever, and the reason is
+economic.** By the time the picture exists, the person — or the platform on
+their behalf — has already paid for it. Rejecting it then spends the money and
+returns nothing. A guard that costs a person their generation every time a
+passage happens to contain the wrong words is worse than the thing it prevents.
 
-Every legitimate image measured exactly zero off-palette pixels, and the
-hijacked one measured 14.8% while containing no cyan at all. Two independent
-signals, either of which is decisive, and both computable without a model from
-a downscaled copy. The adjudicator therefore requires a minimum cyan presence
-and a maximum off-palette share, and sends anything else to the floor.
+So the defence moves earlier, to a step that costs about one percent as much.
 
-This also means the style constant is doing a different job than it appears to.
-It raises the odds of a usable first image; it does not keep a promise. The
-promise is kept by the check.
+### The passage never reaches the image model
+
+The operation is two steps, and the person's own writing only enters the first.
+
+1. **Brief.** A text scenario reads the addressed passage and returns one short
+   visual subject — `{ text }`, at most a line, naming only what should appear.
+   This runs on the existing chat pool.
+2. **Render.** The image relay receives the frozen style constant plus that
+   validated brief. It never receives the passage.
+
+This works because of the asymmetry the probe exposed. A text model *does* have
+an instruction hierarchy, which is why fencing material and carrying
+`REFERENCE_NOT_INSTRUCTION` works there — and this repository already has an
+adversarial corpus proving it, including directions that ask to violate scope.
+An image model has no such hierarchy. So the person's text is handled only where
+the evidenced defence exists, and the step with no defence is handed a string
+the server has already validated.
+
+The brief is adjudicated before any image money is spent, by ordinary
+deterministic checks: a length bound, no colour, medium, rendering, typography
+or lettering terms, no imperative addressed to the renderer. A brief that fails
+settles on the floor having cost a text call.
+
+A second reason this step belongs here regardless of safety: a passage of
+someone's unfinished thinking is not a good image prompt. Distilling it into a
+visual subject is most of what makes the picture good. The guard is a
+consequence of a step the product wanted anyway.
+
+### What becomes of the palette check
+
+It stays, demoted. It is measured and counted as a closed operational scalar so
+a deployment can learn how often style escapes, and it never discards an image
+a person already paid for. If the counter shows escapes are common after the
+brief step, that is evidence to act on — not a reason to start throwing away
+finished work.
 
 ## What the harness is
 
@@ -166,7 +197,9 @@ widen the operation.
 - its own deadline above the measured 30 s, and no automatic retry;
 - an adjudicator that checks decodability, an allowlisted media type, dimension
   bounds and byte bounds, and that rejects anything else to the floor;
-- within that adjudicator, the deterministic palette check above, because a
-  passage can and demonstrably does override the style prompt;
+- a cheap brief adjudication before the image call — length bound, no colour,
+  medium, rendering or lettering terms, no imperative — because that is where a
+  hostile passage is stopped without spending a generation;
+- the palette measurement as a counted operational scalar, never as a rejector;
 - no re-encoding anywhere in the path, so the provider's C2PA manifest survives;
 - a fully lazy chunk and a route that never prerenders.
