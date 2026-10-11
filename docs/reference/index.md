@@ -46,6 +46,7 @@ the contract documents.
 | [`ambient-workbench-ui.md`](ambient-workbench-ui.md) **binding** | right-side paper, corner controls and their optical geometry, rail, ambient media, `Escape` tiers, and pen/palm rules |
 | [`control-fog.md`](control-fog.md) | the passage-local action field: its surface, size, and placement |
 | [`architecture-governance.md`](architecture-governance.md) | auditing module boundaries, state ownership, caches, and architecture fitness |
+| [`context-receipt.md`](context-receipt.md) | the deterministic material projection and its Markdown receipt: addresses, grammar, digest, what it omits, and versioning |
 | [`post-preview-research.md`](post-preview-research.md) | planning-only prior art, evidence standards, stop rules, and activation gates for material projection, local intelligence, generated media, and later sync |
 | [`codex-work-line-audit.md`](codex-work-line-audit.md) | *historical* 2026-09-17 evidence snapshot of unmerged work lines, their preservation tags, and why each was stashed or merged; not policy |
 

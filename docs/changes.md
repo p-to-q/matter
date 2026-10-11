@@ -17,6 +17,28 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — a projection of the tree can be written as one checkable Markdown receipt
+
+Changed: `projectMaterial` projects the tree for three addresses (selection,
+lineage, working-tree) with real parents, sibling rank and depth, and
+`renderContextReceipt` / `parseContextReceipt` write and strictly read it as one
+Markdown file: fixed front matter, an outline whose text is always inside quoted
+lines, a canonical machine block, and a SHA-256 digest. Parsing re-renders and
+requires byte equality, so there is exactly one spelling of a receipt. Sibling rank
+counts only the siblings the address carries, so a receipt cannot reveal how much
+material was held aside. A test pins its node sequence to the Inquiry projection so
+the two cannot drift. Nothing calls it yet; Copy stays literal text.
+
+Why: Archive is lossless but not readable; native Copy is readable but loses the
+relations. One projection that both people and models can read, and that can be
+checked, lets a later "Copy with context" and the AI entries share coherence without
+each re-deriving structure from text.
+
+Forecloses: node text forging a front-matter line, a bullet, the machine block or
+the digest; a receipt that names a node it does not carry; and Mermaid or JSON-LD
+becoming the source format. A newline-heavy full-size tree can exceed the receipt
+size bound (about 14 MB); callers pass limits then.
+
 ## 2026-10-12 — pictures travel through Export and Import, and import never aborts for want of storage
 
 Changed: Export gathers each referenced picture from the session cache, then the
