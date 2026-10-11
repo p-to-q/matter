@@ -494,7 +494,11 @@ Ordered slices (each ships green before the next):
    (stamp 1 and 2), writers dark; — **built** (2026-10-12);
 3. archive binary entries plus the shared pure byte sniffer (extracted from
    `server/image-bytes.ts`, which imports `node:crypto`) — **built** (2026-10-12);
-4. the availability projection and its surfaces in five locales;
+4. the availability projection and its surfaces in five locales — projection
+   **built** (2026-10-12, `persistence/image-availability.ts`); the surfaces and
+   their five-locale copy move into slice 5, because nothing renders a picture
+   until the accept path exists and copy for an unrendered state is a claim about
+   an unbuilt capability;
 5. the accept path, the first producer, with the session byte cache and quota
    refusal;
 6. compaction and the provenance sidecar.
