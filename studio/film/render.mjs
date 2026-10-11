@@ -7,8 +7,8 @@ import { FILM_COPY } from "./copy.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const durationSeconds = 68;
-const outputWidth = 1_440;
-const outputHeight = 810;
+const outputWidth = 1_920;
+const outputHeight = 1_080;
 const captureWidth = 1_600;
 const captureHeight = 900;
 const framesPerSecond = 30;
@@ -16,7 +16,7 @@ const elasticPulseFrames = 14;
 const elasticPulseDepth = 0.025;
 const documentTitle = FILM_COPY.document.title;
 const creditVisibleSeconds = 2.75;
-const outroStartSeconds = 63.5;
+const outroStartSeconds = 64.5;
 const outroDurationSeconds = durationSeconds - outroStartSeconds;
 const outroFrameCount = outroDurationSeconds * framesPerSecond;
 
@@ -756,7 +756,7 @@ export function validateLaunchCreditProbe(value) {
     video?.codec_type !== "video" || video.codec_name !== "png" ||
     video.width !== outputWidth || video.height !== outputHeight || video.pix_fmt !== "rgba"
   ) {
-    throw new Error("Launch credit must be one transparent 1440x810 PNG.");
+    throw new Error("Launch credit must be one transparent 1920x1080 PNG.");
   }
   return Object.freeze({ width: video.width, height: video.height });
 }
@@ -771,7 +771,7 @@ export function validateLaunchOutroSourceProbe(value) {
     video?.codec_type !== "video" || video.codec_name !== "png" ||
     video.width !== outputWidth || video.height !== outputHeight
   ) {
-    throw new Error("Launch outro source must be one 1440x810 PNG.");
+    throw new Error("Launch outro source must be one 1920x1080 PNG.");
   }
   return Object.freeze({ width: video.width, height: video.height });
 }
@@ -798,7 +798,7 @@ export function validateLaunchMediaProbe(value) {
     video.pix_fmt !== "yuv420p" || !Number.isFinite(frameRate) ||
     Math.abs(frameRate - framesPerSecond) > 0.001
   ) {
-    throw new Error("Final video stream does not match the frozen H.264 1440x810 30 fps profile.");
+    throw new Error("Final video stream does not match the frozen H.264 1920x1080 30 fps profile.");
   }
   if (audio.codec_name !== "aac" || audio.sample_rate !== "48000" || audio.channels !== 2) {
     throw new Error("Final audio stream does not match the frozen stereo AAC 48 kHz profile.");
@@ -887,7 +887,7 @@ async function main() {
   console.log(`mode=${options.execute ? "execute" : options.renderExisting ? "render-existing" : "dry-run"}`);
   console.log(
     `browser=isolated Chromium; inquiryMode=${describeLaunchInquiryMode(options)}; ` +
-    "duration=68s; capture=1600x900; output=1440x810",
+    "duration=68s; capture=1600x900; output=1920x1080",
   );
   console.log(`output=${options.outputDirectory}`);
   if (!options.execute && !options.renderExisting) {

@@ -34,7 +34,7 @@ the repository.
 Boundary: Playwright owns a 1600×900 webpage-only capture and emits versioned
 camera cues from real DOM bounds; the renderer owns the opening focus return,
 one archival-audio credit, the final rounded screen departure, and the
-1440×810, 30 fps MP4 mux. FFmpeg owns five cue-bounded camera moves and the
+1920×1080, 30 fps MP4 mux. FFmpeg owns five cue-bounded camera moves and the
 composition boundary. Material-changing AI surfaces use closed fixtures. Ask
 Matter uses a strict, receipt-marked local fixture for the reproducible release
 take, while an explicitly selected live mode remains available for a separate
@@ -87,8 +87,8 @@ complete take refuses to start until the operator selects exactly one.
 The default output is a timestamped directory under
 `studio/film/artifacts/`. It contains `matter-launch-raw.webm`,
 `capture-cues.json`, a transparent `matter-launch-credit.png`, an extracted
-night-paper still, a deterministic 75-frame rounded screen departure, and a 68-second
-`matter-launch-master-68s.mp4` encoded as 1440×810, 30 fps H.264/AAC. The raw
+night-paper still, a deterministic 105-frame rounded screen departure, and a 68-second
+`matter-launch-master-68s.mp4` encoded as 1920×1080, 30 fps H.264/AAC. The raw
 browser take is 1600×900. The sequence is one causal movement: root-seeded
 light paper holding the passage “我们怀念的也许不是一个真实存在过的过去，而是那个过去在今天仍然允许我们想象的其他生活。”;
 the real FX control introducing daylight moving leaf shadow; the real appearance

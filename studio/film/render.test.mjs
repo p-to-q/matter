@@ -141,8 +141,8 @@ function finalProbe(overrides = {}) {
         codec_type: "video",
         codec_name: "h264",
         duration: "68.000000",
-        width: 1_440,
-        height: 810,
+        width: 1_920,
+        height: 1_080,
         pix_fmt: "yuv420p",
         avg_frame_rate: "30/1",
       },
@@ -425,7 +425,7 @@ test("camera filter gives all five windows distinct motion and only Elastic a pu
   assert.match(filter, /between\(on,1176,1499\)/u);
   assert.doesNotMatch(filter, /between\(on,1560,1622\)/u);
   assert.match(filter, /max\(0,min\(iw-iw\/zoom/u);
-  assert.match(filter, /s=1440x810:fps=30$/u);
+  assert.match(filter, /s=1920x1080:fps=30$/u);
   assert.equal(filter.match(/sin\(/gu)?.length, 1);
   assert.doesNotMatch(filter, /drawtext|overlay|fade/u);
 });
@@ -456,8 +456,8 @@ test("opening focus is derived from captured material pixels, not duplicate text
   });
   assert.equal(
     launchOpeningFocusMask(openingRoot),
-    "color=c=black:s=1440x810:r=30:d=3.7,format=gray," +
-      "drawbox=x=438:y=299:w=564:h=212:color=white:t=fill,boxblur=28:2",
+    "color=c=black:s=1920x1080:r=30:d=3.7,format=gray," +
+      "drawbox=x=600:y=410:w=720:h=260:color=white:t=fill,boxblur=28:2",
   );
 });
 
@@ -500,8 +500,8 @@ test("ffmpeg creates one metadata-free 68-second H.264/AAC master", () => {
   assert.match(filter, /fade=t=in:st=0\.15:d=0\.45:alpha=1/u);
   assert.match(filter, /fade=t=out:st=1\.95:d=0\.7:alpha=1/u);
   assert.match(filter, /overlay=0:0[^;]*enable='lt\(t,2\.75\)'/u);
-  assert.match(filter, /setpts=PTS-STARTPTS\+63\.5\/TB/u);
-  assert.match(filter, /enable='gte\(t,63\.5\)'/u);
+  assert.match(filter, /setpts=PTS-STARTPTS\+64\.5\/TB/u);
+  assert.match(filter, /enable='gte\(t,64\.5\)'/u);
   assert.match(filter, /aresample=48000/u);
   assert.doesNotMatch(filter, /afade=/u);
   assert.doesNotMatch(filter, /atempo=/u);
@@ -542,15 +542,15 @@ test("the archival audio credit is transparent, restrained, and outside product 
   assert.deepEqual(validateLaunchCreditProbe({ streams: [{
     codec_type: "video",
     codec_name: "png",
-    width: 1_440,
-    height: 810,
+    width: 1_920,
+    height: 1_080,
     pix_fmt: "rgba",
-  }] }), { width: 1_440, height: 810 });
+  }] }), { width: 1_920, height: 1_080 });
   assert.throws(() => validateLaunchCreditProbe({ streams: [{
     codec_type: "video",
     codec_name: "png",
-    width: 1_440,
-    height: 810,
+    width: 1_920,
+    height: 1_080,
     pix_fmt: "rgb24",
   }] }), /Launch credit/u);
 });
@@ -578,16 +578,16 @@ test("the outro returns the real root-only night paper to haze before it departs
   assert.deepEqual(validateLaunchOutroSourceProbe({ streams: [{
     codec_type: "video",
     codec_name: "png",
-    width: 1_440,
-    height: 810,
+    width: 1_920,
+    height: 1_080,
     pix_fmt: "rgb24",
-  }] }), { width: 1_440, height: 810 });
+  }] }), { width: 1_920, height: 1_080 });
   assert.throws(() => validateLaunchOutroSourceProbe({ streams: [{
     codec_type: "video",
     codec_name: "png",
     width: 1_600,
     height: 900,
-  }] }), /1440x810/u);
+  }] }), /1920x1080/u);
 });
 
 test("invalid launch options and camera receipts fail before rendering", () => {
@@ -731,12 +731,12 @@ test("raw capture receipt requires one 1600x900 video stream", () => {
 });
 
 test("outro source seeks to the authored cut or the last decodable raw frame", () => {
-  assert.equal(resolveLaunchOutroFrameSeconds(68), 63.5);
+  assert.equal(resolveLaunchOutroFrameSeconds(68), 64.5);
   assert.ok(Math.abs(resolveLaunchOutroFrameSeconds(62) - 61.75) < 1e-9);
   assert.throws(() => resolveLaunchOutroFrameSeconds(0), /duration/u);
 });
 
-test("the final receipt requires a 68-second 1440x810 30 fps H.264/AAC master", () => {
+test("the final receipt requires a 68-second 1920x1080 30 fps H.264/AAC master", () => {
   assert.deepEqual(validateLaunchMediaProbe(finalProbe()), { duration: 68 });
   assert.throws(() => validateLaunchMediaProbe(finalProbe({ format: { duration: "55.2" } })), /duration/u);
   assert.throws(() => validateLaunchMediaProbe({
