@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { zipSync } from "fflate";
 import { createSeededDocument } from "../material/seeded-document";
+import { MAX_TREE_IMAGE_BYTES, MAX_TREE_IMAGE_NODES } from "../tree/image-pointer";
 import { treeToBundle } from "./snapshot-codec";
 import { exportSnapshotArchive, importSnapshotArchive } from "./archive-transport";
 
@@ -19,7 +21,21 @@ describe("material ZIP transport", () => {
       ok: true,
       bundle,
       tree: createSeededDocument().tree,
+      blobs: new Map(),
     });
+  });
+
+  // Pinned on the commit before binary entries existed: a tree without pictures
+  // must keep producing exactly the bytes every earlier build produced.
+  it("keeps the exact bytes of an archive that carries no pictures", async () => {
+    const exported = await exportSnapshotArchive(treeToBundle(createSeededDocument().tree));
+    if (!exported.ok) throw new Error("archive export failed");
+
+    expect(exported.missingImages).toBe(0);
+    expect(exported.bytes.byteLength).toBe(4_270);
+    expect(createHash("sha256").update(exported.bytes).digest("hex")).toBe(
+      "ae4879a76f735853a5639938a59635553a71a5aa9c6a603122c3b49302372712",
+    );
   });
 
   it("rejects unsafe paths, directory records, and normalized collisions before decoding", async () => {
@@ -115,11 +131,18 @@ describe("material ZIP transport", () => {
   });
 
   it("bounds compressed input before ZIP parsing", async () => {
-    const maxArchiveBytes = 18_000_000 + (2_002 * (2_048 + 76)) + 22;
+    const textArchiveBytes = 18_000_000 + (2_002 * (2_048 + 76)) + 22;
+    // Local and central headers each repeat the 82-byte longest picture path.
+    const pictureArchiveBytes = MAX_TREE_IMAGE_BYTES + MAX_TREE_IMAGE_NODES * (76 + 2 * 82);
+    const maxArchiveBytes = textArchiveBytes + pictureArchiveBytes;
 
     await expect(importSnapshotArchive(new Uint8Array(maxArchiveBytes + 1))).resolves.toMatchObject({
       ok: false,
       error: { code: "ARCHIVE_BOUND_EXCEEDED" },
+    });
+    await expect(importSnapshotArchive(new Uint8Array(maxArchiveBytes))).resolves.toMatchObject({
+      ok: false,
+      error: { code: "ARCHIVE_INVALID" },
     });
   });
 

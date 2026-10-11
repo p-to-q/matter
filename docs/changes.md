@@ -17,6 +17,28 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — the archive can carry pictures, and never needs them
+
+Changed: an archive may hold `matter/blobs/<sha256>.<jpg|png|webp>` beside the
+text snapshot. Import judges every picture before it is returned: the SHA-256
+equals the filename, the length and the structure equal the pointer, no picture is
+unreferenced or duplicated, and sizes are bounded from the central directory
+before any byte is inflated, in a budget separate from text. A pointer with no
+picture is legal and imports with that hash absent. Export writes only referenced
+pictures that pass the same check and reports `missingImages`; a missing or
+damaged cache entry never costs the person their archive. A tree without images
+exports byte-identical to before (pinned by hash). Compressed input is fed to the
+unzipper in 16 KiB slices so a small deflate bomb cannot allocate its whole output
+before a bound is read.
+
+Why: the archive is the only defence against whole-origin browser eviction, so it
+must be the lenient direction on export and the strict direction on import, and
+this is the first binary input in the product.
+
+Forecloses: a picture whose bytes were never verified entering the content-
+addressed store, and an export that fails for want of bytes. A worker-inflated
+entry (compressed size over about 320,000 bytes) is not exercised by any test.
+
 ## 2026-10-12 — image byte structure is judged by one browser-safe function
 
 Changed: sniffing, dimension reading, and truncation detection moved out of the

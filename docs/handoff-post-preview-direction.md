@@ -493,7 +493,7 @@ Ordered slices (each ships green before the next):
 2. storage expand: database v7 with an empty `blobs` store, tolerant readers
    (stamp 1 and 2), writers dark;
 3. archive binary entries plus the shared pure byte sniffer (extracted from
-   `server/image-bytes.ts`, which imports `node:crypto`);
+   `server/image-bytes.ts`, which imports `node:crypto`) — **built** (2026-10-12);
 4. the availability projection and its surfaces in five locales;
 5. the accept path, the first producer, with the session byte cache and quota
    refusal;
