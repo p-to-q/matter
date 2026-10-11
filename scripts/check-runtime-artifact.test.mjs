@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -134,106 +135,131 @@ test("keeps offline Wiki qualification inventory out of browser artifacts", () =
   );
 });
 
-test("reads root and server traces while budgeting every public asset", async () => {
-  const root = await mkdtemp(join(tmpdir(), "matter-runtime-artifact-"));
+for (const adapter of [false, true]) {
+  test(`reads ${adapter ? "adapter route-cache" : "standard"} root and server traces while budgeting every public asset`, async () => {
+    const root = await mkdtemp(join(tmpdir(), "matter-runtime-artifact-"));
+    const cachePath = (kind, source, pathname) =>
+      `.next/server/route-cache/${kind}/${createHash("sha256").update(source).digest("hex")}/$/${pathname}`;
+    const htmlPath = adapter
+      ? cachePath("APP_PAGE", "/page", "index.html")
+      : ".next/server/app/index.html";
+    const iconPath = adapter
+      ? cachePath("APP_ROUTE", "/icon1.png/route", "icon1.png.body")
+      : ".next/server/app/icon1.png.body";
+    const applePath = adapter
+      ? cachePath("APP_ROUTE", "/apple-icon.png/route", "apple-icon.png.body")
+      : ".next/server/app/apple-icon.png.body";
+    try {
+      await Promise.all([
+        mkdir(join(root, ".next/cache"), { recursive: true }),
+        mkdir(join(root, ".next/server/app"), { recursive: true }),
+        mkdir(join(root, ".next/static/chunks"), { recursive: true }),
+        mkdir(join(root, ".next/static/media"), { recursive: true }),
+        mkdir(join(root, "public/matter-ui"), { recursive: true }),
+      ]);
+      for (const path of [htmlPath, iconPath, applePath]) {
+        await mkdir(join(root, path, ".."), { recursive: true });
+      }
+
+      const publicAssets = new Map([
+        ["public/matter-ui/DepartureMono-Regular.woff2", "departure-font"],
+        ["public/matter-ui/OFL.txt", "font-license"],
+        ["public/matter-ui/PlantinNow.woff2", "plantin-font"],
+        ["public/matter-ui/ptoq-logo.png", "logo"],
+        ["public/matter-ui/shadows-loop.mp4", "mp4"],
+        ["public/matter-ui/shadows-loop.webm", "webm"],
+        ["public/matter-ui/shadows-poster.jpg", "poster"],
+      ]);
+      const writes = [
+        writeFile(
+          join(root, htmlPath),
+          '<script src="/_next/static/chunks/app.12345678.js"></script>',
+        ),
+        writeFile(join(root, ".next/static/chunks/app.12345678.js"), "console.log('matter')"),
+        writeFile(
+          join(root, ".next/static/chunks/offline-wiki.abcdef12.js"),
+          "const pronunciationDictionary = 'bǎng páng pāng';",
+        ),
+        writeFile(
+          join(root, ".next/static/chunks/seed-localization.12345678.js"),
+          "matter-seeded-session-localization matter-seeded-material-copy",
+        ),
+        writeFile(join(root, ".next/static/media/ort.12345678.wasm"), "wasm"),
+        writeFile(join(root, ".next/static/media/12345678-s.woff2"), "font"),
+        writeFile(join(root, iconPath), "tab-icon"),
+        writeFile(join(root, applePath), "touch-icon"),
+        writeFile(
+          join(root, ".next/prerender-manifest.json"),
+          JSON.stringify({ routes: { "/": { compute: "static", initialRevalidateSeconds: false } } }),
+        ),
+        writeFile(
+          join(root, ".next/next-server.js.nft.json"),
+          JSON.stringify({ files: ["../docs/root.md", "../.env.local", "../features/root.test.ts"] }),
+        ),
+        writeFile(
+          join(root, ".next/server/app/page.js.nft.json"),
+          JSON.stringify({
+            files: [
+              "../../../e2e/browser.ts",
+              "../../../node_modules/adm-zip/adm_zip.js",
+            ],
+          }),
+        ),
+        writeFile(
+          join(root, ".next/cache/ignored.nft.json"),
+          JSON.stringify({ files: ["../../docs/ignored.md"] }),
+        ),
+        ...[...publicAssets].map(([path, contents]) => writeFile(join(root, path), contents)),
+      ];
+      await Promise.all(writes);
+
+      const metrics = await readRuntimeArtifact(root);
+      assert.equal(
+        metrics.publicBytes,
+        [...publicAssets.values()].reduce((total, contents) => total + Buffer.byteLength(contents), 0),
+      );
+      assert.equal(metrics.metadataImageBytes, Buffer.byteLength("tab-icontouch-icon"));
+      assert.deepEqual(metrics.metadataImageAssets, [
+        applePath.slice(".next/".length),
+        iconPath.slice(".next/".length),
+      ].sort());
+      assert.deepEqual([...metrics.forbiddenTraceFiles].sort(), [
+        "../../../e2e/browser.ts",
+        "../.env.local",
+        "../docs/root.md",
+        "../features/root.test.ts",
+      ]);
+      assert.equal(
+        metrics.forbiddenTraceFiles.some((file) => file.includes("ignored")),
+        false,
+        ".next/cache must not become a runtime-trace input",
+      );
+      assert.deepEqual(metrics.browserFallbackNodeTraceFiles, [
+        "../../../node_modules/adm-zip/adm_zip.js",
+      ]);
+      assert.deepEqual(metrics.seedLocalizationAssets, [
+        "chunks/seed-localization.12345678.js",
+      ]);
+      assert.deepEqual(metrics.seedMaterialCopyAssets, metrics.seedLocalizationAssets);
+      assert.deepEqual(metrics.offlineWikiQualificationAssets, [
+        "chunks/offline-wiki.abcdef12.js",
+      ]);
+      const failures = inspectRuntimeArtifact(metrics).failures.join("\n");
+      assert.match(failures, /docs\/root\.md/u);
+      assert.match(failures, /\.env\.local/u);
+      assert.match(failures, /root\.test\.ts/u);
+      assert.match(failures, /adm-zip/u);
+      assert.match(failures, /offline Wiki qualification metadata/u);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
+
+test("fails closed when neither root artifact exists", async () => {
+  const root = await mkdtemp(join(tmpdir(), "matter-missing-artifact-"));
   try {
-    await Promise.all([
-      mkdir(join(root, ".next/cache"), { recursive: true }),
-      mkdir(join(root, ".next/server/app"), { recursive: true }),
-      mkdir(join(root, ".next/static/chunks"), { recursive: true }),
-      mkdir(join(root, ".next/static/media"), { recursive: true }),
-      mkdir(join(root, "public/matter-ui"), { recursive: true }),
-    ]);
-
-    const publicAssets = new Map([
-      ["public/matter-ui/DepartureMono-Regular.woff2", "departure-font"],
-      ["public/matter-ui/OFL.txt", "font-license"],
-      ["public/matter-ui/PlantinNow.woff2", "plantin-font"],
-      ["public/matter-ui/ptoq-logo.png", "logo"],
-      ["public/matter-ui/shadows-loop.mp4", "mp4"],
-      ["public/matter-ui/shadows-loop.webm", "webm"],
-      ["public/matter-ui/shadows-poster.jpg", "poster"],
-    ]);
-    const writes = [
-      writeFile(
-        join(root, ".next/server/app/index.html"),
-        '<script src="/_next/static/chunks/app.12345678.js"></script>',
-      ),
-      writeFile(join(root, ".next/static/chunks/app.12345678.js"), "console.log('matter')"),
-      writeFile(
-        join(root, ".next/static/chunks/offline-wiki.abcdef12.js"),
-        "const pronunciationDictionary = 'bǎng páng pāng';",
-      ),
-      writeFile(
-        join(root, ".next/static/chunks/seed-localization.12345678.js"),
-        "matter-seeded-session-localization matter-seeded-material-copy",
-      ),
-      writeFile(join(root, ".next/static/media/ort.12345678.wasm"), "wasm"),
-      writeFile(join(root, ".next/static/media/12345678-s.woff2"), "font"),
-      writeFile(join(root, ".next/server/app/icon1.png.body"), "tab-icon"),
-      writeFile(join(root, ".next/server/app/apple-icon.png.body"), "touch-icon"),
-      writeFile(
-        join(root, ".next/prerender-manifest.json"),
-        JSON.stringify({ routes: { "/": { compute: "static", initialRevalidateSeconds: false } } }),
-      ),
-      writeFile(
-        join(root, ".next/next-server.js.nft.json"),
-        JSON.stringify({ files: ["../docs/root.md", "../.env.local", "../features/root.test.ts"] }),
-      ),
-      writeFile(
-        join(root, ".next/server/app/page.js.nft.json"),
-        JSON.stringify({
-          files: [
-            "../../../e2e/browser.ts",
-            "../../../node_modules/adm-zip/adm_zip.js",
-          ],
-        }),
-      ),
-      writeFile(
-        join(root, ".next/cache/ignored.nft.json"),
-        JSON.stringify({ files: ["../../docs/ignored.md"] }),
-      ),
-      ...[...publicAssets].map(([path, contents]) => writeFile(join(root, path), contents)),
-    ];
-    await Promise.all(writes);
-
-    const metrics = await readRuntimeArtifact(root);
-    assert.equal(
-      metrics.publicBytes,
-      [...publicAssets.values()].reduce((total, contents) => total + Buffer.byteLength(contents), 0),
-    );
-    assert.equal(metrics.metadataImageBytes, Buffer.byteLength("tab-icontouch-icon"));
-    assert.deepEqual(metrics.metadataImageAssets, [
-      "server/app/apple-icon.png.body",
-      "server/app/icon1.png.body",
-    ]);
-    assert.deepEqual([...metrics.forbiddenTraceFiles].sort(), [
-      "../../../e2e/browser.ts",
-      "../.env.local",
-      "../docs/root.md",
-      "../features/root.test.ts",
-    ]);
-    assert.equal(
-      metrics.forbiddenTraceFiles.some((file) => file.includes("ignored")),
-      false,
-      ".next/cache must not become a runtime-trace input",
-    );
-    assert.deepEqual(metrics.browserFallbackNodeTraceFiles, [
-      "../../../node_modules/adm-zip/adm_zip.js",
-    ]);
-    assert.deepEqual(metrics.seedLocalizationAssets, [
-      "chunks/seed-localization.12345678.js",
-    ]);
-    assert.deepEqual(metrics.seedMaterialCopyAssets, metrics.seedLocalizationAssets);
-    assert.deepEqual(metrics.offlineWikiQualificationAssets, [
-      "chunks/offline-wiki.abcdef12.js",
-    ]);
-    const failures = inspectRuntimeArtifact(metrics).failures.join("\n");
-    assert.match(failures, /docs\/root\.md/u);
-    assert.match(failures, /\.env\.local/u);
-    assert.match(failures, /root\.test\.ts/u);
-    assert.match(failures, /adm-zip/u);
-    assert.match(failures, /offline Wiki qualification metadata/u);
+    await assert.rejects(readRuntimeArtifact(root), { code: "ENOENT" });
   } finally {
     await rm(root, { recursive: true, force: true });
   }
