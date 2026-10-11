@@ -504,7 +504,7 @@ Ordered slices (each ships green before the next):
    reducer, the session cache and the Keep order, all dark; 5b-1 (a passage shows its
    picture or a same-size placeholder, with five-locale copy and a height cache
    that knows the picture) **built**; 5b-2 (archive export and import wired into
-   the app, with the `missingImages` report) in progress; 5c-1 (the picture
+   the app, with the `missingImages` report) **built**; 5c-1 (the picture
    driver, the one-in-flight gate, and the health-gated availability read) **built**
    dark; 5c-2 (the control, the arm step and the preview) remains;
 6. compaction and the provenance sidecar.

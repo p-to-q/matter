@@ -150,4 +150,56 @@ describe("material files copy", () => {
     expect(german.resultCount(1)).toBe("1 Materialtreffer");
     expect(german.resultCount(5)).toBe("5 Materialtreffer");
   });
+
+  describe("picture archive notices", () => {
+    it.each(CANVAS_LANGUAGE_OPTIONS)("states both notices and the count in $label", ({ value: locale }) => {
+      const copy = materialFilesCopy(locale);
+      for (const count of [1, 2, 7]) {
+        for (const text of [copy.archivePicturesNotExported(count), copy.archivePicturesNotSaved(count)]) {
+          expect(text.length).toBeGreaterThan(8);
+          expect(text).toContain(String(count));
+        }
+      }
+      expect(copy.archivePicturesNotExported(2)).not.toBe(copy.archivePicturesNotSaved(2));
+    });
+
+    it("is not English outside English", () => {
+      const english = materialFilesCopy("en-US");
+      for (const { value: locale } of CANVAS_LANGUAGE_OPTIONS) {
+        if (locale === "en-US") continue;
+        const copy = materialFilesCopy(locale);
+        expect(copy.archivePicturesNotExported(2)).not.toBe(english.archivePicturesNotExported(2));
+        expect(copy.archivePicturesNotSaved(2)).not.toBe(english.archivePicturesNotSaved(2));
+      }
+    });
+
+    it("chooses singular and plural wording by the locale's rule", () => {
+      const english = materialFilesCopy("en-US");
+      expect(english.archivePicturesNotExported(1))
+        .toBe("Exported. 1 picture file was not on this device and is not in the archive.");
+      expect(english.archivePicturesNotExported(2))
+        .toBe("Exported. 2 picture files were not on this device and are not in the archive.");
+      expect(english.archivePicturesNotSaved(1)).toContain("1 picture could not be saved");
+      expect(english.archivePicturesNotSaved(1)).toContain("keep it.");
+      expect(english.archivePicturesNotSaved(2)).toContain("2 pictures could not be saved");
+      expect(english.archivePicturesNotSaved(2)).toContain("keep them.");
+
+      const german = materialFilesCopy("de-DE");
+      expect(german.archivePicturesNotExported(1))
+        .toBe("Exportiert. 1 Bilddatei war nicht auf diesem Gerät und ist nicht im Archiv.");
+      expect(german.archivePicturesNotExported(3))
+        .toBe("Exportiert. 3 Bilddateien waren nicht auf diesem Gerät und sind nicht im Archiv.");
+      expect(german.archivePicturesNotSaved(1)).toContain("1 Bild konnte");
+      expect(german.archivePicturesNotSaved(1)).toContain("um es zu behalten");
+      expect(german.archivePicturesNotSaved(2)).toContain("2 Bilder konnten");
+      expect(german.archivePicturesNotSaved(2)).toContain("um sie zu behalten");
+
+      // No plural form: one sentence shape for every count.
+      for (const locale of ["zh-CN", "zh-TW", "ja-JP"] as const) {
+        const copy = materialFilesCopy(locale);
+        expect(copy.archivePicturesNotExported(1).replace("1", "2")).toBe(copy.archivePicturesNotExported(2));
+        expect(copy.archivePicturesNotSaved(1).replace("1", "2")).toBe(copy.archivePicturesNotSaved(2));
+      }
+    });
+  });
 });

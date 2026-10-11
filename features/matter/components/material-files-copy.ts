@@ -62,6 +62,10 @@ export type MaterialFilesCopy = Readonly<{
   archiveNoteUnavailable: string;
   archiveNoteUpgradeBlocked: string;
   archiveReloadPage: string;
+  /** After an export: pictures this device could not produce are not in the archive. */
+  archivePicturesNotExported: (count: number) => string;
+  /** After an import: pictures this device could not store last only as long as the tab. */
+  archivePicturesNotSaved: (count: number) => string;
   durabilityCleared: string;
   durabilityDiverged: string;
   durabilityEngineUnavailable: string;
@@ -166,6 +170,10 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   archiveNoteUnavailable: "This browser is not saving Matter material, for example in a private window. Export a copy to keep it.",
   archiveNoteUpgradeBlocked: "Matter is updating local storage. Close other Matter tabs so it can finish.",
   archiveReloadPage: "Reload",
+  archivePicturesNotExported: (count) =>
+    `Exported. ${count} ${counted(ENGLISH_PLURAL, count, "picture file was", "picture files were")} not on this device and ${counted(ENGLISH_PLURAL, count, "is", "are")} not in the archive.`,
+  archivePicturesNotSaved: (count) =>
+    `Imported. ${count} ${counted(ENGLISH_PLURAL, count, "picture", "pictures")} could not be saved on this device and will be gone when you close this tab. Export again to keep ${counted(ENGLISH_PLURAL, count, "it", "them")}.`,
   durabilityCleared: "Local storage was cleared",
   durabilityDiverged: "This page and stored material differ",
   durabilityEngineUnavailable: "Saving could not load",
@@ -273,6 +281,8 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveNoteUnavailable: "此浏览器没有保存 Matter 材料（例如在无痕窗口中）。请导出副本来保留它。",
   archiveNoteUpgradeBlocked: "Matter 正在更新本地存储。请关闭其他 Matter 标签页，让更新完成。",
   archiveReloadPage: "重新载入",
+  archivePicturesNotExported: (count) => `已导出。有 ${count} 张图片的文件不在此设备上，未包含在归档中。`,
+  archivePicturesNotSaved: (count) => `已导入。有 ${count} 张图片无法保存到此设备，关闭这个标签页后将消失。请再次导出以保留。`,
   durabilityCleared: "本地存储已被清除",
   durabilityDiverged: "这一页与已存材料不一致",
   durabilityEngineUnavailable: "保存功能未能加载",
@@ -377,6 +387,8 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveNoteUnavailable: "此瀏覽器沒有儲存 Matter 材料（例如在無痕視窗中）。請匯出副本來保留它。",
   archiveNoteUpgradeBlocked: "Matter 正在更新本機儲存。請關閉其他 Matter 分頁，讓更新完成。",
   archiveReloadPage: "重新載入",
+  archivePicturesNotExported: (count) => `已匯出。有 ${count} 張圖片的檔案不在此裝置上，未包含在封存檔中。`,
+  archivePicturesNotSaved: (count) => `已匯入。有 ${count} 張圖片無法儲存到此裝置，關閉這個分頁後將消失。請再次匯出以保留。`,
   durabilityCleared: "本機儲存已被清除",
   durabilityDiverged: "這一頁與已存材料不一致",
   durabilityEngineUnavailable: "儲存功能未能載入",
@@ -481,6 +493,8 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   archiveNoteUnavailable: "このブラウザは Matter の素材を保存していません（プライベートウィンドウなど）。残すにはコピーを書き出してください。",
   archiveNoteUpgradeBlocked: "Matter が端末内ストレージを更新しています。完了させるには他の Matter タブを閉じてください。",
   archiveReloadPage: "再読み込み",
+  archivePicturesNotExported: (count) => `書き出しました。${count}枚の絵のファイルがこの端末になく、アーカイブに含まれていません。`,
+  archivePicturesNotSaved: (count) => `読み込みました。${count}枚の絵をこの端末に保存できませんでした。このタブを閉じると消えます。もう一度書き出して保管してください。`,
   durabilityCleared: "端末内ストレージが消去されました",
   durabilityDiverged: "このページと保存済みの素材が異なります",
   durabilityEngineUnavailable: "保存機能を読み込めませんでした",
@@ -585,6 +599,10 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   archiveNoteUnavailable: "Dieser Browser speichert kein Matter-Material, zum Beispiel in einem privaten Fenster. Exportieren Sie eine Kopie, um es zu behalten.",
   archiveNoteUpgradeBlocked: "Matter aktualisiert den lokalen Speicher. Schließen Sie andere Matter-Tabs, damit das Update abgeschlossen werden kann.",
   archiveReloadPage: "Neu laden",
+  archivePicturesNotExported: (count) =>
+    `Exportiert. ${count} ${counted(GERMAN_PLURAL, count, "Bilddatei war", "Bilddateien waren")} nicht auf diesem Gerät und ${counted(GERMAN_PLURAL, count, "ist", "sind")} nicht im Archiv.`,
+  archivePicturesNotSaved: (count) =>
+    `Importiert. ${count} ${counted(GERMAN_PLURAL, count, "Bild konnte", "Bilder konnten")} nicht auf diesem Gerät gespeichert werden und ${counted(GERMAN_PLURAL, count, "ist", "sind")} nach dem Schließen dieses Tabs weg. Exportieren Sie erneut, um ${counted(GERMAN_PLURAL, count, "es", "sie")} zu behalten.`,
   durabilityCleared: "Lokaler Speicher wurde gelöscht",
   durabilityDiverged: "Diese Seite und das gespeicherte Material weichen ab",
   durabilityEngineUnavailable: "Speichern konnte nicht geladen werden",

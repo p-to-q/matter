@@ -17,6 +17,24 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — pictures travel through Export and Import, and import never aborts for want of storage
+
+Changed: Export gathers each referenced picture from the session cache, then the
+blob store, and the archive reports how many files were not on this device on the
+existing archive status line. Import stores the bytes before the document is
+committed, so the first render can read them. If the store refuses a picture, the
+import still succeeds, the picture stays visible from the session cache, and the
+same status line says how many will be gone when the tab closes.
+
+Why: a pointer without durable bytes is a state the app already renders honestly,
+and aborting the import would cost the person their material to protect a
+convenience. This reverses the earlier audit note that a blob quota refusal should
+abort an import.
+
+Forecloses: an import that fails because pictures could not be saved, and an
+export that fails because pictures are missing. The corrupt-recovery JSON export
+does not carry pictures.
+
 ## 2026-10-12 — a picture turn has a driver, a one-in-flight gate, and a health-gated availability read
 
 Changed: `PictureDriver` owns one picture turn on one passage: it sends the

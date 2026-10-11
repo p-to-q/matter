@@ -126,9 +126,16 @@ type ArchivePhase = "idle" | "exporting" | "validating" | "replacing" | "repairi
 type IndexMode = "archive" | "browse" | "search" | "select";
 const COMPLETE_INDEX_NAVIGATION = createNavigationState();
 
+/** A success that still owes the person one sentence, stated by the surface in its own copy. */
+export type MaterialArchiveNotice = Readonly<{
+  kind: "pictures-not-exported" | "pictures-not-saved";
+  count: number;
+}>;
+
 export type MaterialArchiveActionResult =
   | Readonly<{
       ok: true;
+      notice?: MaterialArchiveNotice;
       /** Present only after a corrupt row has been exported by this action. */
       repairCorrupt?: () => Promise<MaterialArchiveActionResult>;
       /** A validated archive older than the current material. */
@@ -166,7 +173,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
    * carry. Below that width it overlays the canvas and still needs a handle.
    */
   const [docked, setDocked] = useState(false);
-  const [mode, setMode] = useState<IndexMode>("browse");
+  const [indexMode, setMode] = useState<IndexMode>("browse");
   const [query, setQuery] = useState("");
   const [selectionState, setSelectionState] = useState<Readonly<{ epoch: number; ids: ReadonlySet<string> }>>(
     () => ({ epoch: props.documentEpoch, ids: new Set<string>() }),
@@ -175,6 +182,17 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const [showSaving, setShowSaving] = useState(false);
   const [archivePhase, setArchivePhase] = useState<ArchivePhase>("idle");
   const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [archiveNotice, setArchiveNotice] = useState<MaterialArchiveNotice | null>(null);
+  // An import's notice belongs to the document it created, whose switch resets
+  // this surface. It is derived, not copied into state the reset could erase,
+  // so it holds the panel open however the switch and the import's answer order.
+  const [importNotice, setImportNotice] =
+    useState<Readonly<{ notice: MaterialArchiveNotice; fromEpoch: number }> | null>(null);
+  const switchedImportNotice = importNotice !== null && importNotice.fromEpoch !== props.documentEpoch
+    ? importNotice.notice
+    : null;
+  const mode: IndexMode = switchedImportNotice === null ? indexMode : "archive";
+  const shownNotice = switchedImportNotice ?? archiveNotice;
   const [preparedImport, setPreparedImport] = useState<PreparedImport | null>(null);
   // Opening Archive acknowledges a history notice; its note stays readable
   // for as long as the panel that explains it is open.
@@ -507,6 +525,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setCopyState("idle");
     setArchivePhase("idle");
     setArchiveError(null);
+    setArchiveNotice(null);
     setPreparedImport(null);
     setCorruptRepair(null);
     setScrollMetrics({ top: 0, height: bodyRef.current?.clientHeight ?? 0 });
@@ -799,6 +818,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const closeArchive = () => {
     if (archiveBusy) return;
     setArchiveError(null);
+    setArchiveNotice(null);
+    setImportNotice(null);
     setPreparedImport(null);
     setCorruptRepair(null);
     setArchiveHistoryNotice(null);
@@ -807,6 +828,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const openArchive = () => {
     setCopyState("idle");
     setArchiveError(null);
+    setArchiveNotice(null);
+    setImportNotice(null);
     setPreparedImport(null);
     setArchiveHistoryNotice(persistenceStatus.historyNotice);
     props.archive?.prepare?.();
@@ -814,19 +837,30 @@ export function MaterialFiles(props: MaterialFilesProps) {
     props.persistence.acknowledgeHistoryNotice?.();
   };
 
+  // A notice that was holding Archive open hands that over to the mode itself.
+  const clearArchiveNotices = () => {
+    if (switchedImportNotice !== null) setMode("archive");
+    setArchiveNotice(null);
+    setImportNotice(null);
+  };
+
   const exportArchive = async () => {
     if (props.archive === undefined || archiveBusy) return;
     const documentEpoch = props.documentEpoch;
     setArchiveError(null);
+    clearArchiveNotices();
     if (corrupt) setCorruptRepair(null);
     setArchivePhase("exporting");
     try {
       const result = await props.archive.exportCopy();
       if (liveDocumentEpochRef.current === documentEpoch) {
         if (!result.ok) setArchiveError(result.message);
-        else if (corrupt && result.repairCorrupt !== undefined) {
-          const repair = result.repairCorrupt;
-          setCorruptRepair(() => repair);
+        else {
+          setArchiveNotice(result.notice ?? null);
+          if (corrupt && result.repairCorrupt !== undefined) {
+            const repair = result.repairCorrupt;
+            setCorruptRepair(() => repair);
+          }
         }
       }
     } catch {
@@ -869,6 +903,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     if (props.archive === undefined || archiveBusy) return;
     const documentEpoch = props.documentEpoch;
     setArchiveError(null);
+    clearArchiveNotices();
     setPreparedImport(null);
     setArchivePhase("validating");
     try {
@@ -904,11 +939,15 @@ export function MaterialFiles(props: MaterialFilesProps) {
     if (props.archive === undefined || preparedImport === null || archiveBusy) return;
     const documentEpoch = props.documentEpoch;
     setArchiveError(null);
+    clearArchiveNotices();
     setArchivePhase("replacing");
     try {
       const result = await props.archive.replaceImport(preparedImport.file, {
         replaceUnsaved: persistenceStatus.replaceableByImport,
       });
+      if (result.ok && result.notice !== undefined) {
+        setImportNotice({ notice: result.notice, fromEpoch: documentEpoch });
+      }
       if (liveDocumentEpochRef.current !== documentEpoch) return;
       if (result.ok) {
         setPreparedImport(null);
@@ -1108,6 +1147,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
             busy={archiveBusy}
             copy={copy}
             error={archiveError}
+            notice={shownNotice === null ? null : archiveNoticeText(copy, shownNotice)}
             inputRef={archiveInputRef}
             phase={archivePhase}
             preparedImport={preparedImport}
@@ -1612,6 +1652,7 @@ function ArchivePanel({
   error,
   inputRef,
   note,
+  notice,
   phase,
   preparedImport,
   replacesUnsaved,
@@ -1634,6 +1675,8 @@ function ArchivePanel({
   error: string | null;
   inputRef: RefObject<HTMLInputElement | null>;
   note: string;
+  /** What the last finished action owes the person; the status line yields to a running phase. */
+  notice: string | null;
   phase: ArchivePhase;
   preparedImport: PreparedImport | null;
   /** Replacing refused material says so, and says what an older copy loses. */
@@ -1722,7 +1765,7 @@ function ArchivePanel({
         type="file"
       />
       {/* Live regions mount before they speak, or their first line may be silent. */}
-      <p aria-live="polite" className="material-files__archive-status">{phaseLabel}</p>
+      <p aria-live="polite" className="material-files__archive-status">{phaseLabel ?? notice}</p>
       <p aria-live="polite" className="material-files__archive-error">{error}</p>
       {preparedImport !== null ? (
         <div className="material-files__archive-confirm">
@@ -1738,6 +1781,12 @@ function ArchivePanel({
       ) : null}
     </section>
   );
+}
+
+function archiveNoticeText(copy: MaterialFilesCopy, notice: MaterialArchiveNotice): string {
+  return notice.kind === "pictures-not-exported"
+    ? copy.archivePicturesNotExported(notice.count)
+    : copy.archivePicturesNotSaved(notice.count);
 }
 
 /** An exception's own text is engineering detail, never archive copy. */

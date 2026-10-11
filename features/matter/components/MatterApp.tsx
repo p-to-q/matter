@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { RootedMaterial } from "./RootedMaterial";
 import { PictureBytesContext } from "./picture-bytes-context";
-import { usePictureBytesSource } from "./use-picture-bytes-source";
+import { usePictureStore } from "./use-picture-store";
+import { collectPictureBlobs, restorePictureBlobs } from "../interaction/archive-pictures";
 import { useMatterStore, useWikiOccurrences } from "./use-matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
 import { admissionHoldsSubmittedWords } from "../runtime/admission-interaction";
@@ -62,7 +63,7 @@ const loadArchiveTransport = () => Promise.all([
 
 export function MatterApp() {
   useWikiAuthority();
-  const pictureBytes = usePictureBytesSource();
+  const pictureStore = usePictureStore();
   const tree = useMatterStore((state) => state.tree);
   const documentEpoch = useMatterStore((state) => state.documentEpoch);
   const history = useMatterStore((state) => state.history);
@@ -161,13 +162,21 @@ export function MatterApp() {
     }
     // Always exported from memory: superseded or cleared storage cannot be read.
     const { exportSnapshotArchive, treeToBundle } = await loadArchiveTransport();
-    const archive = await exportSnapshotArchive(treeToBundle(tree));
+    // Pictures a device can no longer produce are left out and counted, never
+    // a reason to refuse the export.
+    const blobs = await collectPictureBlobs(tree, pictureStore);
+    const archive = await exportSnapshotArchive(treeToBundle(tree), blobs);
     if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     downloadLocalBytes(archive.bytes, `${tree.id}.matter.zip`, "application/zip");
     // The exported copy carries every word whose address still holds.
     wikiOccurrences.noteExported();
-    return Object.freeze({ ok: true } as const);
-  }, [archiveLanguage, persistence, requestStoragePersistence, tree, wikiOccurrences]);
+    return archive.missingImages > 0
+      ? Object.freeze({
+          ok: true,
+          notice: Object.freeze({ kind: "pictures-not-exported", count: archive.missingImages }),
+        } as const)
+      : Object.freeze({ ok: true } as const);
+  }, [archiveLanguage, persistence, pictureStore, requestStoragePersistence, tree, wikiOccurrences]);
   const validateArchive = useCallback(async (file: File) => {
     const { importSnapshotArchive } = await loadArchiveTransport();
     const archive = await importSnapshotArchive(file);
@@ -189,11 +198,27 @@ export function MatterApp() {
     const { importSnapshotArchive } = await loadArchiveTransport();
     const archive = await importSnapshotArchive(file);
     if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
+    // The bytes must be readable by the first render of the imported document,
+    // so they are stored before it is committed. Failing to store them never
+    // refuses the import.
+    const pictures = await restorePictureBlobs(archive.blobs, archive.tree, pictureStore);
     const imported = await persistence.importMaterial(archive.tree, basis, options);
-    return imported.status === "switched"
-      ? Object.freeze({ ok: true } as const)
-      : archiveFailure(imported.errorCode, archiveLanguage);
-  }, [archiveLanguage, documentEpoch, persistence, requestStoragePersistence, tree.id, tree.revision]);
+    if (imported.status !== "switched") return archiveFailure(imported.errorCode, archiveLanguage);
+    return pictures.keptInSession > 0
+      ? Object.freeze({
+          ok: true,
+          notice: Object.freeze({ kind: "pictures-not-saved", count: pictures.keptInSession }),
+        } as const)
+      : Object.freeze({ ok: true } as const);
+  }, [
+    archiveLanguage,
+    documentEpoch,
+    persistence,
+    pictureStore,
+    requestStoragePersistence,
+    tree.id,
+    tree.revision,
+  ]);
   useEffect(() => preloadWhenIdle([loadArchiveTransport]), []);
   const archive = useMemo(() => Object.freeze({
     prepare: () => preloadNow(() => loadArchiveTransport()
@@ -312,7 +337,7 @@ export function MatterApp() {
     return materialTurnResult(receipt, "textSwapChange" in receipt ? receipt.textSwapChange : null);
   }, [commitTextSwap]);
   return (
-    <PictureBytesContext.Provider value={pictureBytes}>
+    <PictureBytesContext.Provider value={pictureStore.bytes}>
     <RootedMaterial
       canUndo={history.entries.length > 0}
       canRedo={history.redoEntries.length > 0}
