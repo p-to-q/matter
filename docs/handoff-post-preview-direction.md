@@ -675,6 +675,23 @@ Each can be reversed by saying so; none opens a paid or public surface.
 5. **L0.** Not started: the probe downloads a multi-gigabyte model and a binary,
    and a download is the owner's to approve.
 
+## The owner's original intents, and where each stands — 2026-10-12
+
+Kept here so a later reader can check that the plan still realizes what was asked,
+including the earliest turns of the thread.
+
+| Intent (owner's words, condensed) | State | Next slice |
+| --- | --- | --- |
+| Share coherence with the AI: the tree's relations, not loose files, reach every AI entry, with a short project-and-context framing | working projection is one tested function (built); pure `projectMaterial` and Markdown receipt in progress (C1) | C2: wire one projection into Point and Talk and Ask Matter prompts with a fenced reference-data frame, behind an eval of prompt size and answer quality |
+| Markdown that shows coherence, links and relations, not just files; an Atom/RSS-like receipt for machines | C1 defines the receipt grammar, with digest and strict parser | C2: an explicit "Copy with context" and "Download receipt" action, five-locale copy; native Copy stays literal |
+| Left panel and canvas respond together; selecting a child lights the path to the root | index ancestor underline built; operation-time canvas line not built | I0 slice B: an operation-scoped root→target line on the canvas, only while Point and Talk or Elastic runs, measured against the 2,000-node receipt |
+| Point and Talk gets 生图 as plain text left of the black button; the generation API comes later | closed gate, server route, material lifecycle, canvas rendering, driver and gate built; control and preview in progress | 5c-2: the control, arm step and preview, health-gated and unopened in production |
+| Branch overlaps Voice and belongs only to Preview | decision taken: stays until human child creation has another home | a decided replacement, then the Preview flag and the eight e2e specs |
+| Croquet-style deterministic recompute; sync only the tree and its links; light trustworthy format | satisfied by design: the tree is the authority and every view is a projection; the receipt and archive are the portable formats | S0 only on observed cross-device demand |
+| Local models and a desktop client, privacy-first, sovereignty over material | direction accepted, no capability claim; web keeps its SSRF boundary | L0: one headless probe, awaiting approval to download a model |
+| Material outlives the model; Why Matter exists; long-term direction in the product docs | written in `product.md` and `principles.md` | none |
+| Open-source posture | the repository is proprietary; local deployment, open formats and open source are three separate decisions | an open format first; licensing is a separate owner decision |
+
 ## Next owner decision (superseded where decided above)
 
 Wave 1 and the S2 and image-control audits are done. Nothing here is a
