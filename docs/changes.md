@@ -17,6 +17,26 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — the picture control exists, and nothing opens it
+
+Changed: Point and Talk gains a plain-text control (zh-CN 生图, zh-TW 生圖, ja-JP 描く,
+en-US Draw, de-DE Zeichnen) between Voice and the submit button. It appears only when
+`/api/health` reports the literal `available` for image generation and the passage can
+be drawn. Clicking it never sends: an arm step states what goes where and what it may
+cost, then Draw, Back, "Drawing…" with "Stop waiting", and a preview with Keep and
+Discard. A press elsewhere does not discard a picture that was paid for; leaving, or
+the passage changing, does and says so. A failure after the relay was contacted offers
+no retry and the next arm warns that the last attempt may have been used. Keep is one
+pointer-undoable step; Undo and Redo make no network or storage call. The production
+gate stays off, so for real users nothing appears.
+
+Why: a control that cannot act is a claim about an unbuilt capability, so it is built
+whole and kept unopened until the owner decides who pays and how spend is limited.
+
+Forecloses: showing the control before the surface is open, a retry that spends again
+without a warning, and discarding paid work on an incidental press. All non-English
+copy is provisional until a native speaker reviews it.
+
 ## 2026-10-12 — a person can copy passages with their context, and download the whole receipt
 
 Changed: the Files panel's select mode has "Copy with context" beside Copy, and the

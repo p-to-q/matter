@@ -28,6 +28,18 @@ describe("outcome line", () => {
       .toBeNull();
   });
 
+  it("holds one picture outcome per line, replaced in place, beside the other owners", () => {
+    const line = report(
+      { owner: "picture", reason: "stopped" },
+      REWRITE,
+      { owner: "picture", reason: "stale" },
+    );
+    expect(line.entries.map(({ owner, reason }) => `${owner}:${reason}`)).toEqual([
+      "picture:stale",
+      "rewrite:stale",
+    ]);
+  });
+
   it("holds at most one outcome per owner, the newest in its owner's place", () => {
     const line = report(EXPANSION, REWRITE, { owner: "expansion", reason: "stale" }, REWRITE);
     expect(line.entries.map(({ owner, reason }) => `${owner}:${reason}`)).toEqual([

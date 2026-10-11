@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { RootedMaterial } from "./RootedMaterial";
 import { PictureBytesContext } from "./picture-bytes-context";
+import { PictureAuthoringContext } from "./picture-authoring-context";
+import { usePictureAuthoring } from "./use-picture-authoring";
 import { usePictureStore } from "./use-picture-store";
 import { collectPictureBlobs, restorePictureBlobs } from "../interaction/archive-pictures";
-import { useMatterStore, useWikiOccurrences } from "./use-matter-store";
+import { useMatterStore, useMatterStoreAccess, useWikiOccurrences } from "./use-matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
 import { admissionHoldsSubmittedWords } from "../runtime/admission-interaction";
 import { useAdmission } from "../interaction/use-admission";
@@ -65,6 +67,7 @@ const loadArchiveTransport = () => Promise.all([
 export function MatterApp() {
   useWikiAuthority();
   const pictureStore = usePictureStore();
+  const pictureAuthoring = usePictureAuthoring(pictureStore, useMatterStoreAccess());
   const tree = useMatterStore((state) => state.tree);
   const documentEpoch = useMatterStore((state) => state.documentEpoch);
   const history = useMatterStore((state) => state.history);
@@ -339,6 +342,7 @@ export function MatterApp() {
   }, [commitTextSwap]);
   return (
     <PictureBytesContext.Provider value={pictureStore.bytes}>
+    <PictureAuthoringContext.Provider value={pictureAuthoring}>
     <RootedMaterial
       canUndo={history.entries.length > 0}
       canRedo={history.redoEntries.length > 0}
@@ -382,6 +386,7 @@ export function MatterApp() {
       tree={tree}
       wikiOccurrences={wikiOccurrences}
     />
+    </PictureAuthoringContext.Provider>
     </PictureBytesContext.Provider>
   );
 }

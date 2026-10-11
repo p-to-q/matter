@@ -81,7 +81,9 @@ type CanvasActionGuidanceId =
   | "text-swap-unavailable"
   | "text-swap-stale"
   | "wiki-unsaved"
-  | "wiki-passage-changed";
+  | "wiki-passage-changed"
+  | "picture-stale"
+  | "picture-stopped";
 
 export type CanvasGuidanceId = CanvasActionGuidanceId | "canvas-zoom";
 
@@ -119,6 +121,8 @@ const EN_US_LINES = Object.freeze({
   "text-swap-stale": "Passage changed. Not rewritten.",
   "wiki-unsaved": "Wiki could not save that.",
   "wiki-passage-changed": "Passage changed. Not restored.",
+  "picture-stale": "Passage changed. Not drawn.",
+  "picture-stopped": "Not drawn.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 const ZH_CN_LINES = Object.freeze({
@@ -152,6 +156,8 @@ const ZH_CN_LINES = Object.freeze({
   "text-swap-stale": "段落已变化，未改写。",
   "wiki-unsaved": "词典 WIKI 未能记下这次选择。",
   "wiki-passage-changed": "段落已变化，未恢复。",
+  "picture-stale": "段落已变化，未生图。",
+  "picture-stopped": "没有生成图片。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 export type CanvasGuidance =
@@ -269,6 +275,8 @@ export function outcomeGuidanceId(outcome: MaterialOutcome): CanvasActionGuidanc
       return outcome.reason === "stale" ? "text-swap-stale" : "text-swap-unavailable";
     case "wiki":
       return outcome.reason === "passage-changed" ? "wiki-passage-changed" : "wiki-unsaved";
+    case "picture":
+      return outcome.reason === "stale" ? "picture-stale" : "picture-stopped";
     default:
       return assertNever(outcome);
   }
@@ -327,6 +335,8 @@ const ZH_TW_LINES = Object.freeze({
   "text-swap-stale": "段落已變更，未改寫。",
   "wiki-unsaved": "詞典 WIKI 未能記下這次選擇。",
   "wiki-passage-changed": "段落已變更，未恢復。",
+  "picture-stale": "段落已變更，未生圖。",
+  "picture-stopped": "沒有生成圖片。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const JA_JP_LINES = Object.freeze({
   "allow-microphone": "マイクの使用を許可してください。",
@@ -359,6 +369,8 @@ const JA_JP_LINES = Object.freeze({
   "text-swap-stale": "段落が変わったため書き換えませんでした。",
   "wiki-unsaved": "辞書 WIKI はこの選択を保存できませんでした。",
   "wiki-passage-changed": "段落が変わったため戻しませんでした。",
+  "picture-stale": "段落が変わったため描きませんでした。",
+  "picture-stopped": "描けませんでした。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const DE_DE_LINES = Object.freeze({
   "allow-microphone": "Mikrofonzugriff erlauben.",
@@ -391,6 +403,8 @@ const DE_DE_LINES = Object.freeze({
   "text-swap-stale": "Passage geändert. Nicht umgeschrieben.",
   "wiki-unsaved": "Wiki konnte das nicht speichern.",
   "wiki-passage-changed": "Passage geändert. Nicht wiederhergestellt.",
+  "picture-stale": "Passage geändert. Nicht gezeichnet.",
+  "picture-stopped": "Nicht gezeichnet.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 type GuidanceLocaleCopy = Readonly<{

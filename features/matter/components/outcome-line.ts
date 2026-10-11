@@ -22,7 +22,12 @@ export type MaterialOutcome =
    * An explicit Keep or restore of a Wiki change: Wiki could not record it, or
    * the passage no longer held the word to restore.
    */
-  | Readonly<{ owner: "wiki"; reason: "unsaved" | "passage-changed" }>;
+  | Readonly<{ owner: "wiki"; reason: "unsaved" | "passage-changed" }>
+  /**
+   * A Point-and-Talk picture the person stopped waiting for, or whose passage
+   * changed. Failures are said by the bubble itself while it is open.
+   */
+  | Readonly<{ owner: "picture"; reason: "stale" | "stopped" }>;
 
 export type OutcomeOwner = MaterialOutcome["owner"];
 

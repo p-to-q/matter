@@ -9,7 +9,8 @@ import { pictureCopy } from "./picture-copy";
 import { pictureBoxStyle, pictureLayoutKey } from "./passage-picture-box";
 import { startPictureLoad, type ObjectUrls, type PictureLoadState } from "./passage-picture-load";
 
-const BROWSER_OBJECT_URLS: ObjectUrls = Object.freeze({
+/** The browser's object URLs: the one implementation of `ObjectUrls`, at the render edge. */
+export const BROWSER_OBJECT_URLS: ObjectUrls = Object.freeze({
   create: (blob) => URL.createObjectURL(blob),
   revoke: (url) => URL.revokeObjectURL(url),
 });

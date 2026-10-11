@@ -104,6 +104,7 @@ import {
   type CanvasTurnGuidanceState,
 } from "./canvas-guidance";
 import { useOutcomeAcknowledgement, useOutcomeLine } from "./use-outcome-line";
+import type { PictureHold, PictureOutcomeReason } from "./picture-surface";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
 import type { StoredReloadOutcome } from "../persistence/persistence-status";
 import {
@@ -516,6 +517,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
     wikiOccurrences?.setSurfaceAvailable(materialPresentationAvailable);
   }, [materialPresentationAvailable, wikiOccurrences]);
   const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
+  // Whether the open field holds a picture turn a press elsewhere must not end.
+  const [pointTalkPictureHold, setPointTalkPictureHold] = useState<PictureHold>("free");
+  const [pictureAnnouncement, setPictureAnnouncement] = useState<Readonly<{
+    id: number;
+    text: string;
+    /** The outcome line's last report when this was said. */
+    afterOutcomeId: number;
+  }> | null>(null);
+  const lastOutcomeIdRef = useRef(0);
+  const reportPictureAnnouncement = useCallback((text: string) => {
+    setPictureAnnouncement((current) => ({
+      id: (current?.id ?? 0) + 1,
+      text,
+      afterOutcomeId: lastOutcomeIdRef.current,
+    }));
+  }, []);
+  const reportPictureOutcome = useCallback((reason: PictureOutcomeReason) => {
+    reportOutcome({ owner: "picture", reason });
+  }, [reportOutcome]);
   const [pointTalkExitHandoff] = useState(() => createPresenceHandoff<PointTalkSurfaceView>());
   const reportPointTalkOutcome = useCallback((reason: PointTalkReleasedOutcome) => {
     reportOutcome({ owner: "rewrite", reason });
@@ -1356,6 +1376,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
   );
   const activePointTalkNodeId = pointTalkPresented ? pointTalkHostNodeId : null;
   const pointTalkSelectionCurrent = pointTalkHostNodeId !== null;
+  // Selecting another passage ends an unsent draft, but not a picture that is
+  // being drawn or waits for Keep: its scope is fixed for the rest of the
+  // opening once it holds paid work. The passage's own words still end it.
+  const livePointTalkScopeKey = `${navigationKey}:${workingContextState.epoch}:point-talk`;
+  const [pointTalkScopeHold, setPointTalkScopeHold] = useState<Readonly<{
+    openingId: number;
+    key: string;
+  }> | null>(null);
+  if (pointTalkPictureHold === "paid" && pointTalkScopeHold?.openingId !== pointTalkOpeningId) {
+    setPointTalkScopeHold({ openingId: pointTalkOpeningId, key: livePointTalkScopeKey });
+  }
+  const pointTalkScopeKey = pointTalkScopeHold?.openingId === pointTalkOpeningId
+    ? pointTalkScopeHold.key
+    : livePointTalkScopeKey;
   // One opening of the field, owned by the turn's target so it outlives that
   // target: a vanished passage still names the field that must leave.
   const pointTalkPresenceIdentity = pointTalkOwner === null
@@ -1384,10 +1418,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
       pointTalkOwner.treeId === tree.id;
     if (sameDocument && (
       pointTalkPresented || pointTalkPhase === "pending" || pointTalkPhase === "transcribing"
-    )) reportOutcome({ owner: "rewrite", reason: "stale" });
+    )) {
+      reportOutcome(pointTalkPictureHold === "free"
+        ? { owner: "rewrite", reason: "stale" }
+        : { owner: "picture", reason: "stale" });
+    }
     closePointTalk(sameDocument ? "target-changed" : "cut");
     setPointTalkOwner(null);
     if (pointTalkPhase !== "idle") setPointTalkPhase("idle");
+    if (pointTalkPictureHold !== "free") setPointTalkPictureHold("free");
   }
   const stretchSelection = eligibleStretchSelection({
     candidate: lasso.selections.length === 1 && lasso.selection?.type === "segment-range"
@@ -1435,19 +1474,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
       cancelPointTalkFocusRestore();
     };
   }, [cancelPointTalkFocusRestore]);
-  const publishPointTalkChange = useCallback((change: TextSwapCommittedChange) => {
-    publishMaterialTextChange(change);
-    // The rewritten passage is the ending: the field fades over it.
+  const finishPointTalk = useCallback((basis: PointTalkFocusRestorationBasis) => {
+    // The changed passage is the ending: the field fades over it.
     closePointTalk("result");
     setPointTalkOwner(null);
     setPointTalkPhase("idle");
     setPointTalkVoiceCommand(null);
     cancelPointTalkFocusRestore();
-    const basis = Object.freeze({
-      documentEpoch: change.documentEpoch,
-      nodeId: change.nodeId,
-      treeId: change.treeId,
-    });
     if (!pointTalkFocusRestorationIsCurrent(basis, tree, props.documentEpoch)) return;
     const frameId = requestAnimationFrame(() => {
       const pending = pointTalkFocusFrameRef.current;
@@ -1471,13 +1504,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
       }
     });
     pointTalkFocusFrameRef.current = Object.freeze({ basis, frameId });
-  }, [
-    cancelPointTalkFocusRestore,
-    closePointTalk,
-    props.documentEpoch,
-    publishMaterialTextChange,
-    tree,
-  ]);
+  }, [cancelPointTalkFocusRestore, closePointTalk, props.documentEpoch, tree]);
+  const publishPointTalkChange = useCallback((change: TextSwapCommittedChange) => {
+    publishMaterialTextChange(change);
+    finishPointTalk(Object.freeze({
+      documentEpoch: change.documentEpoch,
+      nodeId: change.nodeId,
+      treeId: change.treeId,
+    }));
+  }, [finishPointTalk, publishMaterialTextChange]);
   const admissionLifecycleState = props.admission.state;
   const setAdmissionDeliveryTarget = props.admission.setDeliveryTarget;
   useLayoutEffect(() => {
@@ -1620,9 +1655,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
   // way a leaving Point Talk field is painted differs.
   /** The person acted elsewhere: presentations leave as the person's close. */
   const dismissPaperPresentations = useCallback(() => {
-    closePointTalk("person");
+    // A picture that is being drawn, or waits for Keep, is paid work: a press
+    // elsewhere does not end it. Only its own controls, or another owner
+    // taking the slot, do.
+    if (pointTalkPictureHold !== "paid") closePointTalk("person");
     abortElasticExpansion();
-  }, [abortElasticExpansion, closePointTalk]);
+  }, [abortElasticExpansion, closePointTalk, pointTalkPictureHold]);
   /** Another owner takes the paper's slot: a Point Talk field fades quickly. */
   const yieldPaperPresentations = useCallback(() => {
     closePointTalk("slot");
@@ -2341,6 +2379,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     voiceAdmissionIsEnabled() &&
     voiceReadiness.status === "ready";
   const pointTalkVoiceStartable = activePointTalkNodeId !== null &&
+    pointTalkPictureHold === "free" &&
     (pointTalkPhase === "eligible" || pointTalkPhase === "ready" || pointTalkPhase === "error");
   const pointTalkVoiceRecording = activePointTalkNodeId !== null && pointTalkPhase === "recording";
   const selectedRewriteAvailable = selectedRewriteNodeId !== null &&
@@ -2517,6 +2556,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     ? outcomeLine.current
     : null;
   useOutcomeAcknowledgement(shownOutcome, outcomeLine.acknowledge);
+  useEffect(() => {
+    lastOutcomeIdRef.current = outcomeLine.lastId;
+  });
   const parkedRelease = guidance.id === "expansion-parked"
     ? discardParkedExpansion
     : guidance.id === "text-swap-parked"
@@ -3791,7 +3833,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
           <span key={`outcome_${shownOutcome.id}`}>{localizeOutcome(shownOutcome, props.locale)}</span>
         ) : guidance.id === "expansion-parked" || guidance.id === "text-swap-parked" ? (
           <span key={guidance.id}>{guidance.text}</span>
-        ) : null}
+        ) : pictureAnnouncement === null || pictureAnnouncement.afterOutcomeId !== outcomeLine.lastId
+          // An outcome reported since supersedes it; said once, it is not said again.
+          ? null
+          : (
+          <span key={`picture_${pictureAnnouncement.id}`}>{pictureAnnouncement.text}</span>
+        )}
       </span>
       <PaperTexture />
       <header className="matter-header" data-canvas-interactive>
@@ -4151,7 +4198,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
             enabled={pointTalkSelectionCurrent && !persistenceLoading}
             geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}:${materialPresentationAvailable ? "surface" : "occluded"}`}
             exitHandoff={pointTalkExitHandoff}
-            interactionScopeKey={`${navigationKey}:${workingContextState.epoch}:point-talk`}
+            interactionPending={interactionPending || transformState.phase === "requesting"}
+            interactionScopeKey={pointTalkScopeKey}
             key={`${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`}
             locale={props.locale}
             nodeId={pointTalkHostNodeId}
@@ -4159,6 +4207,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
             onCommitted={publishPointTalkChange}
             onDeliveryParkedChange={reportPointTalkParked}
             onPhaseChange={setPointTalkPhase}
+            onPictureAnnouncement={reportPictureAnnouncement}
+            onPictureHoldChange={setPointTalkPictureHold}
+            onPictureKept={finishPointTalk}
+            onPictureOutcome={reportPictureOutcome}
             onReleased={releasePointTalkJob}
             onReleasedOutcome={reportPointTalkOutcome}
             origin={pointTalkOrigin}

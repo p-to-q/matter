@@ -92,6 +92,23 @@ describe("Point Talk recovery", () => {
     })).toBe(false);
   });
 
+  it("never reads a press elsewhere as the end of a picture that is drawn or waits for Keep", () => {
+    const outside = {
+      insideBubble: false,
+      insideCanvasChrome: false,
+      insideVoiceTool: false,
+      submitted: false,
+    } as const;
+    expect(pointTalkOutsidePointerDismisses(outside)).toBe(true);
+    expect(pointTalkOutsidePointerDismisses({ ...outside, holdsPaidWork: false })).toBe(true);
+    expect(pointTalkOutsidePointerDismisses({ ...outside, holdsPaidWork: true })).toBe(false);
+    expect(pointTalkOutsidePointerDismisses({
+      ...outside,
+      insideCanvasChrome: true,
+      holdsPaidWork: true,
+    })).toBe(false);
+  });
+
   it("keeps request retry and voice retry as distinct pointer actions", () => {
     expect(pointTalkRecoveryAction(
       failure("REQUEST_FAILED", { direction: "Make it quieter" }),

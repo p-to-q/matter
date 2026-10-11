@@ -158,6 +158,34 @@ describe("canvas guidance projection", () => {
     }
   });
 
+  it("says a stale or stopped picture on the line, in every language and inside the narrow budget where one applies", () => {
+    const stale: MaterialOutcome = { owner: "picture", reason: "stale" };
+    const stopped: MaterialOutcome = { owner: "picture", reason: "stopped" };
+    expect(projectCanvasGuidance(input({ outcome: stale }))).toEqual({
+      id: "picture-stale",
+      kind: "recovery",
+      text: "Passage changed. Not drawn.",
+    });
+    expect(projectCanvasGuidance(input({ outcome: stopped }))).toEqual({
+      id: "picture-stopped",
+      kind: "recovery",
+      text: "Not drawn.",
+    });
+    expect(outcomeGuidanceId(stale)).toBe("picture-stale");
+    expect(outcomeGuidanceId(stopped)).toBe("picture-stopped");
+    for (const { value: language } of CANVAS_LANGUAGE_OPTIONS) {
+      for (const outcome of [stale, stopped]) {
+        const localized = localizeOutcome(outcome, language);
+        // The narrow budget binds the English line and the Chinese ones, as for every other line.
+        if (language === "en-US" || language.startsWith("zh")) {
+          expect(localized.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+        }
+        if (language !== "en-US") expect(localized).not.toBe(localizeOutcome(outcome, "en-US"));
+      }
+      expect(localizeOutcome(stale, language)).not.toBe(localizeOutcome(stopped, language));
+    }
+  });
+
   it("says the shown outcome ahead of a parked result, then the parked result", () => {
     const outcome: MaterialOutcome = { owner: "wiki", reason: "unsaved" };
     expect(projectCanvasGuidance(input({

@@ -43,9 +43,12 @@
    dark canvas tokens, so it takes the same values from the shell. */
 .matter-shell[data-canvas-theme="dark"] .point-talk { --paper-solid: #2b343d; --ink: #f3f4f1; --muted: #c0c5ca; }
 .point-talk__composer,
-.point-talk__feedback { display: flex; width: 100%; min-height: calc(38px * var(--point-talk-scale)); box-sizing: border-box; align-items: center; gap: calc(4px * var(--point-talk-scale)); padding: calc(3px * var(--point-talk-scale)) calc(4px * var(--point-talk-scale)) calc(3px * var(--point-talk-scale)) calc(8px * var(--point-talk-scale)); border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent); border-radius: calc(7px * var(--point-talk-scale)); background: color-mix(in srgb, var(--paper-solid) 97%, transparent); box-shadow: 0 6px 18px rgba(22,29,39,.065); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.point-talk__feedback,
+.point-talk__picture { display: flex; width: 100%; min-height: calc(38px * var(--point-talk-scale)); box-sizing: border-box; align-items: center; gap: calc(4px * var(--point-talk-scale)); padding: calc(3px * var(--point-talk-scale)) calc(4px * var(--point-talk-scale)) calc(3px * var(--point-talk-scale)) calc(8px * var(--point-talk-scale)); border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent); border-radius: calc(7px * var(--point-talk-scale)); background: color-mix(in srgb, var(--paper-solid) 97%, transparent); box-shadow: 0 6px 18px rgba(22,29,39,.065); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.point-talk__composer[hidden] { display: none; }
 .point-talk__composer input { min-width: 0; flex: 1 1 auto; padding: 0; border: 0; outline: 0; background: transparent; color: var(--ink); font-family: var(--mono); font-size: calc(11px * var(--point-talk-scale)); font-weight: 400; line-height: calc(16px * var(--point-talk-scale)); user-select: text; }
-.point-talk__composer input::placeholder { color: color-mix(in srgb, var(--ink) 46%, transparent); }
+.point-talk__composer input { text-overflow: ellipsis; }
+.point-talk__composer input::placeholder { color: color-mix(in srgb, var(--ink) 46%, transparent); text-overflow: ellipsis; }
 .point-talk button { min-width: calc(30px * var(--point-talk-scale)); min-height: calc(30px * var(--point-talk-scale)); padding: 0 calc(5px * var(--point-talk-scale)); border: 0; border-radius: calc(6px * var(--point-talk-scale)); background: transparent; color: var(--muted); font-family: var(--mono); font-size: calc(10px * var(--point-talk-scale)); font-weight: 400; line-height: calc(15px * var(--point-talk-scale)); cursor: pointer; }
 
 @media (hover: hover) {
@@ -61,6 +64,22 @@
   .point-talk__submit:hover { background: color-mix(in srgb, var(--ink) 88%, transparent) !important; color: var(--paper-solid) !important; }
 }
 .point-talk__submit:focus-visible { background: color-mix(in srgb, var(--ink) 88%, transparent) !important; color: var(--paper-solid) !important; }
+/* The 生图 control and every picture step are plain text: no plate, no icon. */
+.point-talk .point-talk__text-button { flex: 0 0 auto; background: transparent; color: var(--muted); white-space: nowrap; }
+.point-talk .point-talk__text-button[data-primary] { color: var(--ink); }
+@media (hover: hover) {
+  .point-talk .point-talk__text-button:hover { background: transparent; color: var(--ink); }
+}
+.point-talk .point-talk__text-button:focus-visible { background: transparent; color: var(--ink); outline: 2px solid currentColor; outline-offset: 1px; }
+.point-talk .point-talk__text-button[aria-disabled="true"] { opacity: .28; cursor: default; }
+.point-talk__picture { flex-direction: column; align-items: stretch; gap: calc(6px * var(--point-talk-scale)); padding: calc(8px * var(--point-talk-scale)); }
+.point-talk__picture[data-picture-step="drawing"] { flex-direction: row; align-items: center; justify-content: space-between; padding-top: calc(3px * var(--point-talk-scale)); padding-bottom: calc(3px * var(--point-talk-scale)); }
+.point-talk__picture[data-picture-step="preview"]:focus { outline: none; }
+.point-talk__statement { margin: 0; color: var(--muted); font-family: var(--mono); font-size: calc(10px * var(--point-talk-scale)); font-weight: 400; line-height: calc(15px * var(--point-talk-scale)); overflow-wrap: anywhere; }
+.point-talk__statement:focus { outline: none; }
+.point-talk__picture-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: calc(4px * var(--point-talk-scale)); }
+/* The preview is the picture in a box no larger than the field's own width. */
+.point-talk__picture .passage-picture { width: min(100%, calc(248px * var(--point-talk-scale))); max-height: calc(248px * var(--point-talk-scale)); margin: 0 auto; }
 .point-talk__feedback { justify-content: flex-end; padding-left: calc(7px * var(--point-talk-scale)); }
 .point-talk__feedback > span { min-width: 0; flex: 1 1 auto; overflow: hidden; color: var(--muted); font-family: var(--mono); font-size: calc(10px * var(--point-talk-scale)); font-weight: 400; line-height: calc(15px * var(--point-talk-scale)); text-overflow: ellipsis; white-space: nowrap; }
 /* The pending field repeats what was asked, quieter than its status. */
@@ -72,6 +91,7 @@
   .point-talk { width: min(calc(280px * var(--point-talk-scale)), calc(100vw - 24px), var(--point-talk-available-width, calc(100vw - 24px))); }
   .point-talk__composer,
   .point-talk__feedback { min-height: 54px; padding-top: 3px; padding-bottom: 3px; }
+  .point-talk__picture { min-height: 54px; }
   /* Mobile Safari magnifies focused inputs below 16px, which changes the
      visual viewport during this local turn and detaches it from its material. */
   .point-talk__composer input { font-size: 16px; line-height: 20px; }
@@ -81,5 +101,9 @@
 
 @media (forced-colors: active) {
   .point-talk__composer,
-  .point-talk__feedback { border: 1px solid CanvasText; background: Canvas; box-shadow: none; }
+  .point-talk__feedback,
+  .point-talk__picture { border: 1px solid CanvasText; background: Canvas; box-shadow: none; }
+  .point-talk .point-talk__text-button { color: ButtonText; }
+  .point-talk .point-talk__text-button[aria-disabled="true"] { color: GrayText; opacity: 1; }
+  .point-talk .point-talk__text-button:focus-visible { outline-color: Highlight; }
 }

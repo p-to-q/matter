@@ -42,6 +42,19 @@ import {
 import { constrainPointTalkDirectionInput } from "./point-talk-direction-input";
 import { useEscapeLayer } from "./escape-layers";
 import { useOutsidePressDismissal } from "./touch-commitment";
+import {
+  pictureControlCopy,
+  type PictureControlCopy,
+} from "./picture-control-copy";
+import {
+  pictureEscapeAction,
+  pictureHold,
+  projectPictureBubble,
+  type PictureBubbleView,
+  type PictureControlPresentation,
+} from "./picture-surface";
+import { PointTalkPicturePanel } from "./PointTalkPicturePanel";
+import type { PictureSession, PointTalkPictureActions } from "./use-picture-session";
 
 export type PointTalkStatusPhase = Extract<
   TextSwapInteractionState["phase"],
@@ -51,7 +64,15 @@ export type PointTalkStatusPhase = Extract<
 type PointTalkFeedbackAction = "stop" | "retry" | "record-again";
 
 type PointTalkSurfaceContent =
-  | Readonly<{ kind: "form"; direction: string; formKey: string; voiceAvailable: boolean }>
+  | Readonly<{
+      kind: "form";
+      direction: string;
+      formKey: string;
+      voiceAvailable: boolean;
+      /** The picture step that takes the form row's place; the row itself is null. */
+      picture: PictureBubbleView | null;
+      pictureControl: PictureControlPresentation;
+    }>
   | Readonly<{
       kind: "feedback";
       /** The settled phase label; the only text a live region announces. */
@@ -79,6 +100,8 @@ type PointTalkHandlers = Readonly<{
   onStartVoice: () => void;
   onStopVoice: () => void;
   onSubmit: (direction: string) => void;
+  picture: PointTalkPictureActions;
+  keeping: boolean;
 }>;
 
 export function PointTalkComposer({
@@ -97,6 +120,7 @@ export function PointTalkComposer({
   onSubmit,
   origin,
   penActive,
+  picture,
   positioningRef,
   presenceIdentity,
   surfaceAvailable,
@@ -121,6 +145,8 @@ export function PointTalkComposer({
   /** Where the person summoned the field; its entrance grows from there. */
   origin: PointTalkOrigin | null;
   penActive: (timeStamp: number) => boolean;
+  /** The passage's picture turn; null when the app has no picture store. */
+  picture: PictureSession | null;
   positioningRef: RefObject<HTMLElement | null>;
   /** One opening of the field; a new opening never inherits the last one's exit. */
   presenceIdentity: string;
@@ -144,6 +170,14 @@ export function PointTalkComposer({
   const visualScale = projectPointTalkScale(canvasZoom);
   const formVisible = phase === "eligible" || phase === "ready";
   const copy = pointTalkCopy(locale);
+  const pictureView = useMemo(
+    () => picture === null ? null : projectPictureBubble(picture.state),
+    [picture],
+  );
+  const pictureStep = pictureView?.step ?? null;
+  const pictureActions = picture?.actions ?? null;
+  const picturePaid = picture !== null && pictureHold(picture.state.phase) === "paid";
+  const pictureControl: PictureControlPresentation = picture?.control ?? "absent";
   const cancelAndRestoreFocus = useCallback(() => {
     onCancel();
     queueMicrotask(() => {
@@ -264,7 +298,12 @@ export function PointTalkComposer({
   // this presentation. An IME candidate dismissal never reaches it. The field
   // is a paper surface, so chrome or a panel that covers it closes first.
   useEscapeLayer(pointTalkSurfaceVisible(controller.state.phase), "paper", () => {
-    cancelAndRestoreFocus();
+    switch (pictureEscapeAction(formVisible ? pictureStep : null)) {
+      case "back": pictureActions?.back(); break;
+      case "stop-waiting": pictureActions?.stopWaiting(); break;
+      case "discard": pictureActions?.discard(); break;
+      case "cancel-field": cancelAndRestoreFocus(); break;
+    }
     return true;
   });
 
@@ -287,6 +326,7 @@ export function PointTalkComposer({
         insideSlotOwner: targetElement?.closest('[data-chrome-control="inquiry"]') != null,
         insideVoiceTool: targetElement?.closest('[data-tool-id="voice"]') != null,
         submitted,
+        holdsPaidWork: picturePaid,
       }) ? onCancel : null;
     },
     penActive,
@@ -308,6 +348,24 @@ export function PointTalkComposer({
     ) return;
     retryRef.current?.focus({ preventScroll: true });
   }, [placementReady, recoveryAvailable, surfaceAvailable]);
+
+  // Each picture step moves focus to its own anchor, and a return to the form
+  // moves it back to the control that was pressed, but only while the person's
+  // focus is still in the field or lost: it never takes focus from elsewhere.
+  const previousPictureStepRef = useRef<typeof pictureStep>(null);
+  useLayoutEffect(() => {
+    const previous = previousPictureStepRef.current;
+    previousPictureStepRef.current = pictureStep;
+    const bubble = bubbleRef.current;
+    if (previous === pictureStep || bubble === null || !placementReady) return;
+    if (!surfaceAvailable || document.visibilityState !== "visible") return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body && !bubble.contains(active)) return;
+    const target = pictureStep === null
+      ? bubble.querySelector<HTMLElement>("[data-picture-control]") ?? inputRef.current
+      : bubble.querySelector<HTMLElement>("[data-picture-anchor]");
+    target?.focus({ preventScroll: true });
+  }, [pictureStep, placementReady, surfaceAvailable]);
 
   const activeState = controller.state;
   const surfaceLive = pointTalkSurfaceVisible(activeState.phase);
@@ -333,6 +391,8 @@ export function PointTalkComposer({
         direction: readyDirection,
         formKey: `${nodeId}:${readyDirection}`,
         voiceAvailable,
+        picture: pictureView,
+        pictureControl,
       });
     }
     const label = shownStatus === null ? "" : pointTalkPhaseLabel(shownStatus, locale);
@@ -350,6 +410,8 @@ export function PointTalkComposer({
     nodeId,
     partialDirection,
     pendingEcho,
+    pictureControl,
+    pictureView,
     readyDirection,
     shownStatus,
     voiceAvailable,
@@ -437,9 +499,17 @@ export function PointTalkComposer({
       <PointTalkContent
         content={content}
         copy={copy}
-        handlers={{ onRetry, onStartVoice, onStopVoice, onSubmit }}
+        handlers={{
+          onRetry,
+          onStartVoice,
+          onStopVoice,
+          onSubmit,
+          picture: pictureActions ?? NO_PICTURE_ACTIONS,
+          keeping: picture?.keeping ?? false,
+        }}
         inputId={inputId}
         inputRef={inputRef}
+        locale={locale}
         retryRef={retryRef}
       />
     </div>
@@ -501,7 +571,12 @@ export function PointTalkExit({
         }ms`,
       } as CSSProperties}
     >
-      <PointTalkContent content={view.content} copy={pointTalkCopy(locale)} handlers={null} />
+      <PointTalkContent
+        content={view.content}
+        copy={pointTalkCopy(locale)}
+        handlers={null}
+        locale={locale}
+      />
     </div>
   );
 }
@@ -512,6 +587,7 @@ function PointTalkContent({
   handlers,
   inputId,
   inputRef,
+  locale,
   retryRef,
 }: Readonly<{
   content: PointTalkSurfaceContent;
@@ -520,21 +596,38 @@ function PointTalkContent({
   handlers: PointTalkHandlers | null;
   inputId?: string;
   inputRef?: RefObject<HTMLInputElement | null>;
+  locale: CanvasLanguage;
   retryRef?: RefObject<HTMLButtonElement | null>;
 }>) {
   const frozenInputId = useId();
   if (content.kind === "form") {
+    const pictureCopy = pictureControlCopy(locale);
     return (
-      <PointTalkForm
-        copy={copy}
-        initialDirection={content.direction}
-        inputId={inputId ?? frozenInputId}
-        inputRef={inputRef}
-        key={content.formKey}
-        onStartVoice={handlers?.onStartVoice ?? ignore}
-        onSubmit={handlers?.onSubmit ?? ignore}
-        voiceAvailable={content.voiceAvailable}
-      />
+      <>
+        <PointTalkForm
+          copy={copy}
+          hidden={content.picture !== null}
+          initialDirection={content.direction}
+          inputId={inputId ?? frozenInputId}
+          inputRef={inputRef}
+          key={content.formKey}
+          onArmPicture={handlers?.picture.arm ?? ignore}
+          onStartVoice={handlers?.onStartVoice ?? ignore}
+          onSubmit={handlers?.onSubmit ?? ignore}
+          pictureControl={content.pictureControl}
+          pictureCopy={pictureCopy}
+          voiceAvailable={content.voiceAvailable}
+        />
+        {content.picture === null ? null : (
+          <PointTalkPicturePanel
+            actions={handlers?.picture ?? null}
+            copy={pictureCopy}
+            keeping={handlers?.keeping ?? false}
+            locale={locale}
+            view={content.picture}
+          />
+        )}
+      </>
     );
   }
   const live = handlers !== null;
@@ -572,6 +665,17 @@ function withTypedDirection(
 }
 
 function ignore(): void {}
+
+const NO_PICTURE_ACTIONS: PointTalkPictureActions = Object.freeze({
+  arm: ignore,
+  confirm: ignore,
+  back: ignore,
+  stopWaiting: ignore,
+  keep: ignore,
+  discard: ignore,
+  tryAgain: ignore,
+  dismissFailure: ignore,
+});
 
 function pointTalkPresencePolicy() {
   return POINT_TALK_PRESENCE_POLICY;
@@ -611,12 +715,15 @@ function pointTalkSurfaceVisible(phase: TextSwapController["state"]["phase"]): b
 }
 
 export function pointTalkOutsidePointerDismisses({
+  holdsPaidWork = false,
   insideBubble,
   insideCanvasChrome,
   insideSlotOwner = false,
   insideVoiceTool,
   submitted,
 }: Readonly<{
+  /** A picture is being drawn or waits for Keep: only its own controls end it. */
+  holdsPaidWork?: boolean;
   insideBubble: boolean;
   insideCanvasChrome: boolean;
   /** A control that opens another AI surface, which takes the slot itself. */
@@ -624,6 +731,7 @@ export function pointTalkOutsidePointerDismisses({
   insideVoiceTool: boolean;
   submitted: boolean;
 }>): boolean {
+  if (holdsPaidWork) return false;
   // Chrome may temporarily occlude accepted work, but draft and capture still
   // follow their visible control and remain easy to dismiss. The fixed Voice
   // tool belongs to the current turn even though it lives outside the bubble.
@@ -635,25 +743,35 @@ export function pointTalkOutsidePointerDismisses({
 
 function PointTalkForm({
   copy,
+  hidden,
   initialDirection,
   inputId,
   inputRef,
+  onArmPicture,
   onStartVoice,
   onSubmit,
+  pictureControl,
+  pictureCopy,
   voiceAvailable,
 }: Readonly<{
   copy: ReturnType<typeof pointTalkCopy>;
+  /** A picture step has taken the row's place; the typed direction is kept for its return. */
+  hidden: boolean;
   initialDirection: string;
   inputId: string;
   inputRef?: RefObject<HTMLInputElement | null>;
+  onArmPicture: () => void;
   onStartVoice: () => void;
   onSubmit: (direction: string) => void;
+  pictureControl: PictureControlPresentation;
+  pictureCopy: PictureControlCopy;
   voiceAvailable: boolean;
 }>) {
   const [direction, setDirection] = useState(initialDirection);
   return (
     <form
       className="point-talk__composer"
+      hidden={hidden}
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit(direction);
@@ -681,6 +799,20 @@ function PointTalkForm({
       >
         <VoiceIcon />
       </button>
+      {pictureControl === "absent" ? null : (
+        // Never `disabled`: focus must survive a pending interaction. It
+        // ignores the typed direction and is not the form's submit.
+        <button
+          aria-disabled={pictureControl === "disabled" || undefined}
+          aria-label={pictureCopy.controlName}
+          className="point-talk__text-button point-talk__draw"
+          data-picture-control
+          onClick={pictureControl === "enabled" ? onArmPicture : undefined}
+          type="button"
+        >
+          {pictureCopy.control}
+        </button>
+      )}
       <button className="point-talk__submit" disabled={direction.trim().length === 0} type="submit">
         {copy.apply}
       </button>
@@ -688,7 +820,7 @@ function PointTalkForm({
   );
 }
 
-function findPointTalkTarget(canvas: HTMLElement, nodeId: string): HTMLElement | undefined {
+export function findPointTalkTarget(canvas: HTMLElement, nodeId: string): HTMLElement | undefined {
   for (const candidate of canvas.querySelectorAll<HTMLElement>("[data-thought-text-id]")) {
     if (candidate.dataset.thoughtTextId === nodeId) return candidate;
   }
