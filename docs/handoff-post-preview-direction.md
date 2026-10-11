@@ -165,6 +165,69 @@ original and derivative ownership, preview versus acceptance, exact undo,
 persistence, quota and garbage collection, Archive, deletion, model context,
 accessibility, and privacy. Until this closes, no Image control appears.
 
+Owner direction of 2026-10-11 authorized a bounded research pass and an
+interface, not a control. The findings below are recorded so M0 starts from
+them. They constrain the design; they do not promote a slice.
+
+*An image cannot be a derived record.* `architecture.md` already sanctions a
+derived per-node repository beside persistence, and labels prove the shape. The
+analogy breaks on one point and it is decisive: a deterministic label is
+disposable because it can be recomputed, so `retainNewestModelLabels` may
+reclaim it oldest-first. A generated image cannot be recomputed. Reclaiming one
+would silently lose something irreplaceable, against both the Preview.64
+campaign and principle 8's `persistence` and `export` clauses. The image is
+therefore material, and its lifecycle is the expensive path.
+
+*A text pointer is what becomes material; bytes never enter the tree.* The Git
+LFS pointer is the reference shape: UTF-8 text, under 1024 bytes, canonically
+encoded with sorted keys, carrying `oid sha256:…` and `size`. Three properties
+transfer. A content hash makes an insert idempotent and an undo cheap. The
+redundant `size` is the partial-availability story: existence, type and byte
+count are known without a single byte of content. And the pointer is text, so it
+survives `snapshot-codec`'s `Record<path, string>` and the archive's fatal UTF-8
+decode unchanged. The durable mutation carries a pointer, not a payload, which
+also leaves `MATTER_HISTORY_LIMITS.maxRetainedInverseBytes` reasoning intact.
+
+*Missing bytes must be a first-class named state, decided before the control
+ships.* Git LFS writes the pointer text into the working tree in place of the
+file; Excalidraw puts `status: "pending" | "saved" | "error"` on the element
+itself; tldraw renders a named broken-asset placeholder. The products that did
+not decide this are the ones with forum threads and third-party repair plugins.
+A document whose bytes are absent must still open, and must say so.
+
+*Nothing reference-counts, and that is not an oversight.* Excalidraw collects on
+time (unused on canvas and `lastRetrieved` older than a day); tldraw declines
+ownership outright and offers an optional `remove()`. Reference counting over
+current state is unsound here because Undo is a forward operation that can
+resurrect any historical reference. So: orphan-tolerant by default, collected
+only at an explicit compaction or export boundary, never on the undo path.
+
+*Browser eviction is all-or-nothing per origin, which is better than it sounds.*
+The Storage Standard evicts a whole bucket, and MDN is explicit that all of an
+origin's data is deleted together "to avoid inconsistency". The failure mode is
+therefore not a tree pointing at vanished bytes; it is total local loss, which
+only export addresses. `navigator.storage.estimate()` is documented as
+imprecise, so it is a UI hint and a soft gate, never an accounting ledger.
+
+*Store `Blob`, never base64.* IndexedDB stores a real `Blob` without
+re-encoding, and Chromium's compression is explicitly ineffective on already
+compressed media. A data URL costs about a third in size; Excalidraw pays it
+only to keep one self-contained JSON file. Matter already exports a ZIP, so
+bytes belong in binary ZIP entries and base64 is never needed.
+
+*Provenance is binary and binds to final bytes.* C2PA gives no partial credit:
+an unsigned assertion is not a Content Credential, and a validator rejects it as
+`claimSignature.missing`. The hard binding is computed over the final bytes, so
+any re-encode on export breaks it. The affordable step is to record a
+`c2pa.actions.v2` assertion with `digitalSourceType` of `trainedAlgorithmicMedia`
+in Matter's own sidecar now, and to show no verification affordance until
+signing and timestamping exist.
+
+What M0 still owes: the archive's third path shape and the one place it must not
+decode UTF-8; the `IndexedDB` version step and its terminal-state story; the
+mutation pair and its exact inverse; and the reading of "every committed
+generative change is pointer-undoable" for a change whose payload is a hash.
+
 **S0 — Replicated computation.** Start only when observed multi-device or
 collaboration demand cannot be met by explicit export. Compare ordered event and
 snapshot approaches, Croquet, Automerge, Yjs, and problem-shaped industry sync.
