@@ -23,6 +23,7 @@ Read only when the change needs it:
 ## Context
 
 - [`reference/`](reference/index.md) — implementation notes, including the prompt harness every model call goes through; a note marked **binding** holds exact rules a contract document delegates to it;
+- [`handoff-post-preview-direction.md`](handoff-post-preview-direction.md) — planning-only map for post-preview research, decision gates, agent ownership, and the resume point; it is not an active roadmap or implementation authorization;
 - [`surfaces.md`](surfaces.md) — what runs today and what is only specified;
 - [`open.md`](open.md) — unresolved product possibilities;
 - [`changes.md`](changes.md) — short record of form-changing decisions.

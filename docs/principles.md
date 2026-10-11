@@ -60,6 +60,15 @@ the running product, not how ambitious a feature sounds.
    owns validation and
    publication before and after every suggestion, and a suggestion that would
    break a valid result is withheld rather than costing it.
+8. **Material outlives the model.** The rooted tree, authored language, and a
+   portable structural projection remain usable without the provider that once
+   helped shape them. Models, private APIs, and qualified on-device runtimes
+   are replaceable capabilities; none owns the document or silently changes its
+   context boundary. The current product states its network dependence
+   honestly while preserving a path toward private and offline computation. A
+   new generative modality earns a product control only after its address,
+   bounded context, material result, acceptance, reversal, persistence, export,
+   and privacy behavior are one coherent contract.
 
 **Submission authority stays strict; result delivery stays resilient.** A
 read-only Inquiry answer belongs to the question and bounded snapshot that were

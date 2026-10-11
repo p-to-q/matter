@@ -9,6 +9,109 @@ bottom.
 
 ---
 
+## Post-preview material-runtime candidates
+
+These candidates share one direction but are not one project. Their research
+order and promotion gates are in
+[`handoff-post-preview-direction.md`](handoff-post-preview-direction.md).
+
+### Coherent material projection and context receipt
+
+Derive one bounded, versioned semantic projection from the rooted tree, then
+adapt it separately for AI context, a deliberate machine-readable receipt, and
+later diagram renderers.
+
+Why it is wanted: current Archive, index Copy, material turns, and Inquiry each
+project the same tree differently. Plain copying loses relations, while making
+every renderer or prompt infer them independently risks drift and hidden scope.
+
+Promotion requires: deciding the receipt's human and machine purpose; resolving
+the stored Inquiry-record migration for `selection`, `lineage`, and
+`working-tree`; an explicit clipping and privacy model; and proof that the
+projection neither widens an address nor becomes a second document model.
+Archive remains the exact recovery format, and ordinary native Copy remains
+literal unless the owner separately reopens it.
+
+### Lineage-aware visual projection
+
+Let the material index and canvas show the root-to-target relationship while a
+person is navigating or performing a bounded operation.
+
+Why it is wanted: the relationship already governs focus and model context, but
+the index and canvas do not yet explain consistently which path is active and
+why a result belongs there.
+
+Promotion requires: a state table separating navigation, lasso selection,
+material-operation basis, and read-only Inquiry; a decision on when ancestors
+and connectors appear and disappear; accessible semantics that do not mark
+ancestors as selected; and proof that connector geometry remains transient view
+state rather than authored coordinates or permanent mind-map chrome.
+
+### Native editing-rail vocabulary
+
+Reduce the main rail to operations that are native to Matter and move the fixed
+Branch composition out of the main product when its Preview purpose has ended.
+
+Why it is wanted: the current Branch action offers seeded continuation copy,
+while selected Voice already owns Point and Talk. Treating a template as a
+permanent editing primitive makes the rail describe the preview rather than the
+material language.
+
+Promotion requires: an explicit Preview/demo composition boundary that preserves
+the existing seeded journey and tests; a decision on whether the main product
+needs a human-authored child-creation operation; a full rail inventory; and
+evidence that removal does not hide the only visible way to create structure.
+
+### Local and private intelligence runtime
+
+Allow the same bounded Matter scenarios to use a verified private API, qualified
+browser-local inference, or a trusted desktop-local runtime without changing
+the material contract.
+
+Why it is wanted: provider replacement, offline continuity, privacy, and smaller
+local models support personal authority and make the document less dependent on
+one service.
+
+Promotion requires: separate Web and Desktop trust boundaries; model licence,
+provenance and integrity; device and memory floors; installation, update,
+rollback, cancellation and resource ownership; a complete offline receipt; and
+proof that the current web rejection of localhost and private-network provider
+addresses remains intact.
+
+### Generated media as material
+
+Permit an image, sound, or later generated medium only when it has the same
+clarity of address, ownership and recovery as text material.
+
+Why it is wanted: generative media can make more kinds of thought visible, but
+an API result or decorative attachment is not yet material.
+
+Promotion requires: source address and direction; content identity and hash;
+original and derivative ownership; preview, acceptance and one perceivable
+commit; exact undo and redo; persistence, quota and garbage collection; Archive
+round-trip; deletion, accessibility, model-context and privacy rules. No Image
+control appears before that lifecycle closes.
+
+### Replicated computation and sync
+
+Let more than one device recompute a trustworthy view from portable material or
+an ordered stream of accepted changes.
+
+Why it is wanted: future local clients may need continuity across devices, and
+later collaboration may need convergence without transferring rendered views.
+
+Promotion requires: observed cross-device or multi-writer need that explicit
+export cannot satisfy; identity, snapshot bootstrap, ordering, idempotency,
+replay and conflict rules; and a proof that replication history is not Material
+Undo. Until then CRDTs, event logs, reflectors and cloud authority stay research
+references rather than architecture.
+
+Only replication waits here. Croquet's model/view discipline — one deterministic
+model, views as pure projections, view state never entering the model — is
+already how Matter is built, and it informs the projection and local-runtime
+candidates above rather than this one. See
+[`reference/post-preview-research.md`](reference/post-preview-research.md).
+
 ## Gesture candidates
 
 Both of these operate on **structure**, not text, which is why they are more

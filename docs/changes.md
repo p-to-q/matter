@@ -17,6 +17,24 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-03 — material outlives the model
+
+Changed: Matter's long direction now makes the rooted material, rather than a
+provider, the durable authority. Private APIs and qualified on-device runtimes
+are replaceable sources of intelligence; network dependence in the current web
+product remains explicit. Any future text, image, voice, or other generative
+modality must first define one coherent material lifecycle across address,
+context, result, acceptance, reversal, persistence, export, and privacy.
+
+Why: a local-first document can preserve personal agency only when its meaning,
+portability, and interaction contract survive provider, model, deployment, and
+connectivity changes. This keeps the road to private and offline computation
+open without pretending that the present release already supplies it.
+
+Forecloses: making a remote provider the owner of material or context; claiming
+offline generation from local document storage alone; and exposing a modality
+as product chrome before it has a reversible, exportable material contract.
+
 ## 2026-09-30 — N1: normalization owner, provisional-edit withhold, join fix, per-gap resilience, near-silence guard
 
 Changed: locale-bound normalization runs exactly once per admission in
