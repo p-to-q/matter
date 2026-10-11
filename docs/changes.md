@@ -17,6 +17,25 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — the picture turn has a client, a state machine, and a Keep order; nothing calls them
+
+Changed: `requestPicture` makes one attempt at `/api/image` and accepts only bytes
+whose SHA-256, media type, dimensions and length agree with the response headers;
+it marks a failure retryable only when the server says so and the status is 429,
+503 or 422. A pure reducer holds the turn (arm, confirm, drawing, arrived,
+accepted, discarded, failed, stale, cancelled) with a sticky "a prior attempt may
+have been billed" flag. A bounded session cache mirrors held bytes so export works
+when IndexedDB does not. `acceptPicture` stores the bytes first and commits the
+pointer second; if the bytes cannot be saved nothing is committed and the preview
+can be kept again at no cost.
+
+Why: a pointer to bytes that cannot be saved is a promise the session cannot
+keep, and a network failure or timeout after a relay was contacted may already
+have been paid for, so retrying must be a deliberate act behind a warning.
+
+Forecloses: committing a pointer before its bytes are durable, and an automatic
+retry after any ambiguous failure.
+
 ## 2026-10-12 — the database has a place for picture bytes, and nothing writes there yet
 
 Changed: database version 7 adds a `blobs` store keyed by SHA-256, with a

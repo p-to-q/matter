@@ -500,7 +500,10 @@ Ordered slices (each ships green before the next):
    until the accept path exists and copy for an unrendered state is a claim about
    an unbuilt capability;
 5. the accept path, the first producer, with the session byte cache and quota
-   refusal;
+   refusal — core **built** (2026-10-12) as 5a: the picture client, the turn
+   reducer, the session cache and the Keep order, all dark; 5b (canvas rendering
+   and the availability surfaces with their copy) and 5c (the control, the arm
+   step and the preview) remain;
 6. compaction and the provenance sidecar.
 
 Largest risk: rollback after v7 makes every document superseded in an older
