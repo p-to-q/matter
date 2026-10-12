@@ -21,6 +21,8 @@ export type PictureAuthoring = Readonly<{
   /** Asks the browser to keep storage persistent; call synchronously inside the gesture. */
   requestPersistence: (gesture: Extract<StoragePersistenceGesture, "keep">) => void;
   readNode: (nodeId: string) => PictureNodeView | undefined;
+  /** Whether the document's picture bounds leave room to keep a picture on this passage. */
+  canTakePicture: (nodeId: string) => boolean;
   subscribeTree: (listener: () => void) => () => void;
   documentEpoch: () => number;
   attachPicture: (values: AttachPictureValues, expectedDocumentEpoch: number) => PictureStoreReceipt;

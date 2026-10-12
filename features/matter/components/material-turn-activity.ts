@@ -4,14 +4,16 @@ import type { FixedExpandTurnState } from "./use-fixed-expand-turn";
 
 /**
  * What the paper holds that the product root must know before replacing the
- * document instance: the phases of its two material turns, and two holds that
- * are not turns at all.
+ * document instance: the phases of its two material turns, the picture turn
+ * once it has cost something, and two holds that are not turns at all.
  */
 export type PaperActivity = Readonly<{
   /** The Elastic material turn. */
   elastic: FixedExpandTurnState["phase"];
   /** The Point-and-Talk material turn. */
   textSwap: TextSwapInteractionState["phase"];
+  /** A picture is being drawn or waits for Keep or Discard: it was paid for. */
+  pictureHeld: boolean;
   /** Ask Matter holds a typed or dictated question, or one awaiting its answer. */
   inquiryHeld: boolean;
   /** A thought name or the canvas title is being typed in the material index. */
@@ -21,6 +23,7 @@ export type PaperActivity = Readonly<{
 export const IDLE_PAPER_ACTIVITY: PaperActivity = Object.freeze({
   elastic: "idle",
   textSwap: "idle",
+  pictureHeld: false,
   inquiryHeld: false,
   editingHeld: false,
 });
@@ -35,7 +38,8 @@ const PAPER_ACTIVITY_FIELDS = Object.freeze(
  * Seed relocalization rewrites untouched preview passages and their history
  * mementos in place. A turn that has read such a passage (a Voice admission in
  * progress, a Point-and-Talk draft or submitted request, or an Elastic request
- * or parked result) holds an exact basis that the rewrite would revoke, so
+ * or parked result, or a picture being drawn or awaiting Keep) holds an exact
+ * basis that the rewrite would revoke, so
  * relocalization waits until every turn has settled and runs when they do.
  *
  * A pending admission repair is deliberately not a holder: it only addresses
@@ -48,6 +52,7 @@ export function materialTurnsHoldBasis(input: Readonly<{
 }>): boolean {
   return input.admission !== "idle" ||
     input.paper.elastic !== "idle" ||
+    input.paper.pictureHeld ||
     textSwapHoldsBasis(input.paper.textSwap);
 }
 

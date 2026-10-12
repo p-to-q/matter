@@ -17,6 +17,28 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — hardening from the independent verifiers: a paid picture survives, caps are checked before paying, hostile ZIPs cannot balloon
+
+Changed: a held picture now defers stored-material replacement and relocalization like any
+other pending turn (the open Point-and-Talk field already did, so this is defence in depth);
+the 32-picture and 32 MiB caps are checked before the control offers a draw and again before
+sending, so nothing is paid for that cannot be kept; one hash declared with two different
+pointers is invalid everywhere; ZIPs written with data descriptors import (the central
+directory is the size authority); and the synchronous inflater replaces the worker one, which
+let a 52 MB hostile archive allocate 2 GB before any bound could run (now refused with bounded
+memory). Escape on the preview no longer discards a paid picture; arrival and failure are
+announced; a timeout is retryable only if the render never began; the paid lane is rate-limited
+only by headers the platform sets; the cost statement is legible; the control is absent where
+the browser could not finish a paid picture; the one-in-flight gate also holds across tabs when
+Web Locks exist. The Chinese control name is now 绘图 / 繪圖. Receipt text containing CR, NEL,
+LS or PS is refused rather than escaped, because a Markdown viewer would break lines on them.
+
+Why: each was found by an adversarial reader, with a reproduction, in code that had passed its
+own tests.
+
+Forecloses: charging before the document can hold the result, and a receipt that claims text
+cannot forge structure while allowing line separators other than LF.
+
 ## 2026-10-12 — picture facts have one owner each, picture code leaves the initial bundle, and Keep asks for persistent storage
 
 Changed: media types, the byte bound and the side bounds are declared once, in

@@ -118,6 +118,12 @@ async function openPointTalk(page: Page, nodeId = ROOT_ID): Promise<Locator> {
   return field;
 }
 
+async function thoughtIds(page: Page): Promise<string[]> {
+  return page.locator("[data-thought-id]").evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("data-thought-id")).filter((id): id is string => id !== null),
+  );
+}
+
 function control(page: Page): Locator {
   return page.locator("[data-picture-control]");
 }
@@ -231,7 +237,7 @@ test.describe("the picture control", () => {
     // Arming never sends, and Back returns to the control.
     await control(page).click();
     await expect(field.getByText(copy.armStatement, { exact: true })).toBeVisible();
-    await expect(field.getByText(copy.armStatementBilled, { exact: true })).toHaveCount(0);
+    await expect(field.getByText(copy.armWarningBilled, { exact: true })).toHaveCount(0);
     expect(images.requests).toBe(0);
     await field.getByRole("button", { name: copy.back, exact: true }).click();
     await expect(control(page)).toBeFocused();
@@ -344,7 +350,7 @@ test.describe("the picture control", () => {
     await expect(page.locator(".matter-guidance__next"))
       .toHaveText(localizeOutcome({ owner: "picture", reason: "stopped" }, LANGUAGE));
     await control(page).click();
-    await expect(field.getByText(copy.armStatementBilled, { exact: true })).toBeVisible();
+    await expect(field.getByText(copy.armWarningBilled, { exact: true })).toBeVisible();
   });
 
   test("a passage that changes while a picture is drawn makes it stale", async ({ page }) => {
@@ -419,7 +425,7 @@ test.describe("the picture control", () => {
     await field.getByRole("button", { name: copy.back, exact: true }).click();
     await expect(control(page)).toBeFocused();
     await control(page).click();
-    await expect(field.getByText(copy.armStatementBilled, { exact: true })).toBeVisible();
+    await expect(field.getByText(copy.armWarningBilled, { exact: true })).toBeVisible();
     expect(images.requests).toBe(2);
   });
 
@@ -440,6 +446,94 @@ test.describe("the picture control", () => {
     expect(images.requests).toBe(1);
   });
 
+  test("a second tab is refused while the first is drawing, and may draw once the first has its picture", async ({ context }) => {
+    const first = await context.newPage();
+    const second = await context.newPage();
+    await answerHealthAvailable(first);
+    await answerHealthAvailable(second);
+    const firstImages = await routeImage(first, "hold");
+    const secondImages = await routeImage(second, "hold");
+    await openMatter(first);
+    await openMatter(second);
+
+    const firstField = await openPointTalk(first);
+    await control(first).click();
+    await firstField.getByRole("button", { name: copy.draw, exact: true }).click();
+    await expect(firstField.getByText(copy.drawing, { exact: true })).toBeVisible();
+    await expect.poll(() => firstImages.requests).toBe(1);
+
+    const secondField = await openPointTalk(second);
+    await control(second).click();
+    await secondField.getByRole("button", { name: copy.draw, exact: true }).click();
+    await expect(secondField.getByText(copy.anotherInFlight, { exact: true })).toBeVisible();
+    // Refused before anything was sent, so nothing could be billed.
+    expect(secondImages.requests).toBe(0);
+    expect(firstImages.requests).toBe(1);
+    await expect(firstField.getByText(copy.drawing, { exact: true })).toBeVisible();
+
+    // The first tab's picture arrives and its wait is over, which frees the other tab.
+    firstImages.behavior = "picture";
+    firstImages.deliver();
+    await expect(firstField.getByRole("button", { name: copy.keep, exact: true })).toBeVisible();
+    await secondField.getByRole("button", { name: copy.tryAgain, exact: true }).click();
+    await secondField.getByRole("button", { name: copy.draw, exact: true }).click();
+    await expect(secondField.getByText(copy.drawing, { exact: true })).toBeVisible();
+    await expect.poll(() => secondImages.requests).toBe(1);
+  });
+
+  test("a paid picture survives another tab's save and a language switch, and Keep still works", async ({ context }) => {
+    const browserErrors: string[] = [];
+    const reader = await context.newPage();
+    const writer = await context.newPage();
+    reader.on("pageerror", (error) => browserErrors.push(error.message));
+    await answerHealthAvailable(reader);
+    await routeImage(reader);
+    await openMatter(reader);
+    await openMatter(writer);
+    for (const page of [reader, writer]) {
+      await expect(page.locator("aside.material-files")).toHaveAttribute("data-persistence-phase", "saved");
+    }
+    const field = await openPointTalk(reader);
+    await drawToPreview(reader, field);
+    const shell = reader.locator("main.matter-shell");
+    const revisionBefore = await shell.getAttribute("data-tree-revision");
+    const passage = reader.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+    const wording = await passage.innerText();
+
+    // Another tab saves a branch; this tab would normally take it up at once.
+    const before = await thoughtIds(writer);
+    await writer.locator(`[data-thought-id="${ROOT_ID}"]`).locator("[data-thought-text-id]").click();
+    await writer.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
+    const written = (await thoughtIds(writer)).find((id) => !before.includes(id));
+    if (written === undefined) throw new Error("the other tab did not create a branch");
+    await expect(writer.locator("aside.material-files")).toHaveAttribute("data-persistence-phase", "saved");
+    await reader.waitForTimeout(900);
+    await expect(reader.locator(`[data-thought-id="${written}"]`)).toHaveCount(0);
+    await expect(shell).toHaveAttribute("data-tree-revision", revisionBefore!);
+    await expect(field.getByRole("button", { name: copy.keep, exact: true })).toBeVisible();
+    await expect(previewImage(field)).toBeVisible();
+
+    // A language switch relocalizes seed copy only once the picture has settled.
+    const german = pictureControlCopy("de-DE");
+    const option = CANVAS_LANGUAGE_OPTIONS.find((candidate) => candidate.value === "de-DE")!;
+    await reader.locator('[data-chrome-control="language"]').click();
+    await reader.getByRole("menuitemradio", { name: option.label, exact: true }).click();
+    await expect(field.getByRole("button", { name: german.keep, exact: true })).toBeVisible();
+    await expect(field.getByRole("button", { name: german.discard, exact: true })).toBeVisible();
+    await expect(previewImage(field)).toBeVisible();
+    await reader.waitForTimeout(600);
+    await expect(passage).toHaveText(wording);
+
+    await field.getByRole("button", { name: german.keep, exact: true }).click();
+    await expect(field).toHaveCount(0);
+    await expect(passagePicture(reader)).toBeVisible();
+    // Settled, the deferred relocalization runs, and the kept picture stays on its passage.
+    await expect(passage).not.toHaveText(wording);
+    await expect(passagePicture(reader)).toBeVisible();
+    expect(await readBlobRow(reader, PNG_SHA256)).not.toBeNull();
+    expect(browserErrors).toEqual([]);
+  });
+
   test("the whole turn is reachable by keyboard alone", async ({ page }) => {
     await answerHealthAvailable(page);
     await routeImage(page);
@@ -457,7 +551,25 @@ test.describe("the picture control", () => {
     await expect(field.getByRole("button", { name: copy.draw, exact: true })).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(field.getByRole("button", { name: copy.keep, exact: true })).toBeVisible();
+    // The arrival is said, and the preview group has a name to read.
+    await expect(page.locator('main [role="status"]').filter({ hasText: copy.announceArrived }))
+      .toHaveCount(1);
+    const group = field.getByRole("group", { name: pictureCopy(LANGUAGE).alt });
+    await expect(group).toBeFocused();
+    // A paid picture is not thrown away by the most incidental key: Escape only
+    // returns focus to the Keep and Discard group.
+    await field.getByRole("button", { name: copy.keep, exact: true }).focus();
     await page.keyboard.press("Escape");
+    await expect(group).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(field.getByRole("button", { name: copy.keep, exact: true })).toBeVisible();
+    await expect(previewImage(field)).toBeVisible();
+    // Discard is the explicit control, and it is reachable from the group by Tab.
+    await page.keyboard.press("Tab");
+    await expect(field.getByRole("button", { name: copy.keep, exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(field.getByRole("button", { name: copy.discard, exact: true })).toBeFocused();
+    await page.keyboard.press("Enter");
     await expect(field).toHaveCount(0);
     await expect(page.locator(`[data-thought-id="${ROOT_ID}"] .passage-picture`)).toHaveCount(0);
     await expect(page.locator(`[data-thought-text-id="${ROOT_ID}"]`)).toBeFocused();

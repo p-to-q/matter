@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { treeCanTakePicture } from "../tree/invariants";
 import type { PictureAuthoring } from "./picture-authoring";
 import type { MatterStoreAccess } from "./use-matter-store";
 import type { PictureStoreAccess } from "./use-picture-store";
@@ -19,6 +20,7 @@ export function usePictureAuthoring(
     loadStore: store.load,
     requestPersistence,
     readNode: (nodeId: string) => access.getState().tree.nodes[nodeId],
+    canTakePicture: (nodeId: string) => treeCanTakePicture(access.getState().tree, nodeId),
     subscribeTree: (listener: () => void) => {
       let tree = access.getState().tree;
       return access.subscribe(() => {

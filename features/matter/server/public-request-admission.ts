@@ -9,6 +9,14 @@ export type PublicRequestAdmissionPolicy = Readonly<{
   windowMs?: number;
   /** Whether this environment is metered; the default is `NODE_ENV === "production"`. */
   metered?: (environment: Readonly<Record<string, string | undefined>>) => boolean;
+  /**
+   * Which request headers name the caller. `forwarded` (the default) also
+   * trusts `x-forwarded-for`, which any client can set when no proxy
+   * overwrites it. `platform` accepts only the headers the hosting platform
+   * itself sets, so a paid lane's window cannot be escaped by inventing an
+   * address on every request; a request carrying none of them shares one bucket.
+   */
+  identity?: "forwarded" | "platform";
 }>;
 
 type WindowEntry = { startedAt: number; requests: number };
@@ -62,7 +70,7 @@ export function createPublicRequestAdmission(policy: PublicRequestAdmissionPolic
       if (!originAllowed(request, environment)) return refuse(request, "ORIGIN");
 
       const timestamp = now();
-      const identity = requestIdentity(request);
+      const identity = requestIdentity(request, policy.identity ?? "forwarded");
       const entry = windows.get(identity);
       const fresh = entry === undefined || timestamp - entry.startedAt >= windowMs;
       if (!fresh && entry.requests >= policy.requestsPerWindow) {
@@ -124,9 +132,10 @@ function originAllowed(
     origin === parseOrigin(request.url);
 }
 
-function requestIdentity(request: Request): string {
-  const forwarded = request.headers.get("x-vercel-forwarded-for")
-    ?? request.headers.get("x-forwarded-for")
+function requestIdentity(request: Request, trust: "forwarded" | "platform"): string {
+  const platform = request.headers.get("x-vercel-forwarded-for") ?? request.headers.get("x-real-ip");
+  const forwarded = platform
+    ?? (trust === "forwarded" ? request.headers.get("x-forwarded-for") : null)
     ?? "unknown";
   return forwarded.split(",", 1)[0]!.trim().slice(0, 96) || "unknown";
 }

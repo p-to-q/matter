@@ -296,6 +296,30 @@ describe("image route money discipline", () => {
     expect(statuses[3]).toBe(429);
   });
 
+  it("keeps a client from escaping its window by inventing a different x-forwarded-for each time", async () => {
+    const adapters = spies();
+    const environment = { NODE_ENV: "production", MATTER_IMAGE_ADAPTER: "live" };
+    const statuses: number[] = [];
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      statuses.push((await post(
+        body(),
+        adapters.pair,
+        { ...SAME_ORIGIN, "x-forwarded-for": `198.51.100.${attempt + 1}` },
+        { environment },
+      )).status);
+    }
+    expect(statuses.slice(0, 3)).toEqual([200, 200, 200]);
+    expect(statuses.slice(3)).toEqual([429, 429]);
+    // The platform's own address still tells two callers apart.
+    const other = await post(
+      body(),
+      adapters.pair,
+      { ...SAME_ORIGIN, "x-vercel-forwarded-for": "203.0.113.50" },
+      { environment },
+    );
+    expect(other.status).toBe(200);
+  });
+
   it("does not invite a retry after the renderer fails, because the relay may have billed", async () => {
     const adapters = spies({ image: async () => ({ text: "https://cdn.example.test/image.png" }) });
     const response = await post(body(), adapters.pair, SAME_ORIGIN);

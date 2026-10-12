@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { MatterLocale } from "../config/locales";
+import { pictureCopy } from "./picture-copy";
 import type { PictureBytesSource } from "../interaction/picture-bytes-source";
 import type { GeneratedPicture } from "../runtime/picture-turn";
 import type { PictureControlCopy } from "./picture-control-copy";
 import {
-  pictureArmStatement,
+  pictureArmText,
   pictureKeepFailureText,
   pictureKeepOffered,
   pictureNoticeText,
@@ -38,12 +39,14 @@ export function PointTalkPicturePanel({
   const live = actions !== null;
   const anchorFocus = live ? -1 : undefined;
   switch (view.step) {
-    case "arm":
+    case "arm": {
+      const { warning, statement } = pictureArmText(copy, view.billed);
       return (
         <div className="point-talk__picture" data-picture-step="arm">
-          <p className="point-talk__statement" data-picture-anchor dir="auto" tabIndex={anchorFocus}>
-            {pictureArmStatement(copy, view.billed)}
-          </p>
+          <div className="point-talk__arm-text" data-picture-anchor dir="auto" tabIndex={anchorFocus}>
+            {warning === null ? null : <p className="point-talk__warning">{warning}</p>}
+            <p className="point-talk__statement">{statement}</p>
+          </div>
           <div className="point-talk__picture-actions">
             <button className="point-talk__text-button" data-primary onClick={actions?.confirm} type="button">
               {copy.draw}
@@ -54,6 +57,7 @@ export function PointTalkPicturePanel({
           </div>
         </div>
       );
+    }
     case "drawing":
       return (
         <div className="point-talk__picture" data-picture-step="drawing">
@@ -95,7 +99,14 @@ export function PointTalkPicturePanel({
         <div
           className="point-talk__picture"
           data-picture-step="preview"
-          {...(live ? { "data-picture-anchor": "", role: "group", tabIndex: -1 } : {})}
+          {...(live
+            ? {
+                "aria-label": pictureCopy(locale).alt,
+                "data-picture-anchor": "",
+                role: "group",
+                tabIndex: -1,
+              }
+            : {})}
         >
           <PreviewPicture live={live} locale={locale} picture={view.picture} />
           {line === null ? null : <p className="point-talk__statement" dir="auto">{line}</p>}

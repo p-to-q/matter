@@ -1,6 +1,5 @@
 import { verifyPictureBytes } from "../protocol/image-verify";
 import {
-  equalImagePointers,
   MAX_IMAGE_POINTER_BYTES,
   MAX_TREE_IMAGE_BYTES,
   MAX_TREE_IMAGE_NODES,
@@ -23,7 +22,6 @@ export type ArchiveErrorCode =
   | "ARCHIVE_UNSUPPORTED_ENTRY"
   | "ARCHIVE_BLOB_DUPLICATE"
   | "ARCHIVE_BLOB_ORPHAN"
-  | "ARCHIVE_BLOB_POINTER_CONFLICT"
   | "ARCHIVE_BLOB_TYPE_MISMATCH"
   | "ARCHIVE_BLOB_SIZE_MISMATCH"
   | "ARCHIVE_BLOB_HASH_MISMATCH"
@@ -104,7 +102,7 @@ export async function exportSnapshotArchive(
     for (const [hash, referenced] of pointers) {
       const bytes = blobs.get(hash);
       if (bytes === undefined || await checkBlob(bytes, referenced) !== null) continue;
-      pictures.push([`${BLOBS_PREFIX}${hash}.${BLOB_EXTENSIONS[referenced[0]!.mediaType]}`, bytes]);
+      pictures.push([`${BLOBS_PREFIX}${hash}.${BLOB_EXTENSIONS[referenced.mediaType]}`, bytes]);
     }
     pictures.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
 
@@ -174,6 +172,11 @@ async function readInput(input: ArchiveInput): Promise<
   Readonly<{ ok: true; bytes: Uint8Array }> | Extract<ArchiveImportResult, { ok: false }>
 > {
   try {
+    // A Blob is judged by its size before any of it is read into memory.
+    const size = input instanceof Blob ? input.size : input.byteLength;
+    if (size > MAX_ARCHIVE_BYTES) {
+      return failure("ARCHIVE_BOUND_EXCEEDED", "The archive exceeds the compressed-byte bound.");
+    }
     const bytes = input instanceof Uint8Array
       ? input
       : new Uint8Array(input instanceof ArrayBuffer ? input : await input.arrayBuffer());
@@ -262,13 +265,19 @@ async function unzipBundle(
         return;
       }
       collisionKeys.add(collisionKey);
-      const declaredSize = file.originalSize;
-      if (!Number.isSafeInteger(declaredSize) || declaredSize === undefined || declaredSize < 0 || declaredSize > budget.entryLimit) {
+      // A writer that streams (a data descriptor follows the data) leaves the
+      // local sizes empty, and the central directory is then the only
+      // declaration. Where the local header does declare, both must agree.
+      const declaredSize = file.originalSize ?? entry.size;
+      if (!Number.isSafeInteger(declaredSize) || declaredSize < 0 || declaredSize > budget.entryLimit) {
         file.terminate();
         finish(failure("ARCHIVE_BOUND_EXCEEDED", "An archive entry has an unsupported declared size."));
         return;
       }
-      if (entry.path.kind === "blob" && declaredSize !== entry.size) {
+      if (
+        (file.originalSize !== undefined && file.originalSize !== entry.size) ||
+        (file.size !== undefined && file.size !== entry.compressedSize)
+      ) {
         file.terminate();
         finish(failure("ARCHIVE_INVALID", "An archive entry disagrees with the central directory about its size."));
         return;
@@ -325,7 +334,12 @@ async function unzipBundle(
       };
       file.start();
     });
-    unzip.register(fflate.AsyncUnzipInflate);
+    // The synchronous inflater delivers every chunk's output inside `push`, so
+    // the feed loop below stops at the first bound it breaks. The asynchronous
+    // one hands entries of 320,000 compressed bytes or more to a Worker each,
+    // and the whole archive would be inside those Workers before any bound
+    // could be judged.
+    unzip.register(fflate.UnzipInflate);
     try {
       for (let offset = 0; offset < bytes.length && !settled; offset += INFLATE_FEED_BYTES) {
         const end = Math.min(offset + INFLATE_FEED_BYTES, bytes.length);
@@ -339,7 +353,7 @@ async function unzipBundle(
   });
 }
 
-type CentralEntry = Readonly<{ crc: number; size: number; path: ArchivePath }>;
+type CentralEntry = Readonly<{ crc: number; compressedSize: number; size: number; path: ArchivePath }>;
 
 /**
  * Every bound that needs only names and declared sizes is judged here, before
@@ -359,6 +373,7 @@ function readCentralDirectory(bytes: Uint8Array):
   const result = new Map<string, CentralEntry>();
   const pictureHashes = new Set<string>();
   let textEntries = 0;
+  let textBytes = 0;
   let pictureBytes = 0;
   let cursor = offset;
   const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -375,6 +390,7 @@ function readCentralDirectory(bytes: Uint8Array):
       const path = classifyArchivePath(name);
       if ("error" in path) return Object.freeze({ ok: false, error: path.error });
       const entrySize = read32(bytes, cursor + 24);
+      const compressedSize = read32(bytes, cursor + 20);
       if (path.kind === "blob") {
         pictureBytes += entrySize;
         if (pictureHashes.size >= MAX_TREE_IMAGE_NODES || entrySize > MAX_IMAGE_POINTER_BYTES || pictureBytes > MAX_TREE_IMAGE_BYTES) {
@@ -386,9 +402,13 @@ function readCentralDirectory(bytes: Uint8Array):
         pictureHashes.add(path.hash);
       } else {
         textEntries += 1;
+        textBytes += entrySize;
         if (textEntries > MAX_BUNDLE_FILES) return failure("ARCHIVE_BOUND_EXCEEDED", "The archive has too many entries.");
+        if (entrySize > MAX_BUNDLE_BYTES || textBytes > MAX_BUNDLE_BYTES) {
+          return failure("ARCHIVE_BOUND_EXCEEDED", "The archive text exceeds the expanded-byte bound.");
+        }
       }
-      result.set(name, Object.freeze({ crc: read32(bytes, cursor + 16), size: entrySize, path }));
+      result.set(name, Object.freeze({ crc: read32(bytes, cursor + 16), compressedSize, size: entrySize, path }));
       cursor = nameEnd + extraLength + commentLength;
     }
   } catch {
@@ -459,13 +479,11 @@ function classifyArchivePath(path: string): ArchivePath | Readonly<{ error: Arch
   return path === "matter/matter.json" || path.endsWith("/index.md") ? { kind: "text" } : unexpected;
 }
 
-function collectPointers(tree: ThoughtTree): Map<string, ImagePointer[]> {
-  const pointers = new Map<string, ImagePointer[]>();
+/** A valid tree describes one hash one way, so each hash maps to exactly one pointer. */
+function collectPointers(tree: ThoughtTree): Map<string, ImagePointer> {
+  const pointers = new Map<string, ImagePointer>();
   for (const node of Object.values(tree.nodes)) {
-    if (node.image === undefined) continue;
-    const referenced = pointers.get(node.image.contentHash);
-    if (referenced === undefined) pointers.set(node.image.contentHash, [node.image]);
-    else referenced.push(node.image);
+    if (node.image !== undefined) pointers.set(node.image.contentHash, node.image);
   }
   return pointers;
 }
@@ -494,13 +512,9 @@ async function verifyBlobs(
  */
 async function checkBlob(
   bytes: Uint8Array,
-  pointers: readonly ImagePointer[],
+  pointer: ImagePointer,
   extension?: BlobExtension,
 ): Promise<ArchiveError | null> {
-  const pointer = pointers[0]!;
-  if (pointers.some((other) => !equalImagePointers(pointer, other))) {
-    return failure("ARCHIVE_BLOB_POINTER_CONFLICT", "Material disagrees about one picture.").error;
-  }
   if (extension !== undefined && extension !== BLOB_EXTENSIONS[pointer.mediaType]) {
     return failure("ARCHIVE_BLOB_TYPE_MISMATCH", "A picture file name contradicts its declared type.").error;
   }

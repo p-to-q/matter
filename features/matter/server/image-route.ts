@@ -109,10 +109,11 @@ export async function handleImageRequest(
       throw unavailable();
     }
     const { brief, image } = resolved;
-    return await withBoundedJsonRequest(request, REQUEST_POLICY, async (payload, signal) => {
+    const progress: RequestProgress = { renderStarted: false };
+    return await withBoundedJsonRequest(request, requestPolicy(progress), async (payload, signal) => {
       const parsed = parseImageRequestEnvelope(payload);
       if (!parsed.ok) throw invalidImageRequest(parsed.message);
-      return await drawImage(parsed.envelope, brief, image, signal, routeEndsAt);
+      return await drawImage(parsed.envelope, brief, image, signal, routeEndsAt, progress);
     });
   } catch (error) {
     // withBoundedJsonRequest lets a caller's disconnect propagate bare.
@@ -129,6 +130,7 @@ async function drawImage(
   imageAdapter: ScenarioAdapter,
   signal: AbortSignal,
   routeEndsAt: number,
+  progress: RequestProgress,
 ): Promise<Response> {
   const briefed = await withRequestSignal(
     runScenario(IMAGE_BRIEF_SCENARIO, Object.freeze({
@@ -150,6 +152,7 @@ async function drawImage(
   if (remainingMs < IMAGE_POOL_LIMITS.minimumAttemptMs) {
     throw new ImageServerError("IMAGE_UNAVAILABLE", "Drawing took too long.", false, 504);
   }
+  progress.renderStarted = true;
   const drawn = await withRequestSignal(
     runScenario(IMAGE_SCENARIO, Object.freeze({
       locale: envelope.locale,
@@ -239,13 +242,18 @@ function cancelledError(): ImageServerError {
   return new ImageServerError("IMAGE_FAILED", "The image request was cancelled.", false, 499);
 }
 
-const REQUEST_POLICY: BoundedRequestPolicy = Object.freeze({
-  maxBytes: MAX_IMAGE_REQUEST_BYTES,
-  timeoutMs: IMAGE_ROUTE_TIMEOUT_MS,
-  fail: boundaryError,
-});
+/** What one request has already spent, which decides whether a timeout invites a retry. */
+type RequestProgress = { renderStarted: boolean };
 
-function boundaryError(reason: BoundedRequestFailure): ImageServerError {
+function requestPolicy(progress: RequestProgress): BoundedRequestPolicy {
+  return Object.freeze({
+    maxBytes: MAX_IMAGE_REQUEST_BYTES,
+    timeoutMs: IMAGE_ROUTE_TIMEOUT_MS,
+    fail: (reason) => boundaryError(reason, progress),
+  });
+}
+
+function boundaryError(reason: BoundedRequestFailure, progress: RequestProgress): ImageServerError {
   switch (reason) {
     case "too-large":
       return new ImageServerError("INVALID_REQUEST", "The image request is too large.", false, 413);
@@ -260,7 +268,10 @@ function boundaryError(reason: BoundedRequestFailure): ImageServerError {
     case "not-utf8":
       return invalidImageRequest("The image request is not valid UTF-8.");
     case "timed-out":
-      return new ImageServerError("IMAGE_UNAVAILABLE", "Drawing took too long.", true, 504);
+      // The renderer may already have been paid by the time the timer fired, and
+      // a retry would pay for a second picture; only a timeout before it began
+      // cost nothing but a text call.
+      return new ImageServerError("IMAGE_UNAVAILABLE", "Drawing took too long.", !progress.renderStarted, 504);
     case "cancelled":
       return cancelledError();
   }

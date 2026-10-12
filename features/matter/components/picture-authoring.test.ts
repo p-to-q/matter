@@ -9,6 +9,7 @@ import { IMAGE_RESPONSE_HEADERS } from "../protocol/image-contract";
 import { SEEDED_DOCUMENT_NODE_IDS } from "../material/seeded-document";
 import { FIXTURE_IMAGE_DATA_URL } from "../server/image-fixtures";
 import { createMatterStore } from "../store/matter-store";
+import { treeCanTakePicture } from "../tree/invariants";
 import {
   BROWSER_PICTURE_VISIBILITY,
   createPictureCommit,
@@ -141,8 +142,10 @@ describe("a kept picture through the real store", () => {
       }),
       blobRepository: { putImageBlob },
       cache: createPictureSessionCache(),
+      canTakePicture: (nodeId) => treeCanTakePicture(store.getState().tree, nodeId),
+      environmentSupported: () => true,
       fetch: fetched as unknown as typeof fetch,
-      inFlightGate: createPictureInFlightGate(),
+      inFlightGate: createPictureInFlightGate(() => undefined),
       visibility: { isVisible: () => true, subscribe: () => () => undefined },
       subscribePageExit: () => () => undefined,
       onState: (state) => states.push(state),

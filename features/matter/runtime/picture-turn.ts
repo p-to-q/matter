@@ -33,10 +33,25 @@ export type PictureFailureReason =
   | "aborted"
   // Raised by the driver before anything is sent: one picture in flight per person.
   | "another-picture-in-flight"
+  // Raised by the driver before anything is sent: the document could not keep the result.
+  | "picture-limit"
+  // Raised by the driver before anything is sent: this browser could not finish the job.
+  | "picture-unsupported"
   | "timeout"
   | "network"
   | "invalid-response"
   | `server-error:${PictureServerErrorCode}`;
+
+const UNSENT_FAILURES: ReadonlySet<PictureFailureReason> = new Set<PictureFailureReason>([
+  "another-picture-in-flight",
+  "picture-limit",
+  "picture-unsupported",
+]);
+
+/** Whether a failure was raised before any request left, so nothing can have been billed. */
+export function failureBeforeSending(reason: PictureFailureReason): boolean {
+  return UNSENT_FAILURES.has(reason);
+}
 
 type Billing = Readonly<{ priorAttemptMayHaveBeenBilled: boolean }>;
 
@@ -121,7 +136,11 @@ export function reducePictureTurn(
       if (!ownsPictureRequest(state, event.requestId)) return unchanged(state);
       return event.retryable
         ? changed({ phase: "failed-retryable", reason: event.reason, priorAttemptMayHaveBeenBilled: billed })
-        : changed({ phase: "failed-final", reason: event.reason, priorAttemptMayHaveBeenBilled: true });
+        : changed({
+            phase: "failed-final",
+            reason: event.reason,
+            priorAttemptMayHaveBeenBilled: billed || !failureBeforeSending(event.reason),
+          });
     case "accept":
       return state.phase === "arrived"
         ? changed({ phase: "accepted", priorAttemptMayHaveBeenBilled: billed })

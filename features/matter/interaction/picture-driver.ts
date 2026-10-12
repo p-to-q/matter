@@ -11,6 +11,7 @@ import {
   reducePictureTurn,
   type GeneratedPicture,
   type PictureTurnEffect,
+  type PictureFailureReason,
   type PictureTurnEvent,
   type PictureTurnState,
 } from "../runtime/picture-turn";
@@ -24,7 +25,7 @@ import {
 } from "./accept-picture";
 import type { PageExit } from "./page-suspension";
 import { requestPicture, type PictureRequestResult } from "./picture-client";
-import type { PictureInFlightGate } from "./picture-in-flight-gate";
+import type { PictureInFlightEntry, PictureInFlightGate } from "./picture-in-flight-gate";
 import type { PictureSessionCache } from "./picture-session-cache";
 
 /** What the driver reads of the passage; a tree node satisfies it as it is. */
@@ -67,6 +68,10 @@ export type PictureDriverDependencies = Readonly<{
   commit: PictureCommit;
   blobRepository: Pick<ImageBlobRepository, "putImageBlob">;
   cache: PictureSessionCache;
+  /** Whether the document could keep one more picture on this passage; read at confirm. */
+  canTakePicture: (nodeId: string) => boolean;
+  /** Whether this browser can finish a picture once it has been paid for; read at confirm. */
+  environmentSupported: () => boolean;
   fetch?: typeof fetch;
   inFlightGate: PictureInFlightGate;
   visibility: PictureVisibilityPort;
@@ -106,7 +111,7 @@ type Basis = Readonly<{
 type Launch = Readonly<{
   envelope: ImageRequestEnvelope;
   basis: Basis;
-  release: () => void;
+  entry: PictureInFlightEntry;
 }>;
 
 type Flight = {
@@ -163,14 +168,24 @@ export class PictureDriver {
       this.apply({ type: "stale" });
       return;
     }
-    const release = this.dependencies.inFlightGate.tryEnter(nodeId);
-    if (release === null) {
-      this.refuseSend(requestId);
+    // Nothing below may send until the person has been told why not: a picture
+    // that could not be finished or kept would be paid for and then lost.
+    if (!this.dependencies.environmentSupported()) {
+      this.refuseSend(requestId, "picture-unsupported", false);
+      return;
+    }
+    if (!this.dependencies.canTakePicture(nodeId)) {
+      this.refuseSend(requestId, "picture-limit", false);
+      return;
+    }
+    const entry = this.dependencies.inFlightGate.tryEnter(nodeId);
+    if (entry === null) {
+      this.refuseSend(requestId, "another-picture-in-flight", true);
       return;
     }
     this.launch = Object.freeze({
       envelope,
-      release,
+      entry,
       basis: Object.freeze({
         documentEpoch: this.dependencies.documentEpoch(),
         text: node.text,
@@ -254,13 +269,13 @@ export class PictureDriver {
     return parsed.ok ? parsed.envelope : null;
   }
 
-  private refuseSend(requestId: string): void {
+  private refuseSend(requestId: string, reason: PictureFailureReason, retryable: boolean): void {
     const confirmed = reducePictureTurn(this.turn, { type: "confirm", requestId });
     const refused = reducePictureTurn(confirmed.state, {
       type: "failed",
       requestId,
-      reason: "another-picture-in-flight",
-      retryable: true,
+      reason,
+      retryable,
     });
     // The confirm's request effect is dropped on purpose: nothing is sent.
     this.transition(refused.state, []);
@@ -294,7 +309,7 @@ export class PictureDriver {
     const flight: Flight = {
       requestId,
       controller,
-      release: launch.release,
+      release: launch.entry.release,
       stopWatchingPage: this.dependencies.subscribePageExit((exit) => {
         if (!exit.persisted && this.flight === flight) this.apply({ type: "stop-waiting" });
       }),
@@ -302,9 +317,31 @@ export class PictureDriver {
     this.flight = flight;
     this.basis = launch.basis;
     this.stopWatchingTree = this.dependencies.subscribeTree(this.onTreeChange);
+    const shared = launch.entry.shareAcrossTabs();
+    if (shared === true) {
+      this.send(flight, launch.envelope);
+      return;
+    }
+    // Waiting for the cross-tab lock costs nothing, and a refusal sends nothing.
+    void shared.then((holdsLock) => {
+      if (!this.ownsFlight(flight)) return;
+      if (holdsLock) {
+        this.send(flight, launch.envelope);
+        return;
+      }
+      this.apply({
+        type: "failed",
+        requestId,
+        reason: "another-picture-in-flight",
+        retryable: true,
+      });
+    });
+  }
+
+  private send(flight: Flight, envelope: ImageRequestEnvelope): void {
     const { fetch } = this.dependencies;
-    void requestPicture(launch.envelope, {
-      signal: controller.signal,
+    void requestPicture(envelope, {
+      signal: flight.controller.signal,
       ...(fetch === undefined ? {} : { fetch }),
     }).then(
       (result) => this.settle(flight, result),

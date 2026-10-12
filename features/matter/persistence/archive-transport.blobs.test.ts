@@ -13,7 +13,8 @@ import type { ThoughtTree } from "../tree/model";
 import { treeToBundle } from "./snapshot-codec";
 import { BLOB_EXTENSIONS, exportSnapshotArchive, importSnapshotArchive } from "./archive-transport";
 
-const MTIME = new Date(Date.UTC(1980, 0, 1));
+// The same local calendar date production stamps; UTC midnight is 1979 west of UTC.
+const MTIME = new Date(1980, 0, 1);
 
 function png(width: number, height: number, fill = 0, filler = 64): Uint8Array {
   const header = new Uint8Array(33);
@@ -380,14 +381,28 @@ describe("archive pictures: import", () => {
     expect(code(result)).toBe("ARCHIVE_BLOB_DUPLICATE");
   });
 
-  it("rejects a picture whose pointers disagree about it", async () => {
+  it("rejects a picture whose pointers disagree about it, before any picture is judged", async () => {
     const otherBox = { ...picture.pointer, width: 800, height: 600 };
     const otherType = { ...picture.pointer, mediaType: "image/webp" as const };
+    const agreeing = archiveOf(treeWith([picture.pointer, picture.pointer]), {
+      [pathOf(picture.pointer)]: picture.bytes,
+    });
+    expect((await importSnapshotArchive(agreeing)).ok).toBe(true);
     for (const disagreeing of [otherBox, otherType]) {
-      const result = await importSnapshotArchive(
-        archiveOf(treeWith([picture.pointer, disagreeing]), { [pathOf(picture.pointer)]: picture.bytes }),
-      );
-      expect(code(result)).toBe("ARCHIVE_BLOB_POINTER_CONFLICT");
+      // The writer refuses such a tree, so the text is rewritten after encoding.
+      const files = unzipSync(agreeing);
+      const decoder = new TextDecoder();
+      const second = Object.keys(files).filter((path) => decoder.decode(files[path]!).includes("image: "))[1]!;
+      const line = `image: ${JSON.stringify({
+        byteLength: disagreeing.byteLength,
+        contentHash: disagreeing.contentHash,
+        height: disagreeing.height,
+        mediaType: disagreeing.mediaType,
+        width: disagreeing.width,
+      })}\n`;
+      files[second] = new TextEncoder().encode(decoder.decode(files[second]!).replace(/image: .*\n/u, line));
+      const result = await importSnapshotArchive(zipSync(files, { mtime: MTIME }));
+      expect(code(result)).toBe("ARCHIVE_INVALID");
     }
   });
 

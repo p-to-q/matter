@@ -15,6 +15,7 @@ describe("material turn activity", () => {
       { ...IDLE_PAPER_ACTIVITY, textSwap: "pending" as const },
       { ...IDLE_PAPER_ACTIVITY, textSwap: "ready" as const },
       { ...IDLE_PAPER_ACTIVITY, elastic: "requesting" as const },
+      { ...IDLE_PAPER_ACTIVITY, pictureHeld: true },
       { ...IDLE_PAPER_ACTIVITY, inquiryHeld: true },
       { ...IDLE_PAPER_ACTIVITY, editingHeld: true },
     ]) {
@@ -48,6 +49,15 @@ describe("material turn activity", () => {
     })).toBe(true);
   });
 
+  it("holds stored-material replacement and relocalization while a paid picture is open", () => {
+    const paper = { ...IDLE_PAPER_ACTIVITY, pictureHeld: true };
+    expect(materialTurnsHoldBasis({ admission: "idle", paper })).toBe(true);
+    expect(materialIsIdle({ admission: "idle", paper })).toBe(false);
+    // Settled again, both proceed.
+    expect(materialTurnsHoldBasis({ admission: "idle", paper: IDLE_PAPER_ACTIVITY })).toBe(false);
+    expect(materialIsIdle({ admission: "idle", paper: IDLE_PAPER_ACTIVITY })).toBe(true);
+  });
+
   it.each([
     ["eligible", true],
     ["permission", true],
@@ -77,6 +87,7 @@ describe("material turn activity", () => {
     for (const changed of [
       { elastic: "requesting" as const },
       { textSwap: "pending" as const },
+      { pictureHeld: true },
       { inquiryHeld: true },
       { editingHeld: true },
     ]) {

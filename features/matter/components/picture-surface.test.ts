@@ -11,7 +11,7 @@ import { pictureControlCopy } from "./picture-control-copy";
 import {
   pictureAnnouncementOnTransition,
   pictureAnnouncementText,
-  pictureArmStatement,
+  pictureArmText,
   pictureCloseOnTransition,
   pictureControlPresentation,
   pictureEscapeAction,
@@ -47,7 +47,13 @@ const failed = (retryable: boolean, reason: "network" | "another-picture-in-flig
   ({ type: "failed", requestId: REQUEST, reason, retryable }) as const;
 
 describe("the picture control's presence", () => {
-  const base = { availability: "available", passageText: "A passage.", interactionPending: false } as const;
+  const base = {
+    availability: "available",
+    environmentSupported: true,
+    documentHasRoom: true,
+    passageText: "A passage.",
+    interactionPending: false,
+  } as const;
 
   it("exists only once the health read said available", () => {
     expect(pictureControlPresentation(base)).toBe("enabled");
@@ -74,6 +80,37 @@ describe("the picture control's presence", () => {
   });
 });
 
+describe("the picture control's reasons to be missing or inert", () => {
+  const base = {
+    availability: "available",
+    environmentSupported: true,
+    documentHasRoom: true,
+    nodeId: "thought_1",
+    passageText: "A passage.",
+    interactionPending: false,
+  } as const;
+
+  it("is absent where this browser could not finish a paid picture", () => {
+    expect(pictureControlPresentation({ ...base, environmentSupported: false })).toBe("absent");
+    expect(pictureControlPresentation({
+      ...base,
+      environmentSupported: false,
+      interactionPending: true,
+    })).toBe("absent");
+  });
+
+  it("stays, aria-disabled and saying why, when the document has no room for a picture", () => {
+    expect(pictureControlPresentation({ ...base, documentHasRoom: false })).toBe("full");
+    expect(pictureControlPresentation({ ...base, documentHasRoom: false, availability: "unavailable" }))
+      .toBe("absent");
+    expect(pictureControlPresentation({ ...base, documentHasRoom: false, passageText: null }))
+      .toBe("absent");
+    // Another interaction in progress is the more immediate reason.
+    expect(pictureControlPresentation({ ...base, documentHasRoom: false, interactionPending: true }))
+      .toBe("disabled");
+  });
+});
+
 describe("the arm step", () => {
   it("is shown for every new turn, and Back returns to the form row", () => {
     expect(projectPictureBubble(turn())).toBeNull();
@@ -87,9 +124,8 @@ describe("the arm step", () => {
     const again = turn(ARM, CONFIRM, { type: "stop-waiting" }, ARM);
     const view = projectPictureBubble(again);
     expect(view).toEqual({ step: "arm", billed: true });
-    expect(pictureArmStatement(copy, false)).toBe(copy.armStatement);
-    expect(pictureArmStatement(copy, true)).toBe(copy.armStatementBilled);
-    expect(pictureArmStatement(copy, true)).not.toBe(pictureArmStatement(copy, false));
+    expect(pictureArmText(copy, false)).toEqual({ warning: null, statement: copy.armStatement });
+    expect(pictureArmText(copy, true)).toEqual({ warning: copy.armWarningBilled, statement: copy.armStatement });
   });
 
   it("does not warn after a failure that cost nothing, and warns after one that may have", () => {
@@ -122,6 +158,19 @@ describe("the bubble for each state", () => {
     expect(pictureNoticeText(copy, "not-drawn")).toBe("Not drawn.");
     expect(pictureNoticeText(copy, "not-drawn-used")).toBe("Not drawn. That attempt may already have been used.");
     expect(pictureNoticeText(copy, "another-in-flight")).toBe("Another picture is being drawn.");
+    expect(pictureNoticeText(copy, "document-full"))
+      .toBe("This document already holds as many pictures as it can.");
+  });
+
+  it("says a refusal that left before sending without claiming the attempt was used", () => {
+    const full = projectPictureBubble(turn(ARM, CONFIRM, {
+      type: "failed", requestId: REQUEST, reason: "picture-limit", retryable: false,
+    }));
+    expect(full).toEqual({ step: "failed", notice: "document-full", retryable: false });
+    const unsupported = projectPictureBubble(turn(ARM, CONFIRM, {
+      type: "failed", requestId: REQUEST, reason: "picture-unsupported", retryable: false,
+    }));
+    expect(unsupported).toEqual({ step: "failed", notice: "not-drawn", retryable: false });
   });
 
   it("previews an arrived picture and carries the Keep failure the driver reports", () => {
@@ -193,6 +242,42 @@ describe("transitions", () => {
     expect(pictureAnnouncementText(copy, "keep-refused")).toBe(copy.keepRefused);
   });
 
+  it("announces the arrival and a failure, which a person whose focus left the bubble would never learn", () => {
+    expect(pictureAnnouncementOnTransition("drawing", "arrived")).toBe("arrived");
+    expect(pictureAnnouncementOnTransition("drawing", "failed-retryable")).toBe("failed");
+    expect(pictureAnnouncementOnTransition("drawing", "failed-final")).toBe("failed");
+    expect(pictureAnnouncementOnTransition("arming", "failed-retryable")).toBe("failed");
+    expect(pictureAnnouncementText(copy, "arrived")).toBe("Picture ready.");
+    // A failure is said in the bubble's own words.
+    expect(pictureAnnouncementText(copy, "failed", "not-drawn-used"))
+      .toBe("Not drawn. That attempt may already have been used.");
+    expect(pictureAnnouncementText(copy, "failed", "document-full"))
+      .toBe("This document already holds as many pictures as it can.");
+    expect(pictureAnnouncementText(copy, "failed")).toBe("Not drawn.");
+    // A stale or stopped turn is said once, by the outcome line.
+    expect(pictureAnnouncementOnTransition("drawing", "stale")).toBeNull();
+    expect(pictureAnnouncementOnTransition("drawing", "cancelled")).toBeNull();
+  });
+
+  it("selects exactly one announcement per entered phase", () => {
+    const entered: Record<PictureTurnPhase, ReturnType<typeof pictureAnnouncementOnTransition>> = {
+      idle: null,
+      arming: null,
+      drawing: "drawing",
+      arrived: "arrived",
+      accepted: "kept",
+      discarded: null,
+      "failed-retryable": "failed",
+      "failed-final": "failed",
+      stale: null,
+      cancelled: null,
+    };
+    for (const [phase, announcement] of Object.entries(entered)) {
+      const previous: PictureTurnPhase = phase === "idle" ? "arming" : "idle";
+      expect(pictureAnnouncementOnTransition(previous, phase as PictureTurnPhase), phase).toBe(announcement);
+    }
+  });
+
   it("announces a Keep failure when it appears or changes, not while it holds", () => {
     expect(pictureKeepFailureAnnouncement(null, "not-saved")).toBe("keep-not-saved");
     expect(pictureKeepFailureAnnouncement("not-saved", "not-saved")).toBeNull();
@@ -213,7 +298,8 @@ describe("transitions", () => {
     expect(pictureEscapeAction(null)).toBe("cancel-field");
     expect(pictureEscapeAction("arm")).toBe("back");
     expect(pictureEscapeAction("drawing")).toBe("stop-waiting");
-    expect(pictureEscapeAction("preview")).toBe("discard");
+    // A paid picture is never discarded by the most incidental key.
+    expect(pictureEscapeAction("preview")).toBe("focus-preview");
     expect(pictureEscapeAction("failed")).toBe("cancel-field");
   });
 });

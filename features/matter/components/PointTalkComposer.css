@@ -64,7 +64,7 @@
   .point-talk__submit:hover { background: color-mix(in srgb, var(--ink) 88%, transparent) !important; color: var(--paper-solid) !important; }
 }
 .point-talk__submit:focus-visible { background: color-mix(in srgb, var(--ink) 88%, transparent) !important; color: var(--paper-solid) !important; }
-/* The 生图 control and every picture step are plain text: no plate, no icon. */
+/* The 绘图 control and every picture step are plain text: no plate, no icon. */
 .point-talk .point-talk__text-button { flex: 0 0 auto; background: transparent; color: var(--muted); white-space: nowrap; }
 .point-talk .point-talk__text-button[data-primary] { color: var(--ink); }
 @media (hover: hover) {
@@ -75,8 +75,14 @@
 .point-talk__picture { flex-direction: column; align-items: stretch; gap: calc(6px * var(--point-talk-scale)); padding: calc(8px * var(--point-talk-scale)); }
 .point-talk__picture[data-picture-step="drawing"] { flex-direction: row; align-items: center; justify-content: space-between; padding-top: calc(3px * var(--point-talk-scale)); padding-bottom: calc(3px * var(--point-talk-scale)); }
 .point-talk__picture[data-picture-step="preview"]:focus { outline: none; }
-.point-talk__statement { margin: 0; color: var(--muted); font-family: var(--mono); font-size: calc(10px * var(--point-talk-scale)); font-weight: 400; line-height: calc(15px * var(--point-talk-scale)); overflow-wrap: anywhere; }
+/* The cost and privacy statement is read before a paid action, so it takes the
+   field's own input size and ink rather than the quiet status line's. */
+.point-talk__statement { margin: 0; color: var(--ink); font-family: var(--mono); font-size: calc(12px * var(--point-talk-scale)); font-weight: 400; line-height: calc(17px * var(--point-talk-scale)); overflow-wrap: anywhere; }
 .point-talk__statement:focus { outline: none; }
+/* The arm step's words are one focus target; a billed attempt's warning is a line of its own, in ink. */
+.point-talk__arm-text { display: flex; flex-direction: column; gap: calc(4px * var(--point-talk-scale)); }
+.point-talk__arm-text:focus { outline: none; }
+.point-talk__warning { margin: 0; color: var(--ink); font-family: var(--mono); font-size: calc(12px * var(--point-talk-scale)); font-weight: 500; line-height: calc(17px * var(--point-talk-scale)); overflow-wrap: anywhere; }
 .point-talk__picture-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; gap: calc(4px * var(--point-talk-scale)); }
 /* The preview is the picture in a box no larger than the field's own width. */
 .point-talk__picture .passage-picture { width: min(100%, calc(248px * var(--point-talk-scale))); max-height: calc(248px * var(--point-talk-scale)); margin: 0 auto; }
@@ -95,6 +101,8 @@
   /* Mobile Safari magnifies focused inputs below 16px, which changes the
      visual viewport during this local turn and detaches it from its material. */
   .point-talk__composer input { font-size: 16px; line-height: 20px; }
+  .point-talk__statement,
+  .point-talk__warning { font-size: 14px; line-height: 20px; }
   .point-talk button { min-width: 48px; min-height: 48px; }
   .point-talk__voice { width: 48px; }
 }

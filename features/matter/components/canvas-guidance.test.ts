@@ -169,7 +169,7 @@ describe("canvas guidance projection", () => {
     expect(projectCanvasGuidance(input({ outcome: stopped }))).toEqual({
       id: "picture-stopped",
       kind: "recovery",
-      text: "Not drawn.",
+      text: "Stopped. It may still count.",
     });
     expect(outcomeGuidanceId(stale)).toBe("picture-stale");
     expect(outcomeGuidanceId(stopped)).toBe("picture-stopped");

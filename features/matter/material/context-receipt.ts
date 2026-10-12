@@ -61,6 +61,13 @@ const DIGEST_PREFIX = "digest: sha256-";
 const DIGEST_LINE = /^digest: sha256-([0-9a-f]{64})$/u;
 const COUNT = /^(?:0|[1-9][0-9]{0,15})$/u;
 const MIN_LINES = FRONT_LINES + 1 + 3 + 1;
+// The grammar breaks lines on "\n" alone, but a Markdown viewer also breaks
+// them at a bare carriage return, and Unicode readers at NEL, LS and PS. A
+// quoted line holding one would escape its "> " prefix and render as forged
+// structure, so a projection carrying one has no receipt: it is refused here
+// rather than escaped, which would need a second spelling that parse must
+// accept and the closed grammar forbids.
+const FOREIGN_LINE_BREAK = /[\r\u0085\u2028\u2029]/u;
 
 export async function renderContextReceipt(projection: MaterialProjection): Promise<string> {
   const problem = projectionProblem(projection);
@@ -366,6 +373,7 @@ function projectionProblem(projection: MaterialProjection): string | null {
     if (
       typeof node.text !== "string" ||
       !isWellFormedUnicodeText(node.text) ||
+      FOREIGN_LINE_BREAK.test(node.text) ||
       node.text.length > MAX_NODE_TEXT_CODE_UNITS
     ) {
       return "text";

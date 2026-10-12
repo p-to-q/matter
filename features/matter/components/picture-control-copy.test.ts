@@ -3,8 +3,8 @@ import { MATTER_LOCALES } from "../config/locales";
 import { pictureControlCopy } from "./picture-control-copy";
 
 const VISIBLE_LABELS = {
-  "zh-CN": "生图",
-  "zh-TW": "生圖",
+  "zh-CN": "绘图",
+  "zh-TW": "繪圖",
   "ja-JP": "描く",
   "en-US": "Draw",
   "de-DE": "Zeichnen",
@@ -47,17 +47,20 @@ describe("picture control copy", () => {
     expect(pictureControlCopy("en-US").stopWaiting).toBe("Stop waiting");
   });
 
-  it("states the cost plainly, and leads the billed variant with the warning", () => {
+  it("states the cost plainly, and gives the billed warning a line of its own", () => {
     const english = pictureControlCopy("en-US");
     expect(english.armStatement).toBe(
       "Draws one picture. Your passage goes to a text model; only a short line goes to an image service. Takes up to a minute. Leaving loses it.",
     );
     for (const locale of MATTER_LOCALES) {
       const copy = pictureControlCopy(locale);
-      expect(copy.armStatementBilled.endsWith(copy.armStatement), locale).toBe(true);
-      expect(copy.armStatementBilled.length).toBeGreaterThan(copy.armStatement.length);
+      expect(copy.armWarningBilled.trim(), locale).not.toBe("");
+      // One short line, never folded into the statement it warns about.
+      expect(copy.armWarningBilled.includes(copy.armStatement), locale).toBe(false);
+      expect(copy.armWarningBilled).not.toContain("\n");
     }
-    expect(english.armStatementBilled.startsWith("The last attempt may already have been used.")).toBe(true);
+    expect(english.armWarningBilled).toBe("The last attempt may already have been used.");
+    expect(pictureControlCopy("zh-CN").armWarningBilled).toBe("上一次可能已产生用量。");
   });
 
   it("keeps the English words the owner specified", () => {
@@ -66,12 +69,14 @@ describe("picture control copy", () => {
     expect(english.notDrawn).toBe("Not drawn.");
     expect(english.notDrawnUsed).toBe("Not drawn. That attempt may already have been used.");
     expect(english.anotherInFlight).toBe("Another picture is being drawn.");
+    expect(english.documentFull).toBe("This document already holds as many pictures as it can.");
     expect(english.tryAgain).toBe("Try again");
     expect(english.keepNotSaved).toBe(
       "Couldn't save on this device. Kept for this session — try Keep again.",
     );
     expect(english.keepRefused).toBe("This picture can't be kept here.");
     expect(english.announceDrawing).toBe("Drawing");
+    expect(english.announceArrived).toBe("Picture ready.");
     expect(english.announceKept).toBe("Kept. Undo is available.");
   });
 });

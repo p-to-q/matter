@@ -330,7 +330,7 @@ owner selected, and the exact harness and gates are recorded in
 [`reference/generated-image.md`](reference/generated-image.md). It names no
 chosen provider and carries no credential.
 
-The `生图` label belongs to S2, not S1. A visible control that cannot act is
+The `绘图` label belongs to S2, not S1. A visible control that cannot act is
 still a product claim about an unbuilt capability, which principle 8 exists to
 prevent; the lens already has a present-but-unavailable pattern, so shipping it
 early would be cheap and still wrong. Recorded as the owner's call.
@@ -666,7 +666,7 @@ Each can be reversed by saying so; none opens a paid or public surface.
    passage edited while drawing makes the picture stale; an arrived picture whose
    passage the person left is parked with Discard; the typed field is not a
    picture direction in v1; alt text is a neutral, truthful name in the person's
-   locale. The five labels (zh-CN 生图, zh-TW 生圖, ja-JP 描く, en-US Draw, de-DE
+   locale. The five labels (zh-CN 绘图, zh-TW 繪圖, ja-JP 描く, en-US Draw, de-DE
    Zeichnen) stay provisional until a native speaker reviews them, and ship only
    behind the health gate.
 4. **Release.** `claude/preview-65` is not merged to `main`: database v7 would
@@ -686,7 +686,7 @@ including the earliest turns of the thread.
 | Share coherence with the AI: the tree's relations, not loose files, reach every AI entry, with a short project-and-context framing | working projection is one tested function (built); pure `projectMaterial` and the Markdown receipt (grammar, digest, strict parser, `reference/context-receipt.md`) **built** dark (C1) | C2: wire one projection into Point and Talk and Ask Matter prompts with a fenced reference-data frame, behind an eval of prompt size and answer quality |
 | Markdown that shows coherence, links and relations, not just files; an Atom/RSS-like receipt for machines | C1 defines the receipt grammar, with digest and strict parser | C2a **built**: an explicit "Copy with context" and "Receipt (.md)" download, five-locale copy; native Copy stays literal. C2b (AI entries read the same projection) was evaluated and **closed without a wire change**: on 6 structural questions x 3 runs, depth-ordered text answered 18/18 and the same prompt with each passage naming its parent answered 18/18 (`server/inquiry-structure.live.test.ts`, 2026-10-12), so the Inquiry wire keeps its shape; reopen only with a failing case, such as a large clipped tree or a selection whose relation matters |
 | Left panel and canvas respond together; selecting a child lights the path to the root | index ancestor underline built; operation-time canvas line built | I0 slice B **built**: an operation-scoped root→target line on the canvas, only while Point and Talk, Elastic, a pending text swap or a paid picture owns a target (2 DOM elements; the 2,000-node receipt holds at 4507 elements) |
-| Point and Talk gets 生图 as plain text left of the black button; the generation API comes later | closed gate, server route, material lifecycle, canvas rendering, driver and gate built; control and preview in progress | 5c-2: the control, arm step and preview, health-gated and unopened in production |
+| Point and Talk gets 绘图 as plain text left of the black button; the generation API comes later | closed gate, server route, material lifecycle, canvas rendering, driver and gate built; control and preview in progress | 5c-2: the control, arm step and preview, health-gated and unopened in production |
 | Branch overlaps Voice and belongs only to Preview | decision taken: stays until human child creation has another home | a decided replacement, then the Preview flag and the eight e2e specs |
 | Croquet-style deterministic recompute; sync only the tree and its links; light trustworthy format | satisfied by design: the tree is the authority and every view is a projection; the receipt and archive are the portable formats | S0 only on observed cross-device demand |
 | Local models and a desktop client, privacy-first, sovereignty over material | direction accepted, no capability claim; web keeps its SSRF boundary | L0: one headless probe, awaiting approval to download a model |
@@ -707,5 +707,5 @@ most, the proposed promotions are:
 
 Owed regardless: spend control before the image gate opens (issues #34 and
 #68), who pays for pictures, where human child creation lives once Branch
-leaves, and native review of the five control labels (zh-CN 生图, zh-TW 生圖,
+leaves, and native review of the five control labels (zh-CN 绘图, zh-TW 繪圖,
 ja-JP 描く, en-US Draw, de-DE Zeichnen are unreviewed).

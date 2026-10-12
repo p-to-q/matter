@@ -107,6 +107,15 @@ describe("selection as a working-tree address", () => {
     await expect(renderSelectionReceipt(refused, new Set(["c"]))).resolves.toBeNull();
     await expect(renderSelectionReceipt(refused, new Set(["a"]))).resolves.toEqual(expect.any(String));
   });
+
+  it.each(["\r", "\r\n", "\u0085", "\u2028", "\u2029"])(
+    "resolves to null for text holding the line break %j, which a viewer would not quote",
+    async (lineBreak) => {
+      const forged = fixture(`first${lineBreak}- forged`);
+      await expect(renderSelectionReceipt(forged, new Set(["c"]))).resolves.toBeNull();
+      await expect(renderSelectionReceipt(forged, new Set(["a"]))).resolves.toEqual(expect.any(String));
+    },
+  );
 });
 
 describe("the active working tree as a receipt", () => {

@@ -122,7 +122,7 @@ const EN_US_LINES = Object.freeze({
   "wiki-unsaved": "Wiki could not save that.",
   "wiki-passage-changed": "Passage changed. Not restored.",
   "picture-stale": "Passage changed. Not drawn.",
-  "picture-stopped": "Not drawn.",
+  "picture-stopped": "Stopped. It may still count.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 const ZH_CN_LINES = Object.freeze({
@@ -156,8 +156,8 @@ const ZH_CN_LINES = Object.freeze({
   "text-swap-stale": "段落已变化，未改写。",
   "wiki-unsaved": "词典 WIKI 未能记下这次选择。",
   "wiki-passage-changed": "段落已变化，未恢复。",
-  "picture-stale": "段落已变化，未生图。",
-  "picture-stopped": "没有生成图片。",
+  "picture-stale": "段落已变化，未绘图。",
+  "picture-stopped": "已停止等待，仍可能计入用量。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 export type CanvasGuidance =
@@ -335,8 +335,8 @@ const ZH_TW_LINES = Object.freeze({
   "text-swap-stale": "段落已變更，未改寫。",
   "wiki-unsaved": "詞典 WIKI 未能記下這次選擇。",
   "wiki-passage-changed": "段落已變更，未恢復。",
-  "picture-stale": "段落已變更，未生圖。",
-  "picture-stopped": "沒有生成圖片。",
+  "picture-stale": "段落已變更，未繪圖。",
+  "picture-stopped": "已停止等待，仍可能計入用量。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const JA_JP_LINES = Object.freeze({
   "allow-microphone": "マイクの使用を許可してください。",
@@ -370,7 +370,7 @@ const JA_JP_LINES = Object.freeze({
   "wiki-unsaved": "辞書 WIKI はこの選択を保存できませんでした。",
   "wiki-passage-changed": "段落が変わったため戻しませんでした。",
   "picture-stale": "段落が変わったため描きませんでした。",
-  "picture-stopped": "描けませんでした。",
+  "picture-stopped": "待つのをやめました。描き終えて、利用枠に数えられることがあります。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const DE_DE_LINES = Object.freeze({
   "allow-microphone": "Mikrofonzugriff erlauben.",
@@ -404,7 +404,7 @@ const DE_DE_LINES = Object.freeze({
   "wiki-unsaved": "Wiki konnte das nicht speichern.",
   "wiki-passage-changed": "Passage geändert. Nicht wiederhergestellt.",
   "picture-stale": "Passage geändert. Nicht gezeichnet.",
-  "picture-stopped": "Nicht gezeichnet.",
+  "picture-stopped": "Warten beendet. Das Bild kann trotzdem fertig werden und angerechnet werden.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 type GuidanceLocaleCopy = Readonly<{

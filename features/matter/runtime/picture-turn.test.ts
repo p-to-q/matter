@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ImagePointer } from "../tree/image-pointer";
 import {
   createPictureTurnState,
+  failureBeforeSending,
   ownsPictureRequest,
   reducePictureTurn,
   type GeneratedPicture,
@@ -271,6 +272,69 @@ describe("picture turn reducer", () => {
       });
       expect(reducePictureTurn(refused, { type: "arm" }).state)
         .toMatchObject({ phase: "arming", priorAttemptMayHaveBeenBilled: false });
+    });
+
+    it.each(["picture-limit", "picture-unsupported"] as const)(
+      "is not set by a final refusal to send (%s): nothing was sent",
+      (reason) => {
+        const refused = run([
+          ...toDrawing,
+          { type: "failed", requestId: REQUEST, reason, retryable: false },
+        ]);
+        expect(refused).toMatchObject({ phase: "failed-final", reason, priorAttemptMayHaveBeenBilled: false });
+        expect(reducePictureTurn(refused, { type: "arm" }).state)
+          .toMatchObject({ phase: "arming", priorAttemptMayHaveBeenBilled: false });
+      },
+    );
+
+    it("keeps a warning already earned through a later final refusal", () => {
+      const state = run([
+        ...toDrawing, EVENTS["failed-current-final"]!,
+        { type: "arm" },
+        { type: "confirm", requestId: REQUEST },
+        { type: "failed", requestId: REQUEST, reason: "picture-limit", retryable: false },
+      ]);
+      expect(state).toMatchObject({ phase: "failed-final", priorAttemptMayHaveBeenBilled: true });
+    });
+
+    it("names exactly the failures that leave before sending", () => {
+      expect(["another-picture-in-flight", "picture-limit", "picture-unsupported"]
+        .every((reason) => failureBeforeSending(reason as never))).toBe(true);
+      for (const reason of ["aborted", "timeout", "network", "invalid-response", "server-error:IMAGE_FAILED"] as const) {
+        expect(failureBeforeSending(reason), reason).toBe(false);
+      }
+    });
+
+    it.each(["picture-limit", "picture-unsupported"] as const)(
+      "is not set by a final refusal to send (%s): nothing was sent",
+      (reason) => {
+        const refused = run([
+          ...toDrawing,
+          { type: "failed", requestId: REQUEST, reason, retryable: false },
+        ]);
+        expect(refused).toMatchObject({ phase: "failed-final", reason, priorAttemptMayHaveBeenBilled: false });
+        expect(reducePictureTurn(refused, { type: "arm" }).state)
+          .toMatchObject({ phase: "arming", priorAttemptMayHaveBeenBilled: false });
+      },
+    );
+
+    it("keeps a warning already earned through a later final refusal", () => {
+      const state = run([
+        ...toDrawing, EVENTS["failed-current-final"]!,
+        { type: "arm" },
+        { type: "confirm", requestId: REQUEST },
+        { type: "failed", requestId: REQUEST, reason: "picture-limit", retryable: false },
+      ]);
+      expect(state).toMatchObject({ phase: "failed-final", priorAttemptMayHaveBeenBilled: true });
+    });
+
+    it("names exactly the failures that leave before sending", () => {
+      for (const reason of ["another-picture-in-flight", "picture-limit", "picture-unsupported"] as const) {
+        expect(failureBeforeSending(reason), reason).toBe(true);
+      }
+      for (const reason of ["aborted", "timeout", "network", "invalid-response", "server-error:IMAGE_FAILED"] as const) {
+        expect(failureBeforeSending(reason), reason).toBe(false);
+      }
     });
 
     it("is not set by leaving the arm step, a stale arm, or discarding", () => {

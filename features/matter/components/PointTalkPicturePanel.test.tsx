@@ -5,6 +5,7 @@ import { MATTER_LOCALES, type MatterLocale } from "../config/locales";
 import type { GeneratedPicture } from "../runtime/picture-turn";
 import { PointTalkPicturePanel } from "./PointTalkPicturePanel";
 import { pictureControlCopy } from "./picture-control-copy";
+import { pictureCopy } from "./picture-copy";
 import type { PictureBubbleView } from "./picture-surface";
 import type { PointTalkPictureActions } from "./use-picture-session";
 
@@ -56,6 +57,18 @@ describe("the picture panel", () => {
     expect(render({ step: "arm", billed: true })).toContain("The last attempt may already have been used.");
   });
 
+  it("puts the billed warning on a line of its own above the statement, inside the one focus target", () => {
+    const plain = render({ step: "arm", billed: false });
+    expect(plain).not.toContain("point-talk__warning");
+    for (const locale of MATTER_LOCALES) {
+      const copy = pictureControlCopy(locale);
+      const markup = render({ step: "arm", billed: true }, { locale });
+      expect(markup, locale).toContain(`<p class="point-talk__warning">${copy.armWarningBilled}</p>`);
+      expect(markup.indexOf("point-talk__warning")).toBeLessThan(markup.indexOf("point-talk__statement"));
+      expect(markup.match(/data-picture-anchor/g)).toHaveLength(1);
+    }
+  });
+
   it("draws with one button that never says Cancel, and no spinner or progress", () => {
     const markup = render({ step: "drawing" });
     expect(buttons(markup)).toEqual(["Stop waiting"]);
@@ -80,6 +93,21 @@ describe("the picture panel", () => {
     expect(markup).toContain("aspect-ratio:640 / 480");
     expect(markup).not.toContain("<img");
     expect(markup).not.toContain("blob:");
+  });
+
+  it("names the preview group in every locale, so a screen reader that lands on it knows what it holds", () => {
+    for (const locale of MATTER_LOCALES) {
+      const markup = render({ step: "preview", picture: PICTURE, failure: null }, { locale });
+      const group = /<div[^>]*role="group"[^>]*>/u.exec(markup)?.[0] ?? "";
+      expect(group, locale).toContain(`aria-label="${pictureCopy(locale).alt}"`);
+      expect(pictureCopy(locale).alt.trim()).not.toBe("");
+    }
+  });
+
+  it("gives the frozen copy no group role and no name to announce twice", () => {
+    const markup = render({ step: "preview", picture: PICTURE, failure: null }, { frozen: true });
+    expect(markup).not.toContain('role="group"');
+    expect(markup).not.toContain("aria-label");
   });
 
   it("says an unsaved Keep inline and keeps Keep, and offers only Discard once refused", () => {

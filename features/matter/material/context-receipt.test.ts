@@ -303,19 +303,50 @@ describe("context receipt text safety", () => {
 
   it("round-trips hostile and international text exactly", async () => {
     const texts = [
-      "a\r\nb\rc\n\nd\n",
+      "a\nb\nc\n\nd\n",
       "---\n---",
       "> > nested\n>\n- - item\n  - sub",
       "<script>alert(1)</script> &amp; <!-- --> matter-receipt: 1",
       "`one` ``two`` ```three``` ````four````  `````five`````",
       "שלום עולם مرحبا بالعالم אבג",
       "你好，世界。日本語のテキスト、한국어 텍스트",
-      "👨‍👩‍👧‍👦 🏳️‍🌈 é ạ̈ ​  ",
+      "👨‍👩‍👧‍👦 🏳️‍🌈 é ạ̈ ​",
       "[…]",
       "  leading and trailing  ",
       "digest: sha256-" + "a".repeat(64),
     ];
     await roundTrip(manual(texts.map((text, index) => pnode(`t${index}`, null, text, { siblingIndex: index, depth: index }))));
+  });
+
+  // CommonMark ends a line at "\n", "\r" or "\r\n"; Unicode readers also end
+  // one at NEL, LS and PS. The receipt quotes by "\n" alone, so text holding any
+  // other break would leave its quote in a viewer and could render as a bullet.
+  const FOREIGN_BREAKS = ["\r", "\r\n", "\u0085", "\u2028", "\u2029"] as const;
+
+  it.each(FOREIGN_BREAKS)("refuses to render text holding the line break %j", async (lineBreak) => {
+    const forged = `a${lineBreak}- b`;
+    await expect(renderContextReceipt(manual([pnode("only", null, forged)]))).rejects.toThrow(RangeError);
+    await expect(renderContextReceipt(manual([pnode("only", null, `tail${lineBreak}`)]))).rejects.toThrow(RangeError);
+    await expect(renderContextReceipt(manual([
+      pnode("ok", null, "fine"),
+      pnode("bad", "ok", `x${lineBreak}y`, { siblingIndex: 0, depth: 1 }),
+    ]))).rejects.toThrow(RangeError);
+  });
+
+  it("leaves no line break outside the grammar's own in any receipt it does render", async () => {
+    const texts = ["plain", "multi\nline", "---\n> x\n- y", "tab\tand\u00a0nbsp\u200b", "\u000b\u000c\u001c"];
+    const receipt = await renderContextReceipt(manual(texts.map((text, index) =>
+      pnode(`t${index}`, null, text, { siblingIndex: index, depth: index }))));
+    expect(/[\r\u0085\u2028\u2029]/u.test(receipt)).toBe(false);
+    expect((await parseContextReceipt(receipt)).ok).toBe(true);
+  });
+
+  it("rejects a signed receipt whose quote holds a foreign line break", async () => {
+    const receipt = await renderContextReceipt(manual([pnode("a", null, "first second")]));
+    for (const lineBreak of FOREIGN_BREAKS) {
+      const forged = forge(receipt, (lines) => lines.map((line) => line.replace("first second", `first${lineBreak}- second`)));
+      expect((await parseContextReceipt(forged)).ok, JSON.stringify(lineBreak)).toBe(false);
+    }
   });
 
   it("sizes the fence beyond every backtick run in the text", async () => {
@@ -634,9 +665,9 @@ const PIECES = [
   "plain words", "---", "> quoted", "- bullet", "`", "``", "```", "````", "`````", "``````",
   "<b>html</b>", "matter-receipt: 1", "digest: sha256-" + "f".repeat(64), "[…]", "{\"nodes\":[]}",
   "👨‍👩‍👧‍👦", "🏳️‍🌈", "😀", "é", "ạ̈", "שלום", "مرحبا بالعالم", "你好，世界。", "日本語", "한국어",
-  "​", " ", "tab\there", "  padded  ",
+  "​", "tab\there", "  padded  ",
 ];
-const JOINERS = ["", " ", "\n", "\r\n", "\n\n", "\r", "\n> ", "\n- "];
+const JOINERS = ["", " ", "\n", "\n\n", "\n> ", "\n- "];
 
 function randomText(random: () => number): string {
   const count = 1 + Math.floor(random() * 6);

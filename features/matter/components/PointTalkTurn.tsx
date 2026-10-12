@@ -24,6 +24,7 @@ import {
   pictureHold,
   pictureKeepFailureAnnouncement,
   pictureOutcomeOnTransition,
+  projectPictureBubble,
   type PictureHold,
   type PictureOutcomeReason,
 } from "./picture-surface";
@@ -167,9 +168,11 @@ export function PointTalkTurn({
   const hold = pictureHold(picturePhase);
   const holdRef = useRef(hold);
   const picturePhaseRef = useRef(picturePhase);
+  const pictureStateRef = useRef(picture?.state ?? null);
   useEffect(() => {
     holdRef.current = hold;
     picturePhaseRef.current = picturePhase;
+    pictureStateRef.current = picture?.state ?? null;
   });
   useEffect(() => {
     onPictureHoldChange?.(hold);
@@ -201,7 +204,12 @@ export function PointTalkTurn({
     if (previous === picturePhase) return;
     const announcement = pictureAnnouncementOnTransition(previous, picturePhase);
     if (announcement !== null) {
-      onPictureAnnouncement?.(pictureAnnouncementText(pictureControlCopy(locale), announcement));
+      const view = pictureStateRef.current === null ? null : projectPictureBubble(pictureStateRef.current);
+      onPictureAnnouncement?.(pictureAnnouncementText(
+        pictureControlCopy(locale),
+        announcement,
+        view?.step === "failed" ? view.notice : null,
+      ));
     }
     const outcome = pictureOutcomeOnTransition(previous, picturePhase);
     if (outcome === "stale") reportPictureStale();

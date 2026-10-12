@@ -206,7 +206,7 @@ test("the banner states which relays are real and which are fake, and never carr
   assert.match(real, /image = REAL/);
   assert.match(real, /SPEND YOUR CREDITS/);
   assert.match(real, /http:\/\/localhost:3000\/matter/);
-  assert.match(real, /生图/);
+  assert.match(real, /绘图/);
   assert.match(real, /Draw/);
   assert.match(real, /provisional/);
   assert.doesNotMatch(real, /developer-secret|models\.example|images\.example|model-a/u);

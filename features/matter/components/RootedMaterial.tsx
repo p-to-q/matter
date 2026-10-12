@@ -1575,13 +1575,21 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const activity: PaperActivity = Object.freeze({
       elastic: transformState.phase,
       textSwap: pointTalkPhase,
+      pictureHeld: pointTalkPictureHold === "paid",
       inquiryHeld,
       editingHeld,
     });
     if (samePaperActivity(reportedPaperActivityRef.current, activity)) return;
     reportedPaperActivityRef.current = activity;
     reportPaperActivity?.(activity);
-  }, [editingHeld, inquiryHeld, pointTalkPhase, reportPaperActivity, transformState.phase]);
+  }, [
+    editingHeld,
+    inquiryHeld,
+    pointTalkPhase,
+    pointTalkPictureHold,
+    reportPaperActivity,
+    transformState.phase,
+  ]);
   useLayoutEffect(() => () => {
     // Unmounting the paper releases what it held, so the root must not keep
     // waiting on activity nobody will report again.

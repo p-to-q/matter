@@ -1,9 +1,19 @@
 "use client";
 
-import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { MatterLocale } from "../config/locales";
 import type { ImageSurfaceAvailability } from "../interaction/image-surface-availability";
 import { subscribePageExit } from "../interaction/page-suspension";
+import { pictureEnvironmentSupported } from "../interaction/picture-environment";
 import { PictureDriver, type PictureDriverState } from "../interaction/picture-driver";
 import { createPictureTurnState } from "../runtime/picture-turn";
 import {
@@ -75,6 +85,14 @@ export function usePictureSession(input: Readonly<{
   const [driver, setDriver] = useState<PictureDriver | null>(null);
   const [state, setState] = useState<PictureDriverState>(createPictureTurnState);
   const [keeping, setKeeping] = useState(false);
+  // The document's room is a fact about the live tree, so it follows the tree
+  // rather than the render that last happened to read it.
+  const documentHasRoom = useSyncExternalStore(
+    authoring?.subscribeTree ?? SUBSCRIBE_NOTHING,
+    () => authoring?.canTakePicture(nodeId) ?? false,
+    () => false,
+  );
+  const environmentSupported = useMemo(() => pictureEnvironmentSupported(globalThis), []);
   const localeRef = useRef(input.locale);
   useLayoutEffect(() => {
     localeRef.current = input.locale;
@@ -114,6 +132,8 @@ export function usePictureSession(input: Readonly<{
         }),
         blobRepository: repository,
         cache,
+        canTakePicture: authoring.canTakePicture,
+        environmentSupported: () => pictureEnvironmentSupported(globalThis),
         inFlightGate: PICTURE_SHARED.gate,
         visibility: BROWSER_PICTURE_VISIBILITY,
         subscribePageExit,
@@ -155,6 +175,8 @@ export function usePictureSession(input: Readonly<{
 
   const control = pictureControlPresentation({
     availability: driver === null ? "unavailable" : availability,
+    environmentSupported,
+    documentHasRoom,
     passageText: input.passageText,
     // The passage's own turn counts: while it draws or previews, the control
     // is there but cannot start another.
@@ -167,3 +189,7 @@ export function usePictureSession(input: Readonly<{
 }
 
 function ignore(): void {}
+
+function SUBSCRIBE_NOTHING(): () => void {
+  return ignore;
+}

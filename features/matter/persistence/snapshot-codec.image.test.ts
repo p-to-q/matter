@@ -211,6 +211,25 @@ describe("snapshot codec and image pointers", () => {
       .toMatchObject({ ok: false, error: { code: "BOUND_EXCEEDED" } });
   });
 
+  it("refuses one content hash described two ways, whether written or read", () => {
+    const { tree, childId } = pictured();
+    const otherId = Object.keys(tree.nodes).find((id) => id !== tree.rootId && id !== childId)!;
+    const conflicting: ThoughtTree = {
+      ...tree,
+      nodes: {
+        ...tree.nodes,
+        [otherId]: { ...tree.nodes[otherId], image: { ...PNG, mediaType: "image/jpeg", width: 2048 } },
+      },
+    };
+    expect(() => treeToBundle(conflicting)).toThrow(TypeError);
+
+    const bundle = treeToBundle(tree);
+    const path = fileOf(bundle, otherId, tree);
+    const line = CANONICAL_LINE.replace('"width":1024', '"width":2048').replace("image/png", "image/jpeg");
+    expect(mutateNode(bundle, path, (content) => content.replace("\n---\n\n", `\n${line}\n---\n\n`)))
+      .toMatchObject({ ok: false, error: { code: "INVALID_TREE" } });
+  });
+
   it("refuses to write a tree whose pointer is invalid", () => {
     const { tree, childId } = pictured();
     const invalid: ThoughtTree = {

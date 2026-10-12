@@ -183,7 +183,7 @@ describe("material ZIP transport", () => {
         for (const name of ["matter/matter.json", "matter/index.md"]) {
           const file = {
             name,
-            originalSize: 1,
+            originalSize: name === "matter/matter.json" ? 2 : 1,
             compression: 0,
             terminate: () => terminated.push(name),
             start: () => queueMicrotask(() => file.ondata(new Error("corrupt"), new Uint8Array(), false)),
@@ -199,7 +199,7 @@ describe("material ZIP transport", () => {
     }
 
     vi.resetModules();
-    vi.doMock("fflate", () => ({ AsyncUnzipInflate: class {}, Unzip: FakeUnzip }));
+    vi.doMock("fflate", () => ({ UnzipInflate: class {}, Unzip: FakeUnzip }));
     try {
       const transport = await import("./archive-transport");
       await expect(transport.importSnapshotArchive(zip({
@@ -214,6 +214,44 @@ describe("material ZIP transport", () => {
       vi.doUnmock("fflate");
       vi.resetModules();
     }
+  });
+});
+
+describe("material ZIP transport and one picture's description", () => {
+  it("refuses an archive whose pictures describe one hash two ways", async () => {
+    const picture = {
+      mediaType: "image/png" as const,
+      byteLength: 1_000,
+      width: 512,
+      height: 512,
+      contentHash: "ab".repeat(32),
+    };
+    const source = createSeededDocument().tree;
+    const [firstId, secondId] = source.nodes[source.rootId!]!.children;
+    const tree = {
+      ...source,
+      nodes: {
+        ...source.nodes,
+        [firstId!]: { ...source.nodes[firstId!]!, image: picture },
+        [secondId!]: { ...source.nodes[secondId!]!, image: { ...picture, width: 1_024, mediaType: "image/webp" as const } },
+      },
+    };
+    // The encoder refuses it too, so the archive is assembled from a valid tree
+    // whose second picture line is then rewritten in the file.
+    const valid = treeToBundle({
+      ...tree,
+      nodes: { ...tree.nodes, [secondId!]: { ...tree.nodes[secondId!]!, image: picture } },
+    });
+    const files = { ...valid.files } as Record<string, string>;
+    const secondPath = Object.keys(files).find((path) => files[path]!.includes(`id: ${secondId}\n`))!;
+    files[secondPath] = files[secondPath]!.replace(
+      /image: .*\n/u,
+      `image: {"byteLength":1000,"contentHash":"${picture.contentHash}","height":512,"mediaType":"image/webp","width":1024}\n`,
+    );
+    await expect(importSnapshotArchive(zip(files))).resolves.toMatchObject({
+      ok: false,
+      error: { code: "ARCHIVE_INVALID" },
+    });
   });
 });
 

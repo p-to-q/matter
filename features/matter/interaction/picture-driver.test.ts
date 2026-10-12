@@ -15,7 +15,11 @@ import {
   type PictureDriverState,
   type PictureNodeView,
 } from "./picture-driver";
-import { createPictureInFlightGate, type PictureInFlightGate } from "./picture-in-flight-gate";
+import {
+  createPictureInFlightGate,
+  type PictureInFlightGate,
+  type PictureLockManager,
+} from "./picture-in-flight-gate";
 import { createPictureSessionCache } from "./picture-session-cache";
 
 vi.mock("./picture-client", async (importOriginal) => {
@@ -62,6 +66,10 @@ type HarnessOptions = Readonly<{
   image?: ImagePointer;
   visible?: boolean;
   gate?: PictureInFlightGate;
+  /** The Web Locks the default gate sees; none unless given. */
+  locks?: PictureLockManager;
+  hasRoom?: boolean;
+  environmentSupported?: boolean;
   blob?: ImageBlobFailureCode | "throw";
   commit?: "stale" | "rejected" | "throw";
   real?: Readonly<{ fetch: typeof fetch }>;
@@ -125,7 +133,9 @@ function createHarness(options: HarnessOptions = {}) {
     return "committed";
   });
 
-  const gate = options.gate ?? createPictureInFlightGate();
+  const gate = options.gate ?? createPictureInFlightGate(() => options.locks);
+  const canTakePicture = vi.fn<(nodeId: string) => boolean>(() => options.hasRoom ?? true);
+  const environmentSupported = vi.fn(() => options.environmentSupported ?? true);
   const cache = createPictureSessionCache();
   const states: PictureDriverState[] = [];
   let ids = 0;
@@ -154,6 +164,8 @@ function createHarness(options: HarnessOptions = {}) {
     commit,
     blobRepository: { putImageBlob },
     cache,
+    canTakePicture,
+    environmentSupported,
     ...(options.real === undefined ? {} : { fetch: options.real.fetch }),
     inFlightGate: gate,
     visibility,
@@ -166,7 +178,7 @@ function createHarness(options: HarnessOptions = {}) {
   drivers.push(driver);
 
   return {
-    driver, nodes, edit, notifyTree, treeListeners, gate, cache, states, commit, putImageBlob, order,
+    driver, nodes, edit, notifyTree, treeListeners, gate, cache, canTakePicture, environmentSupported, states, commit, putImageBlob, order,
     mintRequestId, visibility, setVisible, visibilityListeners, exitListeners, subscribePageExit, pending,
     setEpoch: (value: number) => { epoch = value; },
     setLocale: (value: MatterLocale) => { locale = value; },
@@ -803,7 +815,7 @@ describe("picture driver", () => {
 
   describe("the in-flight gate", () => {
     it("refuses the send when another picture is in flight: closed, retryable, unbilled", () => {
-      const gate = createPictureInFlightGate();
+      const gate = createPictureInFlightGate(() => undefined);
       const release = gate.tryEnter(OTHER)!;
       const h = createHarness({ gate });
       h.driver.arm();
@@ -820,7 +832,7 @@ describe("picture driver", () => {
       // The person never sees a request that was never made.
       expect(h.phases()).toEqual(["arming", "failed-retryable"]);
 
-      release();
+      release.release();
       h.driver.arm();
       h.driver.confirm();
       expect(h.driver.state.phase).toBe("drawing");
@@ -828,7 +840,7 @@ describe("picture driver", () => {
     });
 
     it("keeps two drivers from drawing at once", () => {
-      const gate = createPictureInFlightGate();
+      const gate = createPictureInFlightGate(() => undefined);
       const first = createHarness({ gate });
       first.toDrawing();
       const second = createHarness({ gate });
@@ -885,6 +897,200 @@ describe("picture driver", () => {
       const h = createHarness();
       await h.toArrived();
       expect(h.gate.heldBy()).toBeNull();
+      expect(h.gate.tryEnter("probe")).not.toBeNull();
+    });
+  });
+
+  describe("the cross-tab lock", () => {
+    function createTabLocks() {
+      const held = new Set<string>();
+      const manager: PictureLockManager = {
+        async request(name, _options, callback) {
+          if (held.has(name)) return callback(null);
+          held.add(name);
+          try {
+            return await callback({ name });
+          } finally {
+            held.delete(name);
+          }
+        },
+      };
+      return { held, manager };
+    }
+
+    it("sends nothing while another tab draws: retryable, unbilled, and the request never made", async () => {
+      const tabs = createTabLocks();
+      const first = createHarness({ locks: tabs.manager });
+      first.toDrawing();
+      await flush();
+      expect(requestMock).toHaveBeenCalledOnce();
+
+      const second = createHarness({ locks: tabs.manager });
+      second.driver.arm();
+      second.driver.confirm();
+      await flush();
+      expect(second.driver.state).toEqual({
+        phase: "failed-retryable",
+        reason: "another-picture-in-flight",
+        priorAttemptMayHaveBeenBilled: false,
+      });
+      expect(second.pending).toHaveLength(0);
+      expect(second.gate.heldBy()).toBeNull();
+      expect(second.treeListeners.size).toBe(0);
+      expect(second.exitListeners.size).toBe(0);
+      // The first tab's draw is untouched by the refusal.
+      expect(first.driver.state.phase).toBe("drawing");
+      expect(tabs.held.size).toBe(1);
+    });
+
+    it("lets a later tab draw once the first one's picture has arrived", async () => {
+      const tabs = createTabLocks();
+      const first = createHarness({ locks: tabs.manager });
+      first.toDrawing();
+      await flush();
+      await first.arrive();
+      await vi.waitFor(() => expect(tabs.held.size).toBe(0));
+
+      const second = createHarness({ locks: tabs.manager });
+      second.driver.arm();
+      second.driver.confirm();
+      await flush();
+      expect(second.driver.state.phase).toBe("drawing");
+      expect(second.pending).toHaveLength(1);
+    });
+
+    it("sends once for a double confirm and waits for the lock before the request", async () => {
+      const tabs = createTabLocks();
+      const h = createHarness({ locks: tabs.manager });
+      h.driver.arm();
+      h.driver.confirm();
+      h.driver.confirm();
+      expect(h.driver.state.phase).toBe("drawing");
+      expect(h.pending).toHaveLength(0);
+      await flush();
+      expect(h.pending).toHaveLength(1);
+      expect(requestMock).toHaveBeenCalledOnce();
+    });
+
+    it("sends nothing and frees everything when the wait is stopped before the lock is granted", async () => {
+      let grant!: Parameters<PictureLockManager["request"]>[2];
+      const slow: PictureLockManager = {
+        request: (_name, _options, callback) => {
+          grant = callback;
+          return new Promise<void>(() => undefined);
+        },
+      };
+      const h = createHarness({ locks: slow });
+      h.toDrawing();
+      h.driver.stopWaiting();
+      expect(h.driver.state.phase).toBe("cancelled");
+      expect(h.gate.heldBy()).toBeNull();
+      grant({ name: "late" });
+      await flush();
+      expect(requestMock).not.toHaveBeenCalled();
+      expect(h.pending).toHaveLength(0);
+    });
+
+    it("sends nothing when the passage moves on while the lock is awaited", async () => {
+      let grant!: Parameters<PictureLockManager["request"]>[2];
+      const slow: PictureLockManager = {
+        request: (_name, _options, callback) => {
+          grant = callback;
+          return new Promise<void>(() => undefined);
+        },
+      };
+      const h = createHarness({ locks: slow });
+      h.toDrawing();
+      h.edit(NODE, { text: "moved on", updatedAt: T1 });
+      expect(h.driver.state.phase).toBe("stale");
+      grant({ name: "late" });
+      await flush();
+      expect(requestMock).not.toHaveBeenCalled();
+    });
+
+    it("sends nothing when the wait is stopped in the instant the lock is granted", async () => {
+      let grant!: Parameters<PictureLockManager["request"]>[2];
+      const slow: PictureLockManager = {
+        request: (_name, _options, callback) => {
+          grant = callback;
+          return new Promise<void>(() => undefined);
+        },
+      };
+      const h = createHarness({ locks: slow });
+      h.toDrawing();
+      grant({ name: "granted" });
+      // The grant has settled the wait for the lock, but its continuation has not run yet.
+      h.driver.stopWaiting();
+      await flush();
+      expect(h.driver.state.phase).toBe("cancelled");
+      expect(requestMock).not.toHaveBeenCalled();
+      expect(h.pending).toHaveLength(0);
+    });
+
+    it("keeps the in-tab behaviour exactly where the browser has no Web Locks", () => {
+      const h = createHarness();
+      h.driver.arm();
+      h.driver.confirm();
+      // Synchronous: the request is made inside the confirm itself.
+      expect(requestMock).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe("what the document and the browser can finish", () => {
+    it("refuses a full document before anything is sent: final, unbilled, no slot taken", () => {
+      const h = createHarness({ hasRoom: false });
+      h.driver.arm();
+      h.driver.confirm();
+      expect(h.driver.state).toEqual({
+        phase: "failed-final",
+        reason: "picture-limit",
+        priorAttemptMayHaveBeenBilled: false,
+      });
+      expect(requestMock).not.toHaveBeenCalled();
+      expect(h.canTakePicture).toHaveBeenCalledWith(NODE);
+      expect(h.gate.heldBy()).toBeNull();
+      expect(h.treeListeners.size).toBe(0);
+      expect(h.exitListeners.size).toBe(0);
+      expect(h.phases()).toEqual(["arming", "failed-final"]);
+    });
+
+    it("keeps a warning the person already earned, and adds none for a refusal", () => {
+      const h = createHarness({ hasRoom: false });
+      h.driver.arm();
+      h.driver.confirm();
+      h.driver.arm();
+      expect(h.driver.state).toEqual({ phase: "arming", priorAttemptMayHaveBeenBilled: false });
+    });
+
+    it("asks the live document at confirm, not when the driver was made", () => {
+      const h = createHarness();
+      h.canTakePicture.mockReturnValue(false);
+      h.driver.arm();
+      h.driver.confirm();
+      expect(h.driver.state).toMatchObject({ phase: "failed-final", reason: "picture-limit" });
+      h.canTakePicture.mockReturnValue(true);
+      h.driver.arm();
+      h.driver.confirm();
+      expect(h.driver.state.phase).toBe("drawing");
+    });
+
+    it("refuses an environment that cannot finish a picture before anything is sent", () => {
+      const h = createHarness({ environmentSupported: false });
+      h.driver.arm();
+      h.driver.confirm();
+      expect(h.driver.state).toEqual({
+        phase: "failed-final",
+        reason: "picture-unsupported",
+        priorAttemptMayHaveBeenBilled: false,
+      });
+      expect(requestMock).not.toHaveBeenCalled();
+      expect(h.gate.heldBy()).toBeNull();
+    });
+
+    it("does not let the in-flight slot be taken by a refused send", () => {
+      const h = createHarness({ hasRoom: false });
+      h.driver.arm();
+      h.driver.confirm();
       expect(h.gate.tryEnter("probe")).not.toBeNull();
     });
   });
@@ -1119,7 +1325,7 @@ describe("picture driver", () => {
 });
 
 function occupiedGate(): PictureInFlightGate {
-  const gate = createPictureInFlightGate();
+  const gate = createPictureInFlightGate(() => undefined);
   gate.tryEnter(OTHER);
   return gate;
 }

@@ -101,6 +101,46 @@ describe("an explicit metering rule", () => {
   });
 });
 
+describe("who a request is counted as", () => {
+  const SAME = { origin: "https://matter.ptoq.io", "sec-fetch-site": "same-origin" };
+  const from = (headers: Record<string, string>) =>
+    new Request("https://matter.ptoq.io/api/test", { method: "POST", headers: { ...SAME, ...headers } });
+  const spend = (lane: ReturnType<typeof createPublicRequestAdmission>, headers: Record<string, string>) => {
+    const result = lane.admit(from(headers), PRODUCTION, () => 10);
+    if (result.ok) result.release();
+    return result;
+  };
+
+  it("lets the default lane tell callers apart by x-forwarded-for, as it always has", () => {
+    const lane = createPublicRequestAdmission({ requestsPerWindow: 1, maxConcurrent: 4 });
+    expect(spend(lane, { "x-forwarded-for": "198.51.100.1" }).ok).toBe(true);
+    expect(spend(lane, { "x-forwarded-for": "198.51.100.1" })).toMatchObject({ ok: false, reason: "RATE" });
+    expect(spend(lane, { "x-forwarded-for": "198.51.100.2" }).ok).toBe(true);
+  });
+
+  it("does not let a platform-only lane be reset by an address the client invented", () => {
+    const lane = createPublicRequestAdmission({ requestsPerWindow: 1, maxConcurrent: 4, identity: "platform" });
+    expect(spend(lane, { "x-forwarded-for": "198.51.100.1" }).ok).toBe(true);
+    for (const invented of ["198.51.100.2", "198.51.100.3", "203.0.113.9"]) {
+      expect(spend(lane, { "x-forwarded-for": invented }), invented).toMatchObject({ ok: false, reason: "RATE" });
+    }
+  });
+
+  it("counts a platform-only lane's callers by the headers the platform sets", () => {
+    const lane = createPublicRequestAdmission({ requestsPerWindow: 1, maxConcurrent: 4, identity: "platform" });
+    expect(spend(lane, { "x-vercel-forwarded-for": "198.51.100.1" }).ok).toBe(true);
+    expect(spend(lane, { "x-vercel-forwarded-for": "198.51.100.1", "x-forwarded-for": "evil" }))
+      .toMatchObject({ ok: false, reason: "RATE" });
+    expect(spend(lane, { "x-vercel-forwarded-for": "198.51.100.2" }).ok).toBe(true);
+    expect(spend(lane, { "x-real-ip": "198.51.100.3" }).ok).toBe(true);
+    expect(spend(lane, { "x-real-ip": "198.51.100.3", "x-forwarded-for": "other" }))
+      .toMatchObject({ ok: false, reason: "RATE" });
+    expect(spend(lane, { "x-real-ip": "198.51.100.77" }).ok).toBe(true);
+    // The platform's own header outranks the one a client could add.
+    expect(spend(lane, { "x-vercel-forwarded-for": "198.51.100.4", "x-real-ip": "198.51.100.3" }).ok).toBe(true);
+  });
+});
+
 function request(origin: string | null, address = "192.0.2.1"): Request {
   const headers = new Headers({ "x-vercel-forwarded-for": address });
   if (origin !== null) {

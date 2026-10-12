@@ -28,6 +28,9 @@ const imageAdmission = createPublicRequestAdmission({
   maxConcurrent: 2,
   metered: (environment) =>
     imageSurfaceMode(environment) === "live" || environment.NODE_ENV === "production",
+  // A paid lane keys its window only on what the platform sets: a client that
+  // invents an `x-forwarded-for` on every request must not get a fresh window.
+  identity: "platform",
 });
 
 export function admitImageRequest(

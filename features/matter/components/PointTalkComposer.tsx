@@ -301,7 +301,9 @@ export function PointTalkComposer({
     switch (pictureEscapeAction(formVisible ? pictureStep : null)) {
       case "back": pictureActions?.back(); break;
       case "stop-waiting": pictureActions?.stopWaiting(); break;
-      case "discard": pictureActions?.discard(); break;
+      case "focus-preview":
+        bubbleRef.current?.querySelector<HTMLElement>("[data-picture-anchor]")?.focus({ preventScroll: true });
+        break;
       case "cancel-field": cancelAndRestoreFocus(); break;
     }
     return true;
@@ -768,6 +770,7 @@ function PointTalkForm({
   voiceAvailable: boolean;
 }>) {
   const [direction, setDirection] = useState(initialDirection);
+  const pictureFullReasonId = `${inputId}-picture-full`;
   return (
     <form
       className="point-talk__composer"
@@ -803,7 +806,8 @@ function PointTalkForm({
         // Never `disabled`: focus must survive a pending interaction. It
         // ignores the typed direction and is not the form's submit.
         <button
-          aria-disabled={pictureControl === "disabled" || undefined}
+          aria-describedby={pictureControl === "full" ? pictureFullReasonId : undefined}
+          aria-disabled={pictureControl === "disabled" || pictureControl === "full" || undefined}
           aria-label={pictureCopy.controlName}
           className="point-talk__text-button point-talk__draw"
           data-picture-control
@@ -813,6 +817,9 @@ function PointTalkForm({
           {pictureCopy.control}
         </button>
       )}
+      {pictureControl === "full" ? (
+        <span className="visually-hidden" id={pictureFullReasonId}>{pictureCopy.documentFull}</span>
+      ) : null}
       <button className="point-talk__submit" disabled={direction.trim().length === 0} type="submit">
         {copy.apply}
       </button>
