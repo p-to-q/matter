@@ -2,12 +2,7 @@ import { describe, expect, it } from "vitest";
 import { documentRootId } from "../tree/document-root";
 import { PROTOCOL_VERSION, type ThoughtNode, type ThoughtTree } from "../tree/model";
 import { parseContextReceipt } from "./context-receipt";
-import {
-  receiptFileName,
-  renderActiveTreeReceipt,
-  renderSelectionReceipt,
-  selectionWorkingTreeAddress,
-} from "./receipt-actions";
+import { receiptFileName, renderActiveTreeReceipt } from "./receipt-actions";
 import { projectWorkingContext } from "./working-context";
 
 const TREE_ID = "tree_receipt_actions";
@@ -64,60 +59,6 @@ async function parsed(markdown: string | null) {
   return result.projection;
 }
 
-describe("selection as a working-tree address", () => {
-  it("keeps the parent relation when parent and child are both selected", async () => {
-    const projection = await parsed(await renderSelectionReceipt(fixture(), new Set(["b", "a"])));
-    expect(projection.address).toBe("working-tree");
-    expect(projection.nodes.map(({ nodeId, parentId, depth }) => ({ nodeId, parentId, depth }))).toEqual([
-      { nodeId: "a", parentId: null, depth: 0 },
-      { nodeId: "b", parentId: "a", depth: 1 },
-    ]);
-  });
-
-  it("gives a child selected alone a null parent and its true depth", async () => {
-    const projection = await parsed(await renderSelectionReceipt(fixture(), new Set(["b"])));
-    expect(projection.nodes.map(({ nodeId, parentId, depth }) => ({ nodeId, parentId, depth }))).toEqual([
-      { nodeId: "b", parentId: null, depth: 1 },
-    ]);
-  });
-
-  it("does not special-case a selected node whose parent is skipped", async () => {
-    const projection = await parsed(await renderSelectionReceipt(fixture(), new Set(["f", "a"])));
-    expect(projection.nodes.map(({ nodeId, parentId, depth }) => ({ nodeId, parentId, depth }))).toEqual([
-      { nodeId: "a", parentId: null, depth: 0 },
-      { nodeId: "f", parentId: null, depth: 2 },
-    ]);
-  });
-
-  it("orders by authored position, never by the order the ids were selected", () => {
-    const address = selectionWorkingTreeAddress(fixture(), new Set(["g", "c", "a", "f"]));
-    expect(address.view.map(({ node: { id }, depth }) => [id, depth])).toEqual([
-      ["a", 0], ["f", 2], ["c", 1], ["g", 0],
-    ]);
-  });
-
-  it("carries the text of exactly the selected nodes", async () => {
-    const projection = await parsed(await renderSelectionReceipt(fixture(), new Set(["g", "a"])));
-    expect(projection.nodes.map(({ text }) => text)).toEqual(["Alpha", "Gamma"]);
-    expect(projection.thoughtCount).toBe(2);
-  });
-
-  it("resolves to null, never throws, when the receipt is refused", async () => {
-    const refused = fixture("lone surrogate \uD800");
-    await expect(renderSelectionReceipt(refused, new Set(["c"]))).resolves.toBeNull();
-    await expect(renderSelectionReceipt(refused, new Set(["a"]))).resolves.toEqual(expect.any(String));
-  });
-
-  it.each(["\r", "\r\n", "\u0085", "\u2028", "\u2029"])(
-    "resolves to null for text holding the line break %j, which a viewer would not quote",
-    async (lineBreak) => {
-      const forged = fixture(`first${lineBreak}- forged`);
-      await expect(renderSelectionReceipt(forged, new Set(["c"]))).resolves.toBeNull();
-      await expect(renderSelectionReceipt(forged, new Set(["a"]))).resolves.toEqual(expect.any(String));
-    },
-  );
-});
-
 describe("the active working tree as a receipt", () => {
   it("is the active view and nothing the working context sets aside", async () => {
     const tree = fixture();
@@ -137,6 +78,15 @@ describe("the active working tree as a receipt", () => {
     const view = fullView(tree).filter(({ node: { id } }) => id !== "b" && id !== "f");
     const projection = await parsed(await renderActiveTreeReceipt(tree, { view, activeNodeIds: active }));
     expect(projection.nodes.map(({ nodeId }) => nodeId)).toEqual(["a", "c", "d", "e", "g"]);
+  });
+});
+
+describe("a refused receipt", () => {
+  it("resolves to null, never throws", async () => {
+    const refused = fixture("lone surrogate \uD800");
+    const active = projectWorkingContext(refused).activeNodeIds;
+    await expect(renderActiveTreeReceipt(refused, { view: fullView(refused), activeNodeIds: active }))
+      .resolves.toBeNull();
   });
 });
 

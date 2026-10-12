@@ -37,8 +37,10 @@ Promotion requires: deciding the receipt's human and machine purpose; resolving
 the stored Inquiry-record migration for `selection`, `lineage`, and
 `working-tree`; an explicit clipping and privacy model; and proof that the
 projection neither widens an address nor becomes a second document model.
-Archive remains the exact recovery format, and ordinary native Copy remains
-literal unless the owner separately reopens it.
+Archive remains the exact recovery format. Ordinary Copy carries a selection's
+own nesting as an indented plain outline (and a nested list for rich editors)
+but never ids, digests or headers; the strict receipt stays a separate act in
+Archive.
 
 ### Lineage-aware visual projection
 

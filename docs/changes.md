@@ -17,6 +17,27 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — Copy is one button that carries structure; a trail shows the selected passage's lineage (first version, to be redesigned)
+
+Changed: in select mode, ticking a passage ticks its ancestors as muted "context" rows the person
+may untick (declines are remembered for the session), and one Copy writes `text/plain` and
+`text/html`. With no ancestor-to-descendant structure the text is the literal join, byte for
+byte; with structure it is a Markdown nested list produced by `material/render/{escape,list,html}`
+with an exact parse inverse and an escape inventory that stops any text from becoming a tag,
+link, entity or block. The Archive panel keeps `Receipt (.md)` and adds `Copy receipt` with a
+visible helper line. The canvas draws a trail for a selected passage, for an AI operation and for
+an open Ask Matter over lassoed passages, derived by one pure `trailPresentation`, with the
+state table in `reference/tree-layout.md`.
+
+Why: structure is the context, so selection should pull it in, and a plain paste must stay
+readable everywhere.
+
+Forecloses: a second Copy button and ids or digests in a casual paste. Known weakness, recorded
+by the owner after review: the trail's FIRST VERSION looks wrong (too dark, too thin, symbols
+nobody asked for, and it joins passages across levels instead of each passage to the one below
+it). It is merged because it is correct and tested, not because it is finished; the redesign is
+the first item of the next round in `handoff-post-preview-direction.md`.
+
 ## 2026-10-12 — the popup row never squeezes Rewrite, the Draw control is known before the popup opens, and previews keep their shape
 
 Changed: in the Point-and-Talk field the order is input, mic, Draw, Rewrite, right-aligned to

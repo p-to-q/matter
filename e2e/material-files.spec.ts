@@ -1036,12 +1036,14 @@ for (const viewport of [
     // Undoing the newest thought must take its selection with it, rather than
     // leave a count that counts a thought that is gone.
     await sidebar.locator(`.material-file[data-node-id="${admittedId}"]`).getByRole("checkbox").check();
+    // The admitted thought sits under the first passage, which is ticked already.
     await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(2));
     await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.copySelectedThoughts(2) }).click();
     await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.copied);
     const copied = await page.evaluate(() => navigator.clipboard.readText());
-    expect(copied.startsWith(firstBranchText)).toBe(true);
-    expect(copied.split("\n\n")).toHaveLength(2);
+    // One passage inside the other: a nested Markdown list, not the literal join.
+    expect(copied.startsWith(`- ${firstBranchText}\n  - `)).toBe(true);
+    expect(copied.split("\n").filter((line) => /^ *- /u.test(line))).toHaveLength(2);
     await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(2));
 
     // The spoken child is two steps: its words, then their separately undoable repair.
@@ -1199,7 +1201,10 @@ test("deleted local selection and disclosure do not return with Undo", async ({ 
   const leafId = await leaf.getAttribute("data-node-id");
   if (leafId === null) throw new Error("transient selection leaf is missing");
   await leaf.getByRole("checkbox").check();
-  await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(1));
+  // The leaf and the ancestors ticking it pulled in as context.
+  const ticked = await sidebar.locator(".material-file__check input:checked").count();
+  expect(ticked).toBeGreaterThanOrEqual(1);
+  await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(ticked));
   await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.done, exact: true }).click();
   await leaf.locator(".material-file__open").click();
   await page.keyboard.press("Delete");

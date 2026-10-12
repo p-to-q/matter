@@ -649,6 +649,50 @@ clear; it does not continue to accumulate projects.
 - Stop if a planning document presents a hypothesis as a current capability,
   release promise, open-source commitment, or implementation authorization.
 
+## Next round — the owner's instructions and the queue (written 2026-10-12, work paused)
+
+The owner paused here. Nothing below is started. Read this before doing anything.
+
+**1. The canvas trail must be redone (owner's review of the first version).** What is wrong:
+- the line colour is too dark: make it lighter;
+- it does not connect well: it must join each passage to the passage directly below it in the
+  tree, then that one to the next, one level at a time; the first version looks like two
+  passages on different levels linked through the air;
+- the line is too thin, and it carries symbols nobody asked for. The only symbols wanted are the
+  same family as the sidebar's: a down, left or right arrow, and perhaps a circle, drawn at the
+  same proportions but heavier. How heavy and which symbols is a design pass to do LATER, with the
+  owner, looking at screenshots; do not decide it alone.
+Keep what the owner already decided: it appears when a passage is selected, when an AI operation
+owns it, and when Ask Matter is addressed at selected passages; it covers the lineage upwards and
+downwards of the selected passage; it never appears on hover or focus alone. Where the layout's
+own parent-to-child edges attach at each passage's edges, those edges are the natural geometry.
+
+**2. Queue, in the order the owner's feedback implies**
+- U4 formats: shared nasty-tree fixtures (test data only, not the tree engine), conformance
+  suite, `bounded-text` and tree-walk primitives as single owners, Receipt v2 (`format:
+  matter-receipt/2`, the shared Markdown list as its body, ids only in the machine block, no
+  Mermaid, frozen v1 verifier), a format registry, code-point ZIP ordering with a re-pinned hash,
+  the TZ matrix in CI, and `docs/reference/projections.md` as the one authority for every
+  projection of the tree.
+- Identifier cleanup: one `mintId(prefix)` with no weak fallback and an architecture rule,
+  `interactionId` on picture Keep, `inquiry_voice_<n>`, receipt file name from the digest prefix,
+  and the `SessionRef` definition in the docs (no stored session id).
+- Docs integration from the verifier report (protocol.md, material.md, prompt-harness.md,
+  surfaces.md, architecture.md, open.md, the stale handoff status lines).
+- A "free unused picture space" compaction, before the image gate is opened.
+- Release: Preview.65 is NOT-GO until the owner decides on the database v7 one-way door; initial
+  JS is 392.8 KiB gzip against 396 and CI adds about 2.8 KiB, so any new code must be lazy.
+
+**3. Pending owner decisions:** who pays for pictures and how spend is limited (#34, #68);
+native review of every non-English string; whether the dark-theme popup stays dark; the
+`move` slot label (Pan or Move) in zh/ja/de; whether first paint should wait for the stored
+document on reload; whether to download a local model for the L0 probe.
+
+**4. How to run it:** `npm run dev:ai` (real chat pool), `npm run dev:image -- --fake-image`
+(shows the Draw control with a loopback image relay; the owner's real image credential returned
+403 on 2026-10-12). `npm run check` does not run Playwright; run `npm run test:e2e` before
+calling anything green. Ignore `npm run test:receipt` until the owner says otherwise.
+
 ## Decisions taken under delegation — 2026-10-12
 
 The owner asked the maintainer to make reasonable decisions and report them.

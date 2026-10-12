@@ -13,12 +13,10 @@ import { routeVoiceTool, voiceToolIsAvailable } from "../runtime/voice-tool-rout
 import type { TextSwapInteractionState } from "../runtime/text-swap-interaction";
 import { layoutColumnarTree } from "../layout/columnar-layout";
 import type { ColumnarLayout, LayoutNode } from "../layout/model";
-import { operationLineGeometry } from "../layout/operation-line";
 import type { TypographyHeightAuthorityToken } from "../layout/typography-height-ledger";
 import { projectVerticalPresentationBand } from "../layout/vertical-presentation-band";
 import type { ThoughtTree } from "../tree/model";
 import { isDocumentRoot, isEmptyMaterialDocument } from "../tree/document-root";
-import { selectLineage } from "../tree/selectors";
 import { projectTools } from "../tools/project-tools";
 import { projectToolSurface } from "../tools/project-tool-surface";
 import { isCurrentToolIntent } from "../tools/validate-intent";
@@ -134,8 +132,7 @@ import { preloadableComponent } from "./preloadable-component";
 import { WikiOccurrenceLayer } from "./wiki-occurrence-layer-chunk";
 import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
 import { CanvasRuling } from "./CanvasRuling";
-import { OperationLine } from "./OperationLine";
-import { operationTargetNodeId } from "./operation-target";
+import { operationTarget, trailPresentation } from "./operation-target";
 import {
   MaterialAddressLayer,
   materialAddressVariantOutline,
@@ -254,6 +251,10 @@ const PointTalkExit = preloadableComponent(
 const NodeActionLens = preloadableComponent(
   () => import("./NodeActionLens").then((module) => module.NodeActionLens),
 );
+// The trail mounts with the first selection, so its chunk loads with the rest.
+const OperationTrailLayer = preloadableComponent(
+  () => import("./OperationTrail").then((module) => module.OperationTrailLayer),
+);
 const MaterialFilesWithLabels = dynamic(
   () => import("./MaterialFilesWithLabels").then((module) => module.MaterialFilesWithLabels),
   { ssr: false },
@@ -265,12 +266,14 @@ const PAPER_GESTURE_CHUNKS = Object.freeze([
   PointTalkExit.preload,
   NodeActionLens.preload,
   WikiOccurrenceLayer.preload,
+  OperationTrailLayer.preload,
 ]);
 // Keep the complete grapheme and candidate policy behind the lazy turn. This
 // cheap bound admits every ordinary passage the exact policy can safely size;
 // the turn still owns the authoritative validation before it exposes input.
 const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
 const EMPTY_NODE_IDS: ReadonlySet<string> = new Set<string>();
+const EMPTY_NODE_ID_LIST: readonly string[] = Object.freeze([]);
 const ACTIVE_LAYOUT_NODE_SELECTOR = "[data-layout-node-id][data-thought-id]";
 // The CSS fade of every leaving surface lasts exactly as long as its unmount.
 const PRESENCE_EXIT_STYLE = Object.freeze({
@@ -1618,10 +1621,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
     reportedPaperActivityRef.current = IDLE_PAPER_ACTIVITY;
     reportPaperActivity?.(IDLE_PAPER_ACTIVITY);
   }, [reportPaperActivity]);
-  // The one derived target of an AI operation, and the canvas line that joins
-  // it to the root. Nothing here is stored: the line exists only while an
-  // operation owns a target and only for the published layout it was read from.
-  const operationTargetId = operationTargetNodeId({
+  // What the canvas trail shows, derived in render and never stored: it joins
+  // the root to the passage an AI operation is addressed at, else to the
+  // selected passage, and only for the layout epoch that is published. Hover and
+  // focus never name a passage.
+  const activeOperation = operationTarget({
     elastic: {
       nodeId: transformState.basis?.documentEpoch === props.documentEpoch
         ? transformState.basis.selection.nodeId
@@ -1635,16 +1639,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
       presented: pointTalkPresented,
     },
   });
-  const operationLineData = useMemo(() => {
-    if (operationTargetId === null) return null;
-    const lineage = selectLineage(tree, operationTargetId);
-    return operationLineGeometry({
-      currentLayoutEpoch: completePublication?.layout.layoutEpoch ?? null,
-      layout: activeLayout,
-      lineageIds: lineage === null ? null : lineage.map((node) => node.id),
-      mountedNodeIds: visiblyLaidOutNodeIds,
-    });
-  }, [activeLayout, completePublication, operationTargetId, tree, visiblyLaidOutNodeIds]);
+  const operationTrailPresentation = trailPresentation({
+    selectedNodeId: navigation.selectedNodeId,
+    operationTargetNodeId: activeOperation?.nodeId ?? null,
+    operationWorking: activeOperation?.working ?? false,
+    viewMode: navigation.mode === "focus" ? "focus" : "full",
+    // The one source of what Ask Matter is addressed to: the lassoed passages
+    // `projectInquiryPayload` reads, while its bubble is open. A whole-tree
+    // inquiry names no passage.
+    inquiryNodeIds: canvasOverlay === "inquiry" ? lasso.selections.map(({ nodeId }) => nodeId) : EMPTY_NODE_ID_LIST,
+    lassoActive: lasso.active,
+    layoutEpoch: activeLayout?.layoutEpoch ?? null,
+    publishedEpoch: completePublication?.layout.layoutEpoch ?? null,
+    nodeExists: (nodeId) => Object.hasOwn(tree.nodes, nodeId),
+  });
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
     canvasChromeRef.current?.closeInquiry();
     startTransform(basis);
@@ -4151,7 +4159,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
             inert={viewportRenderer && activeLayout === null ? true : undefined}
             ref={canvasRef}
           >
-            {operationLineData === null ? null : <OperationLine d={operationLineData} />}
+            <OperationTrailLayer
+              key={props.documentEpoch}
+              canvasRef={canvasRef}
+              currentLayoutEpoch={completePublication?.layout.layoutEpoch ?? null}
+              layout={activeLayout}
+              pointTalkPhase={pointTalkPhase}
+              presentation={operationTrailPresentation}
+              tree={tree}
+              viewport={viewport}
+            />
             {viewportRenderer && renderedProjection.length === 0 ? (
               <ViewportMaterialGlimpse text={projection[0]?.node.text ?? ""} />
             ) : (

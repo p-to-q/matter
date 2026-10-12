@@ -3,8 +3,8 @@
 A context receipt is one deterministic, versioned, human-readable rendering of a
 projection of the tree: which passages, in what order, under which parent, at
 what depth, whether anything was clipped, and which revision of which tree it
-describes. It exists so that model context, a deliberate "Copy with context",
-and later renderers can all read one projection instead of each re-deriving
+describes. It exists so that model context, the deliberate Archive receipt
+(download or "Copy receipt"), and later renderers can all read one projection instead of each re-deriving
 structure from text.
 
 It is a projection, never an authority. The tree stays the only durable
@@ -117,9 +117,14 @@ could have written.
 
 ## Privacy
 
-Native Copy stays literal text. A receipt is produced only by an explicit act,
-never as a side effect of copying, saving or asking, and a receipt that left the
-application is a copy the person chose to make.
+Copy of a selection is not a receipt. It writes the selected text as it is when
+no selected passage contains another, and as an indented plain outline (two
+spaces per selected ancestor, plus a nested list for rich editors) when some do;
+it carries no ids, digests or headers. A receipt is produced only by an explicit
+act in Archive (`Receipt (.md)` downloads the active working tree, `Copy
+receipt` puts the same text on the clipboard), never as a side effect of
+copying, saving or asking, and a receipt that left the application is a copy
+the person chose to make.
 
 ## Versioning
 

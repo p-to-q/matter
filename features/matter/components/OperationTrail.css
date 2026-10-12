@@ -1,0 +1,32 @@
+/* Loaded with the trail layer, which mounts with the first selection; it is not part of the first paint. */
+/* The trail joins the root to the selected passage (and the children below it), to the passage
+   an AI operation is addressed at, or to the passages an open Ask Matter is addressed to. It
+   sits beneath the passages in the canvas's own frame and owns no box and takes no pointer. Its
+   sizes are screen sizes: the dots and the cue are scaled by the inverse zoom, the strokes do
+   not scale, and the drawing fades to nothing at the paper's edge. Selected and operating are
+   one drawing at two weights, so the change is a colour transition and nothing remounts. */
+.operation-trail { --trail-line: 55%; --trail-dots: 66%; --trail-target: 80%; --trail-ring: 8%; position: absolute; top: 0; left: 0; width: 0; height: 0; pointer-events: none; will-change: transform; animation: operation-trail-enter 120ms ease-out backwards; }
+.operation-trail[data-strength="operating"] { --trail-line: 80%; --trail-dots: 88%; --trail-target: 95%; --trail-ring: 14%; }
+.operation-trail[data-strength="operating"][data-working] { --trail-ring: 20%; }
+.operation-trail__line { position: absolute; display: block; overflow: hidden; pointer-events: none; --operation-trail-mask: linear-gradient(to right, transparent 0, rgb(0 0 0 / .55) calc(14 * var(--operation-trail-unit)), #000 calc(56 * var(--operation-trail-unit))), linear-gradient(to left, transparent 0, rgb(0 0 0 / .55) calc(14 * var(--operation-trail-unit)), #000 calc(56 * var(--operation-trail-unit))), linear-gradient(to bottom, transparent 0, rgb(0 0 0 / .55) calc(14 * var(--operation-trail-unit)), #000 calc(56 * var(--operation-trail-unit))), linear-gradient(to top, transparent 0, rgb(0 0 0 / .55) calc(14 * var(--operation-trail-unit)), #000 calc(56 * var(--operation-trail-unit))); -webkit-mask-image: var(--operation-trail-mask); mask-image: var(--operation-trail-mask); -webkit-mask-composite: source-in, source-in, source-in; mask-composite: intersect; }
+.operation-trail__path { fill: none; stroke: color-mix(in srgb, var(--ink) var(--trail-line), transparent); stroke-width: 1.75px; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; transition: stroke 120ms ease; }
+.operation-trail__dots { fill: none; stroke: color-mix(in srgb, var(--ink) var(--trail-dots), var(--paper)); stroke-width: 7px; stroke-linecap: round; vector-effect: non-scaling-stroke; transition: stroke 120ms ease; }
+.operation-trail__arrows { fill: color-mix(in srgb, var(--ink) var(--trail-dots), var(--paper)); stroke: none; transition: fill 120ms ease; }
+.operation-trail__more { fill: none; stroke: color-mix(in srgb, var(--ink) var(--trail-dots), var(--paper)); stroke-width: 3px; stroke-linecap: round; vector-effect: non-scaling-stroke; opacity: .85; }
+.operation-trail__path--down, .operation-trail__dots--down, .operation-trail__arrows--down { opacity: .85; }
+.operation-trail__bead { position: absolute; top: 0; left: 0; width: 11px; height: 11px; border-radius: 50%; background: color-mix(in srgb, var(--ink) var(--trail-target), var(--paper)); transform-origin: 0 0; pointer-events: none; transition: background-color 120ms ease; }
+.operation-trail__bead::before { position: absolute; inset: -4.5px; border-radius: 50%; background: color-mix(in srgb, var(--ink) var(--trail-ring), transparent); content: ""; transition: background-color 120ms ease; }
+.operation-trail__chevron { position: absolute; top: 0; left: 0; width: 6px; height: 6px; border-top: 1.75px solid color-mix(in srgb, var(--ink) 60%, transparent); border-right: 1.75px solid color-mix(in srgb, var(--ink) 60%, transparent); box-sizing: border-box; transform-origin: 0 0; pointer-events: none; }
+/* Leaving: the frozen last drawing fades. A result that landed steps back more slowly; every
+   other close is quick; a trail from another layout epoch is never held. */
+.operation-trail[data-presence="exiting"] { opacity: 0; transition: opacity 100ms ease-out; }
+.operation-trail[data-presence="exiting"][data-presence-close="finished"] { transition-duration: 160ms; }
+@keyframes operation-trail-enter { from { opacity: 0; } }
+
+@media (forced-colors: active) {
+  .operation-trail__path, .operation-trail__dots, .operation-trail__more { stroke: CanvasText; }
+  .operation-trail__arrows { fill: CanvasText; }
+  .operation-trail__bead { forced-color-adjust: none; background: CanvasText; }
+  .operation-trail__bead::before { background: transparent; }
+  .operation-trail__chevron { forced-color-adjust: none; border-color: CanvasText; }
+}

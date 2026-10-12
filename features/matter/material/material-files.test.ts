@@ -159,6 +159,7 @@ describe("material selection copy", () => {
     expect(result).toEqual({
       ok: true,
       text: `${tree.nodes["child-a"].text}\n\n${tree.nodes["child-b"].text}`,
+      html: expect.stringMatching(/^<meta charset="utf-8"><p>.+<\/p><p>.+<\/p>$/u),
       nodeIds: ["child-a", "child-b"],
     });
   });

@@ -1,37 +1,44 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { layoutColumnarTree } from "../layout/columnar-layout";
-import { operationLinePath } from "../layout/operation-line";
+import { operationTrailNodes } from "../layout/operation-trail";
 import type { TextSwapInteractionState } from "../runtime/text-swap-interaction";
 import { normalizeDocumentTree, documentRootId } from "../tree/document-root";
 import type { ThoughtNode, ThoughtTree } from "../tree/model";
 import { selectLineage } from "../tree/selectors";
 import { materialFileAncestorIds } from "./material-file-tree";
-import { operationTargetNodeId } from "./operation-target";
+import { operationTarget, trailPresentation } from "./operation-target";
 import type { PictureHold } from "./picture-surface";
 import { projectLayoutProjection } from "./layout-projection";
 
 type Phase = TextSwapInteractionState["phase"];
 
-function target(overrides: {
+type Overrides = {
   elastic?: { phase: "idle" | "requesting"; nodeId: string | null };
   host?: string | null;
   presented?: boolean;
   phase?: Phase;
   hold?: PictureHold;
-}) {
-  return operationTargetNodeId({
-    elastic: overrides.elastic ?? { phase: "idle", nodeId: null },
+  selected?: string | null;
+};
+
+function input(overrides: Overrides) {
+  return {
+    elastic: overrides.elastic ?? { phase: "idle" as const, nodeId: null },
     pointTalk: {
       hostNodeId: overrides.host === undefined ? null : overrides.host,
       phase: overrides.phase ?? "idle",
       pictureHold: overrides.hold ?? "free",
       presented: overrides.presented ?? false,
     },
-  });
+  };
 }
 
-describe("operationTargetNodeId", () => {
+function target(overrides: Overrides) {
+  return operationTarget(input(overrides))?.nodeId ?? null;
+}
+
+describe("operationTarget", () => {
   it("is null when no operation owns a passage: selection and hover are not operations", () => {
     expect(target({})).toBeNull();
     expect(target({ host: "n", presented: false, phase: "idle" })).toBeNull();
@@ -86,52 +93,134 @@ describe("operationTargetNodeId", () => {
       phase: "ready",
     })).toBe("n");
   });
+
+  it("says whether the operation has taken work", () => {
+    expect(operationTarget(input({ host: "n", presented: true, phase: "ready" }))?.working).toBe(false);
+    expect(operationTarget(input({ host: "n", presented: true, phase: "pending" }))?.working).toBe(true);
+    expect(operationTarget(input({ host: "n", presented: true, phase: "ready", hold: "paid" }))?.working).toBe(true);
+    expect(operationTarget(input({ elastic: { phase: "requesting", nodeId: "e" } }))?.working).toBe(true);
+  });
 });
 
-describe("the operation line in the composition", () => {
+describe("trailPresentation: the state table", () => {
+  type Facts = Partial<Parameters<typeof trailPresentation>[0]>;
+  const present = (facts: Facts) => trailPresentation({
+    selectedNodeId: null,
+    operationTargetNodeId: null,
+    operationWorking: false,
+    inquiryNodeIds: [],
+    viewMode: "full",
+    lassoActive: false,
+    layoutEpoch: 7,
+    publishedEpoch: 7,
+    nodeExists: () => true,
+    ...facts,
+  });
+  const off = { targetIds: [], strength: "off", working: false, descendants: false };
+
+  it("draws nothing when nothing is selected and no operation is open; hover and focus name nothing", () => {
+    expect(present({})).toEqual(off);
+  });
+
+  it("draws the selected passage lightly, with its children", () => {
+    expect(present({ selectedNodeId: "s" }))
+      .toEqual({ targetIds: ["s"], strength: "selected", working: false, descendants: true });
+  });
+
+  it("lets an operation win over the selection, and says whether it has taken work", () => {
+    expect(present({ selectedNodeId: "s", operationTargetNodeId: "o" }))
+      .toEqual({ targetIds: ["o"], strength: "operating", working: false, descendants: true });
+    expect(present({ selectedNodeId: "s", operationTargetNodeId: "o", operationWorking: true }))
+      .toEqual({ targetIds: ["o"], strength: "operating", working: true, descendants: true });
+  });
+
+  it("returns to the selected strength when the operation ends on a still-selected passage", () => {
+    const during = present({ selectedNodeId: "n", operationTargetNodeId: "n", operationWorking: true });
+    const after = present({ selectedNodeId: "n", operationTargetNodeId: null });
+    expect(during.targetIds).toEqual(after.targetIds);
+    expect([during.strength, after.strength]).toEqual(["operating", "selected"]);
+  });
+
+  it("draws nothing in the focus view, which already is the lineage", () => {
+    expect(present({ selectedNodeId: "s", viewMode: "focus" })).toEqual(off);
+    expect(present({ selectedNodeId: "s", operationTargetNodeId: "o", viewMode: "focus" })).toEqual(off);
+    expect(present({ inquiryNodeIds: ["a"], viewMode: "focus" })).toEqual(off);
+  });
+
+  it("draws nothing for a lasso that nothing has asked about, whatever is selected", () => {
+    expect(present({ selectedNodeId: "s", lassoActive: true })).toEqual(off);
+    // An operation that owns a passage keeps its own trail (an Elastic turn runs inside a lasso).
+    expect(present({ selectedNodeId: "s", operationTargetNodeId: "o", operationWorking: true, lassoActive: true }).strength)
+      .toBe("operating");
+  });
+
+  it("draws the union of the passages an open Ask Matter is addressed to, lightly, without their children", () => {
+    expect(present({ inquiryNodeIds: ["a", "b"], lassoActive: true }))
+      .toEqual({ targetIds: ["a", "b"], strength: "selected", working: false, descendants: false });
+    expect(present({ inquiryNodeIds: ["a"], selectedNodeId: "s" }).targetIds).toEqual(["a"]);
+    // One passage lassoed twice (two segments of it) is one target.
+    expect(present({ inquiryNodeIds: ["a", "a", "b"] }).targetIds).toEqual(["a", "b"]);
+    // A passage that is gone is not addressed; if none is left the trail is off.
+    expect(present({ inquiryNodeIds: ["a", "gone"], nodeExists: (id) => id !== "gone" }).targetIds).toEqual(["a"]);
+    expect(present({ inquiryNodeIds: ["gone"], nodeExists: () => false })).toEqual(off);
+  });
+
+  it("draws nothing for Ask Matter over the whole working tree, which names no passage", () => {
+    expect(present({ inquiryNodeIds: [] })).toEqual(off);
+  });
+
+  it("lets an operation win over Ask Matter", () => {
+    expect(present({ inquiryNodeIds: ["a", "b"], operationTargetNodeId: "o" }).targetIds).toEqual(["o"]);
+  });
+
+  it("draws nothing for a passage that is gone", () => {
+    expect(present({ selectedNodeId: "s", nodeExists: () => false })).toEqual(off);
+    expect(present({ operationTargetNodeId: "o", nodeExists: () => false })).toEqual(off);
+    expect(present({ selectedNodeId: "s", operationTargetNodeId: "o", nodeExists: (id) => id === "s" })).toEqual(off);
+  });
+
+  it("never draws geometry from another layout epoch than the published one", () => {
+    expect(present({ selectedNodeId: "s", layoutEpoch: 6 })).toEqual(off);
+    expect(present({ selectedNodeId: "s", operationTargetNodeId: "o", publishedEpoch: 8 })).toEqual(off);
+    expect(present({ inquiryNodeIds: ["a"], layoutEpoch: 6 })).toEqual(off);
+    expect(present({ selectedNodeId: "s", layoutEpoch: null, publishedEpoch: null })).toEqual(off);
+    expect(present({ selectedNodeId: "s", publishedEpoch: null })).toEqual(off);
+  });
+});
+
+describe("the trail in the composition", () => {
   const source = readFileSync(new URL("./RootedMaterial.tsx", import.meta.url), "utf8");
 
-  it("derives the target and the line in render and stores neither", () => {
-    expect(source).toContain("const operationTargetId = operationTargetNodeId({");
-    expect(source).toMatch(/const operationLineData = useMemo\(/u);
-    expect(source).not.toMatch(/useState[^;]*operation(?:Target|Line)/iu);
-    expect(source).not.toMatch(/operation(?:Target|Line)\w*Ref\b/u);
-  });
-
-  it("draws one dumb element, beneath the passages, from the current publication only", () => {
-    expect(source).toMatch(/currentLayoutEpoch: completePublication\?\.layout\.layoutEpoch \?\? null/u);
-    expect(source).toMatch(
-      /\{operationLineData === null \? null : <OperationLine d=\{operationLineData\} \/>\}\s*\{viewportRenderer && renderedProjection\.length === 0/u,
+  it("derives the target in render and stores neither the target nor the trail", () => {
+    expect(source).toContain("const operationTrailPresentation = trailPresentation({");
+    expect(source).toContain("selectedNodeId: navigation.selectedNodeId,");
+    expect(source).toContain("viewMode: navigation.mode === \"focus\" ? \"focus\" : \"full\",");
+    expect(source).toContain("lassoActive: lasso.active,");
+    // The one source of what Ask Matter is addressed to: the lassoed passages, while its bubble is open.
+    expect(source).toContain(
+      'inquiryNodeIds: canvasOverlay === "inquiry" ? lasso.selections.map(({ nodeId }) => nodeId) : EMPTY_NODE_ID_LIST,',
     );
+    // The inquiry reads the same selections when it is asked.
+    expect(source).toMatch(/projectInquiryContext\(\s*tree,\s*activeWorkingProjection,\s*lasso\.selections,/u);
+    expect(source).not.toMatch(/useState[^;]*operation(?:Trail|Target|Line)/iu);
+    expect(source).not.toMatch(/operation(?:Trail|Target|Line)\w*Ref\b/u);
   });
 
-  it("clips to the mounted window and ignores a turn from another document", () => {
-    expect(source).toContain("mountedNodeIds: visiblyLaidOutNodeIds");
+  it("draws one layer, beneath the passages, from the current publication only", () => {
+    expect(source).toMatch(/currentLayoutEpoch=\{completePublication\?\.layout\.layoutEpoch \?\? null\}/u);
+    expect(source).toMatch(/<OperationTrailLayer[\s\S]*?\/>\s*\{viewportRenderer && renderedProjection\.length === 0/u);
+  });
+
+  it("ignores an Elastic turn from another document and names the open field's host", () => {
     expect(source).toMatch(
       /transformState\.basis\?\.documentEpoch === props\.documentEpoch\s*\? transformState\.basis\.selection\.nodeId\s*: null/u,
     );
     expect(source).toMatch(/presented: pointTalkPresented,/u);
     expect(source).toMatch(/hostNodeId: pointTalkHostNodeId,/u);
   });
-
-  it("styles a quiet, still, non-interactive line", () => {
-    const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
-    const rule = /\.operation-line\s*\{([^}]*)\}/u.exec(css)?.[1] ?? "";
-    expect(rule).toContain("pointer-events: none");
-    expect(rule).toContain("position: absolute");
-    const path = /\.operation-line__path\s*\{([^}]*)\}/u.exec(css)?.[1] ?? "";
-    expect(path).toContain("stroke-width: 1px");
-    expect(path).toContain("stroke-linecap: square");
-    expect(path).toContain("var(--ink) 28%");
-    // No draw-on, fade, or travel: it never animates, so reduced motion needs no exception.
-    expect(path).toContain("animation: none");
-    expect(path).toContain("transition: none");
-    expect(`${rule}${path}`).not.toMatch(/@keyframes|transform:|opacity/u);
-    expect(css).toMatch(/forced-colors: active\)\s*\{\s*\.operation-line__path\s*\{\s*stroke:\s*CanvasText;/u);
-  });
 });
 
-describe("the operation line and the index ancestor mark", () => {
+describe("the trail and the index ancestor mark", () => {
   const treeId = "operation_line_fixture";
   const rootId = documentRootId(treeId);
   const stamp = "2026-10-12T00:00:00.000Z";
@@ -157,12 +246,12 @@ describe("the operation line and the index ancestor mark", () => {
     },
   });
 
-  it("underlines in the index exactly the ancestors the canvas line joins", () => {
+  it("puts a bead on exactly the passages the index underlines, and one more on the target", () => {
     const projection = projectLayoutProjection({
       tree, mode: "full", focusNodeId: null, foldedNodeIds: new Set(),
     });
     const laid = layoutColumnarTree({
-      nodes: projection.map(({ node, depth, parentId }) => ({
+      nodes: projection.map(({ node, depth, parentId }: { node: ThoughtNode; depth: number; parentId: string | null }) => ({
         id: node.id, parentId, depth, size: { width: 200, height: 40 },
       })),
       origin: { x: 0, y: 0 },
@@ -175,13 +264,12 @@ describe("the operation line and the index ancestor mark", () => {
 
     for (const targetId of ["b", "c", "d"]) {
       const lineage = selectLineage(tree, targetId)!.map((node) => node.id);
-      const segments = operationLinePath(laid.layout.edges, lineage)!;
-      const joined = new Set(segments.map(({ parentId }) => parentId));
+      const anchors = operationTrailNodes(laid.layout, [lineage], null)!.nodes;
       const indexMarked = new Set(materialFileAncestorIds(tree.nodes, targetId));
       // The synthetic document root is the index's outline, not a passage.
       indexMarked.delete(rootId);
-      expect(joined).toEqual(indexMarked);
-      expect(segments.at(-1)?.childId).toBe(targetId);
+      expect(new Set(anchors.slice(0, -1).map(({ id }) => id))).toEqual(indexMarked);
+      expect(anchors.at(-1)?.id).toBe(targetId);
     }
   });
 });

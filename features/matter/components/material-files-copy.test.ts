@@ -68,10 +68,10 @@ describe("material files copy", () => {
       copy.close,
       copy.closeSearch,
       copy.copied,
-      copy.copiedWithContext,
       copy.copy,
-      copy.copyWithContext,
       copy.archiveReceiptDownload,
+      copy.archiveReceiptCopy,
+      copy.archiveReceiptCopied,
       copy.archiveReceiptDescription,
       copy.copyUnavailable,
       copy.done,
@@ -136,41 +136,44 @@ describe("material files copy", () => {
     }
   });
 
-  it("states Copy with context and the readable receipt in every locale, as a complete table", () => {
+  it("states the receipt pair and its one-line helper in every locale, as a complete table", () => {
     const expected = {
       "en-US": [
-        "Copy with context",
-        "Copied with context",
         "Receipt (.md)",
-        "A readable Markdown outline with each passage's parent and order — not a backup",
+        "Copy receipt",
+        "Receipt copied",
+        "Readable outline with each passage’s parent and order — not a backup.",
       ],
-      "zh-CN": ["复制并附上下文", "已复制，附上下文", "回执 (.md)", "可读的 Markdown 大纲，含每段的上级与顺序，不是备份"],
-      "zh-TW": ["複製並附上下文", "已複製，附上下文", "回執 (.md)", "可讀的 Markdown 大綱，含每段的上層與順序，不是備份"],
+      "zh-CN": ["回执 (.md)", "复制回执", "已复制回执", "可读的大纲，含每段的上级与顺序，不是备份。"],
+      "zh-TW": ["回執 (.md)", "複製回執", "已複製回執", "可讀的大綱，含每段的上層與順序，不是備份。"],
       "ja-JP": [
-        "文脈つきでコピー",
-        "文脈つきでコピーしました",
         "レシート (.md)",
-        "各段落の親と順序を含む読みやすい Markdown。バックアップではありません",
+        "レシートをコピー",
+        "レシートをコピーしました",
+        "各段落の親と順序を含む読みやすいアウトライン。バックアップではありません。",
       ],
       "de-DE": [
-        "Mit Kontext kopieren",
-        "Mit Kontext kopiert",
         "Beleg (.md)",
-        "Lesbare Markdown-Gliederung mit Elternteil und Reihenfolge jeder Passage — keine Sicherung",
+        "Beleg kopieren",
+        "Beleg kopiert",
+        "Lesbare Gliederung mit Elternteil und Reihenfolge jeder Passage — keine Sicherung.",
       ],
     } as const;
     for (const { value: locale } of CANVAS_LANGUAGE_OPTIONS) {
       const copy = materialFilesCopy(locale);
       expect([
-        copy.copyWithContext,
-        copy.copiedWithContext,
         copy.archiveReceiptDownload,
+        copy.archiveReceiptCopy,
+        copy.archiveReceiptCopied,
         copy.archiveReceiptDescription,
       ]).toEqual(expected[locale]);
     }
     expect(Object.keys(expected).sort()).toEqual(CANVAS_LANGUAGE_OPTIONS.map(({ value }) => value).sort());
     const source = readFileSync(new URL("./material-files-copy.ts", import.meta.url), "utf8");
     expect(source).toContain("Record<MatterLocale, MaterialFilesCopy>");
+    // The footer has one Copy; the context receipt is no longer a footer action.
+    expect(source).not.toMatch(/copyWithContext|copiedWithContext/u);
+    expect(source).not.toContain("passage's");
   });
 
   it("chooses a count's noun by the locale's plural rule", () => {

@@ -170,6 +170,10 @@
 .material-file__check-mark { box-sizing: border-box; display: grid; width: 11px; height: 11px; justify-self: center; place-items: center; border: 1px solid rgba(22,29,39,.5); border-radius: 2px; background: transparent; transition: border-color 120ms ease; }
 .material-file__check input:checked + .material-file__check-mark { border-color: var(--active); background: transparent; }
 .material-file__check input:checked + .material-file__check-mark::after { width: 5px; height: 2.5px; border-bottom: 1px solid var(--active); border-left: 1px solid var(--active); content: ""; transform: translateY(-.5px) rotate(-45deg); }
+/* A row ticked only because a passage under it is: still checked, in a quieter ink. */
+.material-file__check[data-context="true"] input:checked + .material-file__check-mark { border-color: var(--index-faint); }
+.material-file__check[data-context="true"] input:checked + .material-file__check-mark::after { border-color: var(--index-faint); }
+.material-file__check[data-context="true"] .material-file__title { color: var(--index-muted); }
 .material-file__check input:focus-visible + .material-file__check-mark { outline: 2px solid var(--ink); outline-offset: 3px; }
 .material-file__rename { width: calc(100% - 12px); min-width: 0; height: calc(var(--index-row) - 10px); margin: 0 2px 0 0; grid-column: 2; padding: 0 5px; border: 1px solid var(--active); border-radius: 5px; background: rgba(255,255,255,.62); color: var(--index-ink); font: 400 12px/1.35 var(--matter-face); unicode-bidi: plaintext; }
 .material-file__rename:focus-visible { outline: 1px solid var(--ink); outline-offset: 1px; }
@@ -179,14 +183,21 @@
 .material-files__archive { min-height: 0; padding: 8px 8px 6px; color: var(--index-muted); font: 10px/1.6 var(--mono); }
 .material-files__archive-note { max-width: 188px; margin: 0 0 14px; }
 .material-files__archive-actions { display: grid; gap: 5px; }
+/* The readable receipt: download and clipboard side by side, then one line saying what it is. */
+.material-files__archive-receipt { margin-top: 5px; }
+.material-files__archive-receipt-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.material-files__archive-helper { max-width: 224px; margin: 8px 0 0; color: var(--index-muted); font-size: 10px; line-height: 1.5; }
 .material-files__archive-actions button,
+.material-files__archive-receipt-actions button,
 .material-files__archive-confirm button { min-height: 34px; padding: 0 10px; border: 1px solid rgba(22,29,39,.1); border-radius: 8px; background: rgba(255,255,255,.34); color: var(--index-ink); font: 9px/1 var(--mono); text-align: left; cursor: pointer; transition: background 120ms ease, border-color 120ms ease; }
 
 @media (hover: hover) {
   .material-files__archive-actions button:hover:not(:disabled),
+  .material-files__archive-receipt-actions button:hover:not(:disabled),
   .material-files__archive-confirm button:hover:not(:disabled) { border-color: rgba(22,29,39,.22); background: rgba(255,255,255,.62); }
 }
 .material-files__archive-actions button:disabled,
+.material-files__archive-receipt-actions button:disabled,
 .material-files__archive-confirm button:disabled { cursor: default; opacity: .45; }
 .material-files__archive-retry { width: 100%; min-height: 34px; margin-top: 7px; border: 1px solid var(--index-line); border-radius: 8px; background: transparent; color: var(--active); font: 9px/1 var(--mono); cursor: pointer; }
 
@@ -198,6 +209,8 @@
 .material-files__archive-status,
 .material-files__archive-error { margin: 12px 0 0; font-size: 9px; line-height: 1.5; }
 .material-files__archive-error { color: var(--active); }
+/* A notice that says material will be lost when the tab closes is read, not skimmed. */
+.material-files__archive-status[data-tone="risk"] { color: var(--active); font-size: 10px; }
 .material-files__archive-status:empty,
 .material-files__archive-error:empty { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); }
 .material-files__archive-confirm { margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--index-line); }
@@ -279,6 +292,7 @@
   .material-files__copy { min-width: 48px; height: 48px; }
   .material-files__profile-action { width: 48px; height: 48px; }
   .material-files__archive-actions button,
+  .material-files__archive-receipt-actions button,
   .material-files__archive-confirm button { min-height: 48px; }
 }
 
@@ -309,6 +323,7 @@
   .material-files__copy { min-width: 48px; min-height: 48px; }
   .material-files__search { min-height: 48px; }
   .material-files__archive-actions button,
+  .material-files__archive-receipt-actions button,
   .material-files__archive-confirm button,
   .material-files__archive-retry { min-height: 48px; }
   .material-files__tree { --material-file-action-width: 48px; --material-file-context-width: 48px; }

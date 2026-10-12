@@ -86,12 +86,39 @@ Structure produces one constrained two-dimensional arrangement:
   resulting tree.
 
 The restored hackathon surface renders this geometry as frameless text with no
-persistent lineage connectors. The one exception is operation-scoped: while an AI
-operation (Point and Talk, a pending Elastic turn, a pending passage-local text
-swap) is addressed at a passage, the canvas draws a single 1 px root-to-target line
-from that layout's own edges, beneath the passages, and removes it the instant the
-operation ends. Selection, hover, focus view, and navigation draw nothing; the line
-is the basis of an operation, never a map. The root column is the viewport anchor: adding
+persistent lineage connectors. The one exception is the **canvas trail**, drawn
+only for a passage that is being addressed and never stored: a dot in the left
+gutter of every passage on the path from the root to the target, one hairline
+joining them in each passage's top margin (never through text), and a small
+solid arrowhead where each edge reaches a passage. A single selected passage
+also shows its children, and theirs while they fit, a little lighter; a branch
+with more than six children, anything deeper than two levels below, or more
+than eight grandchildren is cut at the first level with three dots on the last
+child drawn. Siblings of the path are never drawn. It is derived every render
+from the published layout by `trailPresentation` and drawn as one SVG beneath the
+passages; its sizes are screen sizes at every zoom, it fades to nothing at the
+paper's edge with one cue where the path continues, and it is never a map.
+
+| Situation | Trail |
+| --- | --- |
+| nothing selected, no operation | none |
+| hover or focus alone | none |
+| a passage selected (pointer, index, keyboard) | root → passage and its children, light |
+| an AI operation addressed at a passage (Point and Talk, Elastic, text swap, picture) | the same trail at full strength; the target's ring grows once work is taken |
+| the operation ends on a still-selected passage | back to light, no remount |
+| selection moves from one passage to another | the drawing is replaced in place, no fade, shared ancestors do not blink |
+| a top-level passage | its own bead only |
+| Ask Matter open over lassoed passages | root → each passage, shared ancestors once, light, no children |
+| Ask Matter over the whole working tree | none |
+| a lasso nothing has asked about | none |
+| focus view | none (the column already is the lineage) |
+| selection cleared, a passage removed, Undo/redo that removes it | fades 100 ms |
+| a result landed and nothing is selected | fades 160 ms |
+| layout republished, or another epoch than the published one | cut at once, never stale |
+| document switch, import, hydrate | cut at once (the layer is keyed by the document epoch) |
+| reduced motion | no fade |
+
+The root column is the viewport anchor: adding
 material to the right or downward does not recenter the root. A transient camera
 may pan or zoom the complete derived world, but it never changes node boxes
 relative to one another. Thus every new child still appears to the parent's
