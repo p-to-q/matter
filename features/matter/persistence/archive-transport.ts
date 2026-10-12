@@ -69,7 +69,8 @@ const MAX_ARCHIVE_BYTES = MAX_BUNDLE_BYTES + (MAX_BUNDLE_FILES * (MAX_PATH_BYTES
 // Inflating one pushed chunk allocates its whole output before any size check
 // can run, so input is fed in slices that keep a bomb's first allocation small.
 const INFLATE_FEED_BYTES = 16 * 1024;
-const ARCHIVE_MTIME = new Date(Date.UTC(1980, 0, 1));
+// ZIP stores local calendar fields; UTC midnight falls into 1979 west of UTC.
+const ARCHIVE_MTIME = new Date(1980, 0, 1);
 const NO_BLOBS: Blobs = new Map();
 
 type Fflate = typeof import("fflate");

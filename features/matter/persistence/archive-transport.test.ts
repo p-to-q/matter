@@ -26,7 +26,9 @@ describe("material ZIP transport", () => {
   });
 
   // Pinned on the commit before binary entries existed: a tree without pictures
-  // must keep producing exactly the bytes every earlier build produced.
+  // must keep producing exactly the bytes every earlier build produced. Re-pinned
+  // once, when #131 made the entry timestamp timezone-independent; the hash below
+  // is the same under UTC, Asia/Shanghai, America/Los_Angeles and Pacific/Kiritimati.
   it("keeps the exact bytes of an archive that carries no pictures", async () => {
     const exported = await exportSnapshotArchive(treeToBundle(createSeededDocument().tree));
     if (!exported.ok) throw new Error("archive export failed");
@@ -34,7 +36,7 @@ describe("material ZIP transport", () => {
     expect(exported.missingImages).toBe(0);
     expect(exported.bytes.byteLength).toBe(4_270);
     expect(createHash("sha256").update(exported.bytes).digest("hex")).toBe(
-      "ae4879a76f735853a5639938a59635553a71a5aa9c6a603122c3b49302372712",
+      "9fe8a3c1bd8c5f983e055f79572ed1ea3d36061ef8c33ac631fcc635215f3e58",
     );
   });
 
@@ -220,7 +222,7 @@ function zip(files: Record<string, string | Uint8Array>): Uint8Array {
   return zipSync(Object.fromEntries(Object.entries(files).map(([path, value]) => [
     path,
     typeof value === "string" ? encoder.encode(value) : value,
-  ])), { mtime: new Date(Date.UTC(1980, 0, 1)) });
+  ])), { mtime: new Date(1980, 0, 1) });
 }
 
 function rewriteZipUncompressedSize(bytes: Uint8Array, size: number): Uint8Array {

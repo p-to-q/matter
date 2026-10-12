@@ -1,8 +1,13 @@
 import { createReadStream } from "node:fs";
+import { createRequire } from "node:module";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { extname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createGzip } from "node:zlib";
+
+// The pinned Next adapter uses source-owned route-cache keys for prerenders.
+// Use its key function so the check reads the same artifact as the adapter.
+const { getRouteCacheKey } = createRequire(import.meta.url)("next/dist/server/lib/route-cache-key.js");
 
 export const RUNTIME_ARTIFACT_BUDGETS = Object.freeze({
   pageHtmlBytes: 48 * 1_024,
@@ -135,9 +140,8 @@ export function inspectRuntimeArtifact(metrics) {
 
 export async function readRuntimeArtifact(root = process.cwd()) {
   const nextRoot = join(root, ".next");
-  const htmlPath = join(nextRoot, "server/app/index.html");
   const prerenderPath = join(nextRoot, "prerender-manifest.json");
-  const html = await readFile(htmlPath, "utf8");
+  const html = await readRootHtml(nextRoot);
   const prerender = JSON.parse(await readFile(prerenderPath, "utf8"));
   const initialAssets = Object.freeze([
     ...new Set(
@@ -186,7 +190,7 @@ export async function readRuntimeArtifact(root = process.cwd()) {
   ).map((file) => relative(join(nextRoot, "static"), file).split(sep).join("/"));
   const prerendered = Object.keys(prerender.routes ?? {});
   const metadataImageAssets = serverFiles.filter((file) => (
-    /\/app\/(?:icon\d+|apple-icon)\.(?:ico|jpe?g|png|svg)\.body$/u.test(file)
+    /\/(?:app|\$)\/(?:icon\d+|apple-icon)\.(?:ico|jpe?g|png|svg)\.body$/u.test(file)
   )).sort();
 
   return Object.freeze({
@@ -220,6 +224,19 @@ export async function readRuntimeArtifact(root = process.cwd()) {
     productionSourceMaps: staticFiles.filter((file) => file.endsWith(".map")).length +
       serverFiles.filter((file) => file.endsWith(".map")).length,
   });
+}
+
+async function readRootHtml(nextRoot) {
+  const adapterPath = join(nextRoot, "server", `${getRouteCacheKey("/", {
+    kind: "APP_PAGE",
+    sourceRoute: "/page",
+  })}.html`);
+  try {
+    return await readFile(adapterPath, "utf8");
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    return readFile(join(nextRoot, "server/app/index.html"), "utf8");
+  }
 }
 
 async function filesBelow(directory) {
