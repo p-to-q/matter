@@ -85,8 +85,13 @@ Structure produces one constrained two-dimensional arrangement:
   authors or persists a coordinate; layout still derives every box from the
   resulting tree.
 
-The restored hackathon surface renders this geometry as frameless text without
-visible lineage connectors. The root column is the viewport anchor: adding
+The restored hackathon surface renders this geometry as frameless text with no
+persistent lineage connectors. The one exception is operation-scoped: while an AI
+operation (Point and Talk, a pending Elastic turn, a pending passage-local text
+swap) is addressed at a passage, the canvas draws a single 1 px root-to-target line
+from that layout's own edges, beneath the passages, and removes it the instant the
+operation ends. Selection, hover, focus view, and navigation draw nothing; the line
+is the basis of an operation, never a map. The root column is the viewport anchor: adding
 material to the right or downward does not recenter the root. A transient camera
 may pan or zoom the complete derived world, but it never changes node boxes
 relative to one another. Thus every new child still appears to the parent's

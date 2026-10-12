@@ -10,10 +10,12 @@ import { admissionTargetExists } from "../runtime/admission";
 import type { TextSwapInteractionState } from "../runtime/text-swap-interaction";
 import { layoutColumnarTree } from "../layout/columnar-layout";
 import type { ColumnarLayout, LayoutNode } from "../layout/model";
+import { operationLineGeometry } from "../layout/operation-line";
 import type { TypographyHeightAuthorityToken } from "../layout/typography-height-ledger";
 import { projectVerticalPresentationBand } from "../layout/vertical-presentation-band";
 import type { ThoughtTree } from "../tree/model";
 import { isDocumentRoot, isEmptyMaterialDocument } from "../tree/document-root";
+import { selectLineage } from "../tree/selectors";
 import { projectTools } from "../tools/project-tools";
 import { projectToolSurface } from "../tools/project-tool-surface";
 import { isCurrentToolIntent } from "../tools/validate-intent";
@@ -129,6 +131,8 @@ import { preloadableComponent } from "./preloadable-component";
 import { WikiOccurrenceLayer } from "./wiki-occurrence-layer-chunk";
 import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
 import { CanvasRuling } from "./CanvasRuling";
+import { OperationLine } from "./OperationLine";
+import { operationTargetNodeId } from "./operation-target";
 import {
   MaterialAddressLayer,
   materialAddressVariantOutline,
@@ -1584,6 +1588,33 @@ export function RootedMaterial(props: RootedMaterialProps) {
     reportedPaperActivityRef.current = IDLE_PAPER_ACTIVITY;
     reportPaperActivity?.(IDLE_PAPER_ACTIVITY);
   }, [reportPaperActivity]);
+  // The one derived target of an AI operation, and the canvas line that joins
+  // it to the root. Nothing here is stored: the line exists only while an
+  // operation owns a target and only for the published layout it was read from.
+  const operationTargetId = operationTargetNodeId({
+    elastic: {
+      nodeId: transformState.basis?.documentEpoch === props.documentEpoch
+        ? transformState.basis.selection.nodeId
+        : null,
+      phase: transformState.phase,
+    },
+    pointTalk: {
+      hostNodeId: pointTalkHostNodeId,
+      phase: pointTalkPhase,
+      pictureHold: pointTalkPictureHold,
+      presented: pointTalkPresented,
+    },
+  });
+  const operationLineData = useMemo(() => {
+    if (operationTargetId === null) return null;
+    const lineage = selectLineage(tree, operationTargetId);
+    return operationLineGeometry({
+      currentLayoutEpoch: completePublication?.layout.layoutEpoch ?? null,
+      layout: activeLayout,
+      lineageIds: lineage === null ? null : lineage.map((node) => node.id),
+      mountedNodeIds: visiblyLaidOutNodeIds,
+    });
+  }, [activeLayout, completePublication, operationTargetId, tree, visiblyLaidOutNodeIds]);
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
     canvasChromeRef.current?.closeInquiry();
     startTransform(basis);
@@ -4043,6 +4074,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             inert={viewportRenderer && activeLayout === null ? true : undefined}
             ref={canvasRef}
           >
+            {operationLineData === null ? null : <OperationLine d={operationLineData} />}
             {viewportRenderer && renderedProjection.length === 0 ? (
               <ViewportMaterialGlimpse text={projection[0]?.node.text ?? ""} />
             ) : (

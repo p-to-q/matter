@@ -108,6 +108,10 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .matter-world[data-camera-motion="focus"] { transition: transform var(--index-camera-duration, 300ms) cubic-bezier(.65,0,.35,1); }
 .matter-canvas { position: absolute; top: 43%; left: calc(50% + var(--matter-canvas-anchor-x)); width: max(var(--matter-canvas-width, 520px), 520px); height: max(var(--matter-canvas-height, 160px), 160px); transform: translate(calc(var(--matter-column-width) / -2), -80px); }
 .spatial-thoughts { margin: 0; padding: 0; list-style: none; }
+/* The operation line sits beneath the passages in the canvas's own frame. It owns no
+   box, takes no pointer, and has no motion: it appears and leaves with its operation. */
+.operation-line { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.operation-line__path { animation: none; transition: none; fill: none; stroke: color-mix(in srgb, var(--ink) 28%, transparent); stroke-width: 1px; stroke-linecap: square; vector-effect: non-scaling-stroke; }
 .spatial-thought { position: absolute; top: 0; left: 0; width: var(--matter-column-width); contain: layout style; }
 .matter-canvas:not([data-layout-revealed="true"]) .spatial-thought { visibility: hidden; pointer-events: none; }
 .matter-canvas:not([data-layout-revealed="true"]) .spatial-thought:first-child { visibility: visible; opacity: .62; }
@@ -390,6 +394,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 }
 
 @media (forced-colors: active) {
+  .operation-line__path { stroke: CanvasText; }
       .tool-rail__button:focus-visible::after { outline-color: Highlight; }
   .tool-rail__button[data-tool-emphasis="primary"]::before { outline: 2px solid Highlight; outline-offset: -2px; }
   .tool-rail__button[aria-disabled="true"] { color: GrayText; }

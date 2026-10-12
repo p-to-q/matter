@@ -17,6 +17,23 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — while an AI operation owns a passage, the canvas draws the line from the root down to it
+
+Changed: one thin SVG line, beneath the passages and never hit-tested, joins the root
+to the passage that Point and Talk, Elastic, a pending text swap or a paid picture
+currently addresses, and disappears the moment the operation ends. It is the subset of
+the layout's already-computed edges whose child is on the lineage, drawn only for the
+current layout epoch and only where both endpoints are mounted. A single derived value
+(`operationTargetNodeId`) says which passage owns it. Plain selection, hover and focus
+draw nothing, and the index underline of the same ancestors is unchanged.
+
+Why: the tree already knows where a session came from, and an operation is the moment a
+person needs to see it. Keeping the line operation-scoped keeps the canvas from
+becoming a mind map.
+
+Forecloses: persistent connectors, a line that animates in, and any stored coordinates.
+A target at the top level has no edges and draws nothing.
+
 ## 2026-10-12 — naming each passage's parent did not help Ask Matter, so the wire stays as it is
 
 Changed: nothing in the product. A gated live eval (`inquiry-structure.live.test.ts`,
