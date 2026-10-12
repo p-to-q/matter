@@ -30,6 +30,7 @@ export default defineConfig({
       "scripts/check-architecture.test.mjs",
       "scripts/probe-model-pool.test.mjs",
       "scripts/local-ai-demo.test.mjs",
+      "scripts/local-image-demo.test.mjs",
       "scripts/probe-local-ai.test.mjs",
       "scripts/label-corpus.test.mjs",
       "scripts/label-eval-plan.test.mjs",

@@ -68,6 +68,8 @@ path use the configured provider only when their user action occurs. Add
 explicit local evaluation. These switches do not authorize either public live
 gate, and health reports configuration rather than provider quality. See
 [`docs/reference/local-ai-demo.md`](docs/reference/local-ai-demo.md).
+`npm run dev:image` (add `-- --fake-image` to spend no image credit) opens the
+picture gate on the same terms; the reference note describes it.
 
 ```bash
 npm run check

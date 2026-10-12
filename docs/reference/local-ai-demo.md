@@ -64,6 +64,30 @@ Transcript Repair has no document-derived term field. The working-context
 projection remains below the admission boundary, so held-aside material cannot
 cross into repair through a stale render effect.
 
+## Picture demo
+
+`npm run dev:image` is `dev:ai` plus the picture gate. It adds nothing to
+production: it sets `MATTER_IMAGE_ADAPTER=live`, validates the image stations
+you declared in `.env.local` (the `MATTER_IMAGE_*` block of `.env.example`), and
+starts Next on loopback with the same flags as `dev:ai`. The chat pool is always
+your own, so the brief step, Ask, Repair and Point Talk are real calls; with the
+default image pool each Draw also spends one paid image generation. A missing or
+incomplete image station stops the launcher with the variable names to add and
+no values. The picture control appears only when health reports
+`imageGeneration` as `available`, and the live gate meters three drawings per
+minute per origin even on localhost.
+
+`npm run dev:image -- --fake-image` replaces only the image pool with an
+in-process relay on `127.0.0.1` (random port, random per-run bearer key, POST
+only, 64 KiB body cap, no CORS) that answers with one checked-in 1024x1024 PNG,
+so no image credit is spent and the relay needs no credential. Its shape
+defaults to `/v1/images/generations`; `--image-shape=chat` serves the chat
+shape. `--image-delay=<ms>` (0 to 30000, default 4000) sets the wait,
+`--image-fail=<N>` makes every Nth request return HTTP 500, and `--image-slow`
+answers after 45 s to exercise Stop waiting and the 53 s client deadline.
+`--port=<n>` moves Next. The launcher prints which relays are real and which
+are fake, and the manual checklist; it is not repeated here.
+
 ## Probe boundary
 
 `npm run probe:local-ai` is dry by default and sends zero requests. The explicit

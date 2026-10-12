@@ -17,6 +17,23 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — the picture feature can be tried on localhost, with real relays by default
+
+Changed: `npm run dev:image` starts the app with `MATTER_IMAGE_ADAPTER=live` and the
+developer's own chat and image pools from `.env.local`; it prints which relays are real and
+that they spend credits, and refuses to start with a plain error if no image station is
+configured. `--fake-image` replaces only the image pool with a loopback relay (127.0.0.1,
+random key, POST only, 64 KiB cap) that returns a real decodable picture after a
+configurable delay, with flags to fail every Nth request or answer slowly so Drawing, Stop
+waiting and the failure paths can be exercised. A contract test holds the launcher against
+the real pool readers, the surface gate and the image route.
+
+Why: the control only exists when the health read says `available`, so without this nobody
+could see it, and the owner needs to judge it by eye before it is opened to anyone.
+
+Forecloses: a launcher that reads or prints `.env.local` values, and a fake chat relay (the
+brief step always uses the developer's real pool).
+
 ## 2026-10-12 — while an AI operation owns a passage, the canvas draws the line from the root down to it
 
 Changed: one thin SVG line, beneath the passages and never hit-tested, joins the root
