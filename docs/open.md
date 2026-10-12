@@ -9,15 +9,6 @@ bottom.
 
 ---
 
-## Deployment: confirm Production deploys again after next 16.3.8
-
-Tracked as [p-to-q/matter#130](https://github.com/p-to-q/matter/issues/130). Vercel
-builds failed from the `next` 16.3.8 bump (#128). The cause was the post-build
-`check:runtime` step meeting 16.3.8's adapter route-cache artifacts; #131 teaches it to
-read them, and the Production deploy of `053bdaa` then succeeded. The next merge commit
-(`c11b849`) failed within a second of creation, which looks like a queue artefact. Done
-when the next Production deployment on `main` succeeds; then close the issue.
-
 ## Post-preview material-runtime candidates
 
 These candidates share one direction but are not one project. Their research
