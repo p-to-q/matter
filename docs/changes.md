@@ -17,6 +17,24 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — naming each passage's parent did not help Ask Matter, so the wire stays as it is
+
+Changed: nothing in the product. A gated live eval (`inquiry-structure.live.test.ts`,
+skipped unless `MATTER_LIVE_STRUCTURE_EVAL=1`) asked the configured chat model six
+structural questions three times each: which items sit under a heading, which heading
+holds a leaf, and which of two identical "Notes" headings a note belongs to, in English
+and Chinese. Depth-ordered text, which is what Inquiry sends today, scored 18 of 18.
+The same prompt with every passage naming its parent also scored 18 of 18.
+
+Why: the earlier plan assumed the AI entries would be better for being handed the
+tree's relations. Preorder plus true depth already carries them, and a model reads
+that as well as an explicit parent field, so widening a strict wire for it would be a
+protocol bump with no observed gain.
+
+Forecloses: adding parent ids to the Inquiry or material-turn wire on the argument that
+the model needs them. The receipt stays for people and for tools that cannot read an
+indented outline. Reopen with a failing case; this eval used small trees.
+
 ## 2026-10-12 — the picture control exists, and nothing opens it
 
 Changed: Point and Talk gains a plain-text control (zh-CN 生图, zh-TW 生圖, ja-JP 描く,
