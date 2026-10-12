@@ -76,6 +76,33 @@ describe("the picture panel", () => {
     expect(markup).not.toMatch(/cancel|spinner|progress|%|svg/i);
   });
 
+  it("says how long the wait may be once, in one quiet line under the step's own words", () => {
+    for (const locale of MATTER_LOCALES) {
+      const copy = pictureControlCopy(locale);
+      const markup = render({ step: "drawing" }, { locale });
+      const quiet = markup.match(/<p class="point-talk__quiet"[^>]*>([^<]*)<\/p>/u);
+      expect(quiet?.[1], locale).toBe(copy.drawingExpectation);
+      expect(markup.split(copy.drawingExpectation), locale).toHaveLength(2);
+      // Under "Drawing…", never beside it and never before it.
+      expect(markup.indexOf(copy.drawing), locale).toBeLessThan(markup.indexOf(copy.drawingExpectation));
+      expect(markup, locale).toMatch(/point-talk__statement[^>]*>[^<]*<\/p><p class="point-talk__quiet"/u);
+      // It is a line of text, not another control or a second announcement.
+      expect(buttons(markup), locale).toEqual([copy.stopWaiting]);
+      expect(markup).not.toContain("aria-live");
+    }
+    expect(render({ step: "drawing" })).toContain("Up to a minute.");
+  });
+
+  it("gives no other step the expectation line", () => {
+    for (const view of [
+      { step: "arm", billed: false },
+      { step: "failed", notice: "not-drawn", retryable: true },
+      { step: "preview", picture: PICTURE, failure: null },
+    ] as const) {
+      expect(render(view)).not.toContain("point-talk__quiet");
+    }
+  });
+
   it("offers Try again only for a failure that may be retried", () => {
     const retryable = render({ step: "failed", notice: "not-drawn", retryable: true });
     expect(buttons(retryable)).toEqual(["Try again"]);
@@ -112,10 +139,10 @@ describe("the picture panel", () => {
 
   it("says an unsaved Keep inline and keeps Keep, and offers only Discard once refused", () => {
     const unsaved = render({ step: "preview", picture: PICTURE, failure: "not-saved" });
-    expect(unsaved).toContain("Couldn&#x27;t save on this device.");
+    expect(unsaved).toContain("Couldn’t save on this device.");
     expect(buttons(unsaved)).toEqual(["Keep", "Discard"]);
     const refused = render({ step: "preview", picture: PICTURE, failure: "refused" });
-    expect(refused).toContain("This picture can&#x27;t be kept here.");
+    expect(refused).toContain("This picture can’t be kept here.");
     expect(buttons(refused)).toEqual(["Discard"]);
   });
 

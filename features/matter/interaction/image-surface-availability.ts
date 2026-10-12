@@ -85,6 +85,13 @@ export type ImageSurfaceAvailabilityCache = Readonly<{
   get(): Promise<ImageSurfaceAvailability>;
   /** What a render may use now: a fresh answer, else `unavailable`. */
   peek(): ImageSurfaceAvailability;
+  /**
+   * The newest answer this page has had, however old, else `unavailable`. A
+   * field that opens decides its row from this, so an answer that lapsed a
+   * moment ago never makes the control come and go; the read that renews it
+   * runs beside the opening and is heard by the next one.
+   */
+  lastKnown(): ImageSurfaceAvailability;
   /** Forgets the answer and the read in flight; the next `get` reads again. */
   invalidate(): void;
 }>;
@@ -102,6 +109,7 @@ export function createImageSurfaceAvailabilityCache(
   }
   const now = options.now ?? Date.now;
   let answer: Readonly<{ value: ImageSurfaceAvailability; expiresAt: number }> | null = null;
+  let newest: ImageSurfaceAvailability = "unavailable";
   let inFlight: Promise<ImageSurfaceAvailability> | null = null;
 
   const fresh = () => (answer !== null && now() < answer.expiresAt ? answer.value : null);
@@ -122,6 +130,7 @@ export function createImageSurfaceAvailabilityCache(
         if (inFlight === flight) {
           inFlight = null;
           answer = Object.freeze({ value, expiresAt: now() + ttlMs });
+          newest = value;
         }
         return value;
       });
@@ -129,8 +138,10 @@ export function createImageSurfaceAvailabilityCache(
       return flight;
     },
     peek: () => fresh() ?? "unavailable",
+    lastKnown: () => newest,
     invalidate() {
       answer = null;
+      newest = "unavailable";
       inFlight = null;
     },
   });

@@ -9,6 +9,14 @@ bottom.
 
 ---
 
+## Reload shows the seed document first
+
+On reload the seeded document is laid out for about 150 ms before the stored document replaces
+it, so a document that differs from the seed visibly jumps (measured: passages moving 100→270 px).
+It affects every restored document, not only ones with pictures. Promotion: decide whether first
+paint should wait for the stored document, or show a quiet placeholder, and prove it against the
+cold-load receipt.
+
 ## Post-preview material-runtime candidates
 
 These candidates share one direction but are not one project. Their research

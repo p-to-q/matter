@@ -50,8 +50,21 @@ describe("picture copy", () => {
 
 describe("passage picture box", () => {
   it("is the pointer's ratio and nothing else", () => {
-    expect(pictureBoxStyle(POINTER)).toEqual({ aspectRatio: "1024 / 768" });
-    expect(pictureBoxStyle({ width: 512, height: 2048 })).toEqual({ aspectRatio: "512 / 2048" });
+    expect(pictureBoxStyle(POINTER)).toEqual({
+      aspectRatio: "1024 / 768",
+      "--picture-w": 1024,
+      "--picture-h": 768,
+    });
+    expect(pictureBoxStyle({ width: 512, height: 2048 })).toEqual({
+      aspectRatio: "512 / 2048",
+      "--picture-w": 512,
+      "--picture-h": 2048,
+    });
+  });
+
+  it("is derived from the pointer alone: the same pointer, the same box, whatever else changes", () => {
+    expect(pictureBoxStyle({ width: 640, height: 480 })).toEqual(pictureBoxStyle({ ...POINTER, width: 640, height: 480 }));
+    expect(pictureBoxStyle({ width: 1, height: 3 })).not.toEqual(pictureBoxStyle({ width: 3, height: 1 }));
   });
 
   it("keys layout by the hash and the box, and by nothing when there is no picture", () => {
@@ -75,8 +88,9 @@ describe("passage picture frame", () => {
       { kind: "missing", reason: "unavailable" },
     ];
     for (const view of views) {
-      expect(render(view)).toContain('style="aspect-ratio:1024 / 768"');
-      expect(render(view, { ...POINTER, width: 300, height: 900 })).toContain('style="aspect-ratio:300 / 900"');
+      expect(render(view)).toContain('style="aspect-ratio:1024 / 768;--picture-w:1024;--picture-h:768"');
+      expect(render(view, { ...POINTER, width: 300, height: 900 }))
+        .toContain('style="aspect-ratio:300 / 900;--picture-w:300;--picture-h:900"');
     }
   });
 
@@ -136,10 +150,32 @@ describe("passage picture styling", () => {
   const css = readFileSync(new URL("../../../app/globals.css", import.meta.url), "utf8");
   const rules = css.split("\n").filter((line) => line.includes(".passage-picture"));
 
-  it("fixes the width and spacing in the stylesheet and never animates", () => {
-    expect(css).toContain("width: min(100%, 320px)");
+  it("fixes the spacing in the stylesheet and never animates", () => {
     expect(css).toMatch(/\.passage-picture \{[^}]*margin: 10px auto 0/u);
     expect(rules.join("\n")).not.toMatch(/animation|transition|@keyframes/u);
+  });
+
+  it("caps the box at the smaller of 320px and 60vh, and narrows it to keep the pointer's ratio", () => {
+    const rule = css.match(/\.passage-picture \{[^}]*\}/u)?.[0] ?? "";
+    expect(rule).toContain("--picture-cap: min(320px, 60vh)");
+    // The width is bounded by the column, by the cap, and by the cap carried through the ratio.
+    expect(rule).toContain(
+      "width: min(100%, var(--picture-cap), calc(var(--picture-cap) * var(--picture-w, 4) / var(--picture-h, 3)))",
+    );
+    // Nothing is cropped: the picture is contained in a box that already has its ratio.
+    expect(css).toMatch(/\.passage-picture__image \{[^}]*object-fit: contain/u);
+    expect(css).not.toMatch(/\.passage-picture__image \{[^}]*object-fit: cover/u);
+  });
+
+  it("paints a missing plate opaque, so the paper's ruling never shows through it", () => {
+    const plate = css.match(
+      /\.passage-picture\[data-picture-state="absent"\],\s*\.passage-picture\[data-picture-state="damaged"\],\s*\.passage-picture\[data-picture-state="unavailable"\] \{[^}]*\}/u,
+    )?.[0] ?? "";
+    expect(plate).toContain("var(--plate-base)");
+    expect(plate).not.toMatch(/transparent/u);
+    expect(css).toMatch(/\.passage-picture \{[^}]*--plate-base: var\(--paper\)/u);
+    // Inside the field the plate sits on the field's own paper tokens.
+    expect(css).toContain(".point-talk .passage-picture { --plate-base: var(--paper-solid); }");
   });
 
   it("keeps the missing plate and its label visible under forced colors with system colors", () => {

@@ -53,6 +53,7 @@ describe("the picture control's presence", () => {
     documentHasRoom: true,
     passageText: "A passage.",
     interactionPending: false,
+    storeFailed: false,
   } as const;
 
   it("exists only once the health read said available", () => {
@@ -68,6 +69,16 @@ describe("the picture control's presence", () => {
     // The bound is in code points, not code units.
     expect(pictureControlPresentation({ ...base, passageText: "𝒳".repeat(2_000) })).toBe("enabled");
     expect(pictureControlPresentation({ ...base, passageText: "𝒳".repeat(2_001) })).toBe("absent");
+  });
+
+  it("stays, aria-disabled and unable to start, when the picture store could not be opened", () => {
+    // The row was decided when the field opened; a store that failed afterwards
+    // must not take the control away from under the person's hand.
+    expect(pictureControlPresentation({ ...base, storeFailed: true })).toBe("disabled");
+    expect(pictureControlPresentation({ ...base, storeFailed: true, availability: "unavailable" }))
+      .toBe("absent");
+    expect(pictureControlPresentation({ ...base, storeFailed: true, passageText: null }))
+      .toBe("absent");
   });
 
   it("stays, aria-disabled, while another interaction is pending", () => {
@@ -88,6 +99,7 @@ describe("the picture control's reasons to be missing or inert", () => {
     nodeId: "thought_1",
     passageText: "A passage.",
     interactionPending: false,
+    storeFailed: false,
   } as const;
 
   it("is absent where this browser could not finish a paid picture", () => {
@@ -192,8 +204,8 @@ describe("the bubble for each state", () => {
   it("names the Keep failure inline, and offers Keep again only when it could work", () => {
     expect(pictureKeepFailureText(copy, null)).toBeNull();
     expect(pictureKeepFailureText(copy, "not-saved"))
-      .toBe("Couldn't save on this device. Kept for this session — try Keep again.");
-    expect(pictureKeepFailureText(copy, "refused")).toBe("This picture can't be kept here.");
+      .toBe("Couldn’t save on this device. Kept for this session — try Keep again.");
+    expect(pictureKeepFailureText(copy, "refused")).toBe("This picture can’t be kept here.");
     expect(pictureKeepOffered(null)).toBe(true);
     expect(pictureKeepOffered("not-saved")).toBe(true);
     expect(pictureKeepOffered("refused")).toBe(false);

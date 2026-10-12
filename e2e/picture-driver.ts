@@ -44,6 +44,19 @@ function solidPng(width: number, height: number): Uint8Array {
   ]));
 }
 
+/** A picture of any size: its bytes, its hash, and the pointer a document would carry for it. */
+export type PictureFixture = Readonly<{ png: Uint8Array; sha256: string; pointer: ImagePointer }>;
+
+export function pictureOfSize(width: number, height: number): PictureFixture {
+  const png = solidPng(width, height);
+  const sha256 = createHash("sha256").update(png).digest("hex");
+  return {
+    png,
+    sha256,
+    pointer: { mediaType: "image/png", byteLength: png.byteLength, width, height, contentHash: sha256 },
+  };
+}
+
 export const PNG = solidPng(PICTURE_WIDTH, PICTURE_HEIGHT);
 export const POINTER: ImagePointer = {
   mediaType: "image/png",
@@ -87,22 +100,24 @@ export async function replaceWith(page: Page, bytes: Uint8Array): Promise<void> 
 export async function withPictureOn(
   archive: Uint8Array,
   target: string,
-  options: Readonly<{ bytes: boolean }> = { bytes: true },
+  options: Readonly<{ bytes?: boolean; picture?: PictureFixture }> = {},
 ): Promise<Uint8Array> {
+  const withBytes = options.bytes !== false;
+  const picture = options.picture ?? { png: PNG, sha256: POINTER.contentHash, pointer: POINTER };
   const imported = await importSnapshotArchive(archive);
   if (!imported.ok) throw new Error(imported.error.message);
   const node = imported.tree.nodes[target];
   if (node === undefined) throw new Error("fixture passage is missing");
   const tree: ThoughtTree = {
     ...imported.tree,
-    nodes: { ...imported.tree.nodes, [target]: { ...node, image: POINTER } },
+    nodes: { ...imported.tree.nodes, [target]: { ...node, image: picture.pointer } },
   };
   const exported = await exportSnapshotArchive(
     treeToBundle(tree),
-    options.bytes ? new Map([[POINTER.contentHash, PNG]]) : new Map(),
+    withBytes ? new Map([[picture.sha256, picture.png]]) : new Map(),
   );
   if (!exported.ok) throw new Error(exported.error.message);
-  expect(exported.missingImages).toBe(options.bytes ? 0 : 1);
+  expect(exported.missingImages).toBe(withBytes ? 0 : 1);
   return exported.bytes;
 }
 

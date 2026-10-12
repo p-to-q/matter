@@ -146,12 +146,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
 .spatial-thought[data-drag-source="true"] .spatial-thought__text { opacity: .48; pointer-events: none; transform: translate3d(var(--node-drag-x, 0), var(--node-drag-y, 0), 0); }
 .matter-shell[data-view="full"][data-canvas-mode="material"] .spatial-thought[data-selected="true"][data-movable="true"] .spatial-thought__text { cursor: grab; }
 .spatial-thought[data-parent-id] .spatial-thought__text { --material-text-color: var(--muted); font-size: 17px; font-weight: 400; line-height: 1.72; letter-spacing: 0; }
-/* The box is the pointer's ratio at a fixed width, so it holds its place whether the bytes are loading, shown, or missing. */
-.passage-picture { display: flex; width: min(100%, 320px); margin: 10px auto 0; align-items: center; justify-content: center; overflow: hidden; border-radius: 6px; user-select: none; }
+/* The box is the pointer's own ratio (`--picture-w` and `--picture-h`, set from the pointer alone) at a height no taller than the cap, so a tall picture is narrower rather than taller and nothing is cropped. It holds its place whether the bytes are loading, shown, or missing. */
+.passage-picture { --picture-cap: min(320px, 60vh); --plate-base: var(--paper); display: flex; width: min(100%, var(--picture-cap), calc(var(--picture-cap) * var(--picture-w, 4) / var(--picture-h, 3))); margin: 10px auto 0; align-items: center; justify-content: center; overflow: hidden; border-radius: 6px; user-select: none; }
+.point-talk .passage-picture { --plate-base: var(--paper-solid); }
+/* A plate stands in for a picture, so it is opaque: the paper's ruling never shows through it. */
 .passage-picture[data-picture-state="absent"],
 .passage-picture[data-picture-state="damaged"],
-.passage-picture[data-picture-state="unavailable"] { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-.passage-picture__image { display: block; width: 100%; height: 100%; object-fit: cover; -webkit-user-drag: none; }
+.passage-picture[data-picture-state="unavailable"] { background: color-mix(in srgb, var(--ink) 6%, var(--plate-base)); }
+.passage-picture__image { display: block; width: 100%; height: 100%; object-fit: contain; -webkit-user-drag: none; }
 .passage-picture__label { padding: 0 12px; color: var(--muted); font: 400 11px/1.5 var(--header-face); letter-spacing: .01em; text-align: center; overflow-wrap: anywhere; }
 .spatial-thought[data-context-excluded="true"] .spatial-thought__text { opacity: .36; pointer-events: none; user-select: none; cursor: default; }
 /* A held root is still inert material, but it remains the one locally
@@ -423,7 +425,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--ink); outline-o
   .spatial-thought:has(.language-split-projection[data-preview-mode="expand"]) > .spatial-thought__text { color: transparent; }
   .passage-picture[data-picture-state="absent"],
   .passage-picture[data-picture-state="damaged"],
-  .passage-picture[data-picture-state="unavailable"] { background: transparent; outline: 1px solid GrayText; outline-offset: -1px; }
+  .passage-picture[data-picture-state="unavailable"] { background: Canvas; outline: 1px solid GrayText; outline-offset: -1px; }
   .passage-picture__label { color: CanvasText; }
   .language-split-projection { color: CanvasText; }
   .language-split-projection::before { outline: none; background: transparent; }

@@ -39,7 +39,7 @@ const PICTURE_COPY: Readonly<Record<MatterLocale, PictureCopy>> = Object.freeze(
     unavailable: "絵を読み込めません",
   }),
   "de-DE": Object.freeze({
-    alt: "KI-Zeichnung zu diesem Absatz",
+    alt: "KI-Bild zu diesem Absatz",
     absent: "Bild nicht auf diesem Gerät",
     damaged: "Bild beschädigt",
     unavailable: "Bild nicht lesbar",

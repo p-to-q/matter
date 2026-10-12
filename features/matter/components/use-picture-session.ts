@@ -24,6 +24,7 @@ import {
   mintPictureRequestId,
 } from "./picture-authoring";
 import { PictureAuthoringContext } from "./picture-authoring-context";
+import { pictureOpeningAvailability, warmPictureAvailability } from "./picture-availability-timing";
 import { PICTURE_SHARED } from "./picture-shared";
 import {
   pictureControlPresentation,
@@ -52,6 +53,19 @@ export type PictureSession = Readonly<{
   actions: PointTalkPictureActions;
 }>;
 
+/** A press that lands before the driver exists; carried out once, the moment it does. */
+class PendingArm {
+  private requested = false;
+  request(): void {
+    this.requested = true;
+  }
+  take(): boolean {
+    const was = this.requested;
+    this.requested = false;
+    return was;
+  }
+}
+
 const NO_ACTIONS: PointTalkPictureActions = Object.freeze({
   arm: ignore,
   confirm: ignore,
@@ -64,10 +78,13 @@ const NO_ACTIONS: PointTalkPictureActions = Object.freeze({
 });
 
 /**
- * One picture turn for one open Point and Talk session on one passage. The
- * availability question is asked when the session opens and answered from the
- * app's single memo; the driver exists only once that answer is `available`,
- * and is disposed with the session. Null when the app has no picture store.
+ * One picture turn for one open Point and Talk session on one passage. Whether
+ * the control exists is decided once, when the session opens, from the newest
+ * answer the app's single memo holds (the lens has normally asked already); a
+ * read that finishes later is heard by the next opening, so the row never
+ * changes under the person's hand. The driver exists only for an `available`
+ * opening and is disposed with the session. Null when the app has no picture
+ * store.
  */
 export function usePictureSession(input: Readonly<{
   nodeId: string;
@@ -79,10 +96,14 @@ export function usePictureSession(input: Readonly<{
 }>): PictureSession | null {
   const authoring = useContext(PictureAuthoringContext);
   const { documentEpoch, nodeId } = input;
-  const [availability, setAvailability] = useState<ImageSurfaceAvailability>(
-    () => authoring === null ? "unavailable" : PICTURE_SHARED.availability.peek(),
+  // Fixed for this opening: an answer that arrives later applies to the next.
+  const [availability] = useState<ImageSurfaceAvailability>(
+    () => pictureOpeningAvailability(PICTURE_SHARED.availability, authoring !== null),
   );
   const [driver, setDriver] = useState<PictureDriver | null>(null);
+  const [storeFailed, setStoreFailed] = useState(false);
+  // A press that lands while the store is still opening waits for it.
+  const [pending] = useState(() => new PendingArm());
   const [state, setState] = useState<PictureDriverState>(createPictureTurnState);
   const [keeping, setKeeping] = useState(false);
   // The document's room is a fact about the live tree, so it follows the tree
@@ -98,15 +119,11 @@ export function usePictureSession(input: Readonly<{
     localeRef.current = input.locale;
   });
 
+  // Renews the answer for the next opening (the memo shares one read among
+  // every caller and remembers even a closed answer for its window); nothing
+  // here changes what this opening shows.
   useEffect(() => {
-    if (authoring === null) return;
-    let live = true;
-    void PICTURE_SHARED.availability.get().then((answer) => {
-      if (live) setAvailability(answer);
-    });
-    return () => {
-      live = false;
-    };
+    if (authoring !== null) warmPictureAvailability(PICTURE_SHARED.availability);
   }, [authoring]);
 
   useEffect(() => {
@@ -142,13 +159,17 @@ export function usePictureSession(input: Readonly<{
       owner.driver = created;
       setDriver(created);
       setState(created.state);
-    }, () => undefined);
+      if (pending.take()) created.arm();
+    }, () => {
+      if (live) setStoreFailed(true);
+    });
     return () => {
       live = false;
+      pending.take();
       owner.driver?.dispose();
       setDriver(null);
     };
-  }, [authoring, availability, documentEpoch, nodeId]);
+  }, [authoring, availability, documentEpoch, nodeId, pending]);
 
   const keep = useCallback(() => {
     if (driver === null || authoring === null) return;
@@ -159,7 +180,11 @@ export function usePictureSession(input: Readonly<{
     }).finally(() => setKeeping(false));
   }, [authoring, driver]);
 
-  const actions = useMemo<PointTalkPictureActions>(() => driver === null ? NO_ACTIONS : Object.freeze({
+  const actions = useMemo<PointTalkPictureActions>(() => driver === null ? {
+    ...NO_ACTIONS,
+    // Before the driver exists, a press is remembered and carried out the moment it does.
+    arm: () => pending.request(),
+  } : Object.freeze({
     arm: () => driver.arm(),
     confirm: () => driver.confirm(),
     back: () => driver.back(),
@@ -171,16 +196,17 @@ export function usePictureSession(input: Readonly<{
       driver.arm();
       driver.back();
     },
-  }), [driver, keep]);
+  }), [driver, keep, pending]);
 
   const control = pictureControlPresentation({
-    availability: driver === null ? "unavailable" : availability,
+    availability,
     environmentSupported,
     documentHasRoom,
     passageText: input.passageText,
     // The passage's own turn counts: while it draws or previews, the control
     // is there but cannot start another.
     interactionPending: input.interactionPending || pictureHold(state.phase) !== "free",
+    storeFailed,
   });
   return useMemo(
     () => authoring === null ? null : Object.freeze({ state, control, keeping, actions }),

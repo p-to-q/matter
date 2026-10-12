@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MATTER_LOCALES } from "../config/locales";
 import { pictureControlCopy } from "./picture-control-copy";
+import { pictureCopy } from "./picture-copy";
 
 const VISIBLE_LABELS = {
   "zh-CN": "绘图",
@@ -34,10 +35,13 @@ describe("picture control copy", () => {
     for (const locale of MATTER_LOCALES) {
       const copy = pictureControlCopy(locale);
       expect(copy.control).toBe(VISIBLE_LABELS[locale]);
-      expect(copy.controlName).toContain(copy.control);
+      // The accessible name contains the visible label, as a person says it
+      // inside a sentence: the comparison ignores case ("Bild … zeichnen").
+      expect(copy.controlName.toLocaleLowerCase(locale)).toContain(copy.control.toLocaleLowerCase(locale));
       expect([copy.keep, copy.discard]).toEqual(KEEP_AND_DISCARD[locale]);
     }
     expect(pictureControlCopy("en-US").controlName).toBe("Draw a picture from this passage");
+    expect(pictureControlCopy("de-DE").controlName).toBe("Bild zu diesem Absatz zeichnen");
   });
 
   it("never calls the wait a cancellation, because the relay is not cancelled", () => {
@@ -72,11 +76,69 @@ describe("picture control copy", () => {
     expect(english.documentFull).toBe("This document already holds as many pictures as it can.");
     expect(english.tryAgain).toBe("Try again");
     expect(english.keepNotSaved).toBe(
-      "Couldn't save on this device. Kept for this session — try Keep again.",
+      "Couldn’t save on this device. Kept for this session — try Keep again.",
     );
-    expect(english.keepRefused).toBe("This picture can't be kept here.");
+    expect(english.keepRefused).toBe("This picture can’t be kept here.");
     expect(english.announceDrawing).toBe("Drawing");
     expect(english.announceArrived).toBe("Picture ready.");
     expect(english.announceKept).toBe("Kept. Undo is available.");
+  });
+
+  it("says how long the wait may be, in the arm statement's own words", () => {
+    expect(pictureControlCopy("en-US").drawingExpectation).toBe("Up to a minute.");
+    expect(pictureControlCopy("zh-CN").drawingExpectation).toBe("最多需要一分钟。");
+    expect(pictureControlCopy("zh-TW").drawingExpectation).toBe("最多需要一分鐘。");
+    expect(pictureControlCopy("ja-JP").drawingExpectation).toBe("最長で1分ほどかかります。");
+    expect(pictureControlCopy("de-DE").drawingExpectation).toBe("Dauert bis zu einer Minute.");
+    for (const locale of MATTER_LOCALES) {
+      const copy = pictureControlCopy(locale);
+      // One line, and a different thing from the step it sits under.
+      expect(copy.drawingExpectation).not.toContain("\n");
+      expect(copy.drawingExpectation).not.toBe(copy.drawing);
+    }
+  });
+
+  describe("de-DE", () => {
+    const german = () => Object.values(pictureControlCopy("de-DE")).join("\n");
+
+    it("addresses the person formally, like the rest of the product chrome", () => {
+      expect(german()).not.toMatch(/\b(?:du|dein\w*|dir|dich|deine\w*)\b/iu);
+      expect(german()).not.toMatch(/\b(?:versuche|geh|gehst|klicke|tippe|wähle)\b/iu);
+      expect(pictureControlCopy("de-DE").armStatement).toContain("Ihr Absatz");
+      expect(pictureControlCopy("de-DE").keepNotSaved).toContain("versuchen Sie");
+    });
+
+    it("says Bild for the thing and keeps Zeichnen for the control", () => {
+      expect(german()).not.toMatch(/Zeichnung/u);
+      expect(pictureControlCopy("de-DE").control).toBe("Zeichnen");
+      expect(pictureControlCopy("de-DE").draw).toBe("Zeichnen");
+      expect(pictureControlCopy("de-DE").controlName).toBe("Bild zu diesem Absatz zeichnen");
+      expect(pictureCopy("de-DE").alt).toContain("Bild");
+      expect(Object.values(pictureCopy("de-DE")).join(" ")).not.toMatch(/Zeichnung/u);
+    });
+  });
+
+  describe("zh-CN and zh-TW", () => {
+    it.each([["zh-CN", /生成/u, /绘/u], ["zh-TW", /生成/u, /繪/u]] as const)(
+      "%s keeps to the control's own word and never says 生成 for the same act",
+      (locale, forbidden, expected) => {
+        const copy = pictureControlCopy(locale);
+        for (const [key, text] of Object.entries(copy)) {
+          expect(text, `${locale}.${key}`).not.toMatch(forbidden);
+        }
+        expect(copy.notDrawn).toMatch(expected);
+        expect(copy.anotherInFlight).toMatch(expected);
+        expect(copy.armStatement).toMatch(expected);
+        expect(pictureCopy(locale).alt).toMatch(expected);
+      },
+    );
+  });
+
+  it("writes English with the typographic apostrophe, like the rest of the app", () => {
+    for (const text of [...Object.values(pictureControlCopy("en-US")), ...Object.values(pictureCopy("en-US"))]) {
+      expect(text).not.toContain("'");
+    }
+    expect(pictureControlCopy("en-US").keepNotSaved).toContain("Couldn’t");
+    expect(pictureControlCopy("en-US").keepRefused).toContain("can’t");
   });
 });

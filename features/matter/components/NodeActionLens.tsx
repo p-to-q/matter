@@ -22,6 +22,7 @@ import type { UnderBlockReason } from "../runtime/under-child";
 import { MatterAiIcon, MinusIcon, PlusIcon, UnderIcon, WikiChangeIcon } from "./icons";
 import { nodeActionLensCopy } from "./node-action-lens-copy";
 import { useEscapeLayer } from "./escape-layers";
+import { usePictureAvailabilityWarm } from "./use-picture-availability-warm";
 import {
   projectNodeHandleMetrics,
   projectNodeHandlePosition,
@@ -467,6 +468,11 @@ export function NodeActionLens({
   }, [underRecordingNodeId]);
 
   const lensVisible = activeTarget !== null && currentPlacement !== null && actionCount > 0;
+  // The mark that opens Point and Talk is the moment to learn whether its field
+  // will offer a picture, so the row is settled before the field opens.
+  usePictureAvailabilityWarm(
+    lensVisible && activeTarget.kind === "active" && pointTalkEligibleNodeIds.has(activeTarget.nodeId),
+  );
   // A paper surface: chrome or a panel that covers the paper outranks it.
   useEscapeLayer(lensVisible, "paper", () => {
     if (activeTarget === null) return false;

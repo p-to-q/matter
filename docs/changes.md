@@ -17,6 +17,29 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — the popup row never squeezes Rewrite, the Draw control is known before the popup opens, and previews keep their shape
+
+Changed: in the Point-and-Talk field the order is input, mic, Draw, Rewrite, right-aligned to
+Rewrite. Rewrite and Draw never shrink or wrap; only the input flexes, with a floor. With the
+control present the field grows by the control's measured width (264→309 in en-US) so the input
+keeps its width; when the floor cannot be kept, the three controls take a second row, still
+right-aligned, with 48 px targets. One focus ring (2 px, 1 px offset) serves every control in the
+field. Availability is now asked when a selectable passage's lens first shows, not when the field
+opens, each opening decides its row once from the newest answer ever received, and a late answer
+applies to the next opening; a closed gate costs at most one health request a minute, and page
+load alone never asks. A picture previews and sits in the passage at its true aspect (height
+capped at 248 px in the popup, min(320 px, 60vh) in the passage), placeholder plates are opaque,
+and the drawing step says "up to a minute". German picture copy uses the formal address.
+
+Why: with the control present, Rewrite was clipped in 8 of 40 measured language/width/theme
+combinations ("Rewrite" 48.4 px wide for a 54.5 px label; "Ändern" 38.7 px for 54 px), and the
+control appeared a moment after the field and reflowed it.
+
+Forecloses: a control that pops into an open field, and a preview whose shape differs from the
+kept picture. The 100→270 px jump on reload that the craft review attributed to the picture is
+the seeded document being replaced by the stored one and affects every restored document; it is
+recorded in `open.md` as a separate hydration decision.
+
 ## 2026-10-12 — a person adds a child by tapping Under and speaking; Branch leaves the main rail
 
 Changed: the selected-passage lens has a third mark, Under. Tapping it arms one utterance of

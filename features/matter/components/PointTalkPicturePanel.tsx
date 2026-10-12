@@ -61,7 +61,10 @@ export function PointTalkPicturePanel({
     case "drawing":
       return (
         <div className="point-talk__picture" data-picture-step="drawing">
-          <p className="point-talk__statement" dir="auto">{copy.drawing}</p>
+          <div className="point-talk__drawing-text">
+            <p className="point-talk__statement" dir="auto">{copy.drawing}</p>
+            <p className="point-talk__quiet" dir="auto">{copy.drawingExpectation}</p>
+          </div>
           <div className="point-talk__picture-actions">
             <button
               className="point-talk__text-button"

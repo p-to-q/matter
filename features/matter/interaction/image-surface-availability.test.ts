@@ -348,4 +348,78 @@ describe("image availability cache", () => {
   it.each([0, -5, Number.NaN, Number.POSITIVE_INFINITY])("refuses a ttl of %s", (ttlMs) => {
     expect(() => createImageSurfaceAvailabilityCache({ read: async () => "available", ttlMs })).toThrow(RangeError);
   });
+
+  describe("the newest answer an opening decides from", () => {
+    it("is unavailable until the page has learned anything, and learning needs a read", () => {
+      const { cache, read } = harness();
+      expect(cache.lastKnown()).toBe("unavailable");
+      expect(read).not.toHaveBeenCalled();
+    });
+
+    it("is the answer the read brought, and outlives the ttl that makes peek forget it", async () => {
+      const { cache, advance } = harness();
+      await cache.get();
+      expect(cache.lastKnown()).toBe("available");
+      advance(60_000);
+      expect(cache.peek()).toBe("unavailable");
+      expect(cache.lastKnown()).toBe("available");
+    });
+
+    it("keeps the old answer while the read that renews it is in flight, then takes the new one", async () => {
+      let clock = 0;
+      const answers: ImageSurfaceAvailability[] = ["available", "unavailable"];
+      let finish!: (value: ImageSurfaceAvailability) => void;
+      const read = vi.fn(() => answers.length > 1
+        ? Promise.resolve(answers.shift()!)
+        : new Promise<ImageSurfaceAvailability>((resolve) => { finish = resolve; }));
+      const cache = createImageSurfaceAvailabilityCache({ read, ttlMs: 1_000, now: () => clock });
+      await cache.get();
+      clock = 1_000;
+      const renewing = cache.get();
+      expect(cache.lastKnown()).toBe("available");
+      finish("unavailable");
+      await renewing;
+      expect(cache.lastKnown()).toBe("unavailable");
+    });
+
+    it("hears a closed answer too: the control is withdrawn from the next opening, not just never offered", async () => {
+      let clock = 0;
+      const answers: ImageSurfaceAvailability[] = ["available", "unavailable"];
+      const cache = createImageSurfaceAvailabilityCache({
+        read: async () => answers.shift() ?? "unavailable",
+        ttlMs: 1_000,
+        now: () => clock,
+      });
+      await cache.get();
+      clock = 2_000;
+      await cache.get();
+      expect(cache.lastKnown()).toBe("unavailable");
+    });
+
+    it("is not changed by a read that was invalidated while it was out", async () => {
+      let finish!: (value: ImageSurfaceAvailability) => void;
+      const read = vi.fn(() => new Promise<ImageSurfaceAvailability>((resolve) => { finish = resolve; }));
+      const cache = createImageSurfaceAvailabilityCache({ read });
+      const reading = cache.get();
+      cache.invalidate();
+      finish("available");
+      await reading;
+      expect(cache.lastKnown()).toBe("unavailable");
+    });
+
+    it("is forgotten by invalidate", async () => {
+      const { cache } = harness();
+      await cache.get();
+      cache.invalidate();
+      expect(cache.lastKnown()).toBe("unavailable");
+    });
+
+    it("only ever hands out the two literal answers", async () => {
+      const cache = createImageSurfaceAvailabilityCache({
+        read: async () => "fixture" as unknown as ImageSurfaceAvailability,
+      });
+      await cache.get();
+      expect(cache.lastKnown()).toBe("unavailable");
+    });
+  });
 });

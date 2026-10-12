@@ -31,6 +31,7 @@ import {
 import { usePresence, useSettledStatus } from "./use-presence";
 import { pointTalkPresenceClose, pointTalkReleaseReason } from "./point-talk-close";
 import {
+  projectPointTalkControlReserve,
   projectPointTalkEntrance,
   projectPointTalkPlacementWithinSurfaces,
   projectPointTalkScale,
@@ -91,6 +92,8 @@ export type PointTalkSurfaceView = Readonly<{
   top: number;
   maxWidth: number;
   scale: number;
+  /** The measured room the picture control lends the field's width, at scale 1; 0 without one. */
+  controlReserve: number;
   entrance: PointTalkEntrance | null;
   content: PointTalkSurfaceContent;
 }>;
@@ -160,6 +163,7 @@ export function PointTalkComposer({
   const measurementFrameRef = useRef<number | null>(null);
   const [placement, setPlacement] = useState<PointTalkPlacement | null>(null);
   const [entrance, setEntrance] = useState<PointTalkEntrance | null>(null);
+  const [measuredReserve, setMeasuredReserve] = useState(0);
   const inputId = useId();
   const phase = controller.state.phase;
   const submitted = textSwapActionWasSubmitted(controller.state);
@@ -418,6 +422,35 @@ export function PointTalkComposer({
     shownStatus,
     voiceAvailable,
   ]);
+  // The picture control is plain text whose width depends on the language, so
+  // the field learns it from the control itself: read before the first paint
+  // (the field is still hidden then) and again if the font arrives later. The
+  // field is wider by that width plus one gap, which keeps the direction input
+  // as wide as it is without the control. The last width is kept while a
+  // picture step hides the row, so the field never narrows under its steps.
+  const hasPictureControl = pictureControl !== "absent";
+  // A field without the control takes no room for it, whatever an earlier opening measured.
+  const controlReserve = hasPictureControl ? measuredReserve : 0;
+  const formKey = content.kind === "form" ? content.formKey : null;
+  useLayoutEffect(() => {
+    const bubble = bubbleRef.current;
+    if (!hasPictureControl || bubble === null || !formVisible) return;
+    const control = bubble.querySelector<HTMLElement>("[data-picture-control]");
+    if (control === null) return;
+    const read = () => {
+      const next = projectPointTalkControlReserve({
+        controlWidth: control.offsetWidth,
+        scale: Number.parseFloat(getComputedStyle(bubble).getPropertyValue("--point-talk-scale")),
+      });
+      if (next !== null) setMeasuredReserve((current) => current === next ? current : next);
+    };
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(read);
+    observer.observe(control);
+    return () => observer.disconnect();
+  }, [formKey, formVisible, hasPictureControl, locale, pictureStep]);
+
   const surfaceView = useMemo<PointTalkSurfaceView | null>(
     () => !surfaceLive || !surfaceAvailable || placement === null
       ? null
@@ -427,10 +460,11 @@ export function PointTalkComposer({
           top: placement.top,
           maxWidth: placement.maxWidth,
           scale: visualScale,
+          controlReserve,
           entrance,
           content,
         }),
-    [content, entrance, phase, placement, surfaceAvailable, surfaceLive, visualScale],
+    [content, controlReserve, entrance, phase, placement, surfaceAvailable, surfaceLive, visualScale],
   );
   const lastSurfaceViewRef = useRef<PointTalkSurfaceView | null>(null);
   const typedDirectionRef = useRef<Readonly<{ formKey: string; value: string }> | null>(null);
@@ -487,12 +521,13 @@ export function PointTalkComposer({
       inert={!surfaceAvailable || undefined}
       ref={bubbleRef}
       style={!placed
-        ? { visibility: "hidden" }
+        ? { visibility: "hidden", ...pointTalkReserveStyle(controlReserve) } as CSSProperties
         : {
             left: placement.left,
             top: placement.top,
             "--point-talk-available-width": `${placement.maxWidth}px`,
             "--point-talk-scale": visualScale,
+            ...pointTalkReserveStyle(controlReserve),
             ...pointTalkEntranceStyle(entrance),
           } as CSSProperties}
       onInput={recordTypedDirection}
@@ -566,6 +601,7 @@ export function PointTalkExit({
         top: view.top,
         "--point-talk-available-width": `${view.maxWidth}px`,
         "--point-talk-scale": view.scale,
+        ...pointTalkReserveStyle(view.controlReserve),
         ...pointTalkEntranceStyle(view.entrance),
         // The fade lasts exactly as long as the timer that unmounts it.
         "--presence-exit-duration": `${
@@ -683,6 +719,17 @@ function pointTalkPresencePolicy() {
   return POINT_TALK_PRESENCE_POLICY;
 }
 
+/**
+ * The picture control lends the field its own width plus one gap, so the
+ * direction input keeps the room it has without the control. Unscaled: the
+ * stylesheet multiplies it by the field's scale.
+ */
+export function pointTalkReserveStyle(controlReserve: number): CSSProperties {
+  return controlReserve > 0
+    ? { "--point-talk-control-reserve": `${controlReserve}px` } as CSSProperties
+    : {};
+}
+
 /** The entrance's origin, travel, and duration, all read by CSS. */
 function pointTalkEntranceStyle(entrance: PointTalkEntrance | null): CSSProperties {
   return {
@@ -792,37 +839,41 @@ function PointTalkForm({
         type="text"
         value={direction}
       />
-      <button
-        aria-label={copy.voice}
-        className="point-talk__voice"
-        disabled={!voiceAvailable}
-        onClick={onStartVoice}
-        title={copy.voice}
-        type="button"
-      >
-        <VoiceIcon />
-      </button>
-      {pictureControl === "absent" ? null : (
-        // Never `disabled`: focus must survive a pending interaction. It
-        // ignores the typed direction and is not the form's submit.
+      {/* One cluster, right-aligned to the submit button's edge: when the input
+          cannot keep its floor beside it, the whole cluster takes a row of its own. */}
+      <div className="point-talk__actions">
         <button
-          aria-describedby={pictureControl === "full" ? pictureFullReasonId : undefined}
-          aria-disabled={pictureControl === "disabled" || pictureControl === "full" || undefined}
-          aria-label={pictureCopy.controlName}
-          className="point-talk__text-button point-talk__draw"
-          data-picture-control
-          onClick={pictureControl === "enabled" ? onArmPicture : undefined}
+          aria-label={copy.voice}
+          className="point-talk__voice"
+          disabled={!voiceAvailable}
+          onClick={onStartVoice}
+          title={copy.voice}
           type="button"
         >
-          {pictureCopy.control}
+          <VoiceIcon />
         </button>
-      )}
-      {pictureControl === "full" ? (
-        <span className="visually-hidden" id={pictureFullReasonId}>{pictureCopy.documentFull}</span>
-      ) : null}
-      <button className="point-talk__submit" disabled={direction.trim().length === 0} type="submit">
-        {copy.apply}
-      </button>
+        {pictureControl === "absent" ? null : (
+          // Never `disabled`: focus must survive a pending interaction. It
+          // ignores the typed direction and is not the form's submit.
+          <button
+            aria-describedby={pictureControl === "full" ? pictureFullReasonId : undefined}
+            aria-disabled={pictureControl === "disabled" || pictureControl === "full" || undefined}
+            aria-label={pictureCopy.controlName}
+            className="point-talk__text-button point-talk__draw"
+            data-picture-control
+            onClick={pictureControl === "enabled" ? onArmPicture : undefined}
+            type="button"
+          >
+            {pictureCopy.control}
+          </button>
+        )}
+        {pictureControl === "full" ? (
+          <span className="visually-hidden" id={pictureFullReasonId}>{pictureCopy.documentFull}</span>
+        ) : null}
+        <button className="point-talk__submit" disabled={direction.trim().length === 0} type="submit">
+          {copy.apply}
+        </button>
+      </div>
     </form>
   );
 }

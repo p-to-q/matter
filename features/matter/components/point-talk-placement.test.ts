@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   excludePointTalkRightOccluder,
   intersectPointTalkBounds,
+  POINT_TALK_GAP_PX,
+  projectPointTalkControlReserve,
   projectPointTalkEntrance,
   projectPointTalkPlacement,
   projectPointTalkPlacementWithinSurfaces,
@@ -183,5 +185,82 @@ describe("Point-and-Talk entrance", () => {
       target,
       travelPx: 4,
     })).toEqual({ originX: 0, originY: 38, travelY: -4 });
+  });
+});
+
+describe("Point-and-Talk width with the picture control", () => {
+  it("lends the field the control's own width at scale 1, plus one gap", () => {
+    expect(POINT_TALK_GAP_PX).toBe(4);
+    expect(projectPointTalkControlReserve({ controlWidth: 41.5, scale: 1 })).toBe(46);
+    expect(projectPointTalkControlReserve({ controlWidth: 66.9, scale: 1 })).toBe(71);
+    // Laid out at a larger scale, the width is brought back to scale 1: the
+    // stylesheet multiplies it by the scale again.
+    expect(projectPointTalkControlReserve({ controlWidth: 55, scale: 1.1 })).toBe(54);
+    expect(projectPointTalkControlReserve({ controlWidth: 37, scale: .74 })).toBe(54);
+  });
+
+  it("reports nothing for a control that has no width, so the field keeps the room it took", () => {
+    expect(projectPointTalkControlReserve({ controlWidth: 0, scale: 1 })).toBeNull();
+    expect(projectPointTalkControlReserve({ controlWidth: -3, scale: 1 })).toBeNull();
+    expect(projectPointTalkControlReserve({ controlWidth: Number.NaN, scale: 1 })).toBeNull();
+    expect(projectPointTalkControlReserve({ controlWidth: Number.POSITIVE_INFINITY, scale: 1 })).toBeNull();
+  });
+
+  it("reads an unusable scale as 1", () => {
+    for (const scale of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(projectPointTalkControlReserve({ controlWidth: 40, scale })).toBe(44);
+    }
+  });
+
+  const field = { left: 304, top: 12, right: 1268, bottom: 788 };
+  const rail = { left: 1196, top: 216, right: 1256, bottom: 504 };
+
+  it("places the wider box clear of the tool rail and inside the paper, wherever its passage is", () => {
+    for (const bubbleWidth of [264, 309, 335]) {
+      for (const targetLeft of [320, 700, 1000, 1180]) {
+        const projected = projectPointTalkPlacementWithinSurfaces({
+          target: { left: targetLeft, top: 400, right: targetLeft + 300, bottom: 440 },
+          bubble: { width: bubbleWidth, height: 38 },
+          visualViewport: { left: 0, top: 0, right: 1280, bottom: 800 },
+          boundary: field,
+          positioningSurface: field,
+          rightOccluder: rail,
+        });
+        expect(projected.kind).toBe("placed");
+        if (projected.kind !== "placed") continue;
+        expect(projected.placement.left).toBeGreaterThanOrEqual(316);
+        expect(projected.placement.left + bubbleWidth).toBeLessThanOrEqual(rail.left - 12);
+      }
+    }
+  });
+
+  it("clamps the wider box further left than the base box near the rail", () => {
+    const place = (width: number) => projectPointTalkPlacementWithinSurfaces({
+      target: { left: 1100, top: 400, right: 1180, bottom: 440 },
+      bubble: { width, height: 38 },
+      visualViewport: { left: 0, top: 0, right: 1280, bottom: 800 },
+      boundary: field,
+      positioningSurface: field,
+      rightOccluder: rail,
+    });
+    const base = place(264);
+    const grown = place(309);
+    if (base.kind !== "placed" || grown.kind !== "placed") throw new Error("not placed");
+    expect(base.placement.left - grown.placement.left).toBe(45);
+  });
+
+  it("offers the wider box no more room than the visible field has", () => {
+    const projected = projectPointTalkPlacementWithinSurfaces({
+      target: { left: 20, top: 400, right: 300, bottom: 440 },
+      bubble: { width: 335, height: 38 },
+      visualViewport: { left: 0, top: 0, right: 390, bottom: 844 },
+      boundary: { left: 9, top: 9, right: 381, bottom: 835 },
+      positioningSurface: { left: 9, top: 9, right: 381, bottom: 835 },
+      rightOccluder: { left: 306, top: 200, right: 381, bottom: 600 },
+    });
+    expect(projected.kind).toBe("placed");
+    if (projected.kind !== "placed") return;
+    // 306 − 9 − 2 × 12: the field's own width limit, which the stylesheet reads.
+    expect(projected.placement.maxWidth).toBe(273);
   });
 });

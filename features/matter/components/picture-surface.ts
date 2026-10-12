@@ -26,9 +26,12 @@ export type PictureControlPresentation = "absent" | "enabled" | "disabled" | "fu
 /**
  * The control exists only when the health read said `available`, this browser
  * can finish a picture it has paid for, and the passage can be drawn from. It
- * stays, `aria-disabled`, while another interaction is pending or the document
- * is full, so focus survives. The image contract decides what a drawable
- * passage is.
+ * stays, `aria-disabled`, while another interaction is pending, the document
+ * is full, or the picture store could not be opened, so focus survives. Whether
+ * the store is still opening is not an input: the row is decided when the field
+ * opens and never changes after, so a store that is merely slow leaves the
+ * control as it will be and holds a press until the store is ready. The image
+ * contract decides what a drawable passage is.
  */
 export function pictureControlPresentation(input: Readonly<{
   availability: ImageSurfaceAvailability;
@@ -37,13 +40,15 @@ export function pictureControlPresentation(input: Readonly<{
   documentHasRoom: boolean;
   passageText: string | null;
   interactionPending: boolean;
+  /** The store could not be opened for this passage; the control stays, unable to start. */
+  storeFailed: boolean;
 }>): PictureControlPresentation {
   if (
     input.availability !== "available" ||
     !input.environmentSupported ||
     !canDrawFromPassage(input.passageText)
   ) return "absent";
-  if (input.interactionPending) return "disabled";
+  if (input.interactionPending || input.storeFailed) return "disabled";
   return input.documentHasRoom ? "enabled" : "full";
 }
 
