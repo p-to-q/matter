@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { fixtureUiCopy } from "./matter-ui-copy";
+import { addChildUnder, prewarmAdmissionRoutes } from "./under-driver";
 
 const rootId = "thought_fixture_root";
 
@@ -7,7 +8,7 @@ test("a clean tab takes up material another tab saves, without a reload gesture"
   const writer = await openSaved(context.newPage());
   const reader = await openSaved(context.newPage());
 
-  const childId = await commitBranch(writer);
+  const childId = await commitUnderChild(writer);
 
   await expect(reader.locator(`[data-thought-id="${childId}"]`)).toHaveCount(1);
   await expect(reader.locator("aside.material-files .material-files__profile-meta"))
@@ -25,12 +26,12 @@ test("a tab holding refused material meets another tab's save as a conflict", as
     };
   });
   await openSaved(Promise.resolve(holder));
-  const heldId = await commitBranch(holder, false);
+  const heldId = await commitUnderChild(holder, false);
   const sidebar = holder.locator("aside.material-files");
   await expect(sidebar.locator(".material-files__profile-meta"))
     .toHaveText(fixtureUiCopy.materialFiles.durabilityNotSaved);
 
-  await commitBranch(writer);
+  await commitUnderChild(writer);
 
   await expect(sidebar.locator(".material-files__profile-meta"))
     .toHaveText(fixtureUiCopy.materialFiles.durabilityNewerCopy);
@@ -115,7 +116,7 @@ test("a hidden tab keeps a submitted fixture AI turn while another tab commits",
   await expect.poll(() => requests).toBe(1);
 
   await reader.evaluate(() => (window as unknown as { __matterSetHidden(next: boolean): void }).__matterSetHidden(true));
-  const writerChild = await commitBranch(writer);
+  const writerChild = await commitUnderChild(writer);
 
   // The broadcast has arrived, yet the hidden tab keeps its document instance:
   // the submitted turn is bound to it and would be revoked by a replacement.
@@ -148,18 +149,17 @@ test("a hidden tab keeps a submitted fixture AI turn while another tab commits",
 async function openSaved(opening: Promise<Page>): Promise<Page> {
   const page = await opening;
   await page.setViewportSize({ width: 1280, height: 800 });
+  await prewarmAdmissionRoutes(page);
   if (page.url() === "about:blank") await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await expect(page.locator("aside.material-files")).toHaveAttribute("data-persistence-phase", "saved");
   return page;
 }
 
-async function commitBranch(page: Page, awaitStored = true): Promise<string> {
-  const before = await thoughtIds(page);
-  await page.locator(`[data-thought-id="${rootId}"]`).locator("[data-thought-text-id]").click();
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
-  const childId = (await thoughtIds(page)).find((id) => !before.includes(id));
-  if (childId === undefined) throw new Error("the branch was not created");
+async function commitUnderChild(page: Page, awaitStored = true): Promise<string> {
+  // Spoken under the root through the Under mark; the repair that follows is a
+  // second commit, so the history is at rest before any assertion follows.
+  const childId = await addChildUnder(page, rootId);
   if (awaitStored) {
     await expect(page.locator("aside.material-files")).toHaveAttribute("data-persistence-phase", "saved");
     await expect.poll(async () => {
@@ -168,12 +168,6 @@ async function commitBranch(page: Page, awaitStored = true): Promise<string> {
     }).toBe(true);
   }
   return childId;
-}
-
-async function thoughtIds(page: Page): Promise<string[]> {
-  return page.locator("[data-thought-id]").evaluateAll((nodes) =>
-    nodes.map((node) => node.getAttribute("data-thought-id")).filter((id): id is string => id !== null),
-  );
 }
 
 async function readStoredRevision(): Promise<number | null> {

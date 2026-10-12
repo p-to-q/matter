@@ -7,6 +7,9 @@ import dynamic from "next/dynamic";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { NavigationState } from "../runtime/navigation";
 import { admissionTargetExists } from "../runtime/admission";
+import { previewBranchEnabled } from "../config/preview-branch";
+import { createUnderAnchor, underBlockReason } from "../runtime/under-child";
+import { routeVoiceTool, voiceToolIsAvailable } from "../runtime/voice-tool-route";
 import type { TextSwapInteractionState } from "../runtime/text-swap-interaction";
 import { layoutColumnarTree } from "../layout/columnar-layout";
 import type { ColumnarLayout, LayoutNode } from "../layout/model";
@@ -1544,6 +1547,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
   ]);
   const stretchRecoveryRef = useRef<() => void>(() => undefined);
   const admissionCapturePending = admissionCaptureIsActive(props.admission.state);
+  // Under arms ONE utterance: the attempt it began owns the capture until it
+  // returns to idle, and the token is how nothing else can claim it.
+  const [underToken, setUnderToken] = useState<string | null>(null);
+  const underAdmission = props.admission.state.phase !== "idle" &&
+    props.admission.state.token === underToken &&
+    props.admission.state.anchor.kind === "child"
+    ? props.admission.state
+    : null;
+  const underOwnsCapture = underAdmission !== null && admissionCapturePending;
+  const underRecordingNodeId = underAdmission !== null && underAdmission.anchor.kind === "child" &&
+      (underAdmission.phase === "requesting" || underAdmission.phase === "recording")
+    ? underAdmission.anchor.parentNodeId
+    : null;
+  // Escape withdraws the armed recording before any layer beneath it closes.
+  const cancelAdmission = props.admission.cancel;
+  useEscapeLayer(underRecordingNodeId !== null, "gesture", () => {
+    cancelAdmission();
+    return true;
+  });
   const elasticSelection = persistenceLoading || admissionCapturePending
     ? null
     : stretchSelection;
@@ -2431,11 +2453,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
       : admissionVoiceAvailable;
   const admissionVoiceToolAvailable = admissionVoiceAvailable &&
     (props.admission.state.phase === "idle" || props.admission.state.phase === "recording");
-  const voiceToolAvailable = pointTalkHostNodeId !== null
-    ? activePointTalkNodeId !== null && voiceAvailable
-    : selectedNode !== null
-      ? voiceAvailable
-      : admissionVoiceToolAvailable;
+  const voiceToolAvailable = voiceToolIsAvailable({
+    admissionPhase: props.admission.state.phase,
+    pointTalkHosted: pointTalkHostNodeId !== null,
+    pointTalkActive: activePointTalkNodeId !== null,
+    targetVoiceAvailable: voiceAvailable,
+    passageSelected: selectedNode !== null,
+    admissionToolAvailable: admissionVoiceToolAvailable,
+  });
   const admissionFocusContextRef = useRef({ tree, documentEpoch: props.documentEpoch });
   const admissionFocusFrameRef = useRef<Readonly<{
     basis: AdmissionFocusRestorationBasis;
@@ -2501,9 +2526,39 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     admissionFocusFrameRef.current = Object.freeze({ basis, frameId });
   }, [cancelAdmissionFocusRestore, props.documentEpoch, tree]);
+  const underBlocked = (nodeId: string) => underBlockReason({
+    tree,
+    nodeId,
+    voiceAdmissionAvailable: admissionVoiceAvailable,
+    heldAside: heldAsideRootIds.has(nodeId) || !workingContext.activeNodeIds.has(nodeId),
+    interactionBusy: persistenceLoading || props.admission.state.phase !== "idle",
+  });
+  const startUnder = (nodeId: string) => {
+    // The mark is a toggle: while its utterance is armed, tapping it withdraws.
+    if (underRecordingNodeId === nodeId) {
+      props.admission.cancel();
+      return;
+    }
+    if (underBlocked(nodeId) !== null) return;
+    const handle = createUnderAnchor(tree, navigation, nodeId);
+    if (!handle.ok || handle.anchor.target !== "child") return;
+    dismissPaperPresentations();
+    if (lasso.active) lasso.deactivate();
+    // The mark may sit on a passage that is only hovered. Selecting it keeps
+    // the rule that speaking again appends the next child to the same parent.
+    if (navigation.selectedNodeId !== nodeId) props.onSelectNode(nodeId);
+    setUnderToken(props.admission.start({
+      kind: "child",
+      treeId: handle.anchor.treeId,
+      baseRevision: handle.anchor.baseRevision,
+      parentNodeId: handle.anchor.parentNodeId,
+    }));
+  };
+  const previewBranch = previewBranchEnabled();
   const tools = useMemo(
     () =>
       projectTools({
+        previewBranch,
         view: navigation.mode,
           selected:
           toolTargetNode === null
@@ -2516,7 +2571,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         canUndo,
         interaction: interactionPending ? "pending" : "idle",
       }),
-    [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, toolTargetNode],
+    [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, previewBranch, toolTargetNode],
   );
   const toolSurface = useMemo(() => projectToolSurface(tools), [tools]);
   const projectInquiryPayload = useCallback(
@@ -3190,7 +3245,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   } as CSSProperties;
   const nodeActionsEnabled = activeLayout !== null &&
     canvasMode === "material" &&
-    !interactionPending &&
+    !persistenceLoading &&
+    (!admissionCapturePending || underOwnsCapture) &&
     !lasso.active &&
     !lasso.drawing &&
     !stretch.dragging &&
@@ -3973,13 +4029,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
           dispatchToolIntent(intent, props);
         }}
         onVoice={() => {
-          if (pointTalkHostNodeId !== null && activePointTalkNodeId === null) return;
-          if (activePointTalkNodeId !== null) {
-            if (pointTalkVoiceRecording) issuePointTalkVoiceCommand("stop");
-            else if (pointTalkVoiceStartable) issuePointTalkVoiceCommand("start");
+          const action = routeVoiceTool({
+            admissionPhase: props.admission.state.phase,
+            pointTalkHosted: pointTalkHostNodeId !== null,
+            pointTalkActive: activePointTalkNodeId !== null,
+            pointTalkRecording: pointTalkVoiceRecording,
+            pointTalkStartable: pointTalkVoiceStartable,
+            rewriteTargeted: selectedRewriteNodeId !== null,
+            admissionStartable: props.admissionAnchor !== null,
+          });
+          if (action === "none") return;
+          if (action === "stop-point-talk") {
+            issuePointTalkVoiceCommand("stop");
             return;
           }
-          if (selectedRewriteNodeId !== null) {
+          if (action === "start-point-talk") {
+            issuePointTalkVoiceCommand("start");
+            return;
+          }
+          if (action === "open-point-talk" && selectedRewriteNodeId !== null) {
             canvasChromeRef.current?.closeInquiry();
             abortElasticExpansion();
             if (lasso.active) exitLasso();
@@ -3997,9 +4065,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
             return;
           }
           dismissPaperPresentations();
-          if (props.admission.state.phase === "recording") {
+          if (action === "stop-admission") {
             props.admission.stop();
-          } else if (props.admissionAnchor !== null) {
+          } else if (action === "start-admission" && props.admissionAnchor !== null) {
             // Admission temporarily owns the surface, while the validated
             // lasso address stays available to re-arm after cancellation.
             if (lasso.active) lasso.deactivate();
@@ -4008,6 +4076,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }}
         surface={toolSurface}
         panActive={!lasso.active && canvasMode === "pan"}
+        previewBranch={previewBranch}
         voiceActive={props.admission.state.phase === "recording" ||
           pointTalkVoiceRecording ||
           (activePointTalkNodeId !== null && pointTalkPhase === "permission")}
@@ -4143,7 +4212,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             locale={props.locale}
             navigation={navigation}
             onOpenPointTalk={(nodeId, origin) => {
-              if (pointTalkHostNodeId !== null) return;
+              if (pointTalkHostNodeId !== null || props.admission.state.phase !== "idle") return;
               canvasChromeRef.current?.closeInquiry();
               abortElasticExpansion();
               props.admission.clearRepairPresentations();
@@ -4164,6 +4233,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
             pointTalkEligibleNodeIds={pointTalkEligibleNodeIds}
             positioningRef={materialPlaneRef}
             tree={tree}
+            under={{
+              blockedReason: underBlocked,
+              recordingNodeId: underRecordingNodeId,
+              onActivate: startUnder,
+            }}
             wikiReviews={wikiReviews}
           />
         ) : null}
@@ -5500,6 +5574,7 @@ function dispatchToolIntent(intent: ToolIntent, props: RootedMaterialProps) {
   if (
     !isCurrentToolIntent(
       {
+        previewBranch: previewBranchEnabled(),
         view: navigation.mode,
         selected:
           toolTargetNode === null
@@ -5585,8 +5660,10 @@ export function voiceToolLabel(input: Readonly<{
 }>): string {
   const copy = voiceToolCopy(input.locale);
   if (input.rewriteRecording) return copy.stopRewriteDirection;
-  if (input.rewriteTargeted) return copy.recordRewriteDirection;
+  // A live admission recording outranks a selected passage: Under records
+  // while a passage stays selected, and Voice then stops it.
   if (input.isRecording) return copy.stopRecording;
+  if (input.rewriteTargeted) return copy.recordRewriteDirection;
   if (input.firstAdmission) return copy.recordRootThought;
   if (input.anchor?.kind === "root") return copy.recordRootThought;
   if (input.anchor?.kind === "child" && input.anchor.parentNodeId === input.rootId) {

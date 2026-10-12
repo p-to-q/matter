@@ -33,6 +33,12 @@ export type SelectedToolTarget = {
 };
 
 export type ToolContext = {
+  /**
+   * Only a Preview build carries the retired Branch tool. Without it the
+   * projection offers no `insert-child` capability and the controller refuses
+   * the intent, so human child creation has one path: Under, on a passage.
+   */
+  readonly previewBranch: boolean;
   readonly view: "full" | "focus";
   readonly selected: SelectedToolTarget | null;
   readonly canUndo: boolean;

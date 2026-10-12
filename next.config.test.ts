@@ -1,9 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { PHASE_DEVELOPMENT_SERVER, PHASE_PRODUCTION_BUILD } from "next/constants";
-import {
+import matterNextConfig, {
   MATTER_OUTPUT_FILE_TRACING_EXCLUDES,
   resolveMatterNextDistDir,
+  resolveMatterPreviewBranch,
 } from "./next.config";
+
+describe("Matter Preview Branch build flag", () => {
+  it("is closed unless a build names it true", () => {
+    expect(resolveMatterPreviewBranch(undefined)).toBe(false);
+    expect(resolveMatterPreviewBranch("")).toBe(false);
+    expect(resolveMatterPreviewBranch("false")).toBe(false);
+    expect(resolveMatterPreviewBranch("1")).toBe(false);
+    expect(resolveMatterPreviewBranch("true")).toBe(true);
+  });
+
+  it("is on the public environment allow-list, closed by default", () => {
+    const config = matterNextConfig(PHASE_PRODUCTION_BUILD);
+    expect(config.env).toHaveProperty("NEXT_PUBLIC_MATTER_PREVIEW_BRANCH", "false");
+  });
+});
 
 describe("Matter Next development output", () => {
   it("excludes repository-only studio tooling from every server trace", () => {

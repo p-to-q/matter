@@ -2,6 +2,7 @@ import { DEFAULT_CANVAS_PREFERENCES } from "../features/matter/components/canvas
 import { admissionFeedbackActions } from "../features/matter/components/admission-feedback-copy";
 import { canvasRegionCopy } from "../features/matter/components/canvas-region-copy";
 import { materialFilesCopy } from "../features/matter/components/material-files-copy";
+import { nodeActionLensCopy } from "../features/matter/components/node-action-lens-copy";
 import { toolRailCopy } from "../features/matter/components/tool-rail-copy";
 import { voiceToolCopy } from "../features/matter/components/voice-tool-copy";
 
@@ -12,6 +13,7 @@ export const fixtureUiCopy = Object.freeze({
   materialFiles: materialFilesCopy(FIXTURE_LOCALE),
   admissionFeedback: admissionFeedbackActions(FIXTURE_LOCALE),
   canvasRegion: canvasRegionCopy(FIXTURE_LOCALE),
+  nodeActionLens: nodeActionLensCopy(FIXTURE_LOCALE),
   toolRail: toolRailCopy(FIXTURE_LOCALE),
   voiceTool: voiceToolCopy(FIXTURE_LOCALE),
 });

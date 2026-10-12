@@ -1,11 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 import { fixtureUiCopy } from "./matter-ui-copy";
+import { addChildUnder } from "./under-driver";
 
 const rootId = "thought_fixture_root";
 
 test("a pre-v6 inline journal migrates on its first save and still reverses the change", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  const childId = await commitOneBranch(page);
+  const childId = await commitOneChild(page);
 
   // Rewrite storage as the v5 build left it: the previous database version,
   // the journal inline in the row, and no per-step records.
@@ -19,16 +20,22 @@ test("a pre-v6 inline journal migrates on its first save and still reverses the 
   await expect(child).toHaveCount(1);
   const undo = page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true });
   await expect(undo).toBeEnabled();
+  // A spoken child is two steps, its words and their repair; undo both.
+  await undo.click();
+  await expect(child).toHaveCount(1);
   await undo.click();
   await expect(child).toHaveCount(0);
 
   // Undo is itself a save: the row now carries a manifest instead of the
-  // inline journal, and the undone step waits as one redo record.
-  await expect.poll(() => page.evaluate(readJournalShape)).toEqual({
+  // inline journal, and the undone steps wait as redo records.
+  await expect.poll(async () => {
+    const shape = await page.evaluate(readJournalShape);
+    return { ...shape, records: [...shape.records].sort((left, right) => Number(left[1]) - Number(right[1])) };
+  }).toEqual({
     version: 7,
     inline: false,
     manifest: true,
-    records: [["redo", 0]],
+    records: [["redo", 0], ["redo", 1]],
   });
   expect(await page.locator("aside.material-files .material-files__profile-meta").textContent())
     .not.toBe(fixtureUiCopy.materialFiles.historyUnavailable);
@@ -36,7 +43,7 @@ test("a pre-v6 inline journal migrates on its first save and still reverses the 
 
 test("a damaged stored undo step is released with one quiet notice while material loads", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  const childId = await commitOneBranch(page);
+  const childId = await commitOneChild(page);
 
   await page.evaluate(damageNewestUndoRecord);
   await page.reload();
@@ -55,14 +62,11 @@ test("a damaged stored undo step is released with one quiet notice while materia
   await expect(meta).toHaveText(fixtureUiCopy.materialFiles.localOnly);
 });
 
-async function commitOneBranch(page: Page): Promise<string> {
+async function commitOneChild(page: Page): Promise<string> {
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  const before = await thoughtIds(page);
-  await page.locator(`[data-thought-id="${rootId}"]`).locator("[data-thought-text-id]").click();
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
-  const childId = (await thoughtIds(page)).find((id) => !before.includes(id));
-  if (childId === undefined) throw new Error("the branch was not created");
+  // Spoken under the root through the Under mark (words, then their repair).
+  const childId = await addChildUnder(page, rootId);
   await expect.poll(async () => {
     const live = Number(await page.locator("main.matter-shell").getAttribute("data-tree-revision"));
     return (await page.evaluate(readStoredRevision)) === live;
@@ -70,12 +74,6 @@ async function commitOneBranch(page: Page): Promise<string> {
   await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }))
     .toBeEnabled();
   return childId;
-}
-
-async function thoughtIds(page: Page): Promise<string[]> {
-  return page.locator("[data-thought-id]").evaluateAll((nodes) =>
-    nodes.map((node) => node.getAttribute("data-thought-id")).filter((id): id is string => id !== null),
-  );
 }
 
 async function readStoredRevision(): Promise<number | null> {

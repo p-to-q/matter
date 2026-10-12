@@ -10,8 +10,8 @@ const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 const ROOT_ID = "thought_fixture_root";
 
 for (const viewport of [
-  { name: "laptop", width: 1280, height: 800, cell: { width: "636px", height: "196px" }, column: { width: "520px", gap: "116px" }, horizontalInset: 50, lens: { width: 118, height: 66 } },
-  { name: "narrow", width: 390, height: 844, cell: { width: "344px", height: "172px" }, column: { width: "280px", gap: "64px" }, horizontalInset: 24, lens: { width: 126, height: 70 } },
+  { name: "laptop", width: 1280, height: 800, cell: { width: "636px", height: "196px" }, column: { width: "520px", gap: "116px" }, horizontalInset: 50, lens: { width: 168, height: 66 } },
+  { name: "narrow", width: 390, height: 844, cell: { width: "344px", height: "172px" }, column: { width: "280px", gap: "64px" }, horizontalInset: 24, lens: { width: 180, height: 70 } },
 ]) {
   test(`structural paper and one local action lens remain bounded at ${viewport.name}`, async ({ page }) => {
     const browserErrors: string[] = [];
@@ -148,7 +148,7 @@ for (const viewport of [
     await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
     await expect(lens).toHaveAttribute("aria-orientation", "horizontal");
     await expect(lens).toHaveAttribute("data-relation", "corner");
-    await expect(lens.getByRole("button")).toHaveCount(2);
+    await expect(lens.getByRole("button")).toHaveCount(3);
     const rewriteMaterial = lens.locator("[data-node-action=point-talk]");
     await expect(rewriteMaterial).toBeVisible();
     await expect(rewriteMaterial).toHaveAttribute("aria-label", "用 AI 改写这段材料");
@@ -173,8 +173,8 @@ for (const viewport of [
     })).toEqual({
       ...viewport.lens,
       centers: viewport.name === "narrow"
-        ? [{ x: 36, y: 35 }, { x: 90, y: 35 }]
-        : [{ x: 34, y: 33 }, { x: 84, y: 33 }],
+        ? [{ x: 36, y: 35 }, { x: 90, y: 35 }, { x: 144, y: 35 }]
+        : [{ x: 34, y: 33 }, { x: 84, y: 33 }, { x: 134, y: 33 }],
     });
     expect(await lensBoundsAreLawful(page)).toBe(true);
     expect(await lens.evaluate((element) => getComputedStyle(element, "::before").backdropFilter))
@@ -291,7 +291,7 @@ test("the action fog becomes one system capsule in forced colors", async ({ page
     return style.content !== "none" && style.borderTopWidth === "1px" && style.backdropFilter === "none";
   })).toBe(true);
   await expect(lens).toHaveCSS("animation-duration", "0.001s");
-  await expect(lens.getByRole("button")).toHaveCount(2);
+  await expect(lens.getByRole("button")).toHaveCount(3);
 });
 
 test("the action lens is hoverable across its clear gap and yields to pan and chrome overlays", async ({ page }) => {
@@ -420,6 +420,8 @@ test("the action lens has one direct keyboard path and restores the thought focu
   await rootText.press("ArrowRight");
   await expect(rewriteMaterial).toBeFocused();
   await page.keyboard.press("ArrowRight");
+  await expect(lens.locator("[data-node-action=under]")).toBeFocused();
+  await page.keyboard.press("ArrowRight");
   await expect(setAside).toBeFocused();
   await page.keyboard.press("End");
   await expect(setAside).toBeFocused();
@@ -474,7 +476,7 @@ test.describe("coarse pointer action lens", () => {
     expect(await lens.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return { width: Math.round(rect.width), height: Math.round(rect.height) };
-    })).toEqual({ width: 126, height: 70 });
+    })).toEqual({ width: 180, height: 70 });
     expect(await lens.locator("button").evaluateAll((buttons) => buttons.every((button) => {
       const rect = button.getBoundingClientRect();
       return Math.round(rect.width) === 48 && Math.round(rect.height) === 48;
@@ -523,7 +525,7 @@ test("the 2,000-node canvas still mounts one ruling and one delegated action len
   const next = page.locator('[data-thought-id="perf_thought_0001"] [data-thought-text-id]');
   await hoverExposedMaterial(page, first);
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
-  await expect(page.locator("[data-node-action-lens] button")).toHaveCount(2);
+  await expect(page.locator("[data-node-action-lens] button")).toHaveCount(3);
   await expect(page.locator("[data-node-action-lens]")).toHaveAttribute("data-node-id", "perf_thought_0000");
   await hoverExposedMaterial(page, next);
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);

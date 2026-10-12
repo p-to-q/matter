@@ -64,6 +64,15 @@ export function WikiChangeIcon({ className, ...props }: IconProps) {
   );
 }
 
+/** A line stepping down and right from its parent: the place a child takes. */
+export function UnderIcon({ className, ...props }: IconProps) {
+  return (
+    <svg {...sharedProps} className={className} {...props}>
+      <path d="M4 3v5.5a2 2 0 0 0 2 2h6.5M9.5 7.5l3 3-3 3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 /** The selected material-local inquiry mark. */
 export function MatterAiIcon({ className, ...props }: IconProps) {
   return (

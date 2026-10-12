@@ -17,6 +17,7 @@ const repairEnabled = resolveMatterRepairEnabled(
   process.env.MATTER_REPAIR_ADAPTER,
   process.env.NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED,
 );
+const previewBranch = resolveMatterPreviewBranch(process.env.NEXT_PUBLIC_MATTER_PREVIEW_BRANCH);
 const DEFAULT_DIST_DIR = ".next";
 const E2E_DIST_DIR = ".next-e2e";
 export const MATTER_MEDIA_CACHE_CONTROL = "public, max-age=14400, must-revalidate";
@@ -82,6 +83,7 @@ export default function matterNextConfig(phase: string): NextConfig {
       NEXT_PUBLIC_MATTER_AUDIO_UPLOAD_ENABLED: voiceBuild.audioUploadEnabled ? "true" : "false",
       NEXT_PUBLIC_MATTER_LOCAL_TRANSCRIPTION_ENABLED: voiceBuild.localTranscriptionEnabled ? "true" : "false",
       NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED: repairEnabled ? "true" : "false",
+      NEXT_PUBLIC_MATTER_PREVIEW_BRANCH: previewBranch ? "true" : "false",
     },
     outputFileTracingRoot: process.cwd(),
   };
@@ -131,6 +133,11 @@ export function resolveMatterRepairEnabled(
   override?: string,
 ): boolean {
   return resolvePublicBoolean(override, adapter !== "off");
+}
+
+/** The retired Branch tool ships only in a build that asks for it by name. */
+export function resolveMatterPreviewBranch(override?: string): boolean {
+  return resolvePublicBoolean(override, false);
 }
 
 function resolvePublicBoolean(value: string | undefined, fallback: boolean): boolean {

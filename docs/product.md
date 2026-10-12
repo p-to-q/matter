@@ -123,7 +123,10 @@ configuration as a promise that every similar-sounding form will be corrected.
 selected, as a first-level thought in the full material view. Selecting an
 existing passage changes the fixed Voice tool from admission to Point and Talk:
 the spoken line becomes a transient rewrite direction for that complete passage,
-never a child insertion chosen by hidden inference. The final admission
+never a child insertion chosen by hidden inference. A child under a selected
+passage is made deliberately instead, with the Under mark on that passage: it
+arms one utterance, which enters as the passage's last child through this same
+admission. The final admission
 transcript first receives deterministic locale punctuation, using genuine audio
 pauses when available and conservative semantic seams otherwise, then enters
 the tree immediately as human material. That first pass inserts formatting but

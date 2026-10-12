@@ -1,3 +1,4 @@
+import { addChildUnder } from "./under-driver";
 import { createHash } from "node:crypto";
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 import { localizeOutcome } from "../features/matter/components/canvas-guidance";
@@ -501,11 +502,7 @@ test.describe("the picture control", () => {
     const wording = await passage.innerText();
 
     // Another tab saves a branch; this tab would normally take it up at once.
-    const before = await thoughtIds(writer);
-    await writer.locator(`[data-thought-id="${ROOT_ID}"]`).locator("[data-thought-text-id]").click();
-    await writer.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
-    const written = (await thoughtIds(writer)).find((id) => !before.includes(id));
-    if (written === undefined) throw new Error("the other tab did not create a branch");
+    const written = await addChildUnder(writer, ROOT_ID, { settle: "committed" });
     await expect(writer.locator("aside.material-files")).toHaveAttribute("data-persistence-phase", "saved");
     await reader.waitForTimeout(900);
     await expect(reader.locator(`[data-thought-id="${written}"]`)).toHaveCount(0);

@@ -3,6 +3,7 @@ import type { ToolContext } from "./model";
 import { isCurrentToolIntent, sameToolIntent } from "./validate-intent";
 
 const context: ToolContext = {
+  previewBranch: true,
   view: "full",
   selected: { nodeId: "selected", hasChildren: false, isFolded: false },
   canUndo: true,
@@ -14,6 +15,17 @@ describe("isCurrentToolIntent", () => {
     expect(isCurrentToolIntent(context, { type: "insert-child", parentNodeId: "selected" })).toBe(true);
     expect(isCurrentToolIntent(context, { type: "insert-child", parentNodeId: "other" })).toBe(false);
     expect(isCurrentToolIntent(context, { type: "show-full" })).toBe(false);
+  });
+
+  it("refuses insert-child outright in the main product", () => {
+    expect(isCurrentToolIntent(
+      { ...context, previewBranch: false },
+      { type: "insert-child", parentNodeId: "selected" },
+    )).toBe(false);
+    expect(isCurrentToolIntent(
+      { ...context, previewBranch: false },
+      { type: "focus-node", nodeId: "selected" },
+    )).toBe(true);
   });
 
   it("rejects every intent while its applicable tool is pending", () => {

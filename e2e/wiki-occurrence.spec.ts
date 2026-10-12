@@ -595,6 +595,17 @@ async function admitVoice(page: Page, expectedNodeCount: number): Promise<void> 
 /** Taps the centre of one word's first rendered fragment, as a finger would. */
 async function tapWord(page: Page, passage: Locator, word: string): Promise<void> {
   const point = await wordPoint(passage, word);
+  // A selected passage's lens (three marks) can rest over the first line's
+  // start; Escape dismisses it, as a person would, so the tap reaches the word.
+  const lens = page.locator("[data-node-action-lens]");
+  const box = await lens.count() === 0 ? null : await lens.boundingBox({ timeout: 1_000 }).catch(() => null);
+  const covered = box !== null &&
+    point.x >= box.x && point.x <= box.x + box.width &&
+    point.y >= box.y && point.y <= box.y + box.height;
+  if (covered) {
+    await page.keyboard.press("Escape");
+    await expect(lens).toHaveCount(0);
+  }
   await page.mouse.click(point.x, point.y);
 }
 

@@ -184,8 +184,9 @@ export class AdmissionDriver {
     });
   }
 
-  start(anchor: AdmissionAnchor, locale = this.dependencies.locale): void {
-    if (this.disposed || this.state.phase !== "idle") return;
+  /** Returns the attempt's token while it owns the lifecycle, otherwise null. */
+  start(anchor: AdmissionAnchor, locale = this.dependencies.locale): string | null {
+    if (this.disposed || this.state.phase !== "idle") return null;
     const token = this.dependencies.createInteractionId();
     this.deliveryTarget = null;
     this.pendingLocales.set(operationKey({ interactionId: token, attempt: 1 }), locale);
@@ -196,7 +197,9 @@ export class AdmissionDriver {
     });
     if (!stateOwnsOperation(this.state, { interactionId: token, attempt: 1 })) {
       this.pendingLocales.delete(operationKey({ interactionId: token, attempt: 1 }));
+      return null;
     }
+    return token;
   }
 
   stop(): void {

@@ -49,7 +49,8 @@ export type AdmissionController = Readonly<{
   state: AdmissionInteractionState;
   settlement: AdmissionSettlement | null;
   repairPresentations: ReadonlyMap<string, AdmissionRepairCommittedChange>;
-  start: (anchor: AdmissionAnchor) => void;
+  /** The token of the attempt that began, or null when none did. */
+  start: (anchor: AdmissionAnchor) => string | null;
   stop: () => void;
   cancel: () => void;
   retry: () => void;
@@ -154,7 +155,7 @@ export function useAdmission({
     repairPresentations,
     start: (anchor: AdmissionAnchor) => {
       preloadNow(loadTranscriptRepairRuntime);
-      driver.start(anchor, locale);
+      return driver.start(anchor, locale);
     },
     stop: () => driver.stop(),
     cancel: () => driver.cancel(),

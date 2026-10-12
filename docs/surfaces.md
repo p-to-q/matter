@@ -30,10 +30,11 @@ is deliberately absent.
 | Wiki disclosure and takeover | implemented; reject and replace from the word reserved | one heard-to-canonical settle at first perceivable arrival and a dotted mark while unsettled, drawn with Custom Highlights; a tap on the word, or **Review Wiki change** in a focused or selected passage's actions (at most three), opens Keep / heard form / Wiki… at the word; the passage carries a count-aware hidden description; the takeover is a paper-tier `Escape` layer; “Wiki could not save that.” and “Passage changed. Not restored.” use the outcome line; Wiki… opens settings on that one term |
 | Five interface locales | implemented | zh-CN, en-US, ja-JP, de-DE, and zh-TW for chrome, guidance, and settings copy with typed per-locale tables; the untouched built-in seed relocalizes, while human, voice, model, and imported material keep their exact text |
 | Deployment health probe | implemented | `/matter/api/health` (`/api/health` on the dedicated domain) reports protocol, base path, app version, and per-surface state for material, local persistence, voice, label, repair, inquiry, transform, Text Swap, and archive; `user-configurable` means a user lease may supply the surface, not that a provider answers |
-| Fixed workbench shell + leaf atmosphere | implemented | 304 px desktop field, inset rounded paper, supplied silent loop/still, and five-slot editing island |
+| Fixed workbench shell + leaf atmosphere | implemented | 304 px desktop field, inset rounded paper, supplied silent loop/still, and four-slot editing island (Voice, Lasso, Pan, Undo) |
 | Canvas-scoped corner utilities | implemented | 24 px desktop grid, existing lower-left guidance, static information, validated language/FX/appearance preferences, and desktop/mobile browser proof |
 | Transient working context | implemented | held branches stay legible while selection, lasso, and bounded inquiry omit them; disclosure remains independent |
-| Structural paper ruling + local node actions | implemented | FX-off-only one-layer ruling and one measured AI/working-context lens; no document coordinates or per-node control mount |
+| Structural paper ruling + local node actions | implemented | FX-off-only one-layer ruling and one measured lens of three marks, AI, Under and the working-context `−` / `+`; no document coordinates or per-node control mount |
+| Under mark (human child creation) | implemented | on a passage the mark starts an ordinary Voice admission whose parent is that passage and whose words become its last child, through the existing repair, Wiki and tree-engine path; the AI never writes the child. It arms one utterance: a second tap on the mark or `Escape` withdraws it, and fixed Voice then stops rather than opens Point and Talk. It stays focusable and says why when the passage is held aside, at the deepest level (32), full (64 children, 2,000 passages), or voice or another action is unavailable. Strings await native review; `e2e/under-flow.spec.ts` |
 | Touch canvas navigation | implemented; no physical iOS/iPadOS receipt yet | one finger keeps the selected tool; two to ten contacts pan and zoom the transient camera around their centroid, and the last remaining finger continues the pan; pure reducer tests and Chromium touch receipts |
 | Keyboard, IME, and Escape | implemented | Enter and `Escape` never act on an input-method keydown (`isComposing` or `keyCode` 229); one `Escape` closes at most one layer by tier: gesture, transient menus, panels, paper surfaces, then Lasso; disabled rail tools stay focusable with `aria-disabled` and a stated reason; hover affordances exist only under `(hover: hover)` |
 | Pen and palm | implemented; no physical-device receipt | one canvas gesture owner; a touch is rejected while a pen is in contact and for 400 ms after, a pen landing within 300 ms of one finger takes over, and pen hover is not activity |
@@ -101,12 +102,13 @@ described as one. Durability is already IndexedDB's job; a cache layer would add
 its own versioning and update story. Whether Matter ends up on mobile, on the
 web, or on both — and whether those need separate builds — is undecided, so
 installation stays this thin until that is settled.
-The right editing island exposes exactly Voice → Lasso → Branch → Move → Undo.
+The right editing island exposes exactly Voice → Lasso → Pan → Undo. The former Branch slot is gone from the product; a Preview build with
+`NEXT_PUBLIC_MATTER_PREVIEW_BRANCH=true` ([`reference/tool-system.md`](reference/tool-system.md)) restores it between Lasso and Pan.
 Redo remains available through the platform keyboard conventions
 `Cmd/Ctrl+Shift+Z` and `Ctrl+Y`; it is not a second visible rail tool.
 Focus and fold remain navigation capabilities but have no first-release fixed-rail
 presenter. One frosted local action field prefers the passage's upper-left edge
-and exposes the Point-and-Talk AI mark plus the same `−` / `+` working-context
+and exposes the Point-and-Talk AI mark, the Under mark that speaks a child below the passage, plus the same `−` / `+` working-context
 transition as the material index for the precise hovered, keyboard-focused, or
 selected passage.
 Its field and actions arrive in the same reveal. The disclosure control in the

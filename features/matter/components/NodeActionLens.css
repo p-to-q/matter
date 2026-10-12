@@ -25,20 +25,25 @@
 .node-action-lens__button::before { position: absolute; z-index: -1; inset: var(--lens-core-inset); border-radius: var(--lens-core-radius); background: var(--ink); box-shadow: 0 0 3px 1px var(--ink), 0 0 11px 4px color-mix(in srgb, var(--ink) 62%, transparent), 0 0 20px 8px color-mix(in srgb, var(--ink) 22%, transparent); content: ""; opacity: 0; transition: opacity 120ms ease; }
 
 @media (hover: hover) {
-  .node-action-lens__button:hover:not(:disabled) { color: var(--paper); }
+  .node-action-lens__button:hover:not(:disabled):not([aria-disabled="true"]) { color: var(--paper); }
 }
 
 @media (hover: hover) {
-  .node-action-lens__button:hover:not(:disabled)::before { opacity: 1; }
+  .node-action-lens__button:hover:not(:disabled):not([aria-disabled="true"])::before { opacity: 1; }
 }
+
+/* An armed Under recording keeps the dense fog a hover shows: the mark stays pressed until the utterance ends. */
+.node-action-lens__button[data-under-state="recording"] { color: var(--paper); }
+.node-action-lens__button[data-under-state="recording"]::before { opacity: 1; }
 .node-action-lens__button:focus-visible { background: var(--ink); color: var(--paper); outline: 0; box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink); }
 .node-action-lens__button:focus-visible::before { opacity: 0; }
 
 /* Pressing compresses the control in place and releasing lets it spring back. It must not
    travel downward: the field already rests on the first line, so any downward motion reads as
    the control stepping onto the material it is addressing. */
-.node-action-lens__button:active:not(:disabled) { transform: scale(.88); transition: transform 90ms ease-out; }
-.node-action-lens__button:disabled { cursor: default; opacity: .34; }
+.node-action-lens__button:active:not(:disabled):not([aria-disabled="true"]) { transform: scale(.88); transition: transform 90ms ease-out; }
+.node-action-lens__button:disabled,
+.node-action-lens__button[aria-disabled="true"] { cursor: default; opacity: .34; }
 @keyframes node-action-lens-in { from { opacity: 0; } to { opacity: 1; } }
 
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {

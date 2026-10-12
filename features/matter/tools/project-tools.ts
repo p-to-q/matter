@@ -38,14 +38,16 @@ function projectApplicableTools(context: ToolContext): readonly ApplicableTool[]
 
   const tools: ApplicableTool[] = [
     {
-      id: "add-child",
-      intent: { type: "insert-child", parentNodeId: selected.nodeId },
-    },
-    {
       id: "focus",
       intent: { type: "focus-node", nodeId: selected.nodeId },
     },
   ];
+  if (context.previewBranch) {
+    tools.unshift({
+      id: "add-child",
+      intent: { type: "insert-child", parentNodeId: selected.nodeId },
+    });
+  }
 
   if (selected.hasChildren) {
     // An explicit target state lets the controller revalidate duplicate or

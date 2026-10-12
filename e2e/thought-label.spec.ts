@@ -1,6 +1,7 @@
 import { expect, test, type Locator } from "@playwright/test";
 import { MATTER_DATABASE_VERSION } from "../features/matter/persistence/matter-database";
 import { fixtureUiCopy } from "./matter-ui-copy";
+import { addChildUnder, prewarmAdmissionRoutes } from "./under-driver";
 
 const rootId = "thought_fixture_root";
 
@@ -220,21 +221,19 @@ test("a manual name still being written survives a language change and a reload"
 
 test("a label is generated once, not once per reload", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
+  await prewarmAdmissionRoutes(page);
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
-  // Seed names are fixed. A person-created Branch remains ordinary material
-  // and proves the generated-label cache without spending on the example.
+  // Seed names are fixed. A child spoken under a passage remains ordinary
+  // material and proves the generated-label cache without spending on the example.
   const labelResponse = page.waitForResponse((response) => response.url().includes("/api/label"));
-  await page.getByRole("button", {
-    name: fixtureUiCopy.toolRail.extendRelatedThought,
-    exact: true,
-  }).click();
+  await addChildUnder(page, "thought_fixture_root");
   await expect(page.locator(".material-file")).toHaveCount(11);
   await labelResponse;
-  await page.waitForTimeout(400);
+  await page.waitForTimeout(1_000);
   const generatedRow = page.locator(".material-file").last();
   const generatedNodeId = await generatedRow.getAttribute("data-node-id");
-  if (generatedNodeId === null) throw new Error("The generated Branch row is missing its node id.");
+  if (generatedNodeId === null) throw new Error("The generated child row is missing its node id.");
   const first = await generatedRow.locator(".material-file__title").innerText();
 
   const afterReload: string[] = [];

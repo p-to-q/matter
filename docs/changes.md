@@ -17,6 +17,27 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — a person adds a child by tapping Under and speaking; Branch leaves the main rail
+
+Changed: the selected-passage lens has a third mark, Under. Tapping it arms one utterance of
+admission with the selected passage as parent; what is said becomes the new last child through
+the ordinary admission pipeline (repair, Wiki, tree-engine insert), so the AI never writes the
+text. Tapping it again or Escape withdraws it. It stays visible but `aria-disabled`, with a
+spoken reason in five locales, when the passage is held aside, at the deepest level, at the
+children or passage limit, when voice is unavailable, or when something else is busy. While an
+Under recording is live, Voice stops it instead of opening Point and Talk. The main rail is
+voice, lasso, move, undo; `NEXT_PUBLIC_MATTER_PREVIEW_BRANCH=true` restores the fifth slot, the
+fixed-sentence insertion and its seeded prose for demos, and `vercel.json` does not set it.
+
+Why: a selected passage routes Voice to Point and Talk by design, so Branch was the only visible
+way to create a human-written child, and it composed material the person did not speak. The
+spoken child is two undoable steps (the words, then the repair), which the specs now count.
+
+Forecloses: composing child text for the person in the main product, and a rail slot whose only
+purpose is a demo. The lens is wider by one mark (about 50 px), which can cover the start of a
+first-line Wiki word at narrow widths; Escape dismisses it. `studio/film/capture.ts` still clicks
+the Branch tool and needs the flag or a switch to Under before the launch film is re-captured.
+
 ## 2026-10-12 — hardening from the independent verifiers: a paid picture survives, caps are checked before paying, hostile ZIPs cannot balloon
 
 Changed: a held picture now defers stored-material replacement and relocalization like any
