@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { IMAGE_MEDIA_TYPES, MAX_IMAGE_BYTES, parseImageResultMeta } from "../protocol/image-contract";
-import { MAX_IMAGE_SIDE_PX, MIN_IMAGE_SIDE_PX } from "../server/image-bytes";
+import { parseImageResultMeta } from "../protocol/image-contract";
 import {
   cloneImagePointer,
   equalImagePointers,
@@ -30,12 +29,18 @@ describe("image pointer", () => {
     )))).toEqual(POINTER);
   });
 
-  it("pins its bounds to the image result contract and the server's size gate", () => {
-    expect(MAX_IMAGE_POINTER_BYTES).toBe(MAX_IMAGE_BYTES);
-    expect(MIN_IMAGE_POINTER_SIDE_PX).toBe(MIN_IMAGE_SIDE_PX);
-    expect(MAX_IMAGE_POINTER_SIDE_PX).toBe(MAX_IMAGE_SIDE_PX);
-    expect([...IMAGE_POINTER_MEDIA_TYPES].sort()).toEqual([...IMAGE_MEDIA_TYPES].sort());
+  it("is the owner of the bounds the wire contract enforces", () => {
+    expect(IMAGE_POINTER_MEDIA_TYPES).toEqual(["image/jpeg", "image/png", "image/webp"]);
+    expect(MAX_IMAGE_POINTER_BYTES).toBe(2 * 1024 * 1024);
+    expect(MIN_IMAGE_POINTER_SIDE_PX).toBe(256);
+    expect(MAX_IMAGE_POINTER_SIDE_PX).toBe(4096);
     expect(parseImageResultMeta(POINTER)).toEqual(POINTER);
+    for (const mediaType of IMAGE_POINTER_MEDIA_TYPES) {
+      expect(parseImageResultMeta({ ...POINTER, mediaType })).not.toBeNull();
+    }
+    expect(parseImageResultMeta({ ...POINTER, mediaType: "image/gif" })).toBeNull();
+    expect(parseImageResultMeta({ ...POINTER, byteLength: MAX_IMAGE_POINTER_BYTES })).not.toBeNull();
+    expect(parseImageResultMeta({ ...POINTER, byteLength: MAX_IMAGE_POINTER_BYTES + 1 })).toBeNull();
   });
 
   it("accepts the inclusive limits and rejects one step beyond each", () => {

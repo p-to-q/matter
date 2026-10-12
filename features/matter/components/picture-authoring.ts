@@ -2,17 +2,24 @@ import type { PictureCommit, ReplaceImageMutation } from "../interaction/accept-
 import type { PictureNodeView, PictureVisibilityPort } from "../interaction/picture-driver";
 import type { PictureSessionCache } from "../interaction/picture-session-cache";
 import type { ImageBlobRepository } from "../persistence/image-blob-repository";
+import type { StoragePersistenceGesture } from "../persistence/storage-persistence";
 import type { AttachPictureValues } from "../runtime/picture-commit";
 import type { PictureStoreReceipt } from "../store/matter-store";
 
 /**
  * Everything the picture turn needs from the composition root, in one value.
- * The bytes, session cache, and blob connection are the mount's own
- * (`usePictureStore`) and the store ports are the document's.
+ * The session cache and blob connection are the mount's own
+ * (`usePictureStore`), built on first need, and the store ports are the
+ * document's.
  */
 export type PictureAuthoring = Readonly<{
-  cache: PictureSessionCache;
-  blobRepository: Pick<ImageBlobRepository, "putImageBlob">;
+  /** Resolves the mount's session cache and blob repository, building them on first call. */
+  loadStore: () => Promise<Readonly<{
+    cache: PictureSessionCache;
+    repository: Pick<ImageBlobRepository, "putImageBlob">;
+  }>>;
+  /** Asks the browser to keep storage persistent; call synchronously inside the gesture. */
+  requestPersistence: (gesture: Extract<StoragePersistenceGesture, "keep">) => void;
   readNode: (nodeId: string) => PictureNodeView | undefined;
   subscribeTree: (listener: () => void) => () => void;
   documentEpoch: () => number;
@@ -43,6 +50,20 @@ export function createPictureCommit(input: Readonly<{
       input.documentEpoch,
     ),
   );
+}
+
+/**
+ * Keep is the gesture that makes a paid, unrepeatable picture local. Asking the
+ * browser to keep storage persistent happens here, synchronously and before the
+ * accept's first await, because some engines honour `persist()` only while the
+ * click's activation lasts.
+ */
+export function keepPictureGesture(input: Readonly<{
+  requestPersistence: PictureAuthoring["requestPersistence"];
+  accept: () => Promise<void>;
+}>): Promise<void> {
+  input.requestPersistence("keep");
+  return input.accept();
 }
 
 function uniqueSuffix(): string {

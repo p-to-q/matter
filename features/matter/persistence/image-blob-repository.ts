@@ -1,8 +1,10 @@
-import type { IDBPDatabase } from "idb";
-import type { MatterDatabase, MatterDatabaseHandle, StoredImageBlob } from "./matter-database";
+import type { IDBPTransaction } from "idb";
+import { verifyPictureBytes } from "../protocol/image-verify";
+import type { MatterDatabase, StoredImageBlob } from "./matter-database";
 import { isQuotaError, SUPERSEDED_DATABASE_ERROR } from "./storage-errors";
 import { isPlainRecord } from "./stored-value";
 import { parseImagePointer, type ImagePointer } from "../tree/image-pointer";
+import { SHA256_HEX } from "../tree/sha256";
 
 /**
  * Durable storage for the bytes behind image pointers.
@@ -14,8 +16,17 @@ import { parseImagePointer, type ImagePointer } from "../tree/image-pointer";
  *
  * The database handle is injected rather than opened here. This module is held
  * to the same Wiki-free rule as the other persisted-material modules, and the
- * module that creates the handle also names the Wiki schema.
+ * module that creates the handle also names the Wiki schema, so the handle it
+ * accepts is narrowed to the `blobs` store and cannot reach `wiki`.
  */
+
+/** The only door this module may open on the database: a transaction over `blobs`. */
+type BlobsDatabase = Readonly<{
+  transaction(storeNames: "blobs", mode: "readonly"): IDBPTransaction<MatterDatabase, ["blobs"], "readonly">;
+  transaction(storeNames: "blobs", mode: "readwrite"): IDBPTransaction<MatterDatabase, ["blobs"], "readwrite">;
+}>;
+
+export type ImageBlobDatabaseHandle = Readonly<{ open: () => Promise<BlobsDatabase> }>;
 
 export type ImageBlob = Readonly<{
   pointer: ImagePointer;
@@ -43,23 +54,21 @@ export type ImageBlobRepository = Readonly<{
   /** Verifies the bytes against the pointer, then stores them; a held hash is a no-op. */
   putImageBlob(pointer: ImagePointer, bytes: ArrayBuffer): Promise<ImageBlobResult<"written" | "present">>;
   getImageBlob(contentHash: string): Promise<ImageBlobResult<ImageBlobRead>>;
-  /** True only for an intact row, so a damaged one is rewritten by the next put. */
-  hasImageBlob(contentHash: string): Promise<ImageBlobResult<boolean>>;
+  /** Exists, with the `storedAt` index, for the compaction pass that is not built yet. */
   listImageBlobHashes(): Promise<ImageBlobResult<readonly string[]>>;
 }>;
 
 const STORED_BLOB_SCHEMA_VERSION = 1;
-const SHA256_HEX = /^[0-9a-f]{64}$/u;
 
 type TransactionLike = Readonly<{ error: DOMException | null; done: Promise<unknown> }>;
 
 export function createImageBlobRepository(
-  handle: MatterDatabaseHandle,
+  handle: ImageBlobDatabaseHandle,
   now: () => string = () => new Date().toISOString(),
 ): ImageBlobRepository {
   const run = async <Value>(
     operation: (
-      database: IDBPDatabase<MatterDatabase>,
+      database: BlobsDatabase,
       track: <Transaction extends TransactionLike>(transaction: Transaction) => Transaction,
     ) => Promise<ImageBlobResult<Value>>,
   ): Promise<ImageBlobResult<Value>> => {
@@ -85,14 +94,11 @@ export function createImageBlobRepository(
       }
       // The caller may reuse its buffer while the digest is pending.
       const owned = bytes.slice(0);
-      let digest: string;
-      try {
-        digest = await sha256Hex(owned);
-      } catch {
+      const verdict = await verifyPictureBytes(parsed, owned);
+      if (!verdict.ok) {
         // An insecure context has no digest; unverified bytes are never stored.
-        return failed("STORAGE_UNAVAILABLE");
+        return failed(verdict.fault === "digest-unavailable" ? "STORAGE_UNAVAILABLE" : "REJECTED");
       }
-      if (digest !== parsed.contentHash) return failed("REJECTED");
       const row: StoredImageBlob = Object.freeze({
         storageSchemaVersion: STORED_BLOB_SCHEMA_VERSION,
         contentHash: parsed.contentHash,
@@ -127,18 +133,6 @@ export function createImageBlobRepository(
         const stored: unknown = await transaction.store.get(contentHash);
         await transaction.done;
         return isNewerSchema(stored) ? failed("SUPERSEDED") : succeeded(inspect(stored, contentHash));
-      });
-    },
-
-    hasImageBlob(contentHash) {
-      if (!isContentHash(contentHash)) return Promise.resolve(failed("REJECTED"));
-      return run(async (database, track) => {
-        const transaction = track(database.transaction("blobs", "readonly"));
-        const stored: unknown = await transaction.store.get(contentHash);
-        await transaction.done;
-        return isNewerSchema(stored)
-          ? failed("SUPERSEDED")
-          : succeeded(inspect(stored, contentHash).status === "found");
       });
     },
 
@@ -198,11 +192,6 @@ function isContentHash(value: unknown): value is string {
 /** Realm-safe: bytes may come from a worker, a frame, or a decoded response. */
 function isArrayBuffer(value: unknown): value is ArrayBuffer {
   return Object.prototype.toString.call(value) === "[object ArrayBuffer]";
-}
-
-async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes));
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function classify(error: unknown, transaction: TransactionLike | null): ImageBlobFailureCode {

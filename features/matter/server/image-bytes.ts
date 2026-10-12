@@ -1,19 +1,12 @@
-import { createHash } from "node:crypto";
-import {
-  IMAGE_MEDIA_TYPES,
-  MAX_IMAGE_BYTES,
-  type ImageMediaType,
-} from "../protocol/image-contract";
 import {
   IMAGE_STRUCTURE_REFUSAL_REASONS,
   inspectImageStructure,
 } from "../protocol/image-structure";
-
-export {
-  MAX_IMAGE_ASPECT_RATIO,
-  MAX_IMAGE_SIDE_PX,
-  MIN_IMAGE_SIDE_PX,
-} from "../protocol/image-structure";
+import {
+  IMAGE_POINTER_MEDIA_TYPES,
+  MAX_IMAGE_POINTER_BYTES,
+  type ImagePointerMediaType,
+} from "../tree/image-pointer";
 
 /**
  * Last gate before generated image bytes leave the server.
@@ -21,10 +14,11 @@ export {
  * Pure and synchronous. It inspects the data URL the image transport produced and
  * never decodes pixels. The provider embeds a C2PA manifest in the bytes, so the
  * returned `bytes` are exactly the decoded payload: nothing is re-encoded,
- * resized, stripped or rewritten here, and callers must not do so either.
+ * resized, stripped or rewritten here, and callers must not do so either. The
+ * route that ships them names their hash with the shared `sha256Hex`.
  */
 
-// Longest legal header is `data:image/webp;base64,`; the window bounds the slice
+// Longest legal header is `data:` + the longest media type + `;base64,`; the window bounds the slice
 // the header parser sees, so a huge payload is never scanned for its comma.
 const HEADER_WINDOW = 64;
 const DATA_PREFIX = "data:";
@@ -46,11 +40,10 @@ export type ImageInspection =
   | Readonly<{
     ok: true;
     bytes: Uint8Array;
-    mediaType: ImageMediaType;
+    mediaType: ImagePointerMediaType;
     width: number;
     height: number;
     byteLength: number;
-    sha256: string;
   }>
   | Readonly<{ ok: false; reason: ImageRefusalReason }>;
 
@@ -74,7 +67,7 @@ function inspect(dataUrl: string): ImageInspection {
   const comma = dataUrl.slice(0, HEADER_WINDOW).indexOf(",");
   if (comma === -1) return refuse("malformed-data-url");
   const parameters = dataUrl.slice(DATA_PREFIX.length, comma).split(";");
-  const declared = IMAGE_MEDIA_TYPES.find((type) => type === parameters[0]);
+  const declared = IMAGE_POINTER_MEDIA_TYPES.find((type) => type === parameters[0]);
   if (declared === undefined) return refuse("unsupported-media-type");
   if (parameters.length !== 2 || parameters[1] !== BASE64_PARAMETER) {
     return refuse("malformed-data-url");
@@ -87,7 +80,7 @@ function inspect(dataUrl: string): ImageInspection {
   const padding = dataUrl.endsWith("==") ? 2 : dataUrl.endsWith("=") ? 1 : 0;
   // Decided from the string length alone, so an oversize payload never allocates.
   const impliedBytes = (payloadLength / 4) * 3 - padding;
-  if (impliedBytes > MAX_IMAGE_BYTES) return refuse("too-large");
+  if (impliedBytes > MAX_IMAGE_POINTER_BYTES) return refuse("too-large");
   const payload = dataUrl.slice(payloadStart);
   if (!BASE64_PAYLOAD.test(payload)) return refuse("invalid-base64");
 
@@ -108,7 +101,6 @@ function inspect(dataUrl: string): ImageInspection {
     width,
     height,
     byteLength: bytes.byteLength,
-    sha256: createHash("sha256").update(bytes).digest("hex"),
   });
 }
 

@@ -1,11 +1,12 @@
-import { createHash } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MAX_IMAGE_BYTES } from "../protocol/image-contract";
+import { MAX_IMAGE_ASPECT_RATIO } from "../protocol/image-structure";
+import {
+  MAX_IMAGE_POINTER_BYTES,
+  MAX_IMAGE_POINTER_SIDE_PX,
+  MIN_IMAGE_POINTER_SIDE_PX,
+} from "../tree/image-pointer";
 import {
   IMAGE_REFUSAL_REASONS,
-  MAX_IMAGE_ASPECT_RATIO,
-  MAX_IMAGE_SIDE_PX,
-  MIN_IMAGE_SIDE_PX,
   inspectImageDataUrl,
   type ImageRefusalReason,
 } from "./image-bytes";
@@ -150,8 +151,6 @@ describe("image bytes: provenance", () => {
     if (!result.ok) throw new Error(`expected ok, got ${result.reason}`);
     expect(Buffer.from(result.bytes).equals(Buffer.from(original))).toBe(true);
     expect(result.byteLength).toBe(original.byteLength);
-    expect(result.sha256).toBe(createHash("sha256").update(original).digest("hex"));
-    expect(result.sha256).toMatch(/^[0-9a-f]{64}$/u);
   });
 
   it("returns an owned copy that does not alias a shared buffer pool", () => {
@@ -217,10 +216,10 @@ describe("image bytes: size ceiling", () => {
     return bytes;
   }
 
-  it("accepts exactly MAX_IMAGE_BYTES and refuses one byte more", () => {
-    const atLimit = inspectImageDataUrl(dataUrl(paddedPng(MAX_IMAGE_BYTES)));
-    expect(atLimit).toMatchObject({ ok: true, byteLength: MAX_IMAGE_BYTES });
-    expect(refusal(dataUrl(paddedPng(MAX_IMAGE_BYTES + 1)))).toBe("too-large");
+  it("accepts exactly MAX_IMAGE_POINTER_BYTES and refuses one byte more", () => {
+    const atLimit = inspectImageDataUrl(dataUrl(paddedPng(MAX_IMAGE_POINTER_BYTES)));
+    expect(atLimit).toMatchObject({ ok: true, byteLength: MAX_IMAGE_POINTER_BYTES });
+    expect(refusal(dataUrl(paddedPng(MAX_IMAGE_POINTER_BYTES + 1)))).toBe("too-large");
   });
 
   /**
@@ -440,12 +439,12 @@ describe("image bytes: truncation", () => {
 
 describe("image bytes: dimension bounds", () => {
   const sizes: ReadonlyArray<readonly [number, number, ImageRefusalReason | "accepted"]> = [
-    [MIN_IMAGE_SIDE_PX, MIN_IMAGE_SIDE_PX, "accepted"],
-    [MIN_IMAGE_SIDE_PX - 1, MIN_IMAGE_SIDE_PX, "dimensions-out-of-range"],
-    [MIN_IMAGE_SIDE_PX, MIN_IMAGE_SIDE_PX - 1, "dimensions-out-of-range"],
-    [MAX_IMAGE_SIDE_PX, MAX_IMAGE_SIDE_PX, "accepted"],
-    [MAX_IMAGE_SIDE_PX + 1, MAX_IMAGE_SIDE_PX, "dimensions-out-of-range"],
-    [MAX_IMAGE_SIDE_PX, MAX_IMAGE_SIDE_PX + 1, "dimensions-out-of-range"],
+    [MIN_IMAGE_POINTER_SIDE_PX, MIN_IMAGE_POINTER_SIDE_PX, "accepted"],
+    [MIN_IMAGE_POINTER_SIDE_PX - 1, MIN_IMAGE_POINTER_SIDE_PX, "dimensions-out-of-range"],
+    [MIN_IMAGE_POINTER_SIDE_PX, MIN_IMAGE_POINTER_SIDE_PX - 1, "dimensions-out-of-range"],
+    [MAX_IMAGE_POINTER_SIDE_PX, MAX_IMAGE_POINTER_SIDE_PX, "accepted"],
+    [MAX_IMAGE_POINTER_SIDE_PX + 1, MAX_IMAGE_POINTER_SIDE_PX, "dimensions-out-of-range"],
+    [MAX_IMAGE_POINTER_SIDE_PX, MAX_IMAGE_POINTER_SIDE_PX + 1, "dimensions-out-of-range"],
     [0, 0, "dimensions-out-of-range"],
     [1024, 0, "dimensions-out-of-range"],
     [0xffffffff, 0xffffffff, "dimensions-out-of-range"],

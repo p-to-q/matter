@@ -6,6 +6,7 @@ import type { PictureBytesSource } from "../interaction/picture-bytes-source";
 import type { ImagePointer } from "../tree/image-pointer";
 import { PictureBytesContext } from "./picture-bytes-context";
 import { pictureCopy } from "./picture-copy";
+import { PicturePlaceholder } from "./PicturePlaceholder";
 import { pictureBoxStyle, pictureLayoutKey } from "./passage-picture-box";
 import { startPictureLoad, type ObjectUrls, type PictureLoadState } from "./passage-picture-load";
 
@@ -87,7 +88,7 @@ export function PictureFrame({
   const copy = pictureCopy(locale);
   const style = pictureBoxStyle(pointer);
   if (view.kind === "loading") {
-    return <div aria-hidden="true" className="passage-picture" data-picture-state="loading" style={style} />;
+    return <PicturePlaceholder pointer={pointer} />;
   }
   if (view.kind === "resident") {
     return (

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { MODEL_DEADLINES } from "../config/model-deadlines";
@@ -57,8 +58,9 @@ describe("image route", () => {
     expect(response.headers.get("content-length")).toBe(String(FIXTURE_BYTES.byteLength));
     expect(response.headers.get(IMAGE_RESPONSE_HEADERS.width)).toBe("1024");
     expect(response.headers.get(IMAGE_RESPONSE_HEADERS.height)).toBe("1024");
-    expect(response.headers.get(IMAGE_RESPONSE_HEADERS.sha256)).toMatch(/^[0-9a-f]{64}$/);
     const received = new Uint8Array(await response.arrayBuffer());
+    expect(response.headers.get(IMAGE_RESPONSE_HEADERS.sha256))
+      .toBe(createHash("sha256").update(received).digest("hex"));
     expect(Array.from(received.slice(0, 8))).toEqual(PNG_MAGIC);
     expect(Array.from(received)).toEqual(Array.from(FIXTURE_BYTES));
   });

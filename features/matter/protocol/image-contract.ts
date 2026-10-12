@@ -1,11 +1,16 @@
 import { isMatterLocale, type MatterLocale } from "../config/locales";
+import {
+  isImagePointerMediaType,
+  MAX_IMAGE_POINTER_BYTES,
+  type ImagePointerMediaType,
+} from "../tree/image-pointer";
 import { isMaterialId } from "../tree/invariants";
 import { PROTOCOL_VERSION } from "../tree/model";
+import { SHA256_HEX } from "../tree/sha256";
 import { isWellFormedUnicodeText } from "./unicode-text";
 
 export const IMAGE_REQUEST_VERSION = "image/1" as const;
 export const MAX_IMAGE_REQUEST_BYTES = 16 * 1024;
-export const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 export const MAX_IMAGE_PASSAGE_CODE_POINTS = 2_000;
 export const MAX_IMAGE_DIRECTION_CODE_POINTS = 240;
 export const MAX_IMAGE_ID_LENGTH = 128;
@@ -18,8 +23,6 @@ export const MAX_IMAGE_ID_LENGTH = 128;
 // legitimate subject.
 export const MAX_IMAGE_BRIEF_CODE_POINTS = 120;
 
-export const IMAGE_MEDIA_TYPES = Object.freeze(["image/jpeg", "image/png", "image/webp"] as const);
-export type ImageMediaType = (typeof IMAGE_MEDIA_TYPES)[number];
 
 export type ImageRequestEnvelope = Readonly<{
   protocolVersion: typeof PROTOCOL_VERSION;
@@ -32,7 +35,7 @@ export type ImageRequestEnvelope = Readonly<{
 
 // The route returns image bytes as the HTTP body; this carries only the companion metadata.
 export type ImageResultMeta = Readonly<{
-  mediaType: ImageMediaType;
+  mediaType: ImagePointerMediaType;
   byteLength: number;
   width: number;
   height: number;
@@ -63,7 +66,6 @@ export type ImageRequestParseResult =
 // Matches normalizeTextSwapDirection's exclusion set; a direction is a single presentable line.
 const DIRECTION_DANGEROUS = /[\u0000-\u001F\u007F-\u009F\u00AD\u061C\u200B-\u200F\u2028-\u202E\u2060\u2066-\u2069\uFE00-\uFE0F\uFEFF]/u;
 const MULTILINE = /[\r\n\u2028\u2029]/u;
-const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 /** Strict image/1 parser. Rejects unknown keys and any unsupported protocol version. */
 export function parseImageRequestEnvelope(value: unknown): ImageRequestParseResult {
@@ -106,8 +108,8 @@ export function parseImageResultMeta(value: unknown): ImageResultMeta | null {
   if (!isRecord(value) || !hasExactKeys(value, [
     "mediaType", "byteLength", "width", "height", "contentHash",
   ])) return null;
-  if (!isImageMediaType(value.mediaType)) return null;
-  if (!isPositiveInteger(value.byteLength) || value.byteLength > MAX_IMAGE_BYTES) return null;
+  if (!isImagePointerMediaType(value.mediaType)) return null;
+  if (!isPositiveInteger(value.byteLength) || value.byteLength > MAX_IMAGE_POINTER_BYTES) return null;
   if (!isPositiveInteger(value.width) || !isPositiveInteger(value.height)) return null;
   if (typeof value.contentHash !== "string" || !SHA256_HEX.test(value.contentHash)) return null;
   return Object.freeze({
@@ -137,11 +139,19 @@ export function parseImageBrief(value: unknown): ImageBrief | null {
 function parsePassage(value: unknown): ImageRequestEnvelope["passage"] | null {
   if (!isRecord(value) || !hasExactKeys(value, ["nodeId", "text"])) return null;
   if (!isMaterialId(value.nodeId)) return null;
-  if (typeof value.text !== "string" || !isWellFormedUnicodeText(value.text)) return null;
-  if (value.text.trim().length === 0) return null;
-  const codePoints = Array.from(value.text).length;
-  if (codePoints < 1 || codePoints > MAX_IMAGE_PASSAGE_CODE_POINTS) return null;
+  if (!canDrawFromPassage(value.text)) return null;
   return Object.freeze({ nodeId: value.nodeId, text: value.text });
+}
+
+/**
+ * The one rule for which passage text may be drawn from. The request parser
+ * enforces it, and the control and the driver ask it directly instead of
+ * building a request with a made-up identity just to see whether one would parse.
+ */
+export function canDrawFromPassage(text: unknown): text is string {
+  if (typeof text !== "string" || !isWellFormedUnicodeText(text) || text.trim().length === 0) return false;
+  const codePoints = Array.from(text).length;
+  return codePoints >= 1 && codePoints <= MAX_IMAGE_PASSAGE_CODE_POINTS;
 }
 
 function parseDirection(value: unknown): Readonly<{ text: string }> | null {
@@ -162,10 +172,6 @@ function normalizeImageDirection(value: unknown): string | null {
   const codePoints = Array.from(text).length;
   if (codePoints < 1 || codePoints > MAX_IMAGE_DIRECTION_CODE_POINTS) return null;
   return text;
-}
-
-function isImageMediaType(value: unknown): value is ImageMediaType {
-  return value === "image/jpeg" || value === "image/png" || value === "image/webp";
 }
 
 function isPositiveInteger(value: unknown): value is number {

@@ -6,7 +6,6 @@ import { PictureBytesContext } from "./picture-bytes-context";
 import { PictureAuthoringContext } from "./picture-authoring-context";
 import { usePictureAuthoring } from "./use-picture-authoring";
 import { usePictureStore } from "./use-picture-store";
-import { collectPictureBlobs, restorePictureBlobs } from "../interaction/archive-pictures";
 import { useMatterStore, useMatterStoreAccess, useWikiOccurrences } from "./use-matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
 import { admissionHoldsSubmittedWords } from "../runtime/admission-interaction";
@@ -67,7 +66,6 @@ const loadArchiveTransport = () => Promise.all([
 export function MatterApp() {
   useWikiAuthority();
   const pictureStore = usePictureStore();
-  const pictureAuthoring = usePictureAuthoring(pictureStore, useMatterStoreAccess());
   const tree = useMatterStore((state) => state.tree);
   const documentEpoch = useMatterStore((state) => state.documentEpoch);
   const history = useMatterStore((state) => state.history);
@@ -114,6 +112,11 @@ export function MatterApp() {
   );
   const storagePersistence = useStoragePersistence();
   const requestStoragePersistence = storagePersistence.request;
+  const pictureAuthoring = usePictureAuthoring(
+    pictureStore,
+    useMatterStoreAccess(),
+    requestStoragePersistence,
+  );
   const archiveLanguage = canvasPreferences.preferences.language;
   const branchTextResolverRef = useRef<SeededBranchTextResolver>(seededFallbackBranchTexts);
   const [seededSessionRelocalizer, setSeededSessionRelocalizer] =
@@ -146,8 +149,10 @@ export function MatterApp() {
     documentEpoch,
     seededSessionRelocalizer,
   ]);
-  // Export, Replace, and Retry are the only gestures that may ask the browser
-  // to keep storage persistent; each asks before its first await.
+  // Export, Replace, Retry, and a picture's Keep are the only gestures that may
+  // ask the browser to keep storage persistent; each asks before its first await.
+  // Replace is the import gesture: it covers the pictures an archive restores,
+  // and asking again after the awaits would run without the gesture's activation.
   const exportArchive = useCallback(async () => {
     requestStoragePersistence("export");
     if (persistence.status.errorCode === "PERSISTENCE_CORRUPT") {
@@ -168,7 +173,7 @@ export function MatterApp() {
     const { exportSnapshotArchive, treeToBundle } = await loadArchiveTransport();
     // Pictures a device can no longer produce are left out and counted, never
     // a reason to refuse the export.
-    const blobs = await collectPictureBlobs(tree, pictureStore);
+    const blobs = await pictureStore.collectBlobs(tree);
     const archive = await exportSnapshotArchive(treeToBundle(tree), blobs);
     if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     downloadLocalBytes(archive.bytes, `${tree.id}.matter.zip`, "application/zip");
@@ -205,7 +210,7 @@ export function MatterApp() {
     // The bytes must be readable by the first render of the imported document,
     // so they are stored before it is committed. Failing to store them never
     // refuses the import.
-    const pictures = await restorePictureBlobs(archive.blobs, archive.tree, pictureStore);
+    const pictures = await pictureStore.restoreBlobs(archive.blobs, archive.tree);
     const imported = await persistence.importMaterial(archive.tree, basis, options);
     if (imported.status !== "switched") return archiveFailure(imported.errorCode, archiveLanguage);
     return pictures.keptInSession > 0

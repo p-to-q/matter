@@ -5,6 +5,7 @@ import {
   parseImageRequestEnvelope,
   type ImageRequestEnvelope,
 } from "../protocol/image-contract";
+import { sha256Hex } from "../tree/sha256";
 import {
   withBoundedJsonRequest,
   type BoundedRequestFailure,
@@ -164,7 +165,8 @@ async function drawImage(
 
   // The relay's bytes exactly as inspected: re-encoding would destroy the
   // provider's embedded provenance manifest.
-  const { bytes, mediaType, width, height, byteLength, sha256 } = drawn.value;
+  const { bytes, mediaType, width, height, byteLength } = drawn.value;
+  const sha256 = await sha256Hex(bytes);
   // A plain copy only narrows the buffer type for BodyInit; no byte changes.
   return new Response(new Uint8Array(bytes), {
     headers: {

@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { IMAGE_REFUSAL_REASONS } from "../server/image-bytes";
 import {
   IMAGE_STRUCTURE_REFUSAL_REASONS,
-  MAX_IMAGE_SIDE_PX,
   inspectImageStructure,
 } from "./image-structure";
+import { MAX_IMAGE_POINTER_SIDE_PX } from "../tree/image-pointer";
 
 function png(width: number, height: number, { withEnd = true } = {}): Uint8Array {
   const header = new Uint8Array(33);
@@ -37,7 +37,7 @@ describe("image structure", () => {
     expect(inspectImageStructure(new TextEncoder().encode("<svg/>"))).toEqual({ ok: false, reason: "content-not-image" });
     expect(inspectImageStructure(png(512, 512, { withEnd: false }))).toEqual({ ok: false, reason: "truncated-image" });
     expect(inspectImageStructure(png(64, 64))).toEqual({ ok: false, reason: "dimensions-out-of-range" });
-    expect(inspectImageStructure(png(MAX_IMAGE_SIDE_PX + 1, 512))).toEqual({ ok: false, reason: "dimensions-out-of-range" });
+    expect(inspectImageStructure(png(MAX_IMAGE_POINTER_SIDE_PX + 1, 512))).toEqual({ ok: false, reason: "dimensions-out-of-range" });
     expect(inspectImageStructure(png(2048, 512))).toEqual({ ok: false, reason: "aspect-ratio-out-of-range" });
   });
 

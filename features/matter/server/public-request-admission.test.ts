@@ -77,6 +77,30 @@ describe("public request admission", () => {
   });
 });
 
+describe("an explicit metering rule", () => {
+  const staged = createPublicRequestAdmission({
+    requestsPerWindow: 1,
+    maxConcurrent: 2,
+    metered: (environment) => environment.METERED === "yes",
+  });
+
+  it("replaces the NODE_ENV default in both directions, without rewriting the environment", () => {
+    const staging = Object.freeze({ NODE_ENV: "staging", METERED: "yes" });
+    expect(staged.admit(request(null), staging)).toMatchObject({ ok: false, reason: "ORIGIN" });
+    // Production that the rule does not meter is not metered.
+    expect(staged.admit(request(null), { ...PRODUCTION, METERED: "no" }).ok).toBe(true);
+    expect(staged.admit(request(null), { ...PRODUCTION, METERED: "no" }).ok).toBe(true);
+    expect(Object.keys(staging).sort()).toEqual(["METERED", "NODE_ENV"]);
+  });
+
+  it("applies the rate window to what it meters", () => {
+    const environment = { METERED: "yes", MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io" };
+    expect(staged.admit(request("https://matter.ptoq.io"), environment, () => 1).ok).toBe(true);
+    expect(staged.admit(request("https://matter.ptoq.io"), environment, () => 2))
+      .toMatchObject({ ok: false, reason: "RATE" });
+  });
+});
+
 function request(origin: string | null, address = "192.0.2.1"): Request {
   const headers = new Headers({ "x-vercel-forwarded-for": address });
   if (origin !== null) {

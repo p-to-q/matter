@@ -144,6 +144,10 @@ async function undo(page: Page): Promise<void> {
   await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
 }
 
+async function persistCalls(page: Page): Promise<number> {
+  return page.evaluate(() => (window as unknown as { __persistCalls: number }).__persistCalls);
+}
+
 async function blobTransactions(page: Page): Promise<number> {
   return page.evaluate(() => (window as unknown as { __blobTransactions: number }).__blobTransactions);
 }
@@ -192,6 +196,15 @@ test.describe("the picture control", () => {
         }
         return original.call(this, stores, ...rest);
       } as typeof original;
+      // Observe, without a production hook, whether the page asks for persistent storage.
+      (window as unknown as { __persistCalls: number }).__persistCalls = 0;
+      Object.defineProperty(StorageManager.prototype, "persist", {
+        configurable: true,
+        value: async () => {
+          (window as unknown as { __persistCalls: number }).__persistCalls += 1;
+          return true;
+        },
+      });
     });
     await answerHealthAvailable(page);
     const images = await routeImage(page);
@@ -251,8 +264,12 @@ test.describe("the picture control", () => {
     await expect(keep).toBeVisible();
 
     const before = await blobTransactions(page);
+    // Nothing before Keep has asked the browser to keep storage persistent.
+    expect(await persistCalls(page)).toBe(0);
     await keep.click();
     await expect(field).toHaveCount(0);
+    // A Kept picture is paid and irreplaceable, so Keep asks, once.
+    expect(await persistCalls(page)).toBe(1);
     await expect(passagePicture(page)).toHaveAttribute("alt", pictureCopy(LANGUAGE).alt);
     await expect.poll(() => decoded(passagePicture(page))).toBeGreaterThan(0);
     await expect(page.locator(`[data-thought-text-id="${ROOT_ID}"]`)).toBeFocused();

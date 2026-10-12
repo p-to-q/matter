@@ -1,4 +1,11 @@
-export const IMAGE_POINTER_MEDIA_TYPES = Object.freeze(["image/jpeg", "image/png", "image/webp"] as const);
+import { SHA256_HEX } from "./sha256";
+
+/**
+ * The single owner of what a picture may be: its media types, byte bound and
+ * side bounds. The wire contract, the byte inspector, the transports and the
+ * archive import these; none restates them.
+ */
+export const IMAGE_POINTER_MEDIA_TYPES =Object.freeze(["image/jpeg", "image/png", "image/webp"] as const);
 export type ImagePointerMediaType = (typeof IMAGE_POINTER_MEDIA_TYPES)[number];
 
 export const MAX_IMAGE_POINTER_BYTES = 2 * 1024 * 1024;
@@ -7,15 +14,13 @@ export const MAX_IMAGE_POINTER_SIDE_PX = 4096;
 export const MAX_TREE_IMAGE_NODES = 32;
 export const MAX_TREE_IMAGE_BYTES = 32 * 1024 * 1024;
 
-const SHA256_HEX = /^[0-9a-f]{64}$/u;
 const KEYS = ["byteLength", "contentHash", "height", "mediaType", "width"] as const;
 
 /**
  * What a node says about a picture, never the picture. Width and height are
  * required so a document whose bytes are absent keeps the box the image
- * occupied. The fields mirror the image result metadata; the tree is the
- * innermost layer and cannot import that contract, so a test pins the bounds
- * to it instead.
+ * occupied. The fields mirror the image result metadata, which imports the
+ * bounds above rather than restating them.
  */
 export type ImagePointer = Readonly<{
   mediaType: ImagePointerMediaType;
@@ -74,7 +79,7 @@ export function cloneImagePointer(pointer: ImagePointer): ImagePointer {
   };
 }
 
-function isImagePointerMediaType(value: unknown): value is ImagePointerMediaType {
+export function isImagePointerMediaType(value: unknown): value is ImagePointerMediaType {
   return (IMAGE_POINTER_MEDIA_TYPES as readonly unknown[]).includes(value);
 }
 

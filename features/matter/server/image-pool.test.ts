@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { MAX_IMAGE_BYTES } from "../protocol/image-contract";
+import { MAX_IMAGE_POINTER_BYTES } from "../tree/image-pointer";
 import { imageChatTransport, imageGenerationsTransport } from "./image-transport";
 import {
   DEFAULT_POOL_LIMITS,
@@ -128,7 +128,7 @@ describe("readImagePool", () => {
 
 describe("IMAGE_POOL_LIMITS", () => {
   it("covers the base64 form of the largest accepted image plus an envelope", () => {
-    const base64Length = Math.ceil(MAX_IMAGE_BYTES / 3) * 4;
+    const base64Length = Math.ceil(MAX_IMAGE_POINTER_BYTES / 3) * 4;
 
     expect(IMAGE_POOL_LIMITS.maxResponseBytes).toBeGreaterThan(base64Length);
     expect(IMAGE_POOL_LIMITS.maxResponseBytes).toBeGreaterThan(DEFAULT_POOL_LIMITS.maxResponseBytes);

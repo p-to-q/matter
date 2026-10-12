@@ -1,4 +1,6 @@
 import type { UnusableCompletionCode } from "./completion-outcome";
+import { sniffMediaType } from "../protocol/image-structure";
+import type { ImagePointerMediaType } from "../tree/image-pointer";
 import { isJsonContentType } from "./content-type";
 import type { ScenarioCall } from "./harness";
 import type { PoolParsedCompletion, PoolTransport } from "./model-pool";
@@ -91,7 +93,7 @@ function parseImagesGeneration(payload: unknown): PoolParsedCompletion {
       // believing it would discard a picture the platform has already paid for.
       const mediaType = sniffBase64MediaType(encoded);
       if (mediaType === undefined) return unusable("unknown-terminator");
-      return usable(`data:image/${mediaType};base64,${encoded}`);
+      return usable(`data:${mediaType};base64,${encoded}`);
     }
     // A link's lifetime is the relay's. It is refused, never fetched or returned.
     if (typeof first.url === "string" && first.url.length > 0) return unusable("tool-or-continuation");
@@ -107,19 +109,9 @@ function parseImagesGeneration(payload: unknown): PoolParsedCompletion {
  * `Buffer.from(..., "base64")` never throws, and a short prefix simply fails
  * every length-guarded match.
  */
-function sniffBase64MediaType(encoded: string): string | undefined {
+function sniffBase64MediaType(encoded: string): ImagePointerMediaType | undefined {
   const head = Buffer.from(encoded.slice(0, SNIFF_BASE64_CHARACTERS), "base64");
-  if (matchesAt(head, 0, [0xff, 0xd8, 0xff])) return "jpeg";
-  if (matchesAt(head, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "png";
-  if (matchesAt(head, 0, [0x52, 0x49, 0x46, 0x46]) && matchesAt(head, 8, [0x57, 0x45, 0x42, 0x50])) {
-    return "webp";
-  }
-  return undefined;
-}
-
-function matchesAt(data: Uint8Array, offset: number, expected: readonly number[]): boolean {
-  return offset + expected.length <= data.length &&
-    expected.every((value, index) => data[offset + index] === value);
+  return sniffMediaType(head) ?? undefined;
 }
 
 /**

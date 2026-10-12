@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { MODEL_DEADLINES } from "../config/model-deadlines";
 import { parseImageBrief } from "../protocol/image-contract";
@@ -81,7 +80,6 @@ describe("image scenario adjudication", () => {
     // Provenance: the provider's own manifest lives in these bytes.
     const sent = Buffer.from(pngDataUrl(1024, 1024).split(",")[1] ?? "", "base64");
     expect(Buffer.from(verdict.value.bytes).equals(sent)).toBe(true);
-    expect(verdict.value.sha256).toBe(createHash("sha256").update(sent).digest("hex"));
   });
 
   it.each([

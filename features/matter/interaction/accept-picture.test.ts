@@ -246,7 +246,6 @@ function createHarness(overrides: Readonly<{
   });
   const other = {
     getImageBlob: vi.fn(),
-    hasImageBlob: vi.fn(),
     listImageBlobHashes: vi.fn(),
   };
   const commit = vi.fn((mutation: ReplaceImageMutation) => {

@@ -1,13 +1,11 @@
 import { clientMatterBasePath } from "../config/base-path";
 import { MODEL_DEADLINES } from "../config/model-deadlines";
 import {
-  IMAGE_MEDIA_TYPES,
   IMAGE_RESPONSE_HEADERS,
-  MAX_IMAGE_BYTES,
   parseImageResultMeta,
   type ImageRequestEnvelope,
 } from "../protocol/image-contract";
-import { inspectImageStructure } from "../protocol/image-structure";
+import { verifyPictureBytes } from "../protocol/image-verify";
 import {
   PICTURE_SERVER_ERROR_CODES,
   type GeneratedPicture,
@@ -15,7 +13,12 @@ import {
   type PictureServerErrorCode,
 } from "../runtime/picture-turn";
 import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
-import { parseImagePointer } from "../tree/image-pointer";
+import {
+  IMAGE_POINTER_MEDIA_TYPES,
+  isImagePointerMediaType,
+  MAX_IMAGE_POINTER_BYTES,
+  parseImagePointer,
+} from "../tree/image-pointer";
 import { readBoundedJsonResponse } from "./bounded-json-response";
 import { createRequestDeadline } from "./request-deadline";
 
@@ -60,7 +63,7 @@ export async function requestPicture(
       send(`${clientMatterBasePath()}/api/image`, {
         method: "POST",
         headers: {
-          accept: `${IMAGE_MEDIA_TYPES.join(", ")}, application/json`,
+          accept: `${IMAGE_POINTER_MEDIA_TYPES.join(", ")}, application/json`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(envelope),
@@ -125,13 +128,12 @@ async function readPicture(
   response: Response,
   deadline: ReturnType<typeof createRequestDeadline>,
 ): Promise<GeneratedPicture> {
-  const mediaType = (IMAGE_MEDIA_TYPES as readonly string[]).find(
-    (candidate) => candidate === response.headers.get("content-type")?.trim().toLowerCase(),
-  );
+  const contentType = response.headers.get("content-type")?.trim().toLowerCase();
+  const mediaType = isImagePointerMediaType(contentType) ? contentType : undefined;
   const declared = response.headers.get("content-length");
   if (
     mediaType === undefined ||
-    (declared !== null && (!/^\d+$/u.test(declared) || Number(declared) > MAX_IMAGE_BYTES))
+    (declared !== null && (!/^\d+$/u.test(declared) || Number(declared) > MAX_IMAGE_POINTER_BYTES))
   ) {
     void response.body?.cancel().catch(() => undefined);
     throw invalid();
@@ -148,21 +150,10 @@ async function readPicture(
   });
   if (meta === null) throw invalid();
 
-  let digest: string;
-  try {
-    digest = await sha256Hex(bytes);
-  } catch {
-    // Without a digest the bytes cannot be verified, and unverified bytes are refused.
-    throw invalid();
-  }
-  if (digest !== meta.contentHash) throw invalid();
-
-  const structure = inspectImageStructure(bytes, meta.mediaType);
-  if (!structure.ok || structure.width !== meta.width || structure.height !== meta.height) {
-    throw invalid();
-  }
   const pointer = parseImagePointer(meta);
   if (pointer === null) throw invalid();
+  // Unverified bytes, including where no digest can be computed, are refused.
+  if (!(await verifyPictureBytes(pointer, bytes)).ok) throw invalid();
   return Object.freeze({ bytes, pointer });
 }
 
@@ -174,7 +165,7 @@ async function readBytes(response: Response, signal: AbortSignal): Promise<Uint8
     signal.throwIfAborted();
   }
   const reader = body.getReader();
-  const accumulator = new BoundedByteAccumulator(MAX_IMAGE_BYTES);
+  const accumulator = new BoundedByteAccumulator(MAX_IMAGE_POINTER_BYTES);
   let oversized = false;
   const cancel = () => {
     void reader.cancel(signal.reason).catch(() => undefined);
@@ -202,11 +193,6 @@ async function readBytes(response: Response, signal: AbortSignal): Promise<Uint8
 function headerInteger(response: Response, name: string): number | null {
   const value = response.headers.get(name);
   return value !== null && /^\d{1,6}$/u.test(value) ? Number(value) : null;
-}
-
-async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes));
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 // The image protocol owns no client-side error parser; this reads exactly the

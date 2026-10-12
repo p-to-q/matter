@@ -1,6 +1,7 @@
 import type { MatterLocale } from "../config/locales";
 import {
   IMAGE_REQUEST_VERSION,
+  canDrawFromPassage,
   parseImageRequestEnvelope,
   type ImageRequestEnvelope,
 } from "../protocol/image-contract";
@@ -154,7 +155,10 @@ export class PictureDriver {
     const { nodeId } = this.dependencies;
     const requestId = this.dependencies.mintRequestId();
     const node = this.dependencies.getNode(nodeId);
-    const envelope = node === undefined ? null : this.buildEnvelope(requestId, node.text);
+    // The control's own rule, asked again here: a passage edited since arming may no longer qualify.
+    const envelope = node === undefined || !canDrawFromPassage(node.text)
+      ? null
+      : this.buildEnvelope(requestId, node.text);
     if (node === undefined || envelope === null) {
       this.apply({ type: "stale" });
       return;

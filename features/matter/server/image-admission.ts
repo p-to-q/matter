@@ -15,10 +15,19 @@ import { imageSurfaceMode } from "./image-surface";
  * multiplied by an assumed replica count to infer a global ceiling. Spend is
  * protected by the surface gate shipping closed and by an edge rule and a
  * provider budget outside this repository.
+ *
+ * The shared perimeter meters only when NODE_ENV is "production", because
+ * fixture and development traffic shares one process and often no forwarded
+ * identity. That is the right default for text and the wrong one here: a
+ * staging deployment that runs NODE_ENV=something-else with the live gate open
+ * is a paid surface with no rate limit and no origin check. So a live gate is
+ * always metered, whatever the build calls itself.
  */
 const imageAdmission = createPublicRequestAdmission({
   requestsPerWindow: 3,
   maxConcurrent: 2,
+  metered: (environment) =>
+    imageSurfaceMode(environment) === "live" || environment.NODE_ENV === "production",
 });
 
 export function admitImageRequest(
@@ -26,16 +35,7 @@ export function admitImageRequest(
   environment: Readonly<Record<string, string | undefined>> = process.env,
   now: () => number = Date.now,
 ): PublicRequestAdmission {
-  // The shared perimeter meters only when NODE_ENV is "production", because
-  // fixture and development traffic shares one process and often no forwarded
-  // identity. That is the right default for text and the wrong one here: a
-  // staging deployment that runs NODE_ENV=something-else with the live gate open
-  // is a paid surface with no rate limit and no origin check. So a live gate is
-  // always metered, whatever the build calls itself.
-  const metered = imageSurfaceMode(environment) === "live"
-    ? { ...environment, NODE_ENV: "production" }
-    : environment;
-  return imageAdmission.admit(request, metered, now);
+  return imageAdmission.admit(request, environment, now);
 }
 
 export function resetImageAdmissionForTests(): void {

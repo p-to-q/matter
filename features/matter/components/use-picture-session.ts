@@ -2,13 +2,14 @@
 
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { MatterLocale } from "../config/locales";
-import type { ImageAvailability } from "../interaction/image-availability-read";
+import type { ImageSurfaceAvailability } from "../interaction/image-surface-availability";
 import { subscribePageExit } from "../interaction/page-suspension";
 import { PictureDriver, type PictureDriverState } from "../interaction/picture-driver";
 import { createPictureTurnState } from "../runtime/picture-turn";
 import {
   BROWSER_PICTURE_VISIBILITY,
   createPictureCommit,
+  keepPictureGesture,
   mintPictureCommandId,
   mintPictureRequestId,
 } from "./picture-authoring";
@@ -68,7 +69,7 @@ export function usePictureSession(input: Readonly<{
 }>): PictureSession | null {
   const authoring = useContext(PictureAuthoringContext);
   const { documentEpoch, nodeId } = input;
-  const [availability, setAvailability] = useState<ImageAvailability>(
+  const [availability, setAvailability] = useState<ImageSurfaceAvailability>(
     () => authoring === null ? "unavailable" : PICTURE_SHARED.availability.peek(),
   );
   const [driver, setDriver] = useState<PictureDriver | null>(null);
@@ -92,39 +93,51 @@ export function usePictureSession(input: Readonly<{
 
   useEffect(() => {
     if (authoring === null || availability !== "available") return;
-    const created = new PictureDriver({
-      nodeId,
-      getNode: authoring.readNode,
-      subscribeTree: authoring.subscribeTree,
-      documentEpoch: authoring.documentEpoch,
-      mintRequestId: mintPictureRequestId,
-      locale: () => localeRef.current,
-      commit: createPictureCommit({
-        attachPicture: authoring.attachPicture,
-        documentEpoch,
-        mintCommandId: mintPictureCommandId,
-        now: () => new Date().toISOString(),
-      }),
-      blobRepository: authoring.blobRepository,
-      cache: authoring.cache,
-      inFlightGate: PICTURE_SHARED.gate,
-      visibility: BROWSER_PICTURE_VISIBILITY,
-      subscribePageExit,
-      onState: setState,
-    });
-    setDriver(created);
-    setState(created.state);
+    const owner: { driver: PictureDriver | null } = { driver: null };
+    let live = true;
+    // The store (session cache, blob connection) is built here, on the first
+    // session that can draw, not when the app mounts. No control exists until it is.
+    void authoring.loadStore().then(({ cache, repository }) => {
+      if (!live) return;
+      const created = new PictureDriver({
+        nodeId,
+        getNode: authoring.readNode,
+        subscribeTree: authoring.subscribeTree,
+        documentEpoch: authoring.documentEpoch,
+        mintRequestId: mintPictureRequestId,
+        locale: () => localeRef.current,
+        commit: createPictureCommit({
+          attachPicture: authoring.attachPicture,
+          documentEpoch,
+          mintCommandId: mintPictureCommandId,
+          now: () => new Date().toISOString(),
+        }),
+        blobRepository: repository,
+        cache,
+        inFlightGate: PICTURE_SHARED.gate,
+        visibility: BROWSER_PICTURE_VISIBILITY,
+        subscribePageExit,
+        onState: setState,
+      });
+      owner.driver = created;
+      setDriver(created);
+      setState(created.state);
+    }, () => undefined);
     return () => {
-      created.dispose();
+      live = false;
+      owner.driver?.dispose();
       setDriver(null);
     };
   }, [authoring, availability, documentEpoch, nodeId]);
 
   const keep = useCallback(() => {
-    if (driver === null) return;
+    if (driver === null || authoring === null) return;
     setKeeping(true);
-    void driver.accept().finally(() => setKeeping(false));
-  }, [driver]);
+    void keepPictureGesture({
+      requestPersistence: authoring.requestPersistence,
+      accept: () => driver.accept(),
+    }).finally(() => setKeeping(false));
+  }, [authoring, driver]);
 
   const actions = useMemo<PointTalkPictureActions>(() => driver === null ? NO_ACTIONS : Object.freeze({
     arm: () => driver.arm(),
@@ -142,7 +155,6 @@ export function usePictureSession(input: Readonly<{
 
   const control = pictureControlPresentation({
     availability: driver === null ? "unavailable" : availability,
-    nodeId,
     passageText: input.passageText,
     // The passage's own turn counts: while it draws or previews, the control
     // is there but cannot start another.

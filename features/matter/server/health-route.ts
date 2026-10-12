@@ -40,9 +40,10 @@ export type MatterHealth = Readonly<{
     transformTurn: MatterHealthSurface;
     textSwap: MatterHealthSurface;
     /**
-     * Ships closed and has no control. Never `user-configurable`: a person's
-     * provider session is not a supply for a surface that costs real money per
-     * generation, so only an operator's configuration can open it.
+     * Ships closed. The picture control renders only on `available`, never on
+     * `fixture`. Never `user-configurable`: a person's provider session is not a
+     * supply for a surface that costs real money per generation, so only an
+     * operator's configuration can open it.
      */
     imageGeneration: MatterHealthSurface;
     archiveExportImport: "available";

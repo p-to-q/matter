@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { unzipSync, zipSync } from "fflate";
 import { createSeededDocument } from "../material/seeded-document";
 import {
+  IMAGE_POINTER_MEDIA_TYPES,
   MAX_IMAGE_POINTER_BYTES,
   MAX_TREE_IMAGE_BYTES,
   MAX_TREE_IMAGE_NODES,
@@ -10,7 +11,7 @@ import {
 } from "../tree/image-pointer";
 import type { ThoughtTree } from "../tree/model";
 import { treeToBundle } from "./snapshot-codec";
-import { exportSnapshotArchive, importSnapshotArchive } from "./archive-transport";
+import { BLOB_EXTENSIONS, exportSnapshotArchive, importSnapshotArchive } from "./archive-transport";
 
 const MTIME = new Date(Date.UTC(1980, 0, 1));
 
@@ -68,10 +69,8 @@ function pictureOf(
   };
 }
 
-const EXTENSION = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as const;
-
 function pathOf(pointer: ImagePointer): string {
-  return `matter/blobs/${pointer.contentHash}.${EXTENSION[pointer.mediaType]}`;
+  return `matter/blobs/${pointer.contentHash}.${BLOB_EXTENSIONS[pointer.mediaType]}`;
 }
 
 function treeWith(pointers: readonly ImagePointer[]): ThoughtTree {
@@ -151,6 +150,41 @@ function forgeSize(
 }
 
 const HASH_A = "a".repeat(64);
+
+describe("archive pictures: media type table", () => {
+  const builders = {
+    "image/jpeg": () => pictureOf(jpeg(800, 600, 5), "image/jpeg", 800, 600),
+    "image/png": () => pictureOf(png(1024, 768, 3), "image/png", 1024, 768),
+    "image/webp": () => pictureOf(webp(512, 512, 7), "image/webp", 512, 512),
+  } as const satisfies Record<ImagePointer["mediaType"], () => Picture>;
+
+  it("has exactly one extension per media type the tree allows, and no other", () => {
+    expect(Object.keys(BLOB_EXTENSIONS).sort()).toEqual([...IMAGE_POINTER_MEDIA_TYPES].sort());
+    expect(Object.keys(builders).sort()).toEqual([...IMAGE_POINTER_MEDIA_TYPES].sort());
+    expect(new Set(Object.values(BLOB_EXTENSIONS)).size).toBe(IMAGE_POINTER_MEDIA_TYPES.length);
+  });
+
+  it.each(IMAGE_POINTER_MEDIA_TYPES)("exports and re-imports %s under its own extension", async (mediaType) => {
+    const picture = builders[mediaType]();
+    const tree = treeWith([picture.pointer]);
+    const result = await exported(tree, blobMap([picture]));
+    expect(centralRecords(result.bytes).map((record) => record.name))
+      .toContain(`matter/blobs/${picture.pointer.contentHash}.${BLOB_EXTENSIONS[mediaType]}`);
+    const imported = await importSnapshotArchive(result.bytes);
+    expect(code(imported)).toBe("ok");
+  });
+
+  it("refuses a picture path whose extension is not in the table", async () => {
+    const picture = builders["image/png"]();
+    const tree = treeWith([picture.pointer]);
+    for (const extension of ["jpeg", "gif", "PNG", "png ", "bin", ""]) {
+      const result = await importSnapshotArchive(
+        archiveOf(tree, { [`matter/blobs/${picture.pointer.contentHash}.${extension}`]: picture.bytes }),
+      );
+      expect(code(result), extension).toBe("ARCHIVE_UNSUPPORTED_ENTRY");
+    }
+  });
+});
 
 describe("archive pictures: export", () => {
   it("writes each referenced picture once, stored, in code-unit order, and imports it back byte for byte", async () => {

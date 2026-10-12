@@ -6,11 +6,12 @@ import { createRequestDeadline, type RequestDeadline } from "./request-deadline"
  * The picture control renders only on `available`. Everything else, and the
  * time before any answer, is `unavailable`: the server's `fixture` and
  * `user-configurable` states are deliberately not a reason to offer a paid
- * control.
+ * control. This is the server surface's word; the bytes behind a pointer have
+ * their own, `ImageAvailability` in `persistence/image-availability.ts`.
  */
-export type ImageAvailability = "available" | "unavailable";
+export type ImageSurfaceAvailability = "available" | "unavailable";
 
-export type ImageAvailabilityReadOptions = Readonly<{
+export type ImageSurfaceAvailabilityReadOptions = Readonly<{
   fetch?: typeof fetch;
   signal?: AbortSignal;
   deadlineMs?: number;
@@ -27,9 +28,9 @@ const AVAILABLE = "available";
  * reads nothing but `surfaces.imageGeneration`: any failure to learn that the
  * surface is `available` is the answer `unavailable`.
  */
-export async function readImageAvailability(
-  options: ImageAvailabilityReadOptions = {},
-): Promise<ImageAvailability> {
+export async function readImageSurfaceAvailability(
+  options: ImageSurfaceAvailabilityReadOptions = {},
+): Promise<ImageSurfaceAvailability> {
   let deadline: RequestDeadline | undefined;
   try {
     deadline = createRequestDeadline(
@@ -73,17 +74,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-export type ImageAvailabilityCacheOptions = Readonly<{
-  read: () => Promise<ImageAvailability>;
+export type ImageSurfaceAvailabilityCacheOptions = Readonly<{
+  read: () => Promise<ImageSurfaceAvailability>;
   ttlMs?: number;
   now?: () => number;
 }>;
 
-export type ImageAvailabilityCache = Readonly<{
+export type ImageSurfaceAvailabilityCache = Readonly<{
   /** The shared answer: a fresh one, the read already in flight, or one new read. */
-  get(): Promise<ImageAvailability>;
+  get(): Promise<ImageSurfaceAvailability>;
   /** What a render may use now: a fresh answer, else `unavailable`. */
-  peek(): ImageAvailability;
+  peek(): ImageSurfaceAvailability;
   /** Forgets the answer and the read in flight; the next `get` reads again. */
   invalidate(): void;
 }>;
@@ -92,16 +93,16 @@ export type ImageAvailabilityCache = Readonly<{
  * Many passages ask the same question; the server is asked once per window.
  * A failed read is an answer too, so a broken health route is not hammered.
  */
-export function createImageAvailabilityCache(
-  options: ImageAvailabilityCacheOptions,
-): ImageAvailabilityCache {
+export function createImageSurfaceAvailabilityCache(
+  options: ImageSurfaceAvailabilityCacheOptions,
+): ImageSurfaceAvailabilityCache {
   const ttlMs = options.ttlMs ?? DEFAULT_TTL_MS;
   if (!Number.isFinite(ttlMs) || ttlMs <= 0) {
     throw new RangeError("The availability TTL must be positive and finite.");
   }
   const now = options.now ?? Date.now;
-  let answer: Readonly<{ value: ImageAvailability; expiresAt: number }> | null = null;
-  let inFlight: Promise<ImageAvailability> | null = null;
+  let answer: Readonly<{ value: ImageSurfaceAvailability; expiresAt: number }> | null = null;
+  let inFlight: Promise<ImageSurfaceAvailability> | null = null;
 
   const fresh = () => (answer !== null && now() < answer.expiresAt ? answer.value : null);
 
@@ -110,7 +111,7 @@ export function createImageAvailabilityCache(
       const held = fresh();
       if (held !== null) return Promise.resolve(held);
       if (inFlight !== null) return inFlight;
-      const flight: Promise<ImageAvailability> = (async () => {
+      const flight: Promise<ImageSurfaceAvailability> = (async () => {
         try {
           return (await options.read()) === AVAILABLE ? AVAILABLE : "unavailable";
         } catch {

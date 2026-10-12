@@ -7,6 +7,8 @@ export type PublicRequestAdmissionPolicy = Readonly<{
   maxConcurrent: number;
   maxIdentities?: number;
   windowMs?: number;
+  /** Whether this environment is metered; the default is `NODE_ENV === "production"`. */
+  metered?: (environment: Readonly<Record<string, string | undefined>>) => boolean;
 }>;
 
 type WindowEntry = { startedAt: number; requests: number };
@@ -55,7 +57,8 @@ export function createPublicRequestAdmission(policy: PublicRequestAdmissionPolic
       // Fixture, unit, and development traffic share one process and often no
       // forwarded identity. Production is the only environment where this
       // perimeter represents a meaningful instance-local admission signal.
-      if (environment.NODE_ENV !== "production") return DEVELOPMENT_ADMISSION;
+      const metered = policy.metered?.(environment) ?? environment.NODE_ENV === "production";
+      if (!metered) return DEVELOPMENT_ADMISSION;
       if (!originAllowed(request, environment)) return refuse(request, "ORIGIN");
 
       const timestamp = now();

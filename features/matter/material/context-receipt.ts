@@ -1,4 +1,5 @@
 import { MAX_NODES_PER_TREE, MAX_NODE_TEXT_CODE_UNITS, isMaterialId } from "../tree/invariants";
+import { sha256Hex } from "../tree/sha256";
 import { isWellFormedUnicodeText } from "../tree/unicode-text";
 import {
   MATERIAL_ADDRESS_KINDS,
@@ -13,8 +14,8 @@ import {
  * of one MaterialProjection. It is a projection, never an authority, and
  * nothing parsed here is ever fed back into the tree.
  *
- * Rendering and parsing are async because the digest uses `crypto.subtle`, as
- * the persistence layer already does, rather than a second hand-written hash.
+ * Rendering and parsing are async because the digest is the shared Web Crypto
+ * `sha256Hex`, not a second hand-written hash.
  *
  * Text is never interpreted: every line of node text sits behind a `> ` prefix
  * and the front matter, fence and digest are located by position, so no node
@@ -381,11 +382,4 @@ function projectionProblem(projection: MaterialProjection): string | null {
     return "clipped";
   }
   return null;
-}
-
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = new Uint8Array(
-    await globalThis.crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>),
-  );
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

@@ -12,6 +12,7 @@ import { createMatterStore } from "../store/matter-store";
 import {
   BROWSER_PICTURE_VISIBILITY,
   createPictureCommit,
+  keepPictureGesture,
   mintPictureCommandId,
   mintPictureRequestId,
   pictureCommitFromReceipt,
@@ -33,6 +34,36 @@ const TARGET = SEEDED_DOCUMENT_NODE_IDS.imaginedLives;
 const PNG = Uint8Array.from(
   Buffer.from(FIXTURE_IMAGE_DATA_URL.slice(FIXTURE_IMAGE_DATA_URL.indexOf(",") + 1), "base64"),
 );
+
+describe("Keep's persistence request", () => {
+  it("is made synchronously, before the accept starts and before any await", () => {
+    const order: string[] = [];
+    let release!: () => void;
+    const accept = vi.fn(() => {
+      order.push("accept");
+      return new Promise<void>((resolve) => { release = resolve; });
+    });
+
+    const pending = keepPictureGesture({
+      requestPersistence: (gesture) => { order.push(`persist:${gesture}`); },
+      accept,
+    });
+
+    // Nothing has been awaited yet: the click's activation is still live.
+    expect(order).toEqual(["persist:keep", "accept"]);
+    release();
+    return expect(pending).resolves.toBeUndefined();
+  });
+
+  it("still asks when the accept fails, and hands back the accept's own outcome", async () => {
+    const requestPersistence = vi.fn();
+    await expect(keepPictureGesture({
+      requestPersistence,
+      accept: () => Promise.reject(new Error("not saved")),
+    })).rejects.toThrow("not saved");
+    expect(requestPersistence).toHaveBeenCalledExactlyOnceWith("keep");
+  });
+});
 
 describe("Keep's side of the store", () => {
   it("maps a receipt to the commit the driver understands: committed, stale, or rejected", () => {

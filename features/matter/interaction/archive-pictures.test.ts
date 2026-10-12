@@ -60,7 +60,6 @@ function repositoryOf(overrides: Partial<ImageBlobRepository>): ImageBlobReposit
   return {
     putImageBlob: vi.fn(() => Promise.resolve({ ok: true, value: "written" } as const)),
     getImageBlob: vi.fn(() => Promise.resolve(read("absent"))),
-    hasImageBlob: vi.fn(),
     listImageBlobHashes: vi.fn(),
     ...overrides,
   } as ImageBlobRepository;

@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createImageBlobRepository, type ImageBlobRepository } from "./image-blob-repository";
-import type { MatterDatabaseHandle } from "./matter-database";
+import {
+  createImageBlobRepository,
+  type ImageBlobDatabaseHandle,
+  type ImageBlobRepository,
+} from "./image-blob-repository";
 import { MAX_IMAGE_POINTER_BYTES, type ImagePointer } from "../tree/image-pointer";
 
 const STORED_AT = "2026-10-12T00:00:00.000Z";
@@ -14,7 +17,7 @@ describe("image blob repository", () => {
   beforeEach(() => {
     database = new MemoryBlobDatabase();
     open = vi.fn(async () => database);
-    const handle: MatterDatabaseHandle = { open: open as never, close: vi.fn(), reset: vi.fn() };
+    const handle: ImageBlobDatabaseHandle = { open: open as never };
     repository = createImageBlobRepository(handle, () => STORED_AT);
   });
 
@@ -33,7 +36,6 @@ describe("image blob repository", () => {
       expect(read.value.blob.pointer).toEqual(pointer);
       expect(read.value.blob.storedAt).toBe(STORED_AT);
       expect(new Uint8Array(read.value.blob.bytes)).toEqual(new Uint8Array(bytes));
-      await expect(repository.hasImageBlob(pointer.contentHash)).resolves.toEqual({ ok: true, value: true });
     });
 
     it("stores one row per hash, with exactly the documented fields", async () => {
@@ -57,11 +59,10 @@ describe("image blob repository", () => {
       expect(Object.prototype.toString.call(row.bytes)).toBe("[object ArrayBuffer]");
     });
 
-    it("reports absent for a hash it never stored, and false for has", async () => {
+    it("reports absent for a hash it never stored", async () => {
       const hash = picture(1).pointer.contentHash;
 
       await expect(repository.getImageBlob(hash)).resolves.toEqual({ ok: true, value: { status: "absent" } });
-      await expect(repository.hasImageBlob(hash)).resolves.toEqual({ ok: true, value: false });
     });
 
     it("lists the hash of every stored blob", async () => {
@@ -127,17 +128,30 @@ describe("image blob repository", () => {
     });
 
     it("refuses an oversize image even when pointer and bytes agree", async () => {
-      const bytes = new Uint8Array(MAX_IMAGE_POINTER_BYTES + 1).fill(7).buffer;
+      const bytes = png(512, 384, new Uint8Array(MAX_IMAGE_POINTER_BYTES + 1 - 45));
       const pointer = pointerFor(bytes);
 
       await refused(pointer, bytes);
     });
 
     it("accepts an image of exactly the maximum size", async () => {
-      const bytes = new Uint8Array(MAX_IMAGE_POINTER_BYTES).fill(7).buffer;
+      const bytes = png(512, 384, new Uint8Array(MAX_IMAGE_POINTER_BYTES - 45));
       const pointer = pointerFor(bytes);
+      expect(bytes.byteLength).toBe(MAX_IMAGE_POINTER_BYTES);
 
       await expect(repository.putImageBlob(pointer, bytes)).resolves.toEqual({ ok: true, value: "written" });
+    });
+
+    it("refuses bytes that hash to the pointer but are not the picture it describes", async () => {
+      const { bytes } = picture(1);
+      const notAnImage = fillerOf(300, 5).buffer;
+      const cutShort = bytes.slice(0, bytes.byteLength - 12);
+
+      await refused(pointerFor(notAnImage), notAnImage);
+      await refused(pointerFor(cutShort), cutShort);
+      await refused(pointerFor(bytes, { width: 513 }), bytes);
+      await refused(pointerFor(bytes, { height: 385 }), bytes);
+      await refused(pointerFor(bytes, { mediaType: "image/jpeg" }), bytes);
     });
 
     it("refuses a content hash that is not 64 lowercase hex digits", async () => {
@@ -172,10 +186,9 @@ describe("image blob repository", () => {
       await refused(pointer, undefined);
     });
 
-    it("refuses a malformed hash on read and has without opening storage", async () => {
+    it("refuses a malformed hash on read without opening storage", async () => {
       for (const hash of ["", "ab", "A".repeat(64), "g".repeat(64), 7, null]) {
         await expect(repository.getImageBlob(hash as string)).resolves.toEqual({ ok: false, code: "REJECTED" });
-        await expect(repository.hasImageBlob(hash as string)).resolves.toEqual({ ok: false, code: "REJECTED" });
       }
       expect(open).not.toHaveBeenCalled();
     });
@@ -203,7 +216,6 @@ describe("image blob repository", () => {
         ok: true,
         value: { status: "damaged" },
       });
-      await expect(repository.hasImageBlob(pointer.contentHash)).resolves.toEqual({ ok: true, value: false });
     });
 
     it("reports every other broken row shape as damaged", async () => {
@@ -227,8 +239,6 @@ describe("image blob repository", () => {
         database.mutate(pointer.contentHash, change as never);
         await expect(repository.getImageBlob(pointer.contentHash), label)
           .resolves.toEqual({ ok: true, value: { status: "damaged" } });
-        await expect(repository.hasImageBlob(pointer.contentHash), label)
-          .resolves.toEqual({ ok: true, value: false });
       }
     });
 
@@ -245,13 +255,12 @@ describe("image blob repository", () => {
   });
 
   describe("a newer build's row", () => {
-    it("is superseded for get, has, and put, and is never overwritten", async () => {
+    it("is superseded for get and put, and is never overwritten", async () => {
       const { pointer, bytes } = picture(1);
       database.seed({ contentHash: pointer.contentHash, storageSchemaVersion: 2, layout: "from a newer build" });
       const before = database.rows();
 
       await expect(repository.getImageBlob(pointer.contentHash)).resolves.toEqual({ ok: false, code: "SUPERSEDED" });
-      await expect(repository.hasImageBlob(pointer.contentHash)).resolves.toEqual({ ok: false, code: "SUPERSEDED" });
       await expect(repository.putImageBlob(pointer, bytes)).resolves.toEqual({ ok: false, code: "SUPERSEDED" });
 
       expect(database.rows()).toEqual(before);
@@ -316,11 +325,6 @@ describe("image blob repository", () => {
         code: "STORAGE_UNAVAILABLE",
       });
       open.mockRejectedValueOnce(new Error("blocked"));
-      await expect(repository.hasImageBlob(pointer.contentHash)).resolves.toEqual({
-        ok: false,
-        code: "STORAGE_UNAVAILABLE",
-      });
-      open.mockRejectedValueOnce(new Error("blocked"));
       await expect(repository.listImageBlobHashes()).resolves.toEqual({ ok: false, code: "STORAGE_UNAVAILABLE" });
       expect(database.rows()).toEqual([]);
     });
@@ -340,19 +344,38 @@ describe("image blob repository", () => {
   });
 });
 
-function picture(seed: number): { pointer: ImagePointer; bytes: ArrayBuffer } {
-  const bytes = new Uint8Array(300);
-  for (let index = 0; index < bytes.length; index += 1) bytes[index] = (index * 31 + seed * 17) % 251;
-  return { pointer: pointerFor(bytes.buffer), bytes: bytes.buffer };
+/** A structurally valid PNG: signature, IHDR, `filler` payload bytes, and the closing IEND. */
+function png(width: number, height: number, filler: Uint8Array): ArrayBuffer {
+  const header = new Uint8Array(33);
+  header.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  const view = new DataView(header.buffer);
+  view.setUint32(8, 13);
+  header.set([0x49, 0x48, 0x44, 0x52], 12);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  const end = [0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82];
+  return Uint8Array.from([...header, ...filler, ...end]).buffer;
 }
 
-function pointerFor(bytes: ArrayBuffer): ImagePointer {
+function fillerOf(length: number, seed: number): Uint8Array<ArrayBuffer> {
+  const filler = new Uint8Array(length);
+  for (let index = 0; index < length; index += 1) filler[index] = (index * 31 + seed * 17) % 251;
+  return filler;
+}
+
+function picture(seed: number): { pointer: ImagePointer; bytes: ArrayBuffer } {
+  const bytes = png(512, 384, fillerOf(300, seed));
+  return { pointer: pointerFor(bytes), bytes };
+}
+
+function pointerFor(bytes: ArrayBuffer, overrides: Partial<ImagePointer> = {}): ImagePointer {
   return {
     mediaType: "image/png",
     byteLength: bytes.byteLength,
     width: 512,
     height: 384,
     contentHash: createHash("sha256").update(new Uint8Array(bytes)).digest("hex"),
+    ...overrides,
   };
 }
 
@@ -435,3 +458,13 @@ class MemoryBlobDatabase {
     this.store.set(hash, change(this.store.get(hash)!) as Row);
   }
 }
+
+// The handle can open a transaction on `blobs` and nothing else: the type, not
+// a convention, keeps this module away from the Wiki store.
+async function neverRun(handle: ImageBlobDatabaseHandle): Promise<void> {
+  const database = await handle.open();
+  database.transaction("blobs", "readonly");
+  // @ts-expect-error `wiki` is not a store this handle can open.
+  database.transaction("wiki", "readonly");
+}
+void neverRun;

@@ -1,50 +1,95 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { RestoredPictures } from "../interaction/archive-pictures";
 import {
-  createPictureBytesSource,
+  UNAVAILABLE_PICTURE_BYTES,
   type PictureBytesSource,
 } from "../interaction/picture-bytes-source";
-import {
-  createPictureSessionCache,
-  type PictureSessionCache,
-} from "../interaction/picture-session-cache";
-import {
-  createImageBlobRepository,
-  type ImageBlobRepository,
-} from "../persistence/image-blob-repository";
-import { createMatterDatabaseHandle } from "../persistence/matter-database";
+import type { ImagePointer } from "../tree/image-pointer";
+import type { ThoughtTree } from "../tree/model";
+import type { PictureStore } from "./picture-store";
 
 /**
- * The mount's one holder of picture bytes: what passages read, and what the
- * archive collects from and restores into.
+ * The mount's door to picture bytes. The store itself (cache, blob connection,
+ * archive collect and restore) is a lazy chunk built on the first thing that
+ * needs it: a passage that carries a picture, a Keep, or an archive that has
+ * pictures. A document without pictures never loads or constructs any of it.
  */
-export type PictureStore = Readonly<{
+export type PictureStoreAccess = Readonly<{
+  /** Builds the one store on first call; a failed load is retried by the next call. */
+  load: () => Promise<PictureStore>;
+  /** What passages read; honest `unavailable` when the store cannot be loaded. */
   bytes: PictureBytesSource;
-  cache: PictureSessionCache;
-  repository: ImageBlobRepository;
+  /** Empty, without loading anything, when the tree names no picture. */
+  collectBlobs: (tree: ThoughtTree) => Promise<ReadonlyMap<string, Uint8Array>>;
+  /** Nothing to restore, nothing loaded, when the archive carries no picture. */
+  restoreBlobs: (
+    blobs: ReadonlyMap<string, Uint8Array>,
+    tree: ThoughtTree,
+  ) => Promise<RestoredPictures>;
+  /** Releases the blob connection if one was ever opened. */
+  close: () => void;
 }>;
 
-/**
- * One session cache and one lazily opened read connection for the mount. Each
- * persistence module keeps its own handle, so this one is private to picture
- * bytes; it opens nothing until a passage that carries a picture, or an archive
- * gesture, asks for them, and it is released with the mount.
- */
-export function usePictureStore(): PictureStore {
-  const [owner] = useState(() => {
-    const handle = createMatterDatabaseHandle();
-    const cache = createPictureSessionCache();
-    const repository = createImageBlobRepository(handle);
-    return Object.freeze({
-      handle,
-      store: Object.freeze({
-        bytes: createPictureBytesSource({ cache, repository }),
-        cache,
-        repository,
-      }),
-    });
+const NO_BLOBS: ReadonlyMap<string, Uint8Array> = new Map();
+
+export function createPictureStoreAccess(
+  importStore: () => Promise<typeof import("./picture-store")> = () => import("./picture-store"),
+): PictureStoreAccess {
+  let loading: Promise<PictureStore> | null = null;
+  let loaded: PictureStore | null = null;
+  const load = () => {
+    loading ??= importStore().then(
+      (module) => {
+        loaded = module.createPictureStore();
+        return loaded;
+      },
+      (error: unknown) => {
+        loading = null;
+        throw error;
+      },
+    );
+    return loading;
+  };
+  return Object.freeze({
+    load,
+    bytes: Object.freeze({
+      async read(pointer: ImagePointer) {
+        let store: PictureStore;
+        try {
+          store = await load();
+        } catch {
+          return UNAVAILABLE_PICTURE_BYTES.read(pointer);
+        }
+        return store.bytes.read(pointer);
+      },
+    }),
+    async collectBlobs(tree) {
+      if (!Object.values(tree.nodes).some((node) => node.image !== undefined)) return NO_BLOBS;
+      try {
+        return await (await load()).collectBlobs(tree);
+      } catch {
+        // A picture this device cannot produce is left out and counted, never an error.
+        return NO_BLOBS;
+      }
+    },
+    async restoreBlobs(blobs, tree) {
+      if (blobs.size === 0) return Object.freeze({ saved: 0, keptInSession: 0 });
+      try {
+        return await (await load()).restoreBlobs(blobs, tree);
+      } catch {
+        return Object.freeze({ saved: 0, keptInSession: blobs.size });
+      }
+    },
+    close() {
+      loaded?.close();
+    },
   });
-  useEffect(() => () => owner.handle.close(), [owner]);
-  return owner.store;
+}
+
+export function usePictureStore(): PictureStoreAccess {
+  const [access] = useState(() => createPictureStoreAccess());
+  useEffect(() => () => access.close(), [access]);
+  return access;
 }

@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
+import { MAX_IMAGE_POINTER_BYTES } from "../tree/image-pointer";
 import { PROTOCOL_VERSION } from "../tree/model";
 import {
   IMAGE_REQUEST_VERSION,
   IMAGE_RESPONSE_HEADERS,
-  MAX_IMAGE_BYTES,
   MAX_IMAGE_BRIEF_CODE_POINTS,
   MAX_IMAGE_DIRECTION_CODE_POINTS,
   MAX_IMAGE_ID_LENGTH,
   MAX_IMAGE_PASSAGE_CODE_POINTS,
+  canDrawFromPassage,
   parseImageBrief,
   parseImageRequestEnvelope,
   parseImageResultMeta,
@@ -271,9 +272,9 @@ describe("image/1 contract", () => {
       expect(parseImageResultMeta(resultMeta({ width: "1024" }))).toBeNull();
     });
 
-    it("byteLength bound: MAX_IMAGE_BYTES accepted, one over rejected", () => {
-      expect(parseImageResultMeta(resultMeta({ byteLength: MAX_IMAGE_BYTES }))).not.toBeNull();
-      expect(parseImageResultMeta(resultMeta({ byteLength: MAX_IMAGE_BYTES + 1 }))).toBeNull();
+    it("byteLength bound: MAX_IMAGE_POINTER_BYTES accepted, one over rejected", () => {
+      expect(parseImageResultMeta(resultMeta({ byteLength: MAX_IMAGE_POINTER_BYTES }))).not.toBeNull();
+      expect(parseImageResultMeta(resultMeta({ byteLength: MAX_IMAGE_POINTER_BYTES + 1 }))).toBeNull();
     });
 
     it("rejects an invalid contentHash: wrong length, non-hex, uppercase, or non-string", () => {
@@ -331,6 +332,29 @@ describe("image/1 contract", () => {
       expect(parseImageBrief({ text: "\u{1F984}".repeat(MAX_IMAGE_BRIEF_CODE_POINTS) })).not.toBeNull();
       expect(parseImageBrief({ text: "\u{1F984}".repeat(MAX_IMAGE_BRIEF_CODE_POINTS + 1) })).toBeNull();
     });
+  });
+});
+
+describe("canDrawFromPassage", () => {
+  const texts: readonly unknown[] = [
+    PASSAGE_TEXT, "a", "a".repeat(MAX_IMAGE_PASSAGE_CODE_POINTS), "a".repeat(MAX_IMAGE_PASSAGE_CODE_POINTS + 1),
+    "𝒳".repeat(MAX_IMAGE_PASSAGE_CODE_POINTS), "𝒳".repeat(MAX_IMAGE_PASSAGE_CODE_POINTS + 1),
+    "", "   ", "\n\t", "lone \ud800 surrogate", "multi\nline passage is fine", null, undefined, 7, {},
+  ];
+
+  it("is the rule the request parser applies to a passage, for every kind of text", () => {
+    for (const text of texts) {
+      const parsed = parseImageRequestEnvelope(envelope({ passage: { nodeId: NODE_ID, text } })).ok;
+      expect(canDrawFromPassage(text), String(text).slice(0, 20)).toBe(parsed);
+    }
+  });
+
+  it("holds the bound in code points and refuses blank, malformed and non-text", () => {
+    expect(canDrawFromPassage("𝒳".repeat(MAX_IMAGE_PASSAGE_CODE_POINTS))).toBe(true);
+    expect(canDrawFromPassage("𝒳".repeat(MAX_IMAGE_PASSAGE_CODE_POINTS + 1))).toBe(false);
+    for (const refused of ["", "  \n ", "x\ud800", null, undefined, 3]) {
+      expect(canDrawFromPassage(refused)).toBe(false);
+    }
   });
 });
 

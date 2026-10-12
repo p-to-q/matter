@@ -7,6 +7,7 @@ import { createIndexedDbDocumentRepository, type SnapshotBasis } from "../featur
 import { createImageBlobRepository } from "../features/matter/persistence/image-blob-repository";
 import { createMatterDatabaseHandle } from "../features/matter/persistence/matter-database";
 import { createSeededDocument } from "../features/matter/material/seeded-document";
+import { sha256Hex } from "../features/matter/tree/sha256";
 import {
   commitTreeCommand,
   createTreeHistory,
@@ -349,20 +350,32 @@ async function versionSixUpgrade(): Promise<unknown> {
   }
 }
 
+/** A structurally valid PNG of an exact length: the store verifies structure, not just a hash. */
+function pngBytes(width: number, height: number, length: number): ArrayBuffer {
+  const bytes = new Uint8Array(length).map((_, index) => (index * 7) % 251);
+  const view = new DataView(bytes.buffer);
+  bytes.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  view.setUint32(8, 13);
+  bytes.set([0x49, 0x48, 0x44, 0x52], 12);
+  view.setUint32(16, width);
+  view.setUint32(20, height);
+  bytes.set([0, 0, 0, 0, 0x49, 0x45, 0x4e, 0x44, 0xae, 0x42, 0x60, 0x82], length - 12);
+  return bytes.buffer;
+}
+
 async function imageBlobRoundTrip(): Promise<unknown> {
   await deleteDatabase();
   const handle = createMatterDatabaseHandle();
   const documents = createIndexedDbDocumentRepository();
   const blobs = createImageBlobRepository(handle);
   try {
-    const bytes = new Uint8Array(4_096).map((_, index) => (index * 7) % 251).buffer;
-    const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    const bytes = pngBytes(512, 512, 4_096);
     const pointer = {
       mediaType: "image/png" as const,
       byteLength: bytes.byteLength,
       width: 512,
       height: 512,
-      contentHash: Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join(""),
+      contentHash: await sha256Hex(bytes),
     };
     const written = await blobs.putImageBlob(pointer, bytes);
     const again = await blobs.putImageBlob(pointer, bytes);
@@ -373,6 +386,9 @@ async function imageBlobRoundTrip(): Promise<unknown> {
     const tampered = bytes.slice(0);
     new Uint8Array(tampered)[0] ^= 0xff;
     const refused = await blobs.putImageBlob(pointer, tampered);
+    // Correctly hashed bytes that are not the picture are refused too.
+    const notAnImage = new Uint8Array(4_096).fill(7).buffer;
+    const notPicture = await blobs.putImageBlob({ ...pointer, contentHash: await sha256Hex(notAnImage) }, notAnImage);
 
     // Derived-storage reclaim must leave pictures alone, in a database that holds both.
     const database = await handle.open();
@@ -403,6 +419,7 @@ async function imageBlobRoundTrip(): Promise<unknown> {
       idempotent: again.ok && again.value === "present",
       sameBytes,
       tamperedRefused: !refused.ok && refused.code === "REJECTED",
+      notAPictureRefused: !notPicture.ok && notPicture.code === "REJECTED",
       reclaimedLabels: reclaimed,
       survivedReclaim: afterReclaim.ok && afterReclaim.value.status === "found",
       damagedReported: damaged.ok && damaged.value.status === "damaged",

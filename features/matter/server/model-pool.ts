@@ -17,7 +17,7 @@ import {
   type ScenarioCall,
   type ScenarioCandidateEvent,
 } from "./harness";
-import { MAX_IMAGE_BYTES } from "../protocol/image-contract";
+import { MAX_IMAGE_POINTER_BYTES } from "../tree/image-pointer";
 import { BoundedByteAccumulator } from "../runtime/bounded-byte-accumulator";
 
 /**
@@ -310,7 +310,7 @@ export const IMAGE_POOL_LIMITS: PoolLimits = Object.freeze({
   // The image transports ignore the token budget; the type requires a positive
   // number, so the smallest one keeps it from meaning anything.
   maxOutputTokens: 1,
-  maxResponseBytes: base64Length(MAX_IMAGE_BYTES) + IMAGE_ENVELOPE_SLACK_BYTES,
+  maxResponseBytes: base64Length(MAX_IMAGE_POINTER_BYTES) + IMAGE_ENVELOPE_SLACK_BYTES,
   failuresBeforeCooldown: 2,
   cooldownMs: 60_000,
   // One generation per request. A relay can bill and then return something

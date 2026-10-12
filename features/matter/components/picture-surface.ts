@@ -1,9 +1,7 @@
-import type { MatterLocale } from "../config/locales";
-import type { ImageAvailability } from "../interaction/image-availability-read";
+import type { ImageSurfaceAvailability } from "../interaction/image-surface-availability";
 import type { PictureAcceptFailure, PictureDriverState } from "../interaction/picture-driver";
-import { IMAGE_REQUEST_VERSION, parseImageRequestEnvelope } from "../protocol/image-contract";
+import { canDrawFromPassage } from "../protocol/image-contract";
 import type { GeneratedPicture, PictureTurnPhase } from "../runtime/picture-turn";
-import { PROTOCOL_VERSION } from "../tree/model";
 import type { PictureControlCopy } from "./picture-control-copy";
 import type { PointTalkCloseReason } from "./point-talk-close";
 
@@ -18,25 +16,16 @@ export type PictureControlPresentation = "absent" | "enabled" | "disabled";
 
 /**
  * The control exists only when the health read said `available` and the
- * passage can be sent as one image request. It stays, `aria-disabled`, while
- * another interaction is pending, so focus survives. The image contract's own
- * parser decides what a sendable passage is.
+ * passage can be drawn from. It stays, `aria-disabled`, while another
+ * interaction is pending, so focus survives. The image contract decides what a
+ * drawable passage is.
  */
 export function pictureControlPresentation(input: Readonly<{
-  availability: ImageAvailability;
-  nodeId: string;
+  availability: ImageSurfaceAvailability;
   passageText: string | null;
   interactionPending: boolean;
 }>): PictureControlPresentation {
-  if (input.availability !== "available" || input.passageText === null) return "absent";
-  const sendable = parseImageRequestEnvelope({
-    protocolVersion: PROTOCOL_VERSION,
-    requestVersion: IMAGE_REQUEST_VERSION,
-    id: "picture_request_probe",
-    locale: "en-US" satisfies MatterLocale,
-    passage: { nodeId: input.nodeId, text: input.passageText },
-  }).ok;
-  if (!sendable) return "absent";
+  if (input.availability !== "available" || !canDrawFromPassage(input.passageText)) return "absent";
   return input.interactionPending ? "disabled" : "enabled";
 }
 

@@ -1,4 +1,8 @@
-import type { ImageMediaType } from "./image-contract";
+import {
+  MAX_IMAGE_POINTER_SIDE_PX,
+  MIN_IMAGE_POINTER_SIDE_PX,
+  type ImagePointerMediaType,
+} from "../tree/image-pointer";
 
 /**
  * The structure of generated image bytes: real type from the magic bytes,
@@ -10,9 +14,6 @@ import type { ImageMediaType } from "./image-contract";
  * lives in these bytes, so callers must not re-encode, resize, or strip them.
  */
 
-// Dimension bounds; the image contract does not declare dimensions.
-export const MIN_IMAGE_SIDE_PX = 256;
-export const MAX_IMAGE_SIDE_PX = 4096;
 // Longest side may be at most this many times the shortest side, in either direction.
 export const MAX_IMAGE_ASPECT_RATIO = 2;
 
@@ -43,7 +44,7 @@ export const IMAGE_STRUCTURE_REFUSAL_REASONS = Object.freeze([
 export type ImageStructureRefusalReason = (typeof IMAGE_STRUCTURE_REFUSAL_REASONS)[number];
 
 export type ImageStructure =
-  | Readonly<{ ok: true; mediaType: ImageMediaType; width: number; height: number }>
+  | Readonly<{ ok: true; mediaType: ImagePointerMediaType; width: number; height: number }>
   | Readonly<{ ok: false; reason: ImageStructureRefusalReason }>;
 
 type Dimensions =
@@ -56,7 +57,7 @@ type Dimensions =
  */
 export function inspectImageStructure(
   bytes: Uint8Array,
-  declared?: ImageMediaType,
+  declared?: ImagePointerMediaType,
 ): ImageStructure {
   const actual = sniffMediaType(bytes);
   if (actual === null) return refuse("content-not-image");
@@ -66,8 +67,8 @@ export function inspectImageStructure(
   if (!dimensions.ok) return refuse(dimensions.reason);
   const { width, height } = dimensions;
   if (
-    width < MIN_IMAGE_SIDE_PX || width > MAX_IMAGE_SIDE_PX ||
-    height < MIN_IMAGE_SIDE_PX || height > MAX_IMAGE_SIDE_PX
+    width < MIN_IMAGE_POINTER_SIDE_PX || width > MAX_IMAGE_POINTER_SIDE_PX ||
+    height < MIN_IMAGE_POINTER_SIDE_PX || height > MAX_IMAGE_POINTER_SIDE_PX
   ) return refuse("dimensions-out-of-range");
   if (
     width > height * MAX_IMAGE_ASPECT_RATIO ||
@@ -77,7 +78,8 @@ export function inspectImageStructure(
   return Object.freeze({ ok: true, mediaType: actual, width, height });
 }
 
-function sniffMediaType(data: Uint8Array): ImageMediaType | null {
+/** The one magic-number sniffer; it needs only a 12-byte prefix, so a transport may call it on a sliver. */
+export function sniffMediaType(data: Uint8Array): ImagePointerMediaType | null {
   if (startsWith(data, 0, [0xff, 0xd8, 0xff])) return "image/jpeg";
   if (startsWith(data, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png";
   if (startsWith(data, 0, ASCII_RIFF) && startsWith(data, 8, ASCII_WEBP)) return "image/webp";
@@ -89,7 +91,7 @@ function sniffMediaType(data: Uint8Array): ImageMediaType | null {
  * ship. Each rule is deliberately looser than the format so no valid image is
  * refused; it checks the trailer only and never decodes pixels.
  */
-function isTruncated(data: Uint8Array, mediaType: ImageMediaType): boolean {
+function isTruncated(data: Uint8Array, mediaType: ImagePointerMediaType): boolean {
   switch (mediaType) {
     case "image/jpeg": return !hasInTail(data, [0xff, 0xd9], JPEG_EOI_WINDOW);
     case "image/png": return !hasInTail(data, PNG_IEND, PNG_IEND_WINDOW);
@@ -110,7 +112,7 @@ function hasInTail(data: Uint8Array, expected: readonly number[], window: number
   return false;
 }
 
-function readDimensions(data: Uint8Array, mediaType: ImageMediaType): Dimensions {
+function readDimensions(data: Uint8Array, mediaType: ImagePointerMediaType): Dimensions {
   switch (mediaType) {
     case "image/png": return pngDimensions(data);
     case "image/jpeg": return jpegDimensions(data);

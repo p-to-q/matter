@@ -149,7 +149,7 @@ import {
   type MaterialHeightMeasurement,
   type MaterialHeightSubject,
 } from "./material-height-cache";
-import { PassagePicture } from "./PassagePicture";
+import { LazyPassagePicture } from "./LazyPassagePicture";
 import { pictureLayoutKey } from "./passage-picture-box";
 import {
   canMoveNodeToParent,
@@ -4507,7 +4507,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
                 ? <span className="spatial-thought__label">{materialText}</span>
                 : materialText}
             </button>
-            {node.image === undefined ? null : <PassagePicture locale={locale} pointer={node.image} />}
+            {node.image === undefined ? null : <LazyPassagePicture locale={locale} pointer={node.image} />}
             {isTransformPending && transformStatus.announce ? (
               <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
                 {transformStatus.text}

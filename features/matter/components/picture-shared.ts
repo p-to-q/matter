@@ -1,7 +1,7 @@
 import {
-  createImageAvailabilityCache,
-  readImageAvailability,
-} from "../interaction/image-availability-read";
+  createImageSurfaceAvailabilityCache,
+  readImageSurfaceAvailability,
+} from "../interaction/image-surface-availability";
 import { createPictureInFlightGate } from "../interaction/picture-in-flight-gate";
 
 /**
@@ -10,6 +10,6 @@ import { createPictureInFlightGate } from "../interaction/picture-in-flight-gate
  * Point and Talk chunk, which loads once, so the initial bundle carries neither.
  */
 export const PICTURE_SHARED = Object.freeze({
-  availability: createImageAvailabilityCache({ read: () => readImageAvailability() }),
+  availability: createImageSurfaceAvailabilityCache({ read: () => readImageSurfaceAvailability() }),
   gate: createPictureInFlightGate(),
 });

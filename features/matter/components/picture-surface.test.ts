@@ -47,7 +47,7 @@ const failed = (retryable: boolean, reason: "network" | "another-picture-in-flig
   ({ type: "failed", requestId: REQUEST, reason, retryable }) as const;
 
 describe("the picture control's presence", () => {
-  const base = { availability: "available", nodeId: "thought_1", passageText: "A passage.", interactionPending: false } as const;
+  const base = { availability: "available", passageText: "A passage.", interactionPending: false } as const;
 
   it("exists only once the health read said available", () => {
     expect(pictureControlPresentation(base)).toBe("enabled");

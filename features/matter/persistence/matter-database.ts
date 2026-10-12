@@ -173,6 +173,7 @@ export interface MatterDatabase extends DBSchema {
   blobs: {
     key: string;
     value: StoredImageBlob;
+    // Exists for the compaction pass that is not built yet; nothing reads it today.
     indexes: { storedAt: string };
   };
 }

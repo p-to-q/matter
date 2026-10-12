@@ -17,6 +17,30 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-12 — picture facts have one owner each, picture code leaves the initial bundle, and Keep asks for persistent storage
+
+Changed: media types, the byte bound and the side bounds are declared once, in
+`tree/image-pointer.ts`; the contract, the structure inspector, the model pool, the client
+and the archive's path table derive from it, and a test fails if a fourth type is added in
+one place. One `sha256Hex` and one `verifyPictureBytes(pointer, bytes)` replace five hashes
+and three different "bytes match the pointer" checks; accepted bytes are structure-checked
+when written to the store. The server-surface type is `ImageSurfaceAvailability`, so it no
+longer shares a name with the four-state bytes projection, and a contract test feeds the real
+health output to the reader. The blob repository can only reach the `blobs` store. Keep asks
+the browser for persistent storage synchronously in the click. `PassagePicture`, its copy, the
+session cache and the blob repository load only when a picture needs them, behind a
+same-size placeholder, and a test keeps them out of the initial graph.
+
+Why: the release build was over the gzip budget on the CI basis (407,305 against 405,504 bytes
+on the baseline), and the same fact was written in seven places. Initial JS is now 390.5 KiB
+gzip against 396. A paid picture is irreplaceable, so asking for persistence belongs at the
+moment it is kept.
+
+Forecloses: re-declaring a picture bound or a hash helper outside its owner, and importing
+picture code statically into the page. Import after Replace does not call persistence a second
+time: the Replace click already asked, and a later call without the gesture's activation could
+record a refusal that quiets the next real gesture for seven days.
+
 ## 2026-10-12 — the picture feature can be tried on localhost, with real relays by default
 
 Changed: `npm run dev:image` starts the app with `MATTER_IMAGE_ADAPTER=live` and the

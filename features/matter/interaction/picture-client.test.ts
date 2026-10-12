@@ -5,11 +5,11 @@ import { MODEL_DEADLINES } from "../config/model-deadlines";
 import {
   IMAGE_REQUEST_VERSION,
   IMAGE_RESPONSE_HEADERS,
-  MAX_IMAGE_BYTES,
   type ImageRequestEnvelope,
 } from "../protocol/image-contract";
 import type { ImageErrorCode } from "../server/image-errors";
 import { PICTURE_SERVER_ERROR_CODES, type PictureFailureReason } from "../runtime/picture-turn";
+import { MAX_IMAGE_POINTER_BYTES } from "../tree/image-pointer";
 import { PROTOCOL_VERSION } from "../tree/model";
 import { requestPicture } from "./picture-client";
 
@@ -114,8 +114,8 @@ describe("picture client", () => {
     });
 
     it("accepts a picture at exactly the byte ceiling", async () => {
-      const bytes = png(512, 384, MAX_IMAGE_BYTES - pngBase(512, 384).length);
-      expect(bytes.byteLength).toBe(MAX_IMAGE_BYTES);
+      const bytes = png(512, 384, MAX_IMAGE_POINTER_BYTES - pngBase(512, 384).length);
+      expect(bytes.byteLength).toBe(MAX_IMAGE_POINTER_BYTES);
       const result = await requestPicture(envelope(), {
         fetch: async () => imageResponse(bytes),
         signal: new AbortController().signal,
@@ -157,7 +157,7 @@ describe("picture client", () => {
       ["a content length longer than the body", () => imageResponse(bytes, { contentLength: String(bytes.byteLength + 1) })],
       ["a content length shorter than the body", () => imageResponse(bytes, { contentLength: String(bytes.byteLength - 1) })],
       ["a non-numeric content length", () => imageResponse(bytes, { contentLength: "12abc" })],
-      ["a declared length over the ceiling", () => imageResponse(bytes, { contentLength: String(MAX_IMAGE_BYTES + 1) })],
+      ["a declared length over the ceiling", () => imageResponse(bytes, { contentLength: String(MAX_IMAGE_POINTER_BYTES + 1) })],
       ["an empty body", () => imageResponse(new Uint8Array(0))],
       ["a body that is not an image", () => imageResponse(new TextEncoder().encode("<html>sign in</html>".repeat(20)))],
       ["a truncated image", () => imageResponse(bytes.subarray(0, bytes.length - 20))],
@@ -214,7 +214,7 @@ describe("picture client", () => {
       expect(cancelled).toBe(true);
       // 8 chunks reach the 2 MiB ceiling; the ninth is the refusal. A reader that
       // buffered until the end would pull without bound.
-      expect(pulled).toBeLessThanOrEqual(MAX_IMAGE_BYTES / chunk.byteLength + 3);
+      expect(pulled).toBeLessThanOrEqual(MAX_IMAGE_POINTER_BYTES / chunk.byteLength + 3);
     });
 
     it("cancels the body without reading when the declared length is over the ceiling", async () => {
@@ -227,7 +227,7 @@ describe("picture client", () => {
       const result = await requestPicture(envelope(), {
         fetch: async () => new Response(body, {
           status: 200,
-          headers: { "content-type": "image/png", "content-length": String(MAX_IMAGE_BYTES + 1) },
+          headers: { "content-type": "image/png", "content-length": String(MAX_IMAGE_POINTER_BYTES + 1) },
         }),
         signal: new AbortController().signal,
       });

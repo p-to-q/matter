@@ -1,4 +1,4 @@
-import { inspectImageStructure } from "../protocol/image-structure";
+import { verifyPictureBytes } from "../protocol/image-verify";
 import {
   equalImagePointers,
   MAX_IMAGE_POINTER_BYTES,
@@ -52,15 +52,20 @@ const MAX_BUNDLE_BYTES = 18_000_000;
 const MAX_PATH_BYTES = 2_048;
 const MAX_PATH_DEPTH = 34;
 const BLOBS_PREFIX = "matter/blobs/";
-const BLOB_PATH = /^matter\/blobs\/([0-9a-f]{64})\.(jpg|png|webp)$/u;
-const BLOB_EXTENSIONS = Object.freeze({
+// The one table from media type to file extension; the path pattern, the
+// reverse lookup and the entry overhead are all derived from it.
+export const BLOB_EXTENSIONS = Object.freeze({
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
 } as const satisfies Record<ImagePointerMediaType, string>);
 type BlobExtension = (typeof BLOB_EXTENSIONS)[ImagePointerMediaType];
+const BLOB_EXTENSION_LIST: readonly BlobExtension[] = Object.freeze(Object.values(BLOB_EXTENSIONS));
+const BLOB_PATH = new RegExp(`^matter/blobs/([0-9a-f]{64})\\.(${BLOB_EXTENSION_LIST.join("|")})$`, "u");
 // Local and central headers both carry the path, plus 30 and 46 fixed bytes.
-const BLOB_ENTRY_OVERHEAD = 2 * (BLOBS_PREFIX.length + 64 + ".webp".length) + 76;
+const BLOB_ENTRY_OVERHEAD = 2 * (
+  BLOBS_PREFIX.length + 64 + 1 + Math.max(...BLOB_EXTENSION_LIST.map((extension) => extension.length))
+) + 76;
 // A stored ZIP repeats every file path in local and central headers. This bound
 // admits every supported logical bundle and its pictures while ruling out
 // arbitrarily large input.
@@ -98,7 +103,7 @@ export async function exportSnapshotArchive(
     const pictures: Array<readonly [string, Uint8Array]> = [];
     for (const [hash, referenced] of pointers) {
       const bytes = blobs.get(hash);
-      if (bytes === undefined || await checkBlob(hash, bytes, referenced) !== null) continue;
+      if (bytes === undefined || await checkBlob(bytes, referenced) !== null) continue;
       pictures.push([`${BLOBS_PREFIX}${hash}.${BLOB_EXTENSIONS[referenced[0]!.mediaType]}`, bytes]);
     }
     pictures.sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
@@ -446,7 +451,10 @@ function classifyArchivePath(path: string): ArchivePath | Readonly<{ error: Arch
   // Nothing else may live under blobs/, so a picture name never reads as a node.
   if (components[1] === "blobs") {
     const match = BLOB_PATH.exec(path);
-    return match === null ? unexpected : { kind: "blob", hash: match[1]!, extension: match[2] as BlobExtension };
+    const extension = BLOB_EXTENSION_LIST.find((candidate) => candidate === match?.[2]);
+    return match === null || extension === undefined
+      ? unexpected
+      : { kind: "blob", hash: match[1]!, extension };
   }
   return path === "matter/matter.json" || path.endsWith("/index.md") ? { kind: "text" } : unexpected;
 }
@@ -472,7 +480,7 @@ async function verifyBlobs(
   }
   const blobs = new Map<string, Uint8Array>();
   for (const [hash, picture] of pictures) {
-    const fault = await checkBlob(hash, picture.bytes, pointers.get(hash)!, picture.extension);
+    const fault = await checkBlob(picture.bytes, pointers.get(hash)!, picture.extension);
     if (fault !== null) return Object.freeze({ ok: false, error: fault });
     blobs.set(hash, picture.bytes);
   }
@@ -485,7 +493,6 @@ async function verifyBlobs(
  * refuse. The lookup by hash already makes the pointer hash equal the name.
  */
 async function checkBlob(
-  hash: string,
   bytes: Uint8Array,
   pointers: readonly ImagePointer[],
   extension?: BlobExtension,
@@ -497,28 +504,20 @@ async function checkBlob(
   if (extension !== undefined && extension !== BLOB_EXTENSIONS[pointer.mediaType]) {
     return failure("ARCHIVE_BLOB_TYPE_MISMATCH", "A picture file name contradicts its declared type.").error;
   }
-  if (bytes.byteLength !== pointer.byteLength) {
-    return failure("ARCHIVE_BLOB_SIZE_MISMATCH", "A picture does not have the size material declares.").error;
-  }
-  let digest: string;
-  try {
-    digest = await sha256Hex(bytes);
-  } catch {
-    return failure("ARCHIVE_UNAVAILABLE", "Archive support is unavailable in this browser.").error;
-  }
-  if (digest !== hash) {
-    return failure("ARCHIVE_BLOB_HASH_MISMATCH", "A picture does not match its content hash.").error;
-  }
-  const structure = inspectImageStructure(bytes, pointer.mediaType);
-  if (!structure.ok || structure.width !== pointer.width || structure.height !== pointer.height) {
-    return failure("ARCHIVE_BLOB_STRUCTURE_INVALID", "A picture is not the image material declares.").error;
+  const verdict = await verifyPictureBytes(pointer, bytes);
+  if (!verdict.ok) {
+    switch (verdict.fault) {
+      case "size-mismatch":
+        return failure("ARCHIVE_BLOB_SIZE_MISMATCH", "A picture does not have the size material declares.").error;
+      case "digest-unavailable":
+        return failure("ARCHIVE_UNAVAILABLE", "Archive support is unavailable in this browser.").error;
+      case "hash-mismatch":
+        return failure("ARCHIVE_BLOB_HASH_MISMATCH", "A picture does not match its content hash.").error;
+      case "structure-invalid":
+        return failure("ARCHIVE_BLOB_STRUCTURE_INVALID", "A picture is not the image material declares.").error;
+    }
   }
   return null;
-}
-
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = new Uint8Array(await globalThis.crypto.subtle.digest("SHA-256", bytes as Uint8Array<ArrayBuffer>));
-  return Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function joinChunks(chunks: readonly Uint8Array[], length: number): Uint8Array {
