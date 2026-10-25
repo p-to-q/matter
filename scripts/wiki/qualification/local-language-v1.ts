@@ -571,7 +571,7 @@ function stateWithCanonicals(
     locale,
     canonical,
     scope: "both",
-    provenance: "human-confirmed",
+    provenance: "manual",
     confirmedAtRevision: 1,
   }));
   return Object.freeze({

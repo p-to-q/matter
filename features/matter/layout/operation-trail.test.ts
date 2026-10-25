@@ -5,14 +5,36 @@ import type { ColumnarLayout, LayoutNode } from "./model";
 import {
   OPERATION_TRAIL_LIMITS as LIMITS,
   OPERATION_TRAIL_PX as PX,
-  operationTrailGeometry,
+  operationTrailGeometry as buildOperationTrail,
   operationTrailNodes,
   snapBox,
   snapStrokeCentre,
   trailEdgeAlpha,
   trailWindow,
   type TrailRect,
+  type TrailMaterialBounds,
 } from "./operation-trail";
+
+const material = (nodeId: string, bounds: TrailRect, firstRow = bounds, bottomExtent = 0) =>
+  ({ nodeId, bounds, firstRow, bottomExtent });
+
+/** These fixtures deliberately fill their measured material boxes, unlike centred short text. */
+function operationTrailGeometry(input: Omit<Parameters<typeof buildOperationTrail>[0], "materialBounds"> & {
+  materialBounds?: TrailMaterialBounds | null;
+}) {
+  const required = input.layout === null || input.lineages === null ? null :
+    operationTrailNodes(input.layout, input.lineages.slice(0, LIMITS.targets), input.descendantsOf ?? null);
+  return buildOperationTrail({
+    ...input,
+    materialBounds: input.materialBounds === undefined
+      ? input.layout === null || required === null ? null : {
+          layoutEpoch: input.layout.layoutEpoch,
+          passages: required.nodes.map(({ box }) => material(box.nodeId,
+            { x: box.x, y: box.y, width: box.width, height: box.height })),
+        }
+      : input.materialBounds,
+  });
+}
 
 function node(id: string, parentId: string | null, depth: number, height = 40): LayoutNode {
   return { id, parentId, depth, size: { width: 200, height } };
@@ -158,33 +180,294 @@ describe("operationTrailGeometry", () => {
     expect(geometry({ zoom: 0 })).toBeNull();
     expect(geometry({ zoom: Number.NaN })).toBeNull();
     expect(geometry({ window: { x: 0, y: 0, width: 0, height: 10 } })).toBeNull();
+    expect(geometry({ window: { ...WIDE, x: Number.NaN } })).toBeNull();
+    expect(geometry({ window: { ...WIDE, height: Number.POSITIVE_INFINITY } })).toBeNull();
+    expect(geometry({ grid: { x0: 0, y0: 0, dpr: 0 } })).toBeNull();
+    expect(geometry({ grid: { x0: Number.NaN, y0: 0, dpr: 2 } })).toBeNull();
   });
 
-  it("puts a dot on every ancestor, in the left gutter and above the passage's top, and a target bead on the target", () => {
+  it("refuses absent, stale, duplicate, missing, non-finite or out-of-passage material bounds", () => {
+    const layout = laidOut();
+    const receipt: TrailMaterialBounds = {
+      layoutEpoch: 5,
+      passages: layout.boxes.filter((box) => ["a", "b", "c", "d"].includes(box.nodeId)).map((box) => material(box.nodeId, {
+        x: box.x, y: box.y, width: box.width, height: box.height,
+      })),
+    };
+    expect(geometry({ materialBounds: null })).toBeNull();
+    expect(geometry({ materialBounds: { ...receipt, layoutEpoch: 4 } })).toBeNull();
+    expect(geometry({ materialBounds: { ...receipt, passages: receipt.passages.slice(1) } })).toBeNull();
+    expect(geometry({ materialBounds: { ...receipt, passages: [...receipt.passages, receipt.passages[0]!] } })).toBeNull();
+    expect(geometry({ materialBounds: { ...receipt, passages: [
+      ...receipt.passages.slice(0, -1), material("unrelated", receipt.passages[0]!.bounds),
+    ] } })).toBeNull();
+    for (const bounds of [
+      { ...receipt.passages[0]!.bounds, width: Number.NaN },
+      { ...receipt.passages[0]!.bounds, x: -8 },
+      { ...receipt.passages[0]!.bounds, height: 0 },
+      { ...receipt.passages[0]!.bounds, height: 100 },
+    ]) {
+      expect(geometry({ materialBounds: {
+        ...receipt, passages: [material("a", bounds), ...receipt.passages.slice(1)],
+      } })).toBeNull();
+    }
+  });
+
+  it("attaches both points to centred short material instead of the invisible column edges", () => {
+    const layout = laidOut([node("a", null, 0), node("b", "a", 1)]);
+    const trail = geometry({ layout, lineages: [["a", "b"]], materialBounds: {
+      layoutEpoch: 5,
+      passages: [
+        material("a", { x: 60, y: 10, width: 80, height: 20 }),
+        material("b", { x: 290, y: 10, width: 100, height: 20 }),
+      ],
+    } })!;
+    expect(commands(trail.up.line)).toEqual([["M", [148, 20]], ["L", [282, 20]]]);
+    expect(commands(trail.up.dots)).toEqual([["M", [148, 20]], ["h", [0]]]);
+    expect(trail.targets).toEqual([{ nodeId: "b", x: 282, y: 20 }]);
+  });
+
+  it("retains the published bend corridor when real first rows are disjoint", () => {
+    const layout = laidOut([node("a", null, 0, 140), node("b", "a", 1, 80)]);
+    const trail = geometry({ layout, lineages: [["a", "b"]], materialBounds: {
+      layoutEpoch: 5,
+      passages: [
+        material("a", { x: 50, y: 10, width: 100, height: 120 }, { x: 50, y: 70, width: 100, height: 20 }),
+        material("b", { x: 290, y: 10, width: 100, height: 60 }, { x: 290, y: 10, width: 100, height: 20 }),
+      ],
+    } })!;
+    const path = commands(trail.up.line);
+    expect(path[0]).toEqual(["M", [158, 80]]);
+    expect(path.at(-1)).toEqual(["L", [282, 20]]);
+    expect(path.filter(([letter]) => letter === "A")[0]![1][5]).toBe(layout.edges[0]!.points[1].x);
+  });
+
+  it("keeps a short passage parallel with a two-line child's true first row, not the paragraph/image midpoint", () => {
+    const layout = laidOut([node("a", null, 0, 140), node("b", "a", 1, 80)]);
+    const trail = geometry({ layout, lineages: [["a", "b"]], materialBounds: { layoutEpoch: 5, passages: [
+      material("a", { x: 50, y: 10, width: 100, height: 120 }, { x: 65, y: 10, width: 70, height: 20 }),
+      material("b", { x: 290, y: 10, width: 100, height: 60 }, { x: 300, y: 10, width: 80, height: 20 }),
+    ] } })!;
+    expect(commands(trail.up.line)).toEqual([["M", [143, 20]], ["L", [292, 20]]]);
+    expect(trail.targets).toEqual([{ nodeId: "b", x: 292, y: 20 }]);
+    expect(PX.stroke).toBe(2.5);
+    expect(PX.corner).toBe(4);
+  });
+
+  it("bounds Elastic damage by its exact receipt and the current publication, never the whole deep tree", () => {
+    const base = laidOut([node("a", null, 0), node("b", "a", 1)]);
+    const layout = { ...base, bounds: { ...base.bounds, height: 200 } };
+    const firstRow = { x: 60, y: 10, width: 80, height: 20 };
+    const passages = [material("a", { x: 60, y: 10, width: 80, height: 110 }, firstRow, 80),
+      material("b", { x: 290, y: 10, width: 100, height: 20 })];
+    const input = { layout, lineages: [["a", "b"]], materialBounds: { layoutEpoch: 5, passages } };
+    expect(geometry(input)).not.toBeNull();
+    for (const bottomExtent of [0, 20, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(geometry({ ...input, materialBounds: { layoutEpoch: 5,
+        passages: [{ ...passages[0]!, bottomExtent }, passages[1]!] } })).toBeNull();
+    }
+    expect(geometry({ ...input, materialBounds: { layoutEpoch: 5, passages: [
+      material("a", { x: 60, y: 10, width: 80, height: 300 }, firstRow, 1000), passages[1]!,
+    ] } })).toBeNull();
+    expect(geometry({ ...input, materialBounds: { layoutEpoch: 5,
+      passages: [{ ...passages[0]!, bottomExtent: 1000000 }, passages[1]!] } })).toBeNull();
+    for (const row of [{ ...firstRow, x: 50 }, { ...firstRow, width: Number.NaN }, { ...firstRow, y: 120 }]) {
+      expect(geometry({ ...input, materialBounds: { layoutEpoch: 5,
+        passages: [{ ...passages[0]!, firstRow: row }, passages[1]!] } })).toBeNull();
+    }
+  });
+
+  it("allows exactly one canvas unit at the publication boundary, never a larger extent or envelope", () => {
+    const base = laidOut([node("a", null, 0), node("b", "a", 1)]);
+    const layout = { ...base, bounds: { ...base.bounds, height: 200 } };
+    const firstRow = { x: 60, y: 10, width: 80, height: 20 };
+    const passages = [material("a", firstRow, firstRow, 161),
+      material("b", { x: 290, y: 10, width: 100, height: 20 })];
+    const input = { layout, lineages: [["a", "b"]], materialBounds: { layoutEpoch: 5, passages } };
+    // The actual ink stays small: damage itself must still obey box.bottom + extent <= published.bottom + 1.
+    expect(layout.boxes[0]!.y + layout.boxes[0]!.height + passages[0]!.bottomExtent).toBe(201);
+    expect(geometry(input)).not.toBeNull();
+    expect(geometry({ ...input, materialBounds: { layoutEpoch: 5,
+      passages: [{ ...passages[0]!, bottomExtent: 161.01 }, passages[1]!] } })).toBeNull();
+    expect(geometry({ ...input, materialBounds: { layoutEpoch: 5,
+      passages: [{ ...passages[0]!, bounds: { ...firstRow, height: 191 } }, passages[1]!] } })).not.toBeNull();
+    expect(geometry({ ...input, materialBounds: { layoutEpoch: 5,
+      passages: [{ ...passages[0]!, bounds: { ...firstRow, height: 191.01 } }, passages[1]!] } })).toBeNull();
+  });
+
+  it("joins a deep first-child chain as separate adjacent bridges, never across passage interiors", () => {
+    const layout = laidOut();
+    const trail = geometry()!;
+    const steps = trail.up.line.split("M").filter(Boolean).map((part) => commands(`M${part}`));
+    expect(steps).toHaveLength(3);
+    for (let index = 0; index < steps.length; index += 1) {
+      const parent = layout.boxes.find(({ nodeId }) => nodeId === ["a", "b", "c"][index])!;
+      const child = layout.boxes.find(({ nodeId }) => nodeId === ["b", "c", "d"][index])!;
+      expect(steps[index]![0]).toEqual(["M", [parent.x + parent.width + PX.clearance, parent.y + parent.height / 2]]);
+      expect(steps[index]!.at(-1)).toEqual(["L", [child.x - PX.clearance, child.y + child.height / 2]]);
+      expect(steps[index]!.every(([, values]) => values[0]! >= parent.x + parent.width && values[0]! <= child.x)).toBe(true);
+    }
+    expect(trail.up.line).not.toContain("-24");
+  });
+
+  it("refuses missing, duplicate, wrong-parent, non-finite and detached published bridges", () => {
+    const layout = laidOut();
+    const edge = layout.edges.find(({ childId }) => childId === "b")!;
+    const replace = (replacement: typeof edge) => ({
+      ...layout,
+      edges: layout.edges.map((candidate) => candidate === edge ? replacement : candidate),
+    });
+    expect(geometry({ layout: { ...layout, edges: layout.edges.filter((candidate) => candidate !== edge) } })).toBeNull();
+    expect(geometry({
+      layout: { ...layout, edges: layout.edges.filter((candidate) => candidate !== edge) },
+      window: { x: 1000, y: 1000, width: 300, height: 300 },
+    })).toBeNull();
+    expect(geometry({ layout: { ...layout, edges: [...layout.edges, edge] } })).toBeNull();
+    expect(geometry({ layout: replace({ ...edge, parentId: "b2" }) })).toBeNull();
+    expect(geometry({ layout: replace({ ...edge, points: [{ ...edge.points[0], x: Number.NaN }, edge.points[1], edge.points[2], edge.points[3]] }) })).toBeNull();
+    expect(geometry({ layout: replace({ ...edge, points: [edge.points[0], edge.points[1], edge.points[2], { ...edge.points[3], y: edge.points[3].y + 1 }] }) })).toBeNull();
+    expect(geometry({ layout: replace({ ...edge, points: [edge.points[0], { ...edge.points[1], y: edge.points[1].y + 1 }, edge.points[2], edge.points[3]] }) })).toBeNull();
+    expect(geometry({ layout: { ...layout, boxes: [...layout.boxes, layout.boxes[1]!] } })).toBeNull();
+  });
+
+  it("does not use nearby or unrelated bridges as substitutes for an exact parent-child pair", () => {
+    const layout = laidOut();
+    const unrelated = layout.edges.find(({ childId }) => childId === "b2")!;
+    const missing = { ...layout, edges: layout.edges.filter(({ childId }) => childId !== "b") };
+    expect(geometry({ layout: { ...missing, edges: [...missing.edges, { ...unrelated, childId: "c2" }] } })).toBeNull();
+    expect(geometry({ layout: { ...layout, edges: [...layout.edges, unrelated] } })).toEqual(geometry());
+  });
+
+  it.each([[160, 40], [40, 160]])("levels unequal overlapping first-child rows (%i, %i) inside both rows", (parentHeight, childHeight) => {
+    const layout = laidOut([node("a", null, 0, parentHeight), node("b", "a", 1, childHeight)]);
+    const trail = geometry({ layout, lineages: [["a", "b"]] })!;
+    const path = commands(trail.up.line);
+    const common = Math.min(parentHeight - 0.01, childHeight / 2);
+    expect(path).toEqual([["M", [208, common]], ["L", [232, common]]]);
+    expect(trail.targets).toEqual([{ nodeId: "b", x: 232, y: common }]);
+    for (const [letter, values] of path) {
+      const x = letter === "A" ? values[5]! : values[0]!;
+      const y = letter === "A" ? values[6]! : values[1]!;
+      expect(x).toBeGreaterThanOrEqual(200);
+      expect(x).toBeLessThanOrEqual(240);
+      expect(y).toBeGreaterThan(0);
+      expect(y).toBeLessThan(Math.min(parentHeight, childHeight));
+    }
+  });
+
+  it("shares the small receiving row's centre with a larger top-aligned parent row", () => {
+    const layout = laidOut([node("a", null, 0, 140), node("b", "a", 1, 40)]);
+    const trail = geometry({ layout, lineages: [["a", "b"]], materialBounds: { layoutEpoch: 5, passages: [
+      material("a", { x: 50, y: 8, width: 100, height: 100 }, { x: 50, y: 8, width: 100, height: 40 }),
+      material("b", { x: 290, y: 5, width: 100, height: 20 }),
+    ] } })!;
+    expect(commands(trail.up.line)).toEqual([["M", [158, 15]], ["L", [282, 15]]]);
+    expect(trail.targets).toEqual([{ nodeId: "b", x: 282, y: 15 }]);
+  });
+
+  it("keeps one shared outgoing point for both a level first child and a later sibling", () => {
+    const layout = laidOut([node("a", null, 0, 140), node("b", "a", 1), node("c", "a", 1)]);
+    const trail = geometry({ layout, lineages: [["a", "b"], ["a", "c"]], materialBounds: { layoutEpoch: 5, passages: [
+      material("a", { x: 50, y: 8, width: 100, height: 100 }, { x: 50, y: 8, width: 100, height: 40 }),
+      material("b", { x: 290, y: 5, width: 100, height: 20 }),
+      material("c", { x: 290, y: 65, width: 100, height: 20 }),
+    ] } })!;
+    const paths = trail.up.line.split("M").filter(Boolean).map((path) => commands(`M${path}`));
+    expect(paths[0]).toEqual([["M", [158, 15]], ["L", [282, 15]]]);
+    expect(paths[1]![0]).toEqual(["M", [158, 15]]);
+    expect(paths[1]!.at(-1)).toEqual(["L", [282, 75]]);
+    expect(paths[1]!.filter(([letter]) => letter === "A")).toHaveLength(2);
+    expect(commands(trail.up.dots)).toEqual([["M", [158, 15]], ["h", [0]]]);
+    expect(trail.targets).toEqual([{ nodeId: "b", x: 282, y: 15 }, { nodeId: "c", x: 282, y: 75 }]);
+  });
+
+  it("never guesses an unmeasured first child's ordinate from a later sibling's overlapping row", () => {
+    const layout = laidOut([node("a", null, 0, 160), node("b", "a", 1), node("c", "a", 1)]);
+    const trail = geometry({ layout, lineages: [["a", "c"]], materialBounds: { layoutEpoch: 5, passages: [
+      material("a", { x: 50, y: 0, width: 100, height: 120 }),
+      material("c", { x: 290, y: 60, width: 100, height: 20 }),
+    ] } })!;
+    const path = commands(trail.up.line);
+    expect(path[0]).toEqual(["M", [158, 60]]);
+    expect(path.at(-1)).toEqual(["L", [282, 70]]);
+    expect(path.filter(([letter]) => letter === "A")).toHaveLength(2);
+    expect(trail.targets).toEqual([{ nodeId: "c", x: 282, y: 70 }]);
+  });
+
+  it("snaps a common ordinate once at each zoom and DPR without detaching its target", () => {
+    const layout = laidOut([node("a", null, 0, 140), node("b", "a", 1)]);
+    const materialBounds = { layoutEpoch: 5, passages: [
+      material("a", { x: 50, y: 8, width: 100, height: 100 }, { x: 50, y: 8, width: 100, height: 40 }),
+      material("b", { x: 290, y: 5, width: 100, height: 20 }),
+    ] };
+    for (const zoom of [0.6, 1, 1.8]) for (const dpr of [1, 2, 3]) {
+      const trail = geometry({ layout, lineages: [["a", "b"]], materialBounds, zoom, grid: { x0: 0.37, y0: 0.23, dpr } })!;
+      const path = commands(trail.up.line);
+      expect(path).toHaveLength(2);
+      const [, [sourceX, sourceY]] = path[0]!;
+      const [, [targetX, targetY]] = path[1]!;
+      expect(sourceX).toBeLessThan(targetX!);
+      expect(sourceY).toBe(targetY);
+      expect(targetY).toBeGreaterThan(8);
+      expect(targetY).toBeLessThan(25);
+      expect(trail.targets).toEqual([{ nodeId: "b", x: targetX, y: targetY }]);
+    }
+  });
+
+  it("keeps real row-centre ports if pixel snapping leaves a narrow common interior", () => {
+    const layout = laidOut([node("a", null, 0), node("b", "a", 1)]);
+    const trail = geometry({ layout, lineages: [["a", "b"]], grid: { x0: 0, y0: 0, dpr: 1 },
+      materialBounds: { layoutEpoch: 5, passages: [
+        material("a", { x: 50, y: 0.1, width: 100, height: 1 }),
+        material("b", { x: 290, y: 1, width: 100, height: 1 }),
+      ] },
+    })!;
+    const path = commands(trail.up.line);
+    expect(path[0]).toEqual(["M", [158.5, 0.5]]);
+    expect(path.at(-1)).toEqual(["L", [282.5, 1.5]]);
+    expect(path.filter(([letter]) => letter === "A")).toHaveLength(2);
+    expect(trail.targets).toEqual([{ nodeId: "b", x: 282.5, y: 1.5 }]);
+  });
+
+  it("attaches ancestor dots and the target bead to each passage's left boundary midpoint", () => {
     const layout = laidOut();
     const trail = geometry({ lineages: [["a", "b", "c"]] })!;
-    expect(commands(trail.up.dots).filter(([letter]) => letter === "M")).toHaveLength(2);
+    expect(commands(trail.up.dots).filter(([letter]) => letter === "M")).toHaveLength(3);
     const target = trail.targets[0]!;
     const box = layout.boxes.find(({ nodeId }) => nodeId === "c")!;
     expect(target.nodeId).toBe("c");
-    expect(target.x).toBeCloseTo(box.x - PX.gutter, 1);
-    expect(target.y).toBeLessThan(box.y);
-    expect(box.y - target.y).toBeLessThanOrEqual(PX.lift + 0.01);
+    expect(target.x).toBe(box.x - PX.clearance);
+    expect(target.y).toBe(box.y + box.height / 2);
     expect(trail.targets).toHaveLength(1);
   });
 
-  it("keeps the gutter and the lift screen distances at every zoom", () => {
+  it("keeps attachments at the actual passage boundary at every zoom", () => {
     const layout = laidOut();
     const box = layout.boxes.find(({ nodeId }) => nodeId === "b")!;
     for (const zoom of [0.6, 1, 2, 4]) {
       const trail = geometry({ lineages: [["a", "b"]], zoom })!;
-      expect((box.x - trail.targets[0]!.x) * zoom).toBeCloseTo(PX.gutter, 1);
+      expect((box.x - trail.targets[0]!.x) * zoom).toBeCloseTo(PX.clearance, 1);
+      expect(trail.targets[0]!.y).toBe(box.y + box.height / 2);
     }
   });
 
-  it("never lets the lift take more than its share of the gap above", () => {
-    // Two leaf siblings 20px apart: the thread may take only 55% of that gap.
-    const layout = laidOut([node("a", null, 0), node("s0", "a", 1), node("s1", "a", 1)]);
+  it("keeps the larger target clear of text after screen-grid snapping at permitted zooms and DPRs", () => {
+    const box = laidOut().boxes.find(({ nodeId }) => nodeId === "b")!;
+    expect(PX).toMatchObject({ bead: 5, target: 7, clearance: 8, stroke: 2.5 });
+    for (const zoom of [0.6, 1, 1.8]) {
+      for (const dpr of [1, 1.25, 2, 3]) {
+        const trail = geometry({ lineages: [["a", "b"]], zoom,
+          grid: { x0: 13.37, y0: 211.61, dpr } })!;
+        const textToVisibleEdge = (box.x - trail.targets[0]!.x) * zoom - PX.target / 2;
+        // Snapping moves the centre by at most half a device pixel; world values round to .01.
+        expect(textToVisibleEdge).toBeGreaterThanOrEqual(PX.clearance - PX.target / 2 - 0.5 / dpr - 0.01);
+        expect(textToVisibleEdge).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("uses real boundary midpoints with unequal heights and a nearby sibling", () => {
+    const layout = laidOut([node("a", null, 0, 140), node("s0", "a", 1), node("s1", "a", 1, 80)]);
     const lower = layout.boxes.find(({ nodeId }) => nodeId === "s1")!;
     const upper = layout.boxes.find(({ nodeId }) => nodeId === "s0")!;
     const gap = lower.y - (upper.y + upper.height);
@@ -192,11 +475,10 @@ describe("operationTrailGeometry", () => {
     const trail = operationTrailGeometry({
       layout, currentLayoutEpoch: 5, lineages: [["a", "s1"]], zoom: 1, window: WIDE,
     })!;
-    expect(lower.y - trail.targets[0]!.y).toBeCloseTo(gap * 0.55, 1);
-    // With room to spare it takes the whole lift.
-    const roomy = geometry({ lineages: [["a", "b2"]] })!;
-    const b2 = laidOut().boxes.find(({ nodeId }) => nodeId === "b2")!;
-    expect(b2.y - roomy.targets[0]!.y).toBeCloseTo(PX.lift, 1);
+    expect(trail.targets[0]!.y).toBe(lower.y + lower.height / 2);
+    const path = commands(trail.up.line);
+    expect(path[0]).toEqual(["M", [208, 70]]);
+    expect(path.at(-1)).toEqual(["L", [lower.x - PX.clearance, lower.y + lower.height / 2]]);
   });
 
   it("draws only a quiet anchor for a top-level target: its bead and no line", () => {
@@ -225,56 +507,57 @@ describe("operationTrailGeometry", () => {
     }
   });
 
-  it("turns with one corner radius of 8 screen px at every zoom, and a short leg never overshoots", () => {
+  it("turns with one small corner radius of 4 screen px at every zoom, and a short leg never overshoots", () => {
     for (const zoom of [0.6, 1, 2]) {
       const trail = geometry({ lineages: [["a", "b", "c2"]], zoom })!;
       const arcs = commands(trail.up.line).filter(([letter]) => letter === "A");
       expect(arcs.length).toBeGreaterThan(0);
       for (const [, numbers] of arcs) expect(numbers[0]! * zoom).toBeLessThanOrEqual(PX.corner + 0.01);
     }
-    const layout = laidOut();
-    const shallow = { ...layout, boxes: layout.boxes.map((box) => box.nodeId === "b" ? { ...box, y: box.y + 7 } : box) };
+    const shallow = laidOut([node("a", null, 0), node("b", "a", 1, 54)]);
     const trail = operationTrailGeometry({
       layout: shallow, currentLayoutEpoch: 5, lineages: [["a", "b"]], zoom: 1, window: WIDE,
+      materialBounds: { layoutEpoch: 5, passages: [
+        material("a", { x: 0, y: 0, width: 200, height: 40 }, { x: 0, y: 5, width: 200, height: 6 }),
+        material("b", { x: 240, y: 0, width: 200, height: 54 }, { x: 240, y: 12, width: 200, height: 6 }),
+      ] },
     })!;
     const arcs = commands(trail.up.line).filter(([letter]) => letter === "A");
-    expect(arcs).toHaveLength(1);
-    expect(arcs[0]![1][0]).toBeCloseTo(7, 0);
+    expect(arcs).toHaveLength(2);
+    expect(arcs[0]![1][0]).toBeCloseTo(3.5, 1);
   });
 
-  it("joins two all-but-level passages with one level leg instead of a stair-step", () => {
-    const layout = laidOut();
-    const near = { ...layout, boxes: layout.boxes.map((box) => box.nodeId === "b" ? { ...box, y: box.y + 4 } : box) };
+  it("removes a small typographic midpoint difference when the real row interiors overlap", () => {
+    const near = laidOut([node("a", null, 0), node("b", "a", 1, 48)]);
     const trail = operationTrailGeometry({
       layout: near, currentLayoutEpoch: 5, lineages: [["a", "b"]], zoom: 1, window: WIDE,
     })!;
-    expect(commands(trail.up.line).filter(([letter]) => letter === "A")).toHaveLength(0);
-    expect(trail.up.line).toMatch(/^M-?[\d.]+ (-?[\d.]+)L-?[\d.]+ \1$/u);
+    expect(commands(trail.up.line)).toEqual([["M", [208, 24]], ["L", [232, 24]]]);
+    expect(trail.targets).toEqual([{ nodeId: "b", x: 232, y: 24 }]);
   });
 
-  it("ends every edge in a solid arrowhead pointing into the passage it reaches", () => {
+  it("keeps optional comparison arrows open and exactly on the receiving port", () => {
     const trail = geometry({ lineages: [["a", "b", "c2"]] })!;
     const arrows = commands(trail.up.arrows);
-    // One closed triangle per edge: two edges.
-    expect(arrows.filter(([letter]) => letter === "Z")).toHaveLength(2);
+    expect(arrows.filter(([letter]) => letter === "Z")).toHaveLength(0);
     expect(arrows.filter(([letter]) => letter === "M")).toHaveLength(2);
     expect(arrows.filter(([letter]) => letter === "L")).toHaveLength(4);
-    // Level step: rightward, tip toward the bead. Drop: downward into the bead from above.
+    // Both edges arrive rightward at the child's left boundary, even after a vertical drop.
     const [first, second] = trail.up.arrows.split("M").filter(Boolean).map((part) => commands(`M${part}`));
-    const [tip1, left1, right1] = first!.slice(0, 3).map(([, numbers]) => numbers as [number, number]);
+    const [left1, tip1, right1] = first!.slice(0, 3).map(([, numbers]) => numbers as [number, number]);
     expect(left1![0]).toBeLessThan(tip1![0]);
     expect(left1![0]).toBe(right1![0]);
     expect(Math.abs(left1![1] - right1![1])).toBeCloseTo(PX.arrowWidth, 0);
-    const [tip2, left2] = second!.slice(0, 3).map(([, numbers]) => numbers as [number, number]);
-    expect(left2![1]).toBeLessThan(tip2![1]);
-    expect(Math.abs(tip2![0] - trail.targets[0]!.x)).toBeLessThan(0.02);
-    expect(trail.targets[0]!.y - tip2![1]).toBeCloseTo(PX.target / 2 + PX.arrowGap, 0);
+    const [left2, tip2] = second!.slice(0, 3).map(([, numbers]) => numbers as [number, number]);
+    expect(left2![0]).toBeLessThan(tip2![0]);
+    expect(tip2![1]).toBe(trail.targets[0]!.y);
+    expect(tip2![0]).toBe(trail.targets[0]!.x);
   });
 
   it("keeps the arrowhead the same screen size at every zoom", () => {
     for (const zoom of [0.6, 1, 2]) {
       const trail = geometry({ lineages: [["a", "b"]], zoom })!;
-      const [tip, left, right] = commands(trail.up.arrows).slice(0, 3).map(([, numbers]) => numbers as [number, number]);
+      const [left, tip, right] = commands(trail.up.arrows).slice(0, 3).map(([, numbers]) => numbers as [number, number]);
       expect((tip![0] - left![0]) * zoom).toBeCloseTo(PX.arrowLength, 1);
       expect(Math.abs(left![1] - right![1]) * zoom).toBeCloseTo(PX.arrowWidth, 1);
     }
@@ -286,8 +569,8 @@ describe("operationTrailGeometry", () => {
     })!;
     expect(trail.up).toEqual({ line: "", dots: "", arrows: "" });
     expect(commands(trail.down.line).filter(([letter]) => letter === "M")).toHaveLength(3);
-    expect(commands(trail.down.dots).filter(([letter]) => letter === "M")).toHaveLength(3);
-    expect(commands(trail.down.arrows).filter(([letter]) => letter === "Z")).toHaveLength(3);
+    expect(commands(trail.down.dots).filter(([letter]) => letter === "M")).toHaveLength(4);
+    expect(commands(trail.down.arrows).filter(([letter]) => letter === "M")).toHaveLength(3);
     expect(trail.down.more).toBe("");
   });
 
@@ -306,7 +589,7 @@ describe("operationTrailGeometry", () => {
     const trail = geometry({ lineages: [["a", "b", "c"], ["a", "b2"]] })!;
     expect(trail.targets.map(({ nodeId }) => nodeId)).toEqual(["c", "b2"]);
     // a and b are shared: one dot each, and one edge into b.
-    expect(commands(trail.up.dots).filter(([letter]) => letter === "M")).toHaveLength(2);
+    expect(commands(trail.up.dots).filter(([letter]) => letter === "M")).toHaveLength(3);
     expect(commands(trail.up.line).filter(([letter]) => letter === "M")).toHaveLength(3);
   });
 
@@ -322,13 +605,21 @@ describe("operationTrailGeometry", () => {
   it("culls dots outside the window and ends the thread in a cue where it leaves", () => {
     const full = geometry()!;
     expect(full.chevron).toBeNull();
-    const target = full.targets[0]!;
-    const clipped = geometry({ window: { x: target.x - 300, y: -3000, width: 9000, height: 9000 } })!;
+    // The cut crosses the genuine b→c gap, not the interior of passage b.
+    const clipped = geometry({ window: { x: 450, y: -3000, width: 9000, height: 9000 } })!;
     expect(clipped.chevron).not.toBeNull();
     expect(clipped.chevron!.angle).toBe(180);
-    expect(clipped.chevron!.x).toBeCloseTo(clipped.window.x + PX.chevronInset, 1);
+    expect(clipped.chevron!.x).toBeGreaterThanOrEqual(clipped.window.x);
+    expect(clipped.chevron!.x).toBeLessThanOrEqual(clipped.window.x + PX.chevronInset);
     expect(commands(clipped.up.dots).filter(([l]) => l === "M").length).toBeLessThan(commands(full.up.dots).filter(([l]) => l === "M").length);
     // The line itself is whole: the window clips it, and the fade softens the cut.
+    expect(clipped.up.line).toBe(full.up.line);
+  });
+
+  it("does not invent a continuation across a clipped passage interior", () => {
+    const full = geometry()!;
+    const clipped = geometry({ window: { x: full.targets[0]!.x - 300, y: -3000, width: 9000, height: 9000 } })!;
+    expect(clipped.chevron).toBeNull();
     expect(clipped.up.line).toBe(full.up.line);
   });
 
@@ -342,20 +633,17 @@ describe("operationTrailGeometry", () => {
     expect(trail.chevron!.angle).toBe(-90);
   });
 
-  it("keeps the lone target's bead on the edge it is past, with a short lead-in", () => {
+  it("never pins an offscreen target as a fake node; only a genuine clipped bridge gets a cue", () => {
     const full = geometry()!;
     const past: TrailRect = { x: full.targets[0]!.x + 200, y: -3000, width: 9000, height: 9000 };
     const trail = geometry({ window: past })!;
-    expect(trail.targets[0]!.pinned).toBe(true);
-    expect(trail.targets[0]!.nodeId).toBe("d");
-    expect(trail.targets[0]!.x).toBeCloseTo(past.x + PX.pinInset, 1);
+    expect(trail.targets).toHaveLength(0);
     expect(trail.up.dots).toBe("");
-    expect(trail.down.line).toBe("");
-    const [move, line] = commands(trail.up.line);
-    expect(move![0]).toBe("M");
-    expect(move![1][0]).toBeCloseTo(past.x, 1);
-    expect(line![0]).toBe("L");
-    expect(trail.chevron!.angle).toBe(180);
+    expect(trail.up.line).toBe(full.up.line);
+    expect(trail.chevron).toBeNull();
+    const crossing = geometry({ window: { x: 650, y: -3000, width: 50, height: 9000 } })!;
+    expect(crossing.targets).toHaveLength(0);
+    expect(crossing.chevron?.angle).toBe(0);
   });
 
   it("is deterministic and moves with the layout", () => {
@@ -372,9 +660,11 @@ describe("operationTrailGeometry", () => {
 describe("the device pixel grid", () => {
   it("centres an even-width stroke on a pixel edge and an odd one on a pixel centre", () => {
     for (const screen of [10, 10.2, 10.49, 10.5, 10.9, 123.77]) {
-      // 1.75px is two device pixels at dpr 1 and four at dpr 2: both even.
-      expect(snapStrokeCentre(screen, 1, PX.stroke) % 1).toBeCloseTo(0, 6);
-      expect(snapStrokeCentre(screen, 2, PX.stroke) * 2 % 1).toBeCloseTo(0, 6);
+      expect(snapStrokeCentre(screen, 1, 2) % 1).toBeCloseTo(0, 6);
+      expect(snapStrokeCentre(screen, 2, 2) * 2 % 1).toBeCloseTo(0, 6);
+      // The live 2.5px stroke rounds to odd device widths at dpr 1 and 2.
+      expect(snapStrokeCentre(screen, 1, PX.stroke) % 1).toBeCloseTo(0.5, 6);
+      expect(snapStrokeCentre(screen, 2, PX.stroke) * 2 % 1).toBeCloseTo(0.5, 6);
       expect(snapStrokeCentre(screen, 1, 1) % 1).toBeCloseTo(0.5, 6);
       expect(Math.abs(snapStrokeCentre(screen, 1, PX.stroke) - screen)).toBeLessThanOrEqual(1);
     }
@@ -389,7 +679,8 @@ describe("the device pixel grid", () => {
       for (const [value, origin] of [[target.x, grid.x0], [target.y, grid.y0]] as const) {
         const device = (origin + zoom * value) * dpr;
         const fraction = ((device % 1) + 1) % 1;
-        expect(Math.min(fraction, 1 - fraction)).toBeLessThan(0.05);
+        const expected = Math.round(PX.stroke * dpr) % 2 === 1 ? 0.5 : 0;
+        expect(Math.abs(fraction - expected)).toBeLessThan(0.05);
       }
     }
   });
@@ -444,16 +735,20 @@ describe("trailWindow and the edge fade", () => {
   });
 });
 
-describe("the stylesheet's sizes are the constants", () => {
+describe("the stylesheet consumes the projected screen dimensions", () => {
   const css = readFileSync(new URL("../components/OperationTrail.css", import.meta.url), "utf8");
   const rule = (selector: string) => new RegExp(`${selector.replace(/[.[\]]/gu, "\\$&")}\\s*\\{([^}]*)\\}`, "u").exec(css)?.[1] ?? "";
 
-  it("draws the hairline, dots, target and ring at the declared screen sizes", () => {
-    expect(rule(".operation-trail__path")).toContain(`stroke-width: ${PX.stroke}px`);
-    expect(rule(".operation-trail__dots")).toContain(`stroke-width: ${PX.bead}px`);
-    expect(rule(".operation-trail__more")).toContain(`stroke-width: ${PX.moreDot}px`);
-    expect(rule(".operation-trail__bead")).toContain(`width: ${PX.target}px; height: ${PX.target}px`);
-    expect(rule(".operation-trail__bead::before")).toContain(`inset: -${(PX.ring - PX.target) / 2}px`);
+  it("uses the owner's screen-sized strokes without competing CSS defaults", () => {
+    for (const selector of [".operation-trail__path", ".operation-trail__arrows", ".operation-trail__chevron"]) {
+      expect(rule(selector)).toContain("stroke-width: var(--operation-trail-stroke)");
+      expect(rule(selector)).toContain("vector-effect: non-scaling-stroke");
+    }
+    expect(rule(".operation-trail__dots")).toContain("stroke-width: var(--operation-trail-bead)");
+    expect(rule(".operation-trail__more")).toContain("stroke-width: var(--operation-trail-more-dot)");
+    expect(css).not.toMatch(/stroke-width:\s*[\d.]|var\(--operation-trail-(?:stroke|bead|more-dot),/u);
+    expect(rule(".operation-trail__bead")).toContain("fill: var(--trail-ink)");
+    expect(css).not.toContain(".operation-trail__bead::before");
     expect(rule(".operation-trail__path")).toContain("vector-effect: non-scaling-stroke");
     expect(rule(".operation-trail__dots")).toContain("vector-effect: non-scaling-stroke");
   });

@@ -62,6 +62,7 @@ export type ThoughtNode = {
   id: string;
   text: string;
   role?: "document-root";
+  image?: ImagePointer;
   parentId: string | null;
   children: string[];
   createdAt: string;
@@ -103,8 +104,17 @@ Before the first voice admission, the document already has identity, version,
 and revision, but no root. Transcription of the first utterance commits an
 `initialize-root` command; its inverse returns to the same empty document while
 revision continues forward. Later admissions append a human child under the sole
-root, regardless of the currently selected depth. Admission does not call the
+root when no passage is addressed. Under deliberately arms a selected passage
+as the parent of one human admission; selected Voice without that arm supplies
+Point and Talk's transient direction instead. Admission does not call the
 generative planner.
+
+`ImagePointer` is a strict object with `mediaType` (`image/jpeg`, `image/png`,
+or `image/webp`), `byteLength`, `width`, `height` and lowercase SHA-256
+`contentHash`. `tree/image-pointer.ts` owns the exact bounds: at most 2 MiB per
+image, each side 256–4096 pixels, at most 32 image nodes and 32 MiB of referenced
+bytes per tree. The document root cannot carry one. Conflicting metadata for
+one hash is invalid. Image bytes are not a node field or a tree command.
 
 ## Addressing and degree
 
@@ -1005,6 +1015,13 @@ export type TreeMutation =
       updatedAt: string;
     }
   | {
+      type: "replace-image";
+      nodeId: string;
+      expectedUpdatedAt: string;
+      expectedImage: ImagePointer | null;
+      image: ImagePointer | null;
+    }
+  | {
       type: "replace-title";
       expectedTitle: string;
       title: string;
@@ -1073,6 +1090,12 @@ one new atomic mutation later; they do not justify a generic transaction now.
 which mutation may be constructed; the engine applies validated private
 commands without treating provenance as authorization.
 
+`replace-image` validates the node timestamp and prior pointer, changes no text
+or timestamps, and has an exact self-inverse shape. The human Keep path writes
+and verifies bytes before committing the pointer. Storage failure keeps the
+arrived picture available for retry without another paid generation; a later
+stale tree commit may leave an orphan blob, never permission to overwrite.
+
 `expectedRevision` is checked inside the engine for normal commits and undo,
 not only while translating a plan. Undo restores material, structure, sibling
 order, and node timestamps exactly. It is itself a new commit, so tree revision
@@ -1084,7 +1107,7 @@ across both stacks (`MATTER_HISTORY_LIMITS`,
 largest legal inverse, so no valid change is refused, and older steps are
 released. The browser stores one IndexedDB record per retained step beside the
 material snapshot and writes both in one compare-and-swap transaction (database
-schema v6; layout in
+schema v7; per-step journal layout introduced in v6, in
 [`reference/virtual-file-system.md`](reference/virtual-file-system.md#undo-journal-schema-v6)).
 The journal is deliberately excluded from archives, which are the long-term
 recovery path.
@@ -1112,6 +1135,25 @@ root operations name the root; insert names node and parent; move names the
 moved node and both parents; subtree remove or restore names every subtree node
 and the attachment parent. It is not a layout
 damage calculation.
+
+## Picture envelope (`image/1`)
+
+The implemented but production-closed `POST /api/image` accepts only
+`protocolVersion`, `requestVersion: "image/1"`, request `id`, supported `locale`,
+`passage: { nodeId, text }`, and an optional one-line `direction: { text }`.
+The exact parser and bounds live in `protocol/image-contract.ts`. Current UI
+draws from the passage without treating the rewrite field as image direction.
+
+The server first adjudicates a short subject through `image-brief/2`, then
+sends only that subject and frozen style to the image renderer. The passage
+does not reach that renderer. Success returns inspected image bytes with
+Content-Type, Content-Length, `x-matter-image-width`,
+`x-matter-image-height` and `x-matter-image-sha256`; the browser independently
+checks bytes before they can be kept. It is not a JSON tree plan. The model
+chooses no material address or mutation. Failures use the strict image error
+contract; once paid rendering may have begun, retryability must not imply the
+previous attempt was free or cancelled. Process admission and browser locks
+are not a distributed spend control or provider idempotency guarantee.
 
 ## Bounds and errors
 

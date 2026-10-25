@@ -38,6 +38,37 @@ afterEach(() => {
 });
 
 describe("Wiki runtime bridge", () => {
+  it("lets a durable revert revoke attribution while the lazy settlement import waits", async () => {
+    let release!: (module: { settleHydratedMatterWikiOccurrence: typeof settle }) => void;
+    const settle = vi.fn();
+    vi.doMock("./wiki-runtime-core", () => new Promise((resolve) => { release = resolve; }));
+    const bridge = await import("./wiki-runtime-bridge");
+    const owner = await import("./wiki-occurrence-owner");
+    const occurrence = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
+    bridge.claimMatterWikiPublication(publicationOf([occurrence]));
+    const pending = bridge.settleMatterWikiOccurrence(occurrence, "inspected-kept");
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    owner.revokeMatterWikiOccurrences(ATTRIBUTION.rule, ATTRIBUTION.rule.appliedAtRevision + 1);
+    release({ settleHydratedMatterWikiOccurrence: settle });
+    await expect(pending).resolves.toBe("unattributed");
+    expect(settle).not.toHaveBeenCalled();
+  });
+  it.each(["explicit-confirm", "explicit-reject", "reverted"] as const)(
+    "preserves %s intent when an older application was revoked during lazy loading", async (outcome) => {
+      let release!: (module: { settleHydratedMatterWikiOccurrence: typeof settle }) => void;
+      const settle = vi.fn().mockResolvedValue({ ok: true, changed: true, generation: 3, stateRevision: 2 });
+      vi.doMock("./wiki-runtime-core", () => new Promise((resolve) => { release = resolve; }));
+      const bridge = await import("./wiki-runtime-bridge");
+      const owner = await import("./wiki-occurrence-owner");
+      const occurrence = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
+      bridge.claimMatterWikiPublication(publicationOf([occurrence]));
+      const pending = bridge.settleMatterWikiOccurrence(occurrence, outcome);
+      await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+      owner.revokeMatterWikiOccurrences(ATTRIBUTION.rule, ATTRIBUTION.rule.appliedAtRevision + 1);
+      release({ settleHydratedMatterWikiOccurrence: settle });
+      await expect(pending).resolves.toBe("recorded");
+      expect(settle).toHaveBeenCalledOnce();
+    });
   it("matches the canonical empty basis without loading durable configuration", async () => {
     delete bridgeHost[BRIDGE_KEY];
     vi.resetModules();

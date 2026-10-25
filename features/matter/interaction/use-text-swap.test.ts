@@ -3,8 +3,9 @@ import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
 import {
   createTextSwapBasis,
   createTextSwapEnvelope,
+  deliveryDwellRemainingMs,
   pendingDwellRemainingMs,
-  schedulePendingDwellRefresh,
+  scheduleDeliveryDwellRefresh,
 } from "./use-text-swap";
 
 describe("Text Swap pending dwell", () => {
@@ -13,7 +14,7 @@ describe("Text Swap pending dwell", () => {
     let nowMs = 1_000;
     const remaining = () => pendingDwellRemainingMs({ atMs: 1_000 }, 600, nowMs);
     const windows: boolean[] = [];
-    const cancel = schedulePendingDwellRefresh(remaining, () => windows.push(remaining() === 0));
+    const cancel = scheduleDeliveryDwellRefresh(remaining, () => windows.push(remaining() === 0));
     try {
       nowMs = 1_599.6;
       vi.advanceTimersByTime(600);
@@ -31,7 +32,7 @@ describe("Text Swap pending dwell", () => {
   it("cancels the dwell refresh when its request owner leaves", () => {
     vi.useFakeTimers();
     const refresh = vi.fn();
-    const cancel = schedulePendingDwellRefresh(() => 600, refresh);
+    const cancel = scheduleDeliveryDwellRefresh(() => 600, refresh);
     try {
       refresh.mockClear();
       cancel();
@@ -52,6 +53,56 @@ describe("Text Swap pending dwell", () => {
     // No pending request, or no field to keep pending, never holds.
     expect(pendingDwellRemainingMs(null, 600, 1_000)).toBe(0);
     expect(pendingDwellRemainingMs(since, 0, 1_000)).toBe(0);
+  });
+
+  it("waits for the later pending cue or actual first-paint deadline", () => {
+    // An old field has already met its paint dwell, so it still owes only the
+    // ordinary 600 ms pending cue rather than an artificial 800 ms timeout.
+    expect(deliveryDwellRemainingMs({ atMs: 5_000 }, 600, 1_800, 5_000)).toBe(600);
+    expect(deliveryDwellRemainingMs({ atMs: 5_000 }, 600, 1_800, 5_600)).toBe(0);
+
+    // If paint lands after submit, its actual deadline wins.
+    expect(deliveryDwellRemainingMs({ atMs: 1_000 }, 600, 2_300, 1_020)).toBe(1_280);
+    expect(deliveryDwellRemainingMs({ atMs: 1_000 }, 600, 2_300, 2_300)).toBe(0);
+    expect(deliveryDwellRemainingMs(null, 600, 2_300, 1_020)).toBe(0);
+  });
+
+  it("releases a resolved delivery once when presentation detaches", () => {
+    vi.useFakeTimers();
+    const nowMs = 1_100;
+    let minimumPendingMs = 600;
+    let notBeforeMs = 2_300;
+    let delivered = false;
+    let commits = 0;
+    const remaining = () => deliveryDwellRemainingMs(
+      { atMs: 1_000 },
+      minimumPendingMs,
+      notBeforeMs,
+      nowMs,
+    );
+    const refresh = () => {
+      if (remaining() === 0 && !delivered) {
+        delivered = true;
+        commits += 1;
+      }
+    };
+    let cancel = scheduleDeliveryDwellRefresh(remaining, refresh);
+    try {
+      expect(commits).toBe(0);
+      // Detach clears both visible clocks and re-evaluates the same resolved
+      // delivery immediately; the old deadline's timer is cancelled.
+      cancel();
+      minimumPendingMs = 0;
+      notBeforeMs = 0;
+      cancel = scheduleDeliveryDwellRefresh(remaining, refresh);
+      expect(commits).toBe(1);
+      refresh();
+      vi.runAllTimers();
+      expect(commits).toBe(1);
+    } finally {
+      cancel();
+      vi.useRealTimers();
+    }
   });
 });
 

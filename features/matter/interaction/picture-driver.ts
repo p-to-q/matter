@@ -222,7 +222,10 @@ export class PictureDriver {
         expectedUpdatedAt: basis.updatedAt,
         expectedImage: basis.image,
         blobRepository: this.dependencies.blobRepository,
-        commit: this.dependencies.commit,
+        // Byte storage may outlive this turn; only its live exact basis may commit.
+        commit: (mutation) => !this.disposed && this.basisHolds()
+          ? this.dependencies.commit(mutation)
+          : "stale",
         cache: this.dependencies.cache,
       });
     } catch {

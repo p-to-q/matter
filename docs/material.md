@@ -3,6 +3,11 @@
 One rooted tree carries the canvas, document structure, and context boundary.
 Matter does not add a separate memory or session system beside it.
 
+Its projections share authored relationships without sharing every scope or
+byte format. The current output/scope matrix and the rule against implicit
+context widening or write-back are in
+[`reference/projections.md`](reference/projections.md).
+
 A lightweight inquiry may read either the transient lasso selection or a bounded
 projection of the active working material when no lasso selection exists.
 Drafts, pending state, voice partials, and Point-and-Talk directions are
@@ -92,6 +97,8 @@ exactly the empty string.
 type ThoughtNode = {
   id: string;
   text: string;
+  role?: "document-root";
+  image?: ImagePointer;
   parentId: string | null;
   children: string[];
   createdAt: string;
@@ -103,6 +110,14 @@ Before the first admission the tree is empty. Once material exists there is
 exactly one root. The empty tree still has document identity and a monotonic
 revision; it does not invent a placeholder node. Child order is authored and
 meaningful. A node has no stored position: structure determines its presentation.
+
+An ordinary passage may also hold one image pointer: media type, byte length,
+width, height and SHA-256 content hash. The synthetic root cannot. Bytes live
+in the origin-local blob repository, outside tree commands and history;
+`replace-image` changes only the pointer as one exactly reversible command.
+Availability is derived, never stored: a missing picture leaves the language,
+pointer and truthful same-size placeholder intact. This lifecycle is built in
+the integration candidate; it does not open the production drawing gate.
 
 ## Lasso address
 
@@ -216,7 +231,9 @@ One document has one structural root, but that root is not material. Its ordered
 children are the visible first-level passages. Speaking with no passage selected
 adds a first-level passage. Speaking after selecting an existing passage supplies
 Point and Talk's transient whole-node rewrite direction instead of adding a
-child. Dropping a passage onto another
+child. The selected passage's Under mark instead arms one human utterance
+whose words become that passage's last child. It uses the same admission,
+repair and Wiki boundaries and never asks AI to compose a child. Dropping a passage onto another
 passage makes it a child; dropping into a sibling gap changes its exact order;
 dropping on unrelated paper attaches it to the structural root as a first-level
 passage. The canvas title is separate document metadata and may be renamed
@@ -328,7 +345,15 @@ snapshot and one record per retained undo step in one IndexedDB transaction, so
 accepted commands remain reversible after reload within the undo bound (1,000
 steps, 32 MiB). Archive export deliberately contains only the material
 snapshot: importing an archive establishes a new undo boundary, and the archive
-is the long-term recovery path.
+is the long-term recovery path. Image pointers are part of that snapshot;
+verified image bytes travel as separate binary ZIP entries. Export reports
+omitted pictures. Import validates carried bytes and accepts absent ones;
+the passage then shows its missing-state plate. Import's separate notice names
+carried pictures that could not be saved, not absent archive entries.
+The IndexedDB candidate uses database v7 for its blob store; the retained undo
+layout remains the per-step v6 journal design. Upgrading the database prevents
+a v6-only build from opening it, even with drawing disabled; release requires
+an explicit recovery path.
 
 In a browser, local durability and a user-visible folder are different physical
 stores. IndexedDB keeps one versioned logical Markdown bundle and its per-step

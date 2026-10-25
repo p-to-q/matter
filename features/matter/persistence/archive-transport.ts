@@ -7,6 +7,7 @@ import {
   type ImagePointerMediaType,
 } from "../tree/image-pointer";
 import { bundleToTree, type SnapshotBundle } from "./snapshot-codec";
+export { treeToBundle } from "./snapshot-codec";
 import type { ThoughtTree } from "../tree/model";
 
 /**
@@ -76,7 +77,7 @@ const INFLATE_FEED_BYTES = 16 * 1024;
 const ARCHIVE_MTIME = new Date(1980, 0, 1);
 const NO_BLOBS: Blobs = new Map();
 
-type Fflate = typeof import("fflate");
+type Fflate = typeof import("./fflate-chunk");
 type Zippable = import("fflate").Zippable;
 type ArchivePath =
   | Readonly<{ kind: "text" }>
@@ -157,12 +158,12 @@ export async function importSnapshotArchive(input: ArchiveInput): Promise<Archiv
  * Export and import await the same import, so a failure surfaces there.
  */
 export function preloadArchiveCodec(): Promise<unknown> {
-  return import("fflate");
+  return import("./fflate-chunk");
 }
 
 async function loadFflate(): Promise<Readonly<{ ok: true; value: Fflate }> | Extract<ArchiveExportResult, { ok: false }>> {
   try {
-    return Object.freeze({ ok: true, value: await import("fflate") });
+    return Object.freeze({ ok: true, value: await import("./fflate-chunk") });
   } catch {
     return failure("ARCHIVE_UNAVAILABLE", "Archive support is unavailable in this browser.");
   }

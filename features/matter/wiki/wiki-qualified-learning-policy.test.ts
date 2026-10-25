@@ -3,7 +3,7 @@ import {
   readWikiLearningPolicyQualificationBytes,
   runWikiLearningPolicyQualification,
   WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST,
-} from "../../../scripts/wiki/qualification/learning-policy-v4";
+} from "../../../scripts/wiki/qualification/learning-policy-v5";
 import { MATTER_WIKI_QUALIFIED_LEARNING_POLICY } from
   "./wiki-qualified-learning-policy";
 
@@ -32,12 +32,15 @@ describe("qualified Wiki learning policy", () => {
       "duplicate-delivery-settles-once",
       "kept-evidence-never-reactivates",
       "non-human-zero-vote",
+      "producer-family-opportunity-withholds-aging",
+      "term-family-and-spoken-channel-withhold-aging",
+      "legacy-producer-retains-ledger-scan-aging",
     ]);
     expect(run.release).toEqual(MATTER_WIKI_QUALIFIED_LEARNING_POLICY);
   }, 60_000);
 
   it("keeps the compact release separate from labelled scenarios", () => {
-    expect(WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST.scenarios).toHaveLength(18);
+    expect(WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST.scenarios).toHaveLength(21);
     expect(MATTER_WIKI_QUALIFIED_LEARNING_POLICY).not.toHaveProperty("scenarios");
     expect(MATTER_WIKI_QUALIFIED_LEARNING_POLICY).not.toHaveProperty("results");
     expect(Object.isFrozen(MATTER_WIKI_QUALIFIED_LEARNING_POLICY)).toBe(true);

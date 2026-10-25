@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { WIKI_PRODUCER_FAMILIES } from "../wiki/wiki-model";
 import type { WikiRepository } from "./wiki-repository";
 import {
   applyBoundedWikiObservationBatch,
@@ -44,6 +45,7 @@ const ENGLISH_TURN = Object.freeze({
   locale: "en-US" as const,
   channel: "spoken" as const,
   scripts: Object.freeze(["latin" as const]),
+  producerFamilies: WIKI_PRODUCER_FAMILIES,
 });
 
 function tick(
@@ -719,7 +721,7 @@ describe("Wiki coordinator", () => {
     expect(repository.save).toHaveBeenCalledOnce();
   });
 
-  it("rebases a settlement over a concurrent durable write", async () => {
+  it("censors old passive evidence when a CAS conflict reveals an external generation", async () => {
     const initial = observedAliasState();
     const external = applyWikiEvent(initial, {
       type: "create-lexeme",
@@ -742,11 +744,58 @@ describe("Wiki coordinator", () => {
 
     await expect(coordinator.settle(
       occurrenceSettlement("occ_rebased", "inspected-kept", initial.revision),
-    )).resolves.toMatchObject({ ok: true, changed: true, generation: 3 });
-    expect(repository.save).toHaveBeenCalledTimes(2);
+    )).resolves.toMatchObject({ ok: true, changed: false, generation: 2 });
+    expect(repository.save).toHaveBeenCalledOnce();
     expect(coordinator.readState()?.lexemes.map((lexeme) => lexeme.canonical))
       .toContain("Morphogenesis");
+    expect(coordinator.readState()?.aliasEvidence[0]).toMatchObject({ kept: 0 });
+    // A newly disclosed occurrence on the refreshed basis is still eligible.
+    await expect(coordinator.settle(
+      occurrenceSettlement("occ_fresh", "inspected-kept", external.state.revision),
+    )).resolves.toMatchObject({ ok: true, changed: true, generation: 3 });
     expect(coordinator.readState()?.aliasEvidence[0]).toMatchObject({ kept: 8 });
+  });
+
+  it("retains explicit human intent across the same external CAS conflict", async () => {
+    const initial = observedAliasState();
+    const external = applyWikiEvent(initial, {
+      type: "create-lexeme", locale: "en-US", canonical: "Morphogenesis", scope: "both",
+    });
+    if (!external.ok) throw new Error(external.error.message);
+    const repository = fakeRepository();
+    repository.load
+      .mockResolvedValueOnce({ ok: true, value: { state: initial, writeGeneration: 1 } })
+      .mockResolvedValueOnce({ ok: true, value: { state: external.state, writeGeneration: 2 } });
+    repository.save
+      .mockResolvedValueOnce({ ok: false, error: { code: "PERSISTENCE_CONFLICT", message: "newer tab" } })
+      .mockResolvedValueOnce({ ok: true, value: 3 });
+    const coordinator = createWikiCoordinator(repository);
+    await expect(coordinator.settle(
+      occurrenceSettlement("occ_human", "explicit-confirm", initial.revision),
+    )).resolves.toMatchObject({ ok: true, changed: true, generation: 3 });
+    expect(repository.save).toHaveBeenCalledTimes(2);
+    expect(coordinator.readState()?.authorities).toEqual([
+      expect.objectContaining({ form: "Englebart", channel: "spoken" }),
+    ]);
+  });
+
+  it("censors old passive applications after an explicit refresh without a generation signal", async () => {
+    const initial = observedAliasState();
+    const external = applyWikiEvent(initial, {
+      type: "create-lexeme", locale: "en-US", canonical: "Morphogenesis", scope: "both",
+    });
+    if (!external.ok) throw new Error(external.error.message);
+    const repository = fakeRepository();
+    repository.load
+      .mockResolvedValueOnce({ ok: true, value: { state: initial, writeGeneration: 1 } })
+      .mockResolvedValueOnce({ ok: true, value: { state: external.state, writeGeneration: 2 } });
+    const coordinator = createWikiCoordinator(repository);
+    await coordinator.start();
+    await coordinator.retry();
+    await expect(coordinator.settle(
+      occurrenceSettlement("occ_missed", "accepted-implicit", initial.revision),
+    )).resolves.toMatchObject({ ok: true, changed: false, generation: 2 });
+    expect(repository.save).not.toHaveBeenCalled();
   });
 
   it("routes Keep through human authority and reports an explicit failure", async () => {

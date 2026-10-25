@@ -4,7 +4,6 @@
 import "./PointTalkComposer.css";
 import {
   useCallback,
-  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -160,6 +159,7 @@ export function PointTalkComposer({
   const bubbleRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
+  const openingFocusConsumedIdentityRef = useRef<string | null>(null);
   const measurementFrameRef = useRef<number | null>(null);
   const [placement, setPlacement] = useState<PointTalkPlacement | null>(null);
   const [entrance, setEntrance] = useState<PointTalkEntrance | null>(null);
@@ -338,14 +338,26 @@ export function PointTalkComposer({
     penActive,
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (
       !surfaceAvailable || !formVisible || !placementReady ||
       document.visibilityState !== "visible"
     ) return;
-    const frame = requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+    const focusAtSchedule = document.activeElement;
+    const frame = requestAnimationFrame(() => {
+      const input = inputRef.current;
+      const bubble = bubbleRef.current;
+      const active = document.activeElement;
+      if (input === null || bubble === null || document.visibilityState !== "visible") return;
+      const opening = openingFocusConsumedIdentityRef.current !== presenceIdentity;
+      openingFocusConsumedIdentityRef.current = presenceIdentity;
+      // Default focus cannot undo a newer choice, including a picture step's anchor.
+      if (active !== null && bubble.contains(active)) return;
+      if (active !== document.body && (!opening || active !== focusAtSchedule)) return;
+      input.focus({ preventScroll: true });
+    });
     return () => cancelAnimationFrame(frame);
-  }, [formVisible, placementReady, surfaceAvailable]);
+  }, [formVisible, placementReady, presenceIdentity, surfaceAvailable]);
 
   useLayoutEffect(() => {
     if (
@@ -579,6 +591,7 @@ export function PointTalkExit({
     live,
     available ? record?.close ?? "preempted" : "preempted",
     pointTalkPresencePolicy,
+    handoff.markPainted,
   );
   if (
     frame === null ||
@@ -818,6 +831,8 @@ function PointTalkForm({
 }>) {
   const [direction, setDirection] = useState(initialDirection);
   const pictureFullReasonId = `${inputId}-picture-full`;
+  const pictureUnavailableReasonId = `${inputId}-picture-unavailable`;
+  const [explainUnavailable, setExplainUnavailable] = useState(false);
   return (
     <form
       className="point-talk__composer"
@@ -856,12 +871,16 @@ function PointTalkForm({
           // Never `disabled`: focus must survive a pending interaction. It
           // ignores the typed direction and is not the form's submit.
           <button
-            aria-describedby={pictureControl === "full" ? pictureFullReasonId : undefined}
-            aria-disabled={pictureControl === "disabled" || pictureControl === "full" || undefined}
+            aria-describedby={pictureControl === "full" ? pictureFullReasonId
+              : pictureControl === "unavailable" ? pictureUnavailableReasonId : undefined}
+            aria-disabled={pictureControl !== "enabled" || undefined}
             aria-label={pictureCopy.controlName}
             className="point-talk__text-button point-talk__draw"
             data-picture-control
-            onClick={pictureControl === "enabled" ? onArmPicture : undefined}
+            data-picture-availability={pictureControl}
+            onClick={pictureControl === "enabled" ? onArmPicture
+              : pictureControl === "unavailable" ? () => setExplainUnavailable(true) : undefined}
+            title={pictureControl === "unavailable" ? pictureCopy.unavailable : undefined}
             type="button"
           >
             {pictureCopy.control}
@@ -874,6 +893,12 @@ function PointTalkForm({
           {copy.apply}
         </button>
       </div>
+      {pictureControl === "unavailable" ? (
+        <p className={explainUnavailable ? "point-talk__quiet point-talk__unavailable" : "visually-hidden"}
+          id={pictureUnavailableReasonId} role={explainUnavailable ? "status" : undefined}>
+          {pictureCopy.unavailable}
+        </p>
+      ) : null}
     </form>
   );
 }

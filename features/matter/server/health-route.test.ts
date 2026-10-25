@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 import packageMetadata from "../../../package.json";
 import { GET } from "../../../app/api/health/route";
 import { healthSnapshot } from "./health-route";
+import { MATTER_BUILD_ID } from "../config/build-identity";
 
 const originalEnvironment = { ...process.env };
 
@@ -35,6 +36,7 @@ describe("Matter health route", () => {
     await expect(response.json()).resolves.toEqual({
       protocolVersion: "0.2",
       appVersion: packageMetadata.version,
+      buildId: MATTER_BUILD_ID,
       basePath: "/matter",
       status: "ok",
       surfaces: {
@@ -50,6 +52,12 @@ describe("Matter health route", () => {
         archiveExportImport: "available",
       },
     });
+  });
+
+  it("does not replace the frozen build identity from runtime operator/platform values", () => {
+    vi.stubEnv("MATTER_BUILD_ID", "runtime_other");
+    vi.stubEnv("VERCEL_DEPLOYMENT_ID", "runtime_platform");
+    expect(healthSnapshot().buildId).toBe(MATTER_BUILD_ID);
   });
 
   it("marks live admission unavailable until a supported adapter is configured", () => {

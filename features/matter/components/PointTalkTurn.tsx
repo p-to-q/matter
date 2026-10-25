@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
 import type { MatterLocale } from "../config/locales";
 import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import {
@@ -31,7 +38,10 @@ import {
 import { usePictureSession } from "./use-picture-session";
 import type { PointTalkCloseReason } from "./point-talk-close";
 import type { PointTalkBounds, PointTalkOrigin } from "./point-talk-placement";
-import { POINT_TALK_TIMING, type PresenceHandoff } from "./presence";
+import {
+  projectPointTalkDeliveryTiming,
+  type PresenceHandoff,
+} from "./presence";
 import {
   findPointTalkTarget,
   PointTalkComposer,
@@ -91,7 +101,7 @@ export function PointTalkTurn({
   documentEpoch: number;
   deliveryVisibleNodeIds?: ReadonlySet<string>;
   enabled: boolean;
-  exitHandoff?: PresenceHandoff<PointTalkSurfaceView>;
+  exitHandoff: PresenceHandoff<PointTalkSurfaceView>;
   geometryKey: string;
   /** Another interaction is pending: the picture control stays but cannot act. */
   interactionPending: boolean;
@@ -139,6 +149,15 @@ export function PointTalkTurn({
       selectedText: node.text,
     });
   }, [enabled, nodeId, tree]);
+  const presenceRecord = useSyncExternalStore(
+    exitHandoff.subscribe,
+    exitHandoff.getSnapshot,
+    exitHandoff.getSnapshot,
+  );
+  const deliveryTiming = useMemo(
+    () => projectPointTalkDeliveryTiming(presented, presenceIdentity, presenceRecord),
+    [presenceIdentity, presenceRecord, presented],
+  );
   const controller = useTextSwap<TextSwapCommittedChange>({
     tree,
     documentEpoch,
@@ -150,10 +169,10 @@ export function PointTalkTurn({
     commit,
     onCommitted,
     deliveryWindowAvailable: surfaceAvailable,
-    // A presented field stays visibly pending for a minimum time before its
-    // result may change the passage, so a fast result never flashes it.
-    // Detached work has no field to show and delivers as soon as it may.
-    minimumPendingMs: presented ? POINT_TALK_TIMING.pendingMinMs : 0,
+    // The visible opening owns both clocks: pending time and the exact
+    // first-paint dwell. Detached work owes neither visible delay.
+    minimumPendingMs: deliveryTiming.minimumPendingMs,
+    deliveryNotBeforeMs: deliveryTiming.notBeforeMs,
   });
   const appliedVoiceCommandIdRef = useRef<number | null>(null);
   const phase = controller.state.phase;
@@ -385,3 +404,5 @@ export function pointTalkTurnReleasesOwner(
   if (presented) return phase === "success" || phase === "stale";
   return phase === "idle" || phase === "error" || phase === "stale" || phase === "success";
 }
+
+Object.defineProperty(PointTalkTurn, "matterCapability", { value: "matter-capability:point-talk" });

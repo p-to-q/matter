@@ -5,6 +5,7 @@ export type PictureControlCopy = Readonly<{
   /** The visible label of the control; the accessible name must contain it. */
   control: string;
   controlName: string;
+  unavailable: string;
   /** The arm step's cost and privacy statement. */
   armStatement: string;
   /** Its own line above the statement once an earlier attempt may have been billed. */
@@ -39,6 +40,7 @@ const PICTURE_CONTROL_COPY: Readonly<Record<MatterLocale, PictureControlCopy>> =
   "en-US": Object.freeze({
     control: "Draw",
     controlName: "Draw a picture from this passage",
+    unavailable: "Drawing isn’t available here yet. No request will be sent.",
     armStatement:
       "Draws one picture. Your passage goes to a text model; only a short line goes to an image service. Takes up to a minute. Leaving loses it.",
     armWarningBilled: "The last attempt may already have been used.",
@@ -61,8 +63,9 @@ const PICTURE_CONTROL_COPY: Readonly<Record<MatterLocale, PictureControlCopy>> =
     announceKept: "Kept. Undo is available.",
   }),
   "zh-CN": Object.freeze({
-    control: "绘图",
-    controlName: "根据这段文字绘图",
+    control: "生图",
+    controlName: "根据这段文字生图",
+    unavailable: "此处暂时无法生图，不会发送请求。",
     armStatement:
       "绘制一张图片。这段文字会交给文字模型，只有一句简短描述会发给图像服务。最多需要一分钟，离开就会丢失。",
     armWarningBilled: "上一次可能已产生用量。",
@@ -85,8 +88,9 @@ const PICTURE_CONTROL_COPY: Readonly<Record<MatterLocale, PictureControlCopy>> =
     announceKept: "已保留，可撤销。",
   }),
   "zh-TW": Object.freeze({
-    control: "繪圖",
-    controlName: "根據這段文字繪圖",
+    control: "生圖",
+    controlName: "根據這段文字生圖",
+    unavailable: "此處暫時無法生圖，不會傳送請求。",
     armStatement:
       "繪製一張圖片。這段文字會交給文字模型，只有一句簡短描述會傳給圖像服務。最多需要一分鐘，離開就會遺失。",
     armWarningBilled: "上一次可能已產生用量。",
@@ -111,6 +115,7 @@ const PICTURE_CONTROL_COPY: Readonly<Record<MatterLocale, PictureControlCopy>> =
   "ja-JP": Object.freeze({
     control: "描く",
     controlName: "この段落から絵を描く",
+    unavailable: "ここではまだ絵を描けません。リクエストは送信されません。",
     armStatement:
       "絵を1枚描きます。段落の文章はテキストモデルに送られ、画像サービスには短い一文だけが送られます。最長で1分ほどかかります。離れると失われます。",
     armWarningBilled: "前回の試行はすでに使われた可能性があります。",
@@ -135,6 +140,7 @@ const PICTURE_CONTROL_COPY: Readonly<Record<MatterLocale, PictureControlCopy>> =
   "de-DE": Object.freeze({
     control: "Zeichnen",
     controlName: "Bild zu diesem Absatz zeichnen",
+    unavailable: "Zeichnen ist hier noch nicht verfügbar. Es wird keine Anfrage gesendet.",
     armStatement:
       "Zeichnet ein Bild. Ihr Absatz geht an ein Textmodell; nur eine kurze Zeile geht an einen Bilddienst. Dauert bis zu einer Minute. Beim Verlassen geht es verloren.",
     armWarningBilled: "Der letzte Versuch wurde möglicherweise schon verbraucht.",

@@ -23,12 +23,12 @@ export type PictureStoreAccess = Readonly<{
   bytes: PictureBytesSource;
   /** Empty, without loading anything, when the tree names no picture. */
   collectBlobs: (tree: ThoughtTree) => Promise<ReadonlyMap<string, Uint8Array>>;
-  /** Nothing to restore, nothing loaded, when the archive carries no picture. */
+  /** Null refuses restoration when no holder exists; an empty archive loads nothing. */
   restoreBlobs: (
     blobs: ReadonlyMap<string, Uint8Array>,
     tree: ThoughtTree,
-  ) => Promise<RestoredPictures>;
-  /** Releases the blob connection if one was ever opened. */
+  ) => Promise<RestoredPictures | null>;
+  /** Releases ownership and pending loads; a later call may open a new store. */
   close: () => void;
 }>;
 
@@ -39,36 +39,52 @@ export function createPictureStoreAccess(
 ): PictureStoreAccess {
   let loading: Promise<PictureStore> | null = null;
   let loaded: PictureStore | null = null;
-  const load = () => {
-    loading ??= importStore().then(
-      (module) => {
+  let generation = 0;
+  const load = (): Promise<PictureStore> => {
+    if (loading !== null) return loading;
+    const loadGeneration = generation;
+    const pending: Promise<PictureStore> = Promise.resolve()
+      .then(() => {
+        if (loadGeneration !== generation) throw new Error("Picture store load was closed.");
+        return importStore();
+      })
+      .then((module) => {
+        // A chunk that arrives after cleanup must not create a new resource.
+        if (loadGeneration !== generation) throw new Error("Picture store load was closed.");
         loaded = module.createPictureStore();
         return loaded;
-      },
-      (error: unknown) => {
-        loading = null;
+      })
+      .catch((error: unknown) => {
+        if (loading === pending) loading = null;
         throw error;
-      },
-    );
-    return loading;
+      });
+    loading = pending;
+    return pending;
   };
+  const owns = (store: PictureStore, startedIn: number) =>
+    generation === startedIn && loaded === store;
   return Object.freeze({
     load,
     bytes: Object.freeze({
       async read(pointer: ImagePointer) {
+        const startedIn = generation;
         let store: PictureStore;
         try {
           store = await load();
         } catch {
           return UNAVAILABLE_PICTURE_BYTES.read(pointer);
         }
+        if (!owns(store, startedIn)) return UNAVAILABLE_PICTURE_BYTES.read(pointer);
         return store.bytes.read(pointer);
       },
     }),
     async collectBlobs(tree) {
       if (!Object.values(tree.nodes).some((node) => node.image !== undefined)) return NO_BLOBS;
+      const startedIn = generation;
       try {
-        return await (await load()).collectBlobs(tree);
+        const store = await load();
+        if (!owns(store, startedIn)) return NO_BLOBS;
+        return await store.collectBlobs(tree);
       } catch {
         // A picture this device cannot produce is left out and counted, never an error.
         return NO_BLOBS;
@@ -76,14 +92,23 @@ export function createPictureStoreAccess(
     },
     async restoreBlobs(blobs, tree) {
       if (blobs.size === 0) return Object.freeze({ saved: 0, keptInSession: 0 });
+      const startedIn = generation;
       try {
-        return await (await load()).restoreBlobs(blobs, tree);
+        const store = await load();
+        if (!owns(store, startedIn)) return null;
+        const restored = await store.restoreBlobs(blobs, tree);
+        // Accepted writes may finish, but a closed holder cannot admit an import.
+        return owns(store, startedIn) ? restored : null;
       } catch {
-        return Object.freeze({ saved: 0, keptInSession: blobs.size });
+        return null;
       }
     },
     close() {
-      loaded?.close();
+      const store = loaded;
+      generation += 1;
+      loaded = null;
+      loading = null;
+      store?.close();
     },
   });
 }

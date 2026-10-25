@@ -207,6 +207,7 @@ function confirmedProjectionInputsMatch(left: WikiState, right: WikiState): bool
 
 function provisionalProjectionInputsMatch(left: WikiState, right: WikiState): boolean {
   return confirmedProjectionInputsMatch(left, right) &&
+    JSON.stringify(left.preferences) === JSON.stringify(right.preferences) &&
     left.automaticLearningSaturated === right.automaticLearningSaturated &&
     left.aliasEvidence === right.aliasEvidence &&
     left.aliasTombstones === right.aliasTombstones &&
@@ -215,6 +216,7 @@ function provisionalProjectionInputsMatch(left: WikiState, right: WikiState): bo
 
 function fitInputsMatch(left: WikiState, right: WikiState): boolean {
   return left.fittingVersion === right.fittingVersion &&
+    JSON.stringify(left.preferences) === JSON.stringify(right.preferences) &&
     left.lexemes === right.lexemes &&
     termProjectionInputsMatch(left.termEvidence, right.termEvidence);
 }

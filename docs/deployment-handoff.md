@@ -1,13 +1,22 @@
 # Matter deployment handoff
 
-Status: **live — the root-seeded browser preview is deployed on
-`matter.ptoq.io` with the three managed model gates (label, repair, inquiry)
-enabled; Elastic and Text Swap are public surfaces that only a user Model API
-lease may supply, and Production reports them `unavailable` until issue #104
-closes (see [`release-readiness.md`](release-readiness.md)). The required
-abuse- and spend-control receipts in issue #34 are still outstanding, so this
-remains an unverified live exposure rather than a completed release
-boundary.**
+Current observation — 2026-10-16: Production is Preview.64. Its no-store
+health response reports Elastic and Text Swap as `user-configurable`, and the
+anonymous provider-session response reports the Model API surface available
+with no credential present. An open issue #104 is not proof that either
+surface is currently unavailable. These reads do not prove an authenticated
+provider turn or close the external control receipts in issue #34. See
+[`release-readiness.md`](release-readiness.md) for the current release gates.
+
+The candidate on `claude/preview-65` is not this deployment. Its database v7
+upgrade/recovery decision and paid-image gates remain open. A passing local
+check or a historical release exception does not authorize its promotion.
+
+## Historical deployment decisions
+
+The dated entries below preserve the state and owner decisions at each release.
+Their `unavailable` and open-issue statements are historical observations, not
+a replacement for the current observation above or a new risk acceptance.
 
 The deployment owner enabled labels, transcript repair, and inquiry together on
 2026-08-08, ahead of the staged order below, so that the deployed origin matches

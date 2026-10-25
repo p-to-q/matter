@@ -8,6 +8,7 @@ import {
 } from "./matter-database";
 import {
   maximumRawWikiStateBytes,
+  encodeWikiStateAsV7,
   parseWikiState,
   wikiStateStorageBytes,
 } from "../wiki/wiki-codec";
@@ -60,12 +61,14 @@ export function createIndexedDbWikiRepository(): WikiRepository {
         const stored: unknown = await transaction.store.get(WIKI_RECORD_KEY);
         if (stored === undefined) {
           const state = createInitialWikiState();
+          const legacy = encodeWikiStateAsV7(state);
+          if (!legacy.ok) return abort(transaction, "PERSISTENCE_CORRUPT", "The initial Wiki cannot be represented.");
           const initialized: StoredWikiRecord = Object.freeze({
             storageSchemaVersion: STORAGE_SCHEMA_VERSION,
-            recordSchemaVersion: WIKI_RECORD_SCHEMA_VERSION,
+            recordSchemaVersion: 7,
             key: WIKI_RECORD_KEY,
             writeGeneration: 1,
-            state,
+            state: legacy.state,
           });
           await transaction.store.put(initialized);
           await transaction.done;
@@ -74,15 +77,20 @@ export function createIndexedDbWikiRepository(): WikiRepository {
         const parsed = parseStoredWikiRecord(stored);
         if (parsed === null) {
           return isNewerWikiRecord(stored)
-            ? abort(transaction, "PERSISTENCE_UNAVAILABLE", NEWER_WIKI_MESSAGE)
+            ? abort(transaction, "PERSISTENCE_SUPERSEDED", NEWER_WIKI_MESSAGE)
             : abort(transaction, "PERSISTENCE_CORRUPT", "The saved Wiki is invalid.");
         }
-        if (parsed.recordSchemaVersion === WIKI_RECORD_SCHEMA_VERSION) {
+        if (parsed.recordSchemaVersion >= 7) {
           await transaction.done;
           return success(toLoadedWiki(parsed));
         }
         const migrated = ensureWikiStarterLexemes(parsed.state);
+        const legacy = migrated.ok ? encodeWikiStateAsV7(migrated.state) : null;
         if (!migrated.ok || wikiStateStorageBytes(migrated.state) > MAX_STORED_WIKI_BYTES) {
+          await transaction.done;
+          return success(toLoadedWiki(parsed));
+        }
+        if (legacy === null || !legacy.ok) {
           await transaction.done;
           return success(toLoadedWiki(parsed));
         }
@@ -93,10 +101,10 @@ export function createIndexedDbWikiRepository(): WikiRepository {
         }
         const initialized: StoredWikiRecord = Object.freeze({
           storageSchemaVersion: STORAGE_SCHEMA_VERSION,
-          recordSchemaVersion: WIKI_RECORD_SCHEMA_VERSION,
+          recordSchemaVersion: 7,
           key: WIKI_RECORD_KEY,
           writeGeneration,
-          state: migrated.state,
+          state: legacy.state,
         });
         try {
           await transaction.store.put(initialized);
@@ -127,10 +135,13 @@ export function createIndexedDbWikiRepository(): WikiRepository {
         const parsedCurrent = current === undefined ? null : parseStoredWikiRecord(current);
         if (current !== undefined && parsedCurrent === null) {
           return isNewerWikiRecord(current)
-            ? abort(transaction, "PERSISTENCE_UNAVAILABLE", NEWER_WIKI_MESSAGE)
+            ? abort(transaction, "PERSISTENCE_SUPERSEDED", NEWER_WIKI_MESSAGE)
             : abort(transaction, "PERSISTENCE_CORRUPT", "The saved Wiki is invalid.");
         }
         const currentGeneration = parsedCurrent?.writeGeneration ?? null;
+        if (parsedCurrent === null) {
+          return abort(transaction, "PERSISTENCE_CONFLICT", "Wiki must be initialized before saving.");
+        }
         if (currentGeneration !== expectedGeneration) {
           return abort(
             transaction,
@@ -238,6 +249,9 @@ function parseStoredWikiRecord(value: unknown): ParsedStoredWiki | null {
     wikiStateStorageBytes(value.state) > maximumRawBytes
   ) return null;
   const parsed = parseWikiState(value.state);
+  const stateVersion = isPlainObject(value.state) ? value.state.schemaVersion : undefined;
+  if ((value.recordSchemaVersion === 8 || stateVersion === 8) &&
+      (value.recordSchemaVersion !== 8 || stateVersion !== 8)) return null;
   return parsed.ok && wikiStateStorageBytes(parsed.state) <= MAX_STORED_WIKI_BYTES
     ? Object.freeze({
         state: parsed.state,
@@ -256,11 +270,13 @@ const NEWER_WIKI_MESSAGE = "A newer Matter owns the local Wiki.";
  * repository exposes a terminal superseded code, this is where it maps.
  */
 function isNewerWikiRecord(value: unknown): boolean {
-  if (!isPlainObject(value) || value.storageSchemaVersion !== STORAGE_SCHEMA_VERSION ||
-      value.key !== WIKI_RECORD_KEY) return false;
+  if (!isPlainObject(value) || value.key !== WIKI_RECORD_KEY) return false;
   const recordVersion = value.recordSchemaVersion;
   const stateVersion = isPlainObject(value.state) ? value.state.schemaVersion : undefined;
-  return (Number.isSafeInteger(recordVersion) &&
+  return (Number.isSafeInteger(value.storageSchemaVersion) &&
+      (value.storageSchemaVersion as number) > STORAGE_SCHEMA_VERSION) ||
+    ((recordVersion === 8 || stateVersion === 8) && recordVersion !== stateVersion) ||
+    (Number.isSafeInteger(recordVersion) &&
       (recordVersion as number) > WIKI_RECORD_SCHEMA_VERSION) ||
     (Number.isSafeInteger(stateVersion) && (stateVersion as number) > WIKI_SCHEMA_VERSION);
 }

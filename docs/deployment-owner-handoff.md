@@ -1,5 +1,27 @@
 # Preview deployment-owner handoff
 
+## Current observation — 2026-10-16
+
+Production health identifies Preview.64. Its material turns report
+`user-configurable`; anonymous `provider-session/4` reports `available: true`
+and `credentialPresent: false`. These configuration reads supersede the old
+unavailable status below, but do not prove saving a lease, a real model action,
+exact deployed source identity, the strict pool gate or immutable publication.
+Issue #104 remains open pending an operator acceptance receipt; do not infer a
+new missing-key action solely from its older description. #68 is closed;
+remaining live-model and spend controls are tracked in #34 and #52.
+
+The integration candidate remains unreleased and the image gate remains off.
+See [`release-readiness.md`](release-readiness.md) for current gates. Deployment
+and credential ownership stay with the existing owner; no token or raw
+configuration belongs here.
+
+## Historical status and operator procedure
+
+The following status paragraphs describe their dated Preview.63/57 receipts.
+Keep their operational procedure, but use the current observation above to
+decide what is still missing rather than repeating a completed environment step.
+
 Status: the public origin identifies itself as Preview.63 through the automatic
 GitHub-linked Production path after PRs #121 and #122 reached `main` at
 `c691cc73f76c98ecf5cf83d425898d1b19023300`. Exact merged-main CI run

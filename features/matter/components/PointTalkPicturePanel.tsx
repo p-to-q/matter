@@ -14,7 +14,7 @@ import {
   type PictureBubbleView,
 } from "./picture-surface";
 import { startPictureLoad, type PictureLoadState } from "./passage-picture-load";
-import { BROWSER_OBJECT_URLS, PictureFrame, pictureView } from "./PassagePicture";
+import { BROWSER_OBJECT_URLS, PictureFrame, pictureView } from "./PictureFrame";
 import type { PointTalkPictureActions } from "./use-picture-session";
 
 /**

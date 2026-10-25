@@ -54,8 +54,8 @@ export type TextSwapDriverDependencies<TCommitted> = Readonly<{
     basis: TextSwapBasis,
   ) => MaterialTurnCommitResult<TCommitted>;
   onCommitted: (change: TCommitted) => void;
-  createInteractionId: () => string;
-  createRequestId: () => string;
+  createInteractionId: () => string | null;
+  createRequestId: () => string | null;
   monotonicNow: () => number;
 }>;
 
@@ -180,9 +180,11 @@ export class TextSwapDriver<TCommitted> {
     // The host owns at most one submitted turn. A later presentation gesture
     // cannot replace work that already crossed the person's submit boundary.
     if (submittedState(this.state)) return false;
+    const interactionId = this.dependencies.createInteractionId();
+    if (interactionId === null) return false;
     this.send({
       type: "enter",
-      interactionId: this.dependencies.createInteractionId(),
+      interactionId,
       basis,
     });
     if (!this.scopeMatches(basis)) {
@@ -208,9 +210,11 @@ export class TextSwapDriver<TCommitted> {
   }
 
   submit(): boolean {
+    if (this.state.phase !== "ready") return false;
     const requestId = this.dependencies.createRequestId();
+    if (requestId === null) return false;
     this.send({ type: "submit", requestId });
-    return this.state.phase === "pending" && this.state.requestId === requestId;
+    return isPendingRequest(this.getState(), requestId);
   }
 
   retry(): boolean {
@@ -218,6 +222,7 @@ export class TextSwapDriver<TCommitted> {
       return false;
     }
     const requestId = this.dependencies.createRequestId();
+    if (requestId === null) return false;
     this.send({ type: "retry-request", requestId });
     return isPendingRequest(this.getState(), requestId);
   }
@@ -485,7 +490,7 @@ export class TextSwapDriver<TCommitted> {
     // intentional: a native transcript may resolve while an earlier reducer
     // effect is still draining. An invalid or stale direction makes `submit`
     // inert, while a valid one creates exactly one immutable request.
-    this.send({ type: "submit", requestId });
+    if (requestId !== null) this.send({ type: "submit", requestId });
   }
 
   private requestSwap(

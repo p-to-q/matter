@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { documentRootId } from "../tree/document-root";
 import { PROTOCOL_VERSION, type ThoughtNode, type ThoughtTree } from "../tree/model";
-import { parseContextReceipt } from "./context-receipt";
+import { parseContextReceiptV2 } from "./context-receipt-v2";
 import { receiptFileName, renderActiveTreeReceipt } from "./receipt-actions";
 import { projectWorkingContext } from "./working-context";
 
@@ -54,7 +54,7 @@ function fullView(tree: ThoughtTree): { node: ThoughtNode; depth: number }[] {
 
 async function parsed(markdown: string | null) {
   expect(markdown).not.toBeNull();
-  const result = await parseContextReceipt(markdown);
+  const result = await parseContextReceiptV2(markdown);
   if (!result.ok) throw new Error(`receipt rejected: ${result.reason}`);
   return result.projection;
 }
@@ -79,6 +79,14 @@ describe("the active working tree as a receipt", () => {
     const projection = await parsed(await renderActiveTreeReceipt(tree, { view, activeNodeIds: active }));
     expect(projection.nodes.map(({ nodeId }) => nodeId)).toEqual(["a", "c", "d", "e", "g"]);
   });
+
+  it("writes v2 and preserves valid line separators rather than silently refusing or normalizing them", async () => {
+    const text = "valid\r\nmaterial\u0085with\u2028all\u2029separators";
+    const tree = fixture(text);
+    const markdown = await renderActiveTreeReceipt(tree, { view: fullView(tree), activeNodeIds: projectWorkingContext(tree).activeNodeIds });
+    expect(markdown).toContain("format: matter-receipt/2");
+    expect((await parsed(markdown)).nodes.find(({ nodeId }) => nodeId === "c")?.text).toBe(text);
+  });
 });
 
 describe("a refused receipt", () => {
@@ -87,6 +95,19 @@ describe("a refused receipt", () => {
     const active = projectWorkingContext(refused).activeNodeIds;
     await expect(renderActiveTreeReceipt(refused, { view: fullView(refused), activeNodeIds: active }))
       .resolves.toBeNull();
+  });
+
+  it("refuses a digest failure without leaking text and succeeds on an explicit later retry", async () => {
+    const tree = fixture();
+    const active = { view: fullView(tree), activeNodeIds: projectWorkingContext(tree).activeNodeIds };
+    const digest = vi.spyOn(globalThis.crypto.subtle, "digest").mockRejectedValueOnce(new Error("synthetic unavailable crypto"));
+    try {
+      await expect(renderActiveTreeReceipt(tree, active)).resolves.toBeNull();
+      const retried = await renderActiveTreeReceipt(tree, active);
+      expect((await parsed(retried)).treeId).toBe(tree.id);
+    } finally {
+      digest.mockRestore();
+    }
   });
 });
 

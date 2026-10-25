@@ -84,6 +84,8 @@ function harness(options: Partial<{
   transcribe: TextSwapDriverDependencies<string>["transcribe"];
   request: TextSwapDriverDependencies<string>["request"];
   commit: TextSwapDriverDependencies<string>["commit"];
+  createInteractionId: TextSwapDriverDependencies<string>["createInteractionId"];
+  createRequestId: TextSwapDriverDependencies<string>["createRequestId"];
 }> = {}) {
   const voice = new ControlledVoice();
   let requestSequence = 0;
@@ -116,8 +118,8 @@ function harness(options: Partial<{
     request,
     commit,
     onCommitted,
-    createInteractionId: () => "text_swap_interaction_1",
-    createRequestId: () => `text_swap_request_${++requestSequence}`,
+    createInteractionId: options.createInteractionId ?? (() => "text_swap_interaction_1"),
+    createRequestId: options.createRequestId ?? (() => `text_swap_request_${++requestSequence}`),
     monotonicNow: () => 20,
   });
   driver.updateScope(SCOPE);
@@ -156,6 +158,44 @@ async function completeVoice(
 }
 
 describe("TextSwapDriver", () => {
+  it("leaves the current interaction untouched when no CSPRNG can mint its identity", () => {
+    const h = harness({ createInteractionId: () => null });
+
+    expect(h.driver.enter(BASIS)).toBe(false);
+    expect(h.driver.getState()).toEqual({ phase: "idle" });
+    expect(h.request).not.toHaveBeenCalled();
+  });
+
+  it("keeps an authored direction ready when no CSPRNG can mint its request", () => {
+    const h = harness({ createRequestId: () => null });
+    expect(h.driver.enter(BASIS)).toBe(true);
+    expect(h.driver.acceptDirection("Use a calmer rhythm")).toBe(true);
+
+    expect(h.driver.submit()).toBe(false);
+    expect(h.driver.getState()).toMatchObject({
+      phase: "ready",
+      direction: "Use a calmer rhythm",
+      basis: { sourceText: "Rain is near" },
+    });
+    expect(h.buildEnvelope).not.toHaveBeenCalled();
+    expect(h.request).not.toHaveBeenCalled();
+  });
+
+  it("keeps a resolved voice direction ready when request identity is unavailable", async () => {
+    const h = harness({ createRequestId: () => null });
+    const operation = await reachRecording(h);
+    h.driver.stopRecording();
+    h.voice.finish(operation, "Use a calmer rhythm");
+    await settle(30);
+
+    expect(h.driver.getState()).toMatchObject({
+      phase: "ready",
+      direction: "Use a calmer rhythm.",
+      basis: { sourceText: "Rain is near" },
+    });
+    expect(h.request).not.toHaveBeenCalled();
+  });
+
   it("freezes Voice and transcription locale in the entered basis", async () => {
     const h = harness();
     const basis = Object.freeze({ ...BASIS, locale: "zh-CN" as const });
@@ -449,6 +489,33 @@ describe("TextSwapDriver", () => {
       phase: "success",
       requestId: "text_swap_request_2",
     });
+  });
+
+  it("preserves a retryable error when a fresh secure request identity is unavailable", async () => {
+    const request = vi.fn().mockRejectedValue(new TextSwapClientError(true, "try again"));
+    const createRequestId = vi.fn()
+      .mockReturnValueOnce("text_swap_request_1")
+      .mockReturnValue(null);
+    const h = harness({ request, createRequestId });
+    expect(h.driver.enter(BASIS)).toBe(true);
+    expect(h.driver.acceptDirection("Use a calmer rhythm")).toBe(true);
+    expect(h.driver.submit()).toBe(true);
+    await settle();
+    const beforeRetry = h.driver.getState();
+    expect(beforeRetry).toMatchObject({
+      phase: "error",
+      retryable: true,
+      direction: "Use a calmer rhythm",
+      requestId: "text_swap_request_1",
+      submitted: true,
+    });
+
+    expect(h.driver.retry()).toBe(false);
+    expect(h.driver.getState()).toBe(beforeRetry);
+    expect(createRequestId).toHaveBeenCalledTimes(2);
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(h.buildEnvelope).toHaveBeenCalledTimes(1);
+    expect(h.commit).not.toHaveBeenCalled();
   });
 
   it("turns a stale commit receipt into stale rather than success", async () => {

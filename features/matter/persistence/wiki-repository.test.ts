@@ -6,7 +6,8 @@ import {
   createInitialWikiState,
   projectApplicableWikiRules,
 } from "../wiki/wiki-evidence";
-import { MAX_WIKI_LEXEMES } from "../wiki/wiki-model";
+import { MAX_WIKI_LEXEMES, type WikiState } from "../wiki/wiki-model";
+import { encodeWikiStateAsV7 } from "../wiki/wiki-codec";
 import { createIndexedDbWikiRepository } from "./wiki-repository";
 
 vi.mock("idb", () => ({ openDB: vi.fn() }));
@@ -32,14 +33,16 @@ describe("IndexedDB Wiki repository", () => {
     });
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
       writeGeneration: 1,
-      state: createInitialWikiState(),
+      recordSchemaVersion: 7,
+      state: v7Fixture(createInitialWikiState()),
     }));
   });
 
   it("saves a validated state at one compare-and-swap generation", async () => {
     const put = vi.fn().mockResolvedValue(undefined);
     const transaction = {
-      store: { get: vi.fn().mockResolvedValue(undefined), put },
+      store: { get: vi.fn().mockResolvedValue({ storageSchemaVersion: 1, recordSchemaVersion: 7,
+        key: "origin", writeGeneration: 1, state: v7Fixture(createEmptyWikiState()) }), put },
       abort: vi.fn(),
       done: Promise.resolve(),
     };
@@ -47,14 +50,18 @@ describe("IndexedDB Wiki repository", () => {
       transaction: vi.fn().mockReturnValue(transaction),
     } as never);
     const repository = createIndexedDbWikiRepository();
-    const state = createEmptyWikiState();
+    const changed = applyWikiEvent(createEmptyWikiState(), {
+      type: "create-lexeme", locale: "en-US", canonical: "Matter", scope: "both",
+    });
+    if (!changed.ok) throw new Error(changed.error.message);
+    const state = changed.state;
 
-    await expect(repository.save(state, null)).resolves.toEqual({ ok: true, value: 1 });
+    await expect(repository.save(state, 1)).resolves.toEqual({ ok: true, value: 2 });
     expect(put).toHaveBeenCalledWith({
       storageSchemaVersion: 1,
-      recordSchemaVersion: 7,
+      recordSchemaVersion: 8,
       key: "origin",
-      writeGeneration: 1,
+      writeGeneration: 2,
       state,
     });
   });
@@ -95,7 +102,7 @@ describe("IndexedDB Wiki repository", () => {
         id: lexeme.id,
         locale: lexeme.locale,
         canonical: lexeme.canonical,
-        provenance: lexeme.provenance,
+        provenance: "human-confirmed",
         confirmedAtRevision: lexeme.confirmedAtRevision,
       })),
       evidence: [],
@@ -126,7 +133,7 @@ describe("IndexedDB Wiki repository", () => {
     const migrated = await repository.load();
     expect(migrated).toMatchObject({
       ok: true,
-      value: { writeGeneration: 8, state: { schemaVersion: 7 } },
+      value: { writeGeneration: 8, state: { schemaVersion: 8 } },
     });
     if (!migrated.ok || migrated.value === null) return;
     expect(migrated.value.state.lexemes[0].scope).toBe("both");
@@ -236,7 +243,7 @@ describe("IndexedDB Wiki repository", () => {
       value: {
         writeGeneration: 8,
         state: {
-          schemaVersion: 7,
+          schemaVersion: 8,
           termEvidence: [{ producer: "legacy-term-v1", support: 4 }],
         },
       },
@@ -307,7 +314,7 @@ describe("IndexedDB Wiki repository", () => {
       value: {
         writeGeneration: 4,
         state: {
-          schemaVersion: 7,
+          schemaVersion: 8,
           scoringVersion: 4,
           aliasEvidence: [{ phase: "active", support: 16, kept: 0, keptQuietTurns: 0 }],
           revertStrikes: [],
@@ -328,7 +335,7 @@ describe("IndexedDB Wiki repository", () => {
 
   it("treats a row from a newer Matter as unavailable and never resettable", async () => {
     for (const newer of [
-      { recordSchemaVersion: 8, state: createInitialWikiState() },
+      { recordSchemaVersion: 9, state: createInitialWikiState() },
       { recordSchemaVersion: 7, state: { ...createInitialWikiState(), schemaVersion: 8 } },
     ]) {
       const stored = {
@@ -350,11 +357,11 @@ describe("IndexedDB Wiki repository", () => {
 
       await expect(repository.load()).resolves.toMatchObject({
         ok: false,
-        error: { code: "PERSISTENCE_UNAVAILABLE" },
+        error: { code: "PERSISTENCE_SUPERSEDED" },
       });
       await expect(repository.save(createInitialWikiState(), 9)).resolves.toMatchObject({
         ok: false,
-        error: { code: "PERSISTENCE_UNAVAILABLE" },
+        error: { code: "PERSISTENCE_SUPERSEDED" },
       });
       await expect(repository.resetCorrupt(0)).resolves.toMatchObject({
         ok: false,
@@ -379,7 +386,7 @@ describe("IndexedDB Wiki repository", () => {
           recordSchemaVersion: 4,
           key: "origin",
           writeGeneration: 4,
-          state: removed.state,
+          state: v7Fixture(removed.state),
         }),
         put,
       },
@@ -398,7 +405,7 @@ describe("IndexedDB Wiki repository", () => {
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
       recordSchemaVersion: 7,
       writeGeneration: 5,
-      state: removed.state,
+      state: v7Fixture(removed.state),
     }));
   });
 
@@ -412,7 +419,7 @@ describe("IndexedDB Wiki repository", () => {
         locale: "en-US" as const,
         canonical: `term ${index}`,
         scope: "both" as const,
-        provenance: "aggregate-evidence" as const,
+        provenance: "collected" as const,
         confirmedAtRevision: null,
       })),
     };
@@ -424,7 +431,7 @@ describe("IndexedDB Wiki repository", () => {
           recordSchemaVersion: 2,
           key: "origin",
           writeGeneration: 9,
-          state,
+          state: v7Fixture(state),
         }),
         put,
       },
@@ -452,7 +459,7 @@ describe("IndexedDB Wiki repository", () => {
           recordSchemaVersion: 2,
           key: "origin",
           writeGeneration: 5,
-          state,
+          state: v7Fixture(state),
         }),
         put: vi.fn().mockRejectedValue(new DOMException("full", "QuotaExceededError")),
       },
@@ -480,7 +487,7 @@ describe("IndexedDB Wiki repository", () => {
           recordSchemaVersion: 2,
           key: "origin",
           writeGeneration: 12,
-          state,
+          state: v7Fixture(state),
         }),
         put,
       },
@@ -498,7 +505,7 @@ describe("IndexedDB Wiki repository", () => {
     expect(put).toHaveBeenCalledWith(expect.objectContaining({
       recordSchemaVersion: 7,
       writeGeneration: 13,
-      state,
+      state: v7Fixture(state),
     }));
   });
 
@@ -512,7 +519,7 @@ describe("IndexedDB Wiki repository", () => {
         locale: "en-US" as const,
         canonical: "[p → q]",
         scope: "both" as const,
-        provenance: "aggregate-evidence" as const,
+        provenance: "collected" as const,
         confirmedAtRevision: null,
       }],
     };
@@ -521,7 +528,7 @@ describe("IndexedDB Wiki repository", () => {
       recordSchemaVersion: 3,
       key: "origin",
       writeGeneration: 7,
-      state: duplicate,
+      state: v7Fixture(duplicate),
     };
     const put = vi.fn(async (value: unknown) => {
       stored = value;
@@ -558,7 +565,7 @@ describe("IndexedDB Wiki repository", () => {
           recordSchemaVersion: 1,
           key: "origin",
           writeGeneration: 3,
-          state: createEmptyWikiState(),
+          state: v7Fixture(createEmptyWikiState()),
         }),
         put: vi.fn(),
       },
@@ -595,7 +602,7 @@ describe("IndexedDB Wiki repository", () => {
           recordSchemaVersion: 1,
           key: "origin",
           writeGeneration: 3,
-          state: durable.state,
+          state: v7Fixture(durable.state),
         }),
         put: vi.fn(),
       },
@@ -646,7 +653,8 @@ describe("IndexedDB Wiki repository", () => {
   it("distinguishes quota exhaustion from an unavailable write", async () => {
     const transaction = {
       store: {
-        get: vi.fn().mockResolvedValue(undefined),
+        get: vi.fn().mockResolvedValue({ storageSchemaVersion: 1, recordSchemaVersion: 7,
+          key: "origin", writeGeneration: 1, state: v7Fixture(createEmptyWikiState()) }),
         put: vi.fn().mockRejectedValue(new DOMException("full", "QuotaExceededError")),
       },
       abort: vi.fn(),
@@ -657,7 +665,11 @@ describe("IndexedDB Wiki repository", () => {
     } as never);
     const repository = createIndexedDbWikiRepository();
 
-    await expect(repository.save(createEmptyWikiState(), null)).resolves.toMatchObject({
+    const changed = applyWikiEvent(createEmptyWikiState(), {
+      type: "set-near-sound", locale: "en-US", enabled: false,
+    });
+    if (!changed.ok) throw new Error(changed.error.message);
+    await expect(repository.save(changed.state, 1)).resolves.toMatchObject({
       ok: false,
       error: { code: "PERSISTENCE_STORAGE_FULL" },
     });
@@ -702,7 +714,7 @@ describe("IndexedDB Wiki repository", () => {
           recordSchemaVersion: 1,
           key: "origin",
           writeGeneration: 3,
-          state: createEmptyWikiState(),
+          state: v7Fixture(createEmptyWikiState()),
         }),
         put: vi.fn(),
       },
@@ -722,3 +734,11 @@ describe("IndexedDB Wiki repository", () => {
     expect(transaction.store.put).not.toHaveBeenCalled();
   });
 });
+
+/** These synthetic rows represent pre-V8 human provenance, not a downgrade API. */
+function v7Fixture(state: WikiState) {
+  const encoded = encodeWikiStateAsV7({ ...state, lexemes: state.lexemes.map((entry) =>
+    entry.provenance === "learned" ? { ...entry, provenance: "manual" as const } : entry) });
+  if (!encoded.ok) throw new Error("The legacy fixture contains nonrepresentable V8 facts.");
+  return encoded.state;
+}

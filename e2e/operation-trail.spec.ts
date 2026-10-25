@@ -3,6 +3,7 @@ import { SEEDED_DOCUMENT_NODE_IDS } from "../features/matter/material/seeded-doc
 import { settleLassoGeometry } from "./lasso-driver";
 import { selectThoughtThroughMaterialIndex } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
+import { OPERATION_TRAIL_PX } from "../features/matter/layout/operation-trail";
 
 // A passage that is selected draws a light trail from the root down to it; an AI
 // operation addressed at a passage draws the same trail at full strength. Hover and
@@ -90,7 +91,7 @@ test.describe("canvas trail", () => {
     });
   });
 
-  test("a dot on every passage from the root down, a larger bead with its ring on the target, an arrowhead into each", async ({ page }) => {
+  test("each adjacent bridge has exact visible-material ports, small points and no halo or solid arrow", async ({ page }) => {
     await openSettled(page);
     await selectThoughtThroughMaterialIndex(page, MIDDLE_ID);
     // Zoomed out and moved so the root passage is on the paper: its dot, and the target's bead.
@@ -99,22 +100,53 @@ test.describe("canvas trail", () => {
     expect(dots).toHaveLength(1);
     await expect(page.locator(TARGET)).toHaveCount(1);
     const root = await passageBox(page, ROOT_ID);
-    // Left of the passage's edge by the gutter, and above its top by the lift.
-    expect(Math.abs(dots[0]!.x - (root.left - 36))).toBeLessThanOrEqual(2);
-    expect(root.top - dots[0]!.y).toBeGreaterThan(0);
-    expect(root.top - dots[0]!.y).toBeLessThanOrEqual(24.5);
+    // The source is the visible parent's outgoing port, not its column's left edge.
+    expect(Math.abs(dots[0]!.x - root.right)).toBeLessThanOrEqual(2);
     const target = await beadCentre(page.locator(TARGET));
     const middle = await passageBox(page, MIDDLE_ID);
-    expect(Math.abs(target.x - (middle.left - 36))).toBeLessThanOrEqual(2);
-    expect(middle.top - target.y).toBeGreaterThan(0);
-    await expect(page.locator(TARGET)).toHaveCSS("width", "11px");
-    expect(await page.locator(TARGET).evaluate((element) => getComputedStyle(element, "::before").inset)).toBe("-4.5px");
-    // One closed triangle for the edge into the middle passage.
-    const arrows = (await page.locator(".operation-trail__arrows--up").getAttribute("d")) ?? "";
-    expect(arrows.match(/Z/gu)).toHaveLength(1);
+    expect(dots[0]!.y).toBeGreaterThanOrEqual(root.rowTop - 1);
+    expect(dots[0]!.y).toBeLessThanOrEqual(root.rowBottom + 1);
+    expect(Math.abs(dots[0]!.y - target.y)).toBeLessThanOrEqual(1);
+    expect(Math.abs(target.x - middle.left)).toBeLessThanOrEqual(2);
+    expect(Math.abs(target.y - middle.middle)).toBeLessThanOrEqual(2);
+    expect(await page.locator(TARGET).evaluate((element) => element.getBoundingClientRect().width))
+      .toBeCloseTo(OPERATION_TRAIL_PX.target, 0);
+    expect(await page.locator(TARGET).evaluate((element) => getComputedStyle(element, "::before").content)).toBe("none");
+    const arrows = page.locator(".operation-trail__arrows--up");
+    if (await arrows.count() > 0) {
+      await expect(arrows).toHaveCSS("display", "none");
+      expect((await arrows.getAttribute("d")) ?? "").not.toMatch(/Z/u);
+    }
   });
 
-  test("it is crisp: a 1.75px round-capped stroke that does not scale, one device row of ink", async ({ page }) => {
+  test("each first-child step bridges its actual parent and child without crossing the passage between steps", async ({ page }) => {
+    await openSettled(page);
+    await selectThoughtThroughMaterialIndex(page, DEEP_ID);
+    await showAncestors(page);
+    await expect(page.locator(TRAIL)).not.toHaveAttribute("data-pinned", "true");
+    const bridges = await bridgePorts(page);
+    expect(bridges).toHaveLength(2);
+    const boxes = await Promise.all([ROOT_ID, MIDDLE_ID, DEEP_ID].map((id) => passageBox(page, id)));
+    for (const [index, bridge] of bridges.entries()) {
+      expect(Math.abs(bridge.from.x - boxes[index]!.right)).toBeLessThanOrEqual(2);
+      expect(bridge.from.y).toBeGreaterThanOrEqual(boxes[index]!.rowTop - 1);
+      expect(bridge.from.y).toBeLessThanOrEqual(boxes[index]!.rowBottom + 1);
+      expect(Math.abs(bridge.from.y - bridge.to.y)).toBeLessThanOrEqual(1);
+      expect(Math.abs(bridge.to.x - boxes[index + 1]!.left)).toBeLessThanOrEqual(2);
+      expect(Math.abs(bridge.to.y - boxes[index + 1]!.middle)).toBeLessThanOrEqual(2);
+    }
+  });
+
+  test("visible-material review keeps both endpoints readable in light, dark and leaf atmosphere", async ({ page }) => {
+    await openSettled(page);
+    await selectThoughtThroughMaterialIndex(page, MIDDLE_ID);
+    await setZoom(page, 1);
+    await frameAdjacentMaterialPair(page, ROOT_ID, MIDDLE_ID);
+    expect(Number(await page.locator("main.matter-shell").getAttribute("data-viewport-zoom"))).toBeGreaterThanOrEqual(0.9);
+    await attachBridgeHypotheses(page);
+  });
+
+  test("the 2.5px soft-corner stroke keeps its screen weight while zooming", async ({ page }) => {
     await openSettled(page);
     await selectThoughtThroughMaterialIndex(page, DEEP_ID);
     const path = page.locator(".operation-trail__path--up");
@@ -129,7 +161,7 @@ test.describe("canvas trail", () => {
         animationName: style.animationName,
       };
     })).toEqual({
-      fill: "none", linecap: "round", linejoin: "round", vectorEffect: "non-scaling-stroke", width: "1.75px", animationName: "none",
+      fill: "none", linecap: "round", linejoin: "round", vectorEffect: "non-scaling-stroke", width: "2.5px", animationName: "none",
     });
     // Level and plumb legs only: no diagonal in the path data.
     const d = (await path.getAttribute("d")) ?? "";
@@ -148,11 +180,11 @@ test.describe("canvas trail", () => {
     const beadHandle = await page.locator(TARGET).elementHandle();
     await expect(trail).toHaveAttribute("data-strength", "selected");
     const selectedStroke = await page.locator(".operation-trail__path--up").evaluate((element) => getComputedStyle(element).stroke);
-    expect(await trail.evaluate((element) => getComputedStyle(element).getPropertyValue("--trail-ring").trim())).toBe("8%");
+    expect(await page.locator(TARGET).evaluate((element) => getComputedStyle(element, "::before").content)).toBe("none");
 
     await openFieldOnSelected(page);
     await expect(trail).toHaveAttribute("data-strength", "operating");
-    expect(await trail.evaluate((element) => getComputedStyle(element).getPropertyValue("--trail-ring").trim())).toBe("14%");
+    expect(await page.locator(TARGET).evaluate((element) => getComputedStyle(element, "::before").content)).toBe("none");
     await expect.poll(() => page.locator(".operation-trail__path--up").evaluate((element) => getComputedStyle(element).stroke))
       .not.toBe(selectedStroke);
     expect(await trail.elementHandle().then((handle) => handle!.evaluate((a, b) => a === b, wrapper))).toBe(true);
@@ -204,14 +236,12 @@ test.describe("canvas trail", () => {
     // Whatever is drawn now is joined to a passage that exists: nothing trails the deleted one.
     await expect.poll(async () => {
       if (await page.locator(TRAIL).count() === 0) return true;
-      // A bead pinned to the paper's edge stands in for a passage that is off the paper.
-      if (await page.locator(TRAIL).getAttribute("data-pinned") === "true") return true;
+      if (await page.locator(TARGET).count() === 0) return true;
       const centre = await beadCentre(page.locator(TARGET));
-      const boxes = await page.locator("[data-thought-id]").evaluateAll((elements) => elements.map((element) => {
-        const rect = element.getBoundingClientRect();
-        return { x: rect.left, y: rect.top };
-      }));
-      return boxes.some((box) => Math.abs(centre.x - (box.x - 24)) <= 2.5 && Math.abs(centre.y - (box.y - 6)) <= 2.5);
+      const ids = await page.locator("[data-thought-id]").evaluateAll((elements) =>
+        elements.map((element) => (element as HTMLElement).dataset.thoughtId!));
+      const boxes = await Promise.all(ids.map((id) => passageBox(page, id)));
+      return boxes.some((box) => Math.abs(centre.x - box.left) <= 2.5 && Math.abs(centre.y - box.middle) <= 2.5);
     }).toBe(true);
   });
 
@@ -248,8 +278,8 @@ test.describe("canvas trail", () => {
     await expect(trail).toHaveAttribute("data-presence", "present");
     const target = await beadCentre(page.locator(TARGET));
     const sibling = await passageBox(page, SIBLING_ID);
-    expect(Math.abs(target.x - (sibling.left - 36))).toBeLessThanOrEqual(2);
-    expect(sibling.top - target.y).toBeGreaterThan(0);
+    expect(Math.abs(target.x - sibling.left)).toBeLessThanOrEqual(2);
+    expect(Math.abs(target.y - sibling.middle)).toBeLessThanOrEqual(2);
   });
 
   test("a top-level passage draws only its quiet anchor bead and no line", async ({ page }) => {
@@ -268,6 +298,65 @@ test.describe("canvas trail", () => {
     await page.getByRole("button", { name: fixtureUiCopy.toolRail.circleSelectLanguage, exact: true }).click();
     await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
     await expect(page.locator(TRAIL)).toHaveCount(0);
+  });
+
+  test("a real pending font load cuts old ink and recovers current material ports", async ({ page }) => {
+    await openSettled(page);
+    await selectThoughtThroughMaterialIndex(page, MIDDLE_ID);
+    await expect(page.locator(`${TRAIL} svg`)).toHaveCount(1);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    await page.route(/\/matter-ui\/PlantinNowVariable-Upright\.woff2\?trail-proof$/u, async (route) => {
+      await gate;
+      await route.continue();
+    });
+    try {
+      await page.evaluate(() => {
+        const face = new FontFace("MatterTrailProof", 'url("/matter/matter-ui/PlantinNowVariable-Upright.woff2?trail-proof")');
+        document.fonts.add(face);
+        // A fresh URL loads real repository font bytes, not a synthetic event.
+        void document.fonts.load('20px "MatterTrailProof"', "Matter").catch(() => undefined);
+      });
+      await expect.poll(() => page.evaluate(() => document.fonts.status)).toBe("loading");
+      await expect(page.locator(`${TRAIL} svg`)).toHaveCount(0);
+      release();
+      await expect.poll(() => page.evaluate(() => Array.from(document.fonts)
+        .some((face) => face.family === "MatterTrailProof" && face.status === "loaded"))).toBe(true);
+      await expect(page.locator(`${TRAIL} svg`)).toHaveCount(1);
+      const material = await passageBox(page, MIDDLE_ID);
+      const target = await beadCentre(page.locator(TARGET));
+      expect(Math.abs(target.x - material.left)).toBeLessThanOrEqual(2.5);
+      expect(Math.abs(target.y - material.middle)).toBeLessThanOrEqual(2.5);
+    } finally {
+      release();
+    }
+  });
+
+  test("node dragging cuts the old attachments and cancellation restores exact current ports", async ({ page }) => {
+    await openSettled(page);
+    await selectThoughtThroughMaterialIndex(page, DEEP_ID);
+    await expect(page.locator(`${TRAIL} svg`)).toHaveCount(1);
+    const shell = page.locator("main.matter-shell");
+    const revision = await shell.getAttribute("data-tree-revision");
+    const source = page.locator(`[data-thought-id="${DEEP_ID}"]`);
+    const box = (await source.boundingBox())!;
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    try {
+      await page.mouse.move(box.x + box.width / 2 + 44, box.y + box.height / 2 + 36, { steps: 5 });
+      await expect(shell).toHaveAttribute("data-node-dragging", "true");
+      await expect(page.locator(`${TRAIL} svg`)).toHaveCount(0);
+      await shell.dispatchEvent("pointercancel", { pointerId: 1, pointerType: "mouse", isPrimary: true });
+    } finally {
+      await page.mouse.up();
+    }
+    await expect(shell).not.toHaveAttribute("data-node-dragging", /.+/u);
+    await expect(shell).toHaveAttribute("data-tree-revision", revision!);
+    await expect(page.locator(`${TRAIL} svg`)).toHaveCount(1);
+    const material = await passageBox(page, DEEP_ID);
+    const target = await beadCentre(page.locator(TARGET));
+    expect(Math.abs(target.x - material.left)).toBeLessThanOrEqual(2.5);
+    expect(Math.abs(target.y - material.middle)).toBeLessThanOrEqual(2.5);
   });
 
   test("the trail adds a fixed handful of elements whatever the depth, never changes what the pointer reaches, and moves nothing", async ({ page }) => {
@@ -300,35 +389,34 @@ test.describe("canvas trail", () => {
     expect(await passageBox(page, DEEP_ID)).toEqual(before);
   });
 
-  test("it rides the camera: beads keep their screen distance to the passages at every zoom", async ({ page }) => {
+  test("it rides the camera: beads stay attached to passage boundaries at every zoom", async ({ page }) => {
     await openSettled(page);
     await selectThoughtThroughMaterialIndex(page, DEEP_ID);
     for (const zoom of [0.6, 1, 2]) {
       await setZoom(page, zoom);
-      const centre = await beadCentre(page.locator(TARGET));
       const deep = await passageBox(page, DEEP_ID);
       if (zoom === 2) {
-        // The gutter is past the paper's edge at this zoom: the bead stands in on the edge.
-        await expect(page.locator(TRAIL)).toHaveAttribute("data-pinned", "true");
-        expect(centre.x).toBeGreaterThan(305);
+        // An offscreen material is not impersonated by a dot pinned to the paper.
+        await expect(page.locator(TRAIL)).not.toHaveAttribute("data-pinned", "true");
+        await expect(page.locator(TARGET)).toHaveCount(0);
       } else {
-        expect(Math.abs(centre.x - (deep.left - 36))).toBeLessThanOrEqual(2.5);
-        expect(deep.top - centre.y).toBeGreaterThan(0);
-        expect(deep.top - centre.y).toBeLessThanOrEqual(24.5);
+        const centre = await beadCentre(page.locator(TARGET));
+        expect(Math.abs(centre.x - deep.left)).toBeLessThanOrEqual(2.5);
+        expect(Math.abs(centre.y - deep.middle)).toBeLessThanOrEqual(2.5);
       }
       // Screen sizes: the target and the cue do not scale with the camera, and neither do the strokes.
       const sizes = await page.evaluate(() => ({
-        target: document.querySelector(".operation-trail__bead--target")!.getBoundingClientRect().width,
+        target: document.querySelector(".operation-trail__bead--target")?.getBoundingClientRect().width ?? null,
         chevron: document.querySelector(".operation-trail__chevron")?.getBoundingClientRect().width ?? null,
         line: getComputedStyle(document.querySelector(".operation-trail__path--up")!).strokeWidth,
         dots: (() => {
           const dots = document.querySelector(".operation-trail__dots--up");
-          return dots === null ? "7px" : getComputedStyle(dots).strokeWidth;
+          return dots === null ? null : getComputedStyle(dots).strokeWidth;
         })(),
       }));
-      expect(sizes.target).toBeCloseTo(11, 0);
-      expect(sizes.line).toBe("1.75px");
-      expect(sizes.dots).toBe("7px");
+      if (sizes.target !== null) expect(sizes.target).toBeCloseTo(OPERATION_TRAIL_PX.target, 0);
+      expect(sizes.line).toBe("2.5px");
+      if (sizes.dots !== null) expect(sizes.dots).toBe(`${OPERATION_TRAIL_PX.bead}px`);
       if (sizes.chevron !== null) expect(sizes.chevron).toBeLessThan(10);
     }
   });
@@ -356,55 +444,77 @@ test.describe("canvas trail", () => {
         canvasText: probe("CanvasText"),
         stroke: getComputedStyle(path).stroke,
         dots: getComputedStyle(dots).stroke,
-        arrows: getComputedStyle(arrows).fill,
-        target: getComputedStyle(target).backgroundColor,
+        arrows: arrows === null ? null : getComputedStyle(arrows).stroke,
+        target: getComputedStyle(target).fill,
       };
     });
     expect(receipt.stroke).toBe(receipt.canvasText);
     expect(receipt.dots).toBe(receipt.canvasText);
-    expect(receipt.arrows).toBe(receipt.canvasText);
+    if (receipt.arrows !== null) expect(receipt.arrows).toBe(receipt.canvasText);
     expect(receipt.target).toBe(receipt.canvasText);
   });
 
-  test("a pending Elastic turn keeps the operating trail to its passage and releases it when the turn ends", async ({ page }) => {
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    await page.route("**/api/turn", async (route) => {
-      await gate;
-      await route.continue();
-    });
-    await openSettled(page);
-    await selectThoughtThroughMaterialIndex(page, DEEP_ID);
-    await passageText(page, DEEP_ID).click();
-    await page.getByRole("button", {
-      name: fixtureUiCopy.toolRail.circleSelectLanguage,
-      exact: true,
-    }).click();
-    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
-    await settleLassoGeometry(page);
-    // Choosing the degree is not yet an operation, and a lasso suppresses the selected trail.
-    const text = page.locator(`[data-thought-text-id="${DEEP_ID}"] .spatial-thought__label`);
-    await drawLoop(page, await firstSegmentProbe(text));
-    const grip = page.getByRole("slider", { name: "用下握点设置所选文字的展开程度" });
-    await expect(grip).toHaveAttribute("aria-valuenow", "0");
-    await expect(page.locator(TRAIL)).toHaveCount(0);
-    await grip.focus();
-    await page.keyboard.press("PageUp");
-    await expect(grip).toHaveAttribute("aria-valuenow", "0.5");
-    await expect(page.locator(TRAIL)).toHaveCount(0);
+  for (const handle of ["bottom", "top"] as const) {
+    test(`a pending Elastic turn from the ${handle} grip attaches to visible text and releases when the turn ends`, async ({ page }) => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await page.route("**/api/turn", async (route) => {
+        await gate;
+        await route.continue();
+      });
+      await openSettled(page);
+      await selectThoughtThroughMaterialIndex(page, DEEP_ID);
+      await passageText(page, DEEP_ID).click();
+      await page.getByRole("button", {
+        name: fixtureUiCopy.toolRail.circleSelectLanguage,
+        exact: true,
+      }).click();
+      await expect(page.locator("main.matter-shell")).toHaveAttribute("data-lasso-mode", "true");
+      await settleLassoGeometry(page);
+      // Choosing the degree is not yet an operation, and a lasso suppresses the selected trail.
+      const text = page.locator(`[data-thought-text-id="${DEEP_ID}"] .spatial-thought__label`);
+      await drawLoop(page, await firstSegmentProbe(text));
+      const grip = page.getByRole("slider", { name: handle === "top"
+        ? "用上握点设置所选文字的展开程度"
+        : "用下握点设置所选文字的展开程度" });
+      await expect(grip).toHaveAttribute("aria-valuenow", "0");
+      await expect(page.locator(TRAIL)).toHaveCount(0);
+      await grip.focus();
+      await page.keyboard.press("PageUp");
+      await expect(grip).toHaveAttribute("aria-valuenow", "0.5");
+      await expect(page.locator(TRAIL)).toHaveCount(0);
 
-    await page.keyboard.press("Enter");
-    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-transform-phase", "requesting");
-    await expect(page.locator(TRAIL)).toHaveAttribute("data-strength", "operating");
+      await page.keyboard.press("Enter");
+      await expect(page.locator("main.matter-shell")).toHaveAttribute("data-transform-phase", "requesting");
+      await expect(page.locator(TRAIL)).toHaveAttribute("data-strength", "operating");
+      const split = page.locator(`[data-thought-id="${DEEP_ID}"] > .language-split-projection[data-preview-mode="expand"]`);
+      await expect(split).toHaveAttribute("data-layout-mode", "expand");
+      // This address starts at the first canonical segment. With the upper grip
+      // the visible first row moves; the transparent canonical button does not.
+      await expect.poll(async () => {
+        if (await page.locator(TARGET).count() !== 1) return false;
+        const port = await split.locator(".language-split-selected-copy").evaluate((element) => {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          const first = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0)
+            .sort((left, right) => left.top - right.top)[0];
+          range.detach();
+          if (first === undefined) throw new Error("visible Elastic row missing");
+          return { x: first.left - 8, y: first.top + first.height / 2 };
+        });
+        const target = await beadCentre(page.locator(TARGET));
+        return Math.abs(port.x - target.x) <= 2.5 && Math.abs(port.y - target.y) <= 2.5;
+      }).toBe(true);
 
-    release();
-    await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-transform-phase", "requesting", {
-      timeout: 15_000,
+      release();
+      await expect(page.locator("main.matter-shell")).not.toHaveAttribute("data-transform-phase", "requesting", {
+        timeout: 15_000,
+      });
+      await expect(page.locator(`${TRAIL}[data-strength="operating"]`)).toHaveCount(0);
     });
-    await expect(page.locator(`${TRAIL}[data-strength="operating"]`)).toHaveCount(0);
-  });
+  }
 
   test("the index underlines exactly the passages the trail puts a bead on", async ({ page }) => {
     await openSettled(page);
@@ -416,10 +526,19 @@ test.describe("canvas trail", () => {
     // The document root names the index's outline; it is not a passage.
     const passages = underlined.filter((id) => id.length > 0 && !id.startsWith("matter_document_root_"));
     expect(new Set(passages)).toEqual(new Set([ROOT_ID, MIDDLE_ID]));
-    // One dot per underlined ancestor that is on the paper, plus the target's bead.
+    // Every visible dot belongs to an ancestor's incoming or outgoing text port.
     const dots = await dotCentres(page, ".operation-trail__dots--up");
     expect(dots.length).toBeGreaterThanOrEqual(1);
-    expect(dots.length).toBeLessThanOrEqual(passages.length);
+    expect(dots.length).toBeLessThanOrEqual(passages.length * 2 - 1);
+    const ports = await Promise.all(passages.map((id) => passageBox(page, id)));
+    for (const dot of dots) {
+      // A compatible first child shares an in-row source ordinate, not the
+      // ancestor's independent midpoint. It must still belong to that row.
+      expect(ports.some((port) =>
+        Math.min(Math.abs(dot.x - port.left), Math.abs(dot.x - port.right)) <= 2 &&
+        dot.y >= port.rowTop - 1 && dot.y <= port.rowBottom + 1,
+      )).toBe(true);
+    }
   });
 
   test("a selected passage with children draws them below it, lighter, with the same vocabulary", async ({ page }) => {
@@ -427,19 +546,20 @@ test.describe("canvas trail", () => {
     await selectThoughtThroughMaterialIndex(page, MIDDLE_ID);
     await showAncestors(page);
     await expect(page.locator(".operation-trail__path--down")).toHaveCount(1);
-    // Imagined lives has two children: their dots, and an arrowhead into each.
-    expect(await dotCentres(page, ".operation-trail__dots--down")).toHaveLength(2);
-    expect(((await page.locator(".operation-trail__arrows--down").getAttribute("d")) ?? "").match(/Z/gu)).toHaveLength(2);
-    expect(await page.locator(".operation-trail__path--down").evaluate((element) => getComputedStyle(element).opacity)).toBe("0.85");
-    expect(await page.locator(".operation-trail__path--up").evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
-    // Each child's dot sits in the gutter left of its passage, above its top.
-    const [first, second] = await dotCentres(page, ".operation-trail__dots--down");
-    const time = await passageBox(page, DEEP_ID);
-    const relations = await passageBox(page, SIBLING_ID);
-    expect(Math.abs(first!.x - (time.left - 36))).toBeLessThanOrEqual(2.5);
-    expect(Math.abs(second!.x - (relations.left - 36))).toBeLessThanOrEqual(2.5);
-    expect(time.top - first!.y).toBeGreaterThan(0);
-    expect(relations.top - second!.y).toBeGreaterThan(0);
+    // Two child ports share one deduplicated parent port; no mark floats in a column gutter.
+    const dots = await dotCentres(page, ".operation-trail__dots--down");
+    expect(dots).toHaveLength(3);
+    const arrows = page.locator(".operation-trail__arrows--down");
+    await expect(arrows).toHaveCSS("display", "none");
+    expect((await arrows.getAttribute("d")) ?? "").not.toMatch(/Z/u);
+    const strokes = await page.locator(".operation-trail__path--up, .operation-trail__path--down")
+      .evaluateAll((elements) => elements.map((element) => getComputedStyle(element).stroke));
+    expect(strokes).toHaveLength(2);
+    expect(strokes[0]).not.toBe(strokes[1]);
+    const [parent, time, relations] = await Promise.all([MIDDLE_ID, DEEP_ID, SIBLING_ID].map((id) => passageBox(page, id)));
+    for (const port of [{ x: parent!.right, y: parent!.middle }, { x: time!.left, y: time!.middle }, { x: relations!.left, y: relations!.middle }]) {
+      expect(dots.some((dot) => Math.abs(dot.x - port.x) <= 2.5 && Math.abs(dot.y - port.y) <= 2.5)).toBe(true);
+    }
     // A leaf draws nothing below it, and a sibling of the path is never drawn.
     await selectThoughtThroughMaterialIndex(page, DEEP_ID);
     await expect(page.locator(".operation-trail__path--down, .operation-trail__dots--down")).toHaveCount(0);
@@ -477,6 +597,185 @@ test.describe("canvas trail", () => {
     await expect(page.locator(TRAIL)).toHaveCount(0);
   });
 });
+
+for (const dpr of [1, 2]) {
+  test.describe(`endpoint screen metrics at DPR ${dpr}`, () => {
+    test.use({ deviceScaleFactor: dpr });
+
+    test("one metric owner keeps points attached and clear at both zoom bounds", async ({ page }) => {
+      await openSettled(page);
+      await selectThoughtThroughMaterialIndex(page, DEEP_ID);
+      expect(await page.evaluate(() => window.devicePixelRatio)).toBe(dpr);
+      const shell = page.locator("main.matter-shell");
+      for (const zoom of [0.6, 1, 1.8]) {
+        // Requests beyond a bound reach the actual clamp rather than stopping
+        // within the ordinary helper's five-percent approach tolerance.
+        await setZoom(page, zoom === 0.6 ? 0.5 : zoom === 1.8 ? 2 : zoom);
+        expect(Number(await shell.getAttribute("data-viewport-zoom"))).toBeCloseTo(zoom, zoom === 1 ? 1 : 5);
+        await frameBridgePorts(page, MIDDLE_ID, DEEP_ID);
+        const trail = page.locator(TRAIL);
+        await expect(trail).toHaveAttribute("data-strength", "selected");
+        const metrics = await trail.evaluate((element) => {
+          const style = getComputedStyle(element);
+          const line = getComputedStyle(element.querySelector(".operation-trail__path--up")!);
+          const dots = getComputedStyle(element.querySelector(".operation-trail__dots--up")!);
+          const target = element.querySelector(".operation-trail__bead--target")!.getBoundingClientRect();
+          return {
+            stroke: Number.parseFloat(style.getPropertyValue("--operation-trail-stroke")),
+            bead: Number.parseFloat(style.getPropertyValue("--operation-trail-bead")),
+            more: Number.parseFloat(style.getPropertyValue("--operation-trail-more-dot")),
+            lineWidth: Number.parseFloat(line.strokeWidth),
+            dotWidth: Number.parseFloat(dots.strokeWidth),
+            cap: dots.strokeLinecap,
+            vector: dots.vectorEffect,
+            targetWidth: target.width,
+            targetHeight: target.height,
+          };
+        });
+        expect(metrics).toMatchObject({
+          stroke: OPERATION_TRAIL_PX.stroke,
+          bead: OPERATION_TRAIL_PX.bead,
+          more: OPERATION_TRAIL_PX.moreDot,
+          lineWidth: OPERATION_TRAIL_PX.stroke,
+          dotWidth: OPERATION_TRAIL_PX.bead,
+          cap: "round",
+          vector: "non-scaling-stroke",
+        });
+        expect(metrics.targetWidth).toBeCloseTo(OPERATION_TRAIL_PX.target, 2);
+        expect(metrics.targetHeight).toBeCloseTo(OPERATION_TRAIL_PX.target, 2);
+        const [parent, child] = await Promise.all([MIDDLE_ID, DEEP_ID].map((id) => passageBox(page, id)));
+        const dots = await dotCentres(page, ".operation-trail__dots--up");
+        const source = dots.find((dot) => Math.abs(dot.x - parent!.right) <= 1);
+        expect(source, "the real parent outgoing point must remain drawn").toBeDefined();
+        const target = await beadCentre(page.locator(TARGET));
+        const lastBridge = (await bridgePorts(page)).at(-1)!;
+        expect(Math.hypot(lastBridge.from.x - source!.x, lastBridge.from.y - source!.y)).toBeLessThan(0.1);
+        expect(Math.hypot(lastBridge.to.x - target.x, lastBridge.to.y - target.y)).toBeLessThan(0.1);
+        expect(dots.some((dot) => Math.hypot(dot.x - target.x, dot.y - target.y) < 0.1)).toBe(false);
+        // Allow one screen pixel of snapping, not another marker radius.
+        expect(source!.x - parent!.inkRight - metrics.dotWidth / 2)
+          .toBeGreaterThanOrEqual(OPERATION_TRAIL_PX.clearance - OPERATION_TRAIL_PX.bead / 2 - 1);
+        expect(child!.inkLeft - target.x - metrics.targetWidth / 2)
+          .toBeGreaterThanOrEqual(OPERATION_TRAIL_PX.clearance - OPERATION_TRAIL_PX.target / 2 - 1);
+      }
+      await test.info().attach(`endpoint-metrics-dpr-${dpr}-candidate-not-accepted`, {
+        body: await page.screenshot({ animations: "disabled" }), contentType: "image/png",
+      });
+    });
+  });
+}
+
+async function bridgePorts(page: Page): Promise<Readonly<{ from: Point; to: Point }>[]> {
+  return page.locator(".operation-trail__path--up").evaluate((element) => {
+    const matrix = (element as SVGGraphicsElement).getScreenCTM();
+    if (matrix === null) throw new Error("bridge transform missing");
+    return ((element.getAttribute("d") ?? "").match(/M[^M]+/gu) ?? []).map((part) => {
+      const start = /^M(-?[\d.]+) (-?[\d.]+)/u.exec(part);
+      const end = [...part.matchAll(/L(-?[\d.]+) (-?[\d.]+)/gu)].at(-1);
+      if (start === null || end === undefined) throw new Error("bridge endpoints missing");
+      const from = new DOMPoint(Number(start[1]), Number(start[2])).matrixTransform(matrix);
+      const to = new DOMPoint(Number(end[1]), Number(end[2])).matrixTransform(matrix);
+      return { from: { x: from.x, y: from.y }, to: { x: to.x, y: to.y } };
+    });
+  });
+}
+
+/** Frame real ports through Pan only; index navigation may change readable zoom. */
+async function frameBridgePorts(page: Page, parentId: string, childId: string): Promise<void> {
+  const shell = page.locator("main.matter-shell");
+  const before = await shell.getAttribute("data-viewport-zoom");
+  const paper = (await page.locator(".matter-document").boundingBox())!;
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
+  for (let step = 0; step < 8; step += 1) {
+    const [parent, child] = await Promise.all([parentId, childId].map((id) => passageBox(page, id)));
+    const dx = paper.x + paper.width / 2 - (parent!.right + child!.left) / 2;
+    const dy = paper.y + paper.height * 0.44 - (parent!.middle + child!.middle) / 2;
+    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) break;
+    const x = paper.x + paper.width / 2;
+    const y = paper.y + paper.height - 96;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + Math.max(-200, Math.min(200, dx)), y + Math.max(-150, Math.min(150, dy)), { steps: 8 });
+    await page.mouse.up();
+  }
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitCanvasPan, exact: true }).click();
+  expect(await shell.getAttribute("data-viewport-zoom")).toBe(before);
+  for (const [id, side] of [[parentId, "right"], [childId, "left"]] as const) {
+    const box = await passageBox(page, id);
+    expect(box[side]).toBeGreaterThan(paper.x + 64);
+    expect(box[side]).toBeLessThan(paper.x + paper.width - 64);
+    expect(box.middle).toBeGreaterThan(paper.y + 64);
+    expect(box.middle).toBeLessThan(paper.y + paper.height - 64);
+  }
+}
+
+/** Real-page style hypotheses only; no production toggle or acceptance claim. */
+async function attachBridgeHypotheses(page: Page): Promise<void> {
+  const style = await page.addStyleTag({ content: `
+    .operation-trail[data-review-arrows] .operation-trail__arrows { display: block; }
+    .operation-trail[data-review-arrows] .operation-trail__dots,
+    .operation-trail[data-review-arrows] .operation-trail__bead { display: none; }
+  ` });
+  try {
+    for (const theme of ["light", "dark"] as const) {
+      // Auto follows the person's local clock, not prefers-color-scheme.
+      // Use the product control so the review matches an explicit preference.
+      for (let step = 0; step < 3; step += 1) {
+        const paper = page.locator(".matter-document");
+        if (await paper.getAttribute("data-canvas-theme-preference") === theme) break;
+        await page.locator('[data-chrome-control="appearance"]').click();
+      }
+      await expect(page.locator(".matter-document")).toHaveAttribute("data-canvas-theme-preference", theme);
+      await expect(page.locator(".matter-document")).toHaveAttribute("data-canvas-theme", theme);
+      for (const fx of [false, true]) {
+        const control = page.locator('[data-chrome-control="fx"]');
+        if (await control.getAttribute("aria-pressed") !== String(fx)) await control.click();
+        await expect(control).toHaveAttribute("aria-pressed", String(fx));
+        for (const variant of ["A", "B"] as const) {
+          await page.locator(TRAIL).evaluate((element, candidate) => {
+            element.toggleAttribute("data-review-arrows", candidate === "B");
+          }, variant);
+          await test.info().attach(`visible-material-${variant}-${theme}-fx-${fx ? "on" : "off"}-not-accepted`, {
+            body: await page.screenshot({ animations: "disabled" }), contentType: "image/png",
+          });
+        }
+      }
+    }
+  } finally {
+    await style.evaluate((element) => { element.parentNode?.removeChild(element); });
+    await page.locator(TRAIL).evaluate((element) => element.removeAttribute("data-review-arrows"));
+  }
+}
+
+/** Use the real Pan controller; never fake a camera transform for a screenshot. */
+async function frameAdjacentMaterialPair(page: Page, parentId: string, childId: string): Promise<void> {
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }).click();
+  const paper = (await page.locator(".matter-document").boundingBox())!;
+  for (let step = 0; step < 8; step += 1) {
+    const bounds = await Promise.all([parentId, childId].map((id) => passageBox(page, id)));
+    const left = Math.min(...bounds.map((box) => box.envelopeLeft));
+    const right = Math.max(...bounds.map((box) => box.envelopeRight));
+    const top = Math.min(...bounds.map((box) => box.top));
+    const bottom = Math.max(...bounds.map((box) => box.bottom));
+    const dx = paper.x + paper.width / 2 - (left + right) / 2;
+    const dy = paper.y + paper.height * 0.44 - (top + bottom) / 2;
+    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) break;
+    const x = paper.x + paper.width / 2;
+    const y = paper.y + paper.height - 96;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + Math.max(-200, Math.min(200, dx)), y + Math.max(-150, Math.min(150, dy)), { steps: 8 });
+    await page.mouse.up();
+  }
+  await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitCanvasPan, exact: true }).click();
+  for (const id of [parentId, childId]) {
+    const box = await passageBox(page, id);
+    expect(box.envelopeLeft).toBeGreaterThan(paper.x + 24);
+    expect(box.envelopeRight).toBeLessThan(paper.x + paper.width - 24);
+    expect(box.top).toBeGreaterThan(paper.y + 24);
+    expect(box.bottom).toBeLessThan(paper.y + paper.height - 24);
+  }
+}
 
 /** A press on empty paper, away from every passage, the index and the rails. */
 async function clearSelection(page: Page): Promise<void> {
@@ -555,8 +854,30 @@ async function dotCentres(page: Page, selector: string): Promise<Point[]> {
 
 async function passageBox(page: Page, nodeId: string) {
   return page.locator(`[data-thought-id="${nodeId}"]`).evaluate((element) => {
-    const rect = element.getBoundingClientRect();
-    return { left: rect.left, right: rect.right, top: rect.top, middle: rect.top + rect.height / 2 };
+    const label = element.querySelector(":scope > [data-thought-text-id]");
+    if (label === null) throw new Error("visible material text missing");
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    const rects = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
+    range.detach();
+    if (rects.length === 0) throw new Error("visible material bounds missing");
+    const first = [...rects].sort((left, right) => left.top - right.top)[0]!;
+    const firstRow = rects.filter((rect) => rect.top < first.bottom && rect.bottom > first.top);
+    const left = Math.min(...firstRow.map((rect) => rect.left));
+    const right = Math.max(...firstRow.map((rect) => rect.right));
+    const rowTop = Math.min(...firstRow.map((rect) => rect.top));
+    const rowBottom = Math.max(...firstRow.map((rect) => rect.bottom));
+    const picture = element.querySelector(".passage-picture")?.getBoundingClientRect();
+    if (picture !== undefined && picture.width > 0 && picture.height > 0) rects.push(picture);
+    const top = Math.min(...rects.map((rect) => rect.top));
+    const bottom = Math.max(...rects.map((rect) => rect.bottom));
+    // Eight pixels is text-to-centre clearance; visible air also subtracts radius.
+    return {
+      left: left - 8, right: right + 8, top, bottom, middle: (rowTop + rowBottom) / 2, rowTop, rowBottom,
+      inkLeft: left, inkRight: right,
+      envelopeLeft: Math.min(...rects.map((rect) => rect.left)),
+      envelopeRight: Math.max(...rects.map((rect) => rect.right)),
+    };
   });
 }
 
@@ -576,7 +897,7 @@ async function samplePoints(page: Page): Promise<Point[]> {
   const points: Point[] = [];
   for (const box of boxes) {
     points.push({ x: box.x + box.width / 2, y: box.y + box.height / 2 });
-    points.push({ x: box.x - 24, y: box.y - 6 });
+    points.push({ x: box.x, y: box.y + box.height / 2 });
     points.push({ x: box.x - 6, y: box.y + box.height / 2 });
     points.push({ x: box.x + box.width + 6, y: box.y + box.height / 2 });
   }

@@ -50,7 +50,7 @@ export async function copyMaterialSelection(input: Readonly<{
     try {
       await clipboard.writeText(result.text);
     } catch {
-      return "failed";
+      return input.stillCurrent?.() === false ? null : "failed";
     }
   }
   if (input.stillCurrent?.() === false) return null;
@@ -70,22 +70,27 @@ export async function copyActiveTreeReceipt(input: Readonly<{
   clipboard: ClipboardLike;
   stillCurrent?: () => boolean;
 }>): Promise<MaterialCopyOutcome | null> {
+  if (input.stillCurrent?.() === false) return null;
   const pending = renderActiveTreeReceipt(input.tree, input.active);
   const clipboard = input.clipboard;
   if (clipboard?.write !== undefined && typeof ClipboardItem !== "undefined") {
+    const part = pending.then((text) => {
+      if (text === null || input.stillCurrent?.() === false) throw new Error("no receipt");
+      return new Blob([text], { type: "text/plain" });
+    });
+    // A constructor or clipboard may refuse before consuming its promise.
+    // Observe rejection without turning the original part into a successful write.
+    void part.catch(() => undefined);
     try {
       const item = new ClipboardItem({
-        "text/plain": pending.then((text) => {
-          if (text === null || input.stillCurrent?.() === false) throw new Error("no receipt");
-          return new Blob([text], { type: "text/plain" });
-        }),
+        "text/plain": part,
       });
       await clipboard.write([item]);
     } catch {
       // A refusal, a stale document and a denied write look the same from here.
       return input.stillCurrent?.() === false ? null : "failed";
     }
-    return "copied";
+    return input.stillCurrent?.() === false ? null : "copied";
   }
   const text = await pending;
   if (input.stillCurrent?.() === false) return null;
@@ -93,7 +98,7 @@ export async function copyActiveTreeReceipt(input: Readonly<{
   try {
     await clipboard.writeText(text);
   } catch {
-    return "failed";
+    return input.stillCurrent?.() === false ? null : "failed";
   }
-  return "copied";
+  return input.stillCurrent?.() === false ? null : "copied";
 }

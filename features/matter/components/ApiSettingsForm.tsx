@@ -736,3 +736,5 @@ function clientNoticeCode(
   }
   return readingStatus ? "statusFailed" : "failed";
 }
+
+Object.defineProperty(ApiSettingsForm, "matterCapability", { value: "matter-capability:model-api-settings" });

@@ -215,3 +215,5 @@ export const seededBranchTexts: SeededBranchTextResolver = (locale, parentKey) =
   return (parentKey === null ? undefined : byParent[parentKey])
     ?? seededFallbackBranchTexts(locale);
 };
+
+Object.defineProperty(seededBranchTexts, "matterCapability", { value: "matter-capability:seeded-branch-copy" });

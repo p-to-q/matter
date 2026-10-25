@@ -72,6 +72,14 @@ position and mounts one shared lens regardless of tree size. Lasso, stretch,
 pan, node drag, pending work, modal chrome, held descendants, and lack of clear
 adjacent space all suppress it. A held root alone retains the local `+` recovery
 and disables AI so set-aside text cannot become a transformation target.
+The lens's screen targets stay fixed at 44px desktop / 48px compact-or-coarse,
+not proportional to material text or camera zoom. Its main decorative fog
+shares the exact placement but paints behind the material world; the
+interactive controls remain in front. Neither paint plane owns another target,
+observer, action lifecycle, or material copy.
+The corner retains its original 6px button-box contact with first-line ink;
+the small overlap is intentional. Detached fallbacks and fixed chrome still
+use full-carrier clearance. Hover/press never shifts the target downward.
 Canvas Fold/Unfold remains an unpresented navigation capability in this
 first-release surface. The material index has a separate view-local disclosure
 control: it neither dispatches canvas Fold nor changes canvas visibility. Delete
@@ -107,6 +115,24 @@ tool: the fifth rail slot, the `insert-child` intent, `extendMaterial` and the s
 prose. It defaults to `false`, is documented in `.env.example`, and is never set in
 `vercel.json`, so the deployed product has no Branch. `npm run test:e2e:preview-branch`
 proves the five-slot rail; the default run proves four.
+The owner review build restores the stable pre-Under two-action hover:
+AI and `−` / restore `+`, with no middle Branch or Under mark. The reference is
+`6b70e794`, not a whole-file rollback; optional Wiki reviews keep their bounded
+keyboard/touch contract. Fixed 44/48px sizing and behind-material fog are
+explicit current overrides of that historical visual baseline.
+Branch remains only on the preview rail and follows its selected parent or the
+default root, never the hovered passage. It uses the existing local fixture
+command, tree-engine history and Undo, with no generation or transcription
+request. The command appends the
+last direct child; layout derives its next-column position and authored sibling
+order. Known seed parents have continuation samples; arbitrary text gets the
+existing locale fallback, not an answer derived from that text. Future adjacent
+context, ideas and references require their own bounded-context freeze.
+The owner's correction reopens the historical retirement/placement decision;
+this review build does not settle the formal default or Under's eventual place.
+The earlier three-mark Branch hover and 14px detached-clearance experiments are
+superseded by the owner's later review; their evidence stays in the active
+plan and handoff, not as instructions to reintroduce them.
 
 ## Rejected
 

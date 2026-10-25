@@ -233,6 +233,18 @@ describe("archive pictures: export", () => {
 
     expect(second.bytes).toEqual(first.bytes);
     expect(reversed.bytes).toEqual(first.bytes);
+
+    const records = centralRecords(first.bytes);
+    expect(records.some((record) => record.name.endsWith(".md"))).toBe(true);
+    expect(records.filter((record) => record.name.startsWith("matter/blobs/"))).toHaveLength(3);
+    const view = new DataView(first.bytes.buffer, first.bytes.byteOffset, first.bytes.byteLength);
+    for (const record of records) {
+      // ZIP uses local calendar fields, not an instant shifted by the host time zone.
+      expect(view.getUint16(record.local + 10, true), record.name).toBe(0);
+      expect(view.getUint16(record.local + 12, true), record.name).toBe(0x21);
+      expect(view.getUint16(record.central + 12, true), record.name).toBe(0);
+      expect(view.getUint16(record.central + 14, true), record.name).toBe(0x21);
+    }
   });
 
   it("stores one picture once however many passages point at it", async () => {

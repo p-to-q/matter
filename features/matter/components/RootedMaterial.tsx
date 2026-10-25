@@ -2162,6 +2162,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         dismissPaperPresentations();
         return props.archive!.replaceImport(file, options);
       },
+      deploymentUpdate: props.archive.deploymentUpdate,
     });
   }, [dismissPaperPresentations, props.archive]);
   useEffect(() => {
@@ -2648,6 +2649,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       outcome: outcomeLine.current,
       language: languageGuidance,
       material: materialGuidance,
+      deploymentChanged: props.archive?.deploymentUpdate?.canReload === true &&
+        outcomePresentationAvailable && !interactionPending && !pointTalkPresented &&
+        !inquiryHeld && !editingHeld && pointTalkPictureHold !== "paid",
     }),
     canvasPreferences.preferences.language,
   );
@@ -4249,6 +4253,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             }}
             pointTalkEligibleNodeIds={pointTalkEligibleNodeIds}
             positioningRef={materialPlaneRef}
+            previewBranch={previewBranch}
             tree={tree}
             under={{
               blockedReason: underBlocked,

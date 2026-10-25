@@ -38,6 +38,8 @@ import type { MaterialFilesCopy } from "./material-files-copy";
 import { downloadLocalBytes } from "./download-local-bytes";
 import type { MatterLocale } from "../config/locales";
 import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
+import { requestDeploymentReload } from "../interaction/deployment-version-watch";
+import { useDeploymentVersion } from "./use-deployment-version";
 
 // Synchronous per-locale floor used in archiveFailure's catch arm when the
 // material-files-copy chunk cannot load. Values match archiveErrorAction from
@@ -53,14 +55,11 @@ const ARCHIVE_ERROR_ACTION_FLOOR: Readonly<Record<string, string>> = Object.free
 // Archive bytes move only after a Files-panel gesture. The transport and its
 // snapshot encoder load after first paint, and the zip codec when Archive
 // opens, so neither Export nor a chosen file waits on a code fetch.
-const loadArchiveTransport = () => Promise.all([
-  import("../persistence/archive-transport"),
-  import("../persistence/snapshot-codec"),
-]).then(([transport, codec]) => Object.freeze({
+const loadArchiveTransport = () => import("../persistence/archive-transport").then((transport) => Object.freeze({
   exportSnapshotArchive: transport.exportSnapshotArchive,
   importSnapshotArchive: transport.importSnapshotArchive,
   preloadArchiveCodec: transport.preloadArchiveCodec,
-  treeToBundle: codec.treeToBundle,
+  treeToBundle: transport.treeToBundle,
 }));
 
 export function MatterApp() {
@@ -100,6 +99,7 @@ export function MatterApp() {
   const [paperActivity, setPaperActivity] = useState<PaperActivity>(IDLE_PAPER_ACTIVITY);
   // One signal gates every replacement of the loaded document instance.
   const materialTurns = { admission: admission.state.phase, paper: paperActivity };
+  const materialIdle = materialIsIdle(materialTurns);
   const persistence = useMaterialPersistence(
     tree,
     history,
@@ -107,17 +107,35 @@ export function MatterApp() {
     documentEpoch,
     hydrateSnapshot,
     switchDocument,
-    materialIsIdle(materialTurns),
+    materialIdle,
     admissionHoldsSubmittedWords(admission.state),
   );
   const storagePersistence = useStoragePersistence();
   const requestStoragePersistence = storagePersistence.request;
+  const storeAccess = useMatterStoreAccess();
   const pictureAuthoring = usePictureAuthoring(
     pictureStore,
-    useMatterStoreAccess(),
+    storeAccess,
     requestStoragePersistence,
   );
   const archiveLanguage = canvasPreferences.preferences.language;
+  const deploymentVersion = useDeploymentVersion(materialIdle && persistence.initialReconciliationComplete);
+  const deploymentReloadRef = useRef({ tree, history, documentEpoch, materialIdle, deploymentVersion,
+    hydrated: persistence.initialReconciliationComplete, status: persistence.status });
+  useLayoutEffect(() => {
+    deploymentReloadRef.current = { tree, history, documentEpoch, materialIdle, deploymentVersion,
+      hydrated: persistence.initialReconciliationComplete, status: persistence.status };
+  });
+  const reloadChangedDeployment = useCallback(() => requestDeploymentReload(() => {
+    const basis = deploymentReloadRef.current;
+    const current = storeAccess.getState();
+    return {
+      different: basis.deploymentVersion === "different", idle: basis.materialIdle,
+      hydrated: basis.hydrated && basis.status.phase === "saved", unsaved: basis.status.unsaved,
+      visible: document.visibilityState === "visible" && document.hasFocus(),
+      current: current.tree === basis.tree && current.history === basis.history && current.documentEpoch === basis.documentEpoch,
+    };
+  }, () => window.location.reload()), [storeAccess]);
   const branchTextResolverRef = useRef<SeededBranchTextResolver>(seededFallbackBranchTexts);
   const [seededSessionRelocalizer, setSeededSessionRelocalizer] =
     useState<SeededSessionRelocalizer | null>(null);
@@ -208,9 +226,10 @@ export function MatterApp() {
     const archive = await importSnapshotArchive(file);
     if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     // The bytes must be readable by the first render of the imported document,
-    // so they are stored before it is committed. Failing to store them never
-    // refuses the import.
+    // so they are held before it is committed. A durable-write refusal may use
+    // the session cache, but an unavailable holder cannot admit the import.
     const pictures = await pictureStore.restoreBlobs(archive.blobs, archive.tree);
+    if (pictures === null) return archiveFailure("ARCHIVE_ACTION_FAILED", archiveLanguage);
     const imported = await persistence.importMaterial(archive.tree, basis, options);
     if (imported.status !== "switched") return archiveFailure(imported.errorCode, archiveLanguage);
     return pictures.keptInSession > 0
@@ -229,13 +248,20 @@ export function MatterApp() {
     tree.revision,
   ]);
   useEffect(() => preloadWhenIdle([loadArchiveTransport]), []);
-  const archive = useMemo(() => Object.freeze({
+  const deploymentCanReload = deploymentVersion === "different" && materialIdle && persistence.initialReconciliationComplete &&
+    persistence.status.phase === "saved" && !persistence.status.unsaved;
+  const archive = useMemo(() => ({
     prepare: () => preloadNow(() => loadArchiveTransport()
       .then((transport) => transport.preloadArchiveCodec())),
     exportCopy: exportArchive,
     validateImport: validateArchive,
     replaceImport: replaceArchive,
-  }), [exportArchive, replaceArchive, validateArchive]);
+    deploymentUpdate: {
+      available: deploymentVersion === "different",
+      canReload: deploymentCanReload,
+      reload: reloadChangedDeployment,
+    },
+  }), [deploymentCanReload, deploymentVersion, exportArchive, reloadChangedDeployment, replaceArchive, validateArchive]);
   const retrySaving = persistence.retry;
   const persistenceSurface = useMemo(() => Object.freeze({
     status: persistence.status,
@@ -443,6 +469,8 @@ async function archiveFailure(code: string, language: MatterLocale) {
 
 function archiveMessage(code: string, copy: MaterialFilesCopy): string {
   switch (code) {
+    case "ARCHIVE_ACTION_FAILED":
+      return copy.archiveErrorAction;
     case "IMPORT_STALE":
       return copy.archiveErrorStale;
     case "IMPORT_BUSY":

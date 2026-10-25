@@ -56,9 +56,9 @@ describe("the picture control's presence", () => {
     storeFailed: false,
   } as const;
 
-  it("exists only once the health read said available", () => {
+  it("separates a visible entry from permission to arm a paid driver", () => {
     expect(pictureControlPresentation(base)).toBe("enabled");
-    expect(pictureControlPresentation({ ...base, availability: "unavailable" })).toBe("absent");
+    expect(pictureControlPresentation({ ...base, availability: "unavailable" })).toBe("unavailable");
   });
 
   it("is absent for an empty passage and for one over the image contract's bound", () => {
@@ -74,9 +74,9 @@ describe("the picture control's presence", () => {
   it("stays, aria-disabled and unable to start, when the picture store could not be opened", () => {
     // The row was decided when the field opened; a store that failed afterwards
     // must not take the control away from under the person's hand.
-    expect(pictureControlPresentation({ ...base, storeFailed: true })).toBe("disabled");
+    expect(pictureControlPresentation({ ...base, storeFailed: true })).toBe("unavailable");
     expect(pictureControlPresentation({ ...base, storeFailed: true, availability: "unavailable" }))
-      .toBe("absent");
+      .toBe("unavailable");
     expect(pictureControlPresentation({ ...base, storeFailed: true, passageText: null }))
       .toBe("absent");
   });
@@ -87,7 +87,7 @@ describe("the picture control's presence", () => {
       ...base,
       availability: "unavailable",
       interactionPending: true,
-    })).toBe("absent");
+    })).toBe("unavailable");
   });
 });
 
@@ -102,19 +102,19 @@ describe("the picture control's reasons to be missing or inert", () => {
     storeFailed: false,
   } as const;
 
-  it("is absent where this browser could not finish a paid picture", () => {
-    expect(pictureControlPresentation({ ...base, environmentSupported: false })).toBe("absent");
+  it("is visible but unavailable where this browser could not finish a paid picture", () => {
+    expect(pictureControlPresentation({ ...base, environmentSupported: false })).toBe("unavailable");
     expect(pictureControlPresentation({
       ...base,
       environmentSupported: false,
       interactionPending: true,
-    })).toBe("absent");
+    })).toBe("unavailable");
   });
 
   it("stays, aria-disabled and saying why, when the document has no room for a picture", () => {
     expect(pictureControlPresentation({ ...base, documentHasRoom: false })).toBe("full");
     expect(pictureControlPresentation({ ...base, documentHasRoom: false, availability: "unavailable" }))
-      .toBe("absent");
+      .toBe("unavailable");
     expect(pictureControlPresentation({ ...base, documentHasRoom: false, passageText: null }))
       .toBe("absent");
     // Another interaction in progress is the more immediate reason.

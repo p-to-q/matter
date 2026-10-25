@@ -348,6 +348,8 @@ export type PresenceHandoffRecord<T> = Readonly<{
   view: T | null;
   /** The owner's final content, kept for the frozen exit. */
   lastView: T | null;
+  /** The presence owner's one first-paint receipt for this identity. */
+  paintedAtMs: number | null;
   /** How the released surface left; `preempted` unless its closer said otherwise. */
   close: PresenceClose;
 }> | null;
@@ -358,6 +360,8 @@ export type PresenceHandoff<T> = Readonly<{
   /** A surface mounted; any other surface's exit is preempted by it. */
   enter: (identity: string) => void;
   show: (identity: string, view: T) => void;
+  /** Records the current identity's first paint once; stale identities cannot write it. */
+  markPainted: (identity: string, paintedAtMs: number) => void;
   /** Declares how the next release of `identity` leaves. */
   intend: (identity: string, close: PresenceLeave) => void;
   /**
@@ -383,6 +387,10 @@ export function createPresenceHandoff<T>(): PresenceHandoff<T> {
   const listeners = new Set<() => void>();
   let record: PresenceHandoffRecord<T> = null;
   let intent: Readonly<{ identity: string; close: PresenceClose }> | null = null;
+  // Only `show` grants the current identity the capability to receipt paint.
+  // Release keeps it so a frame already recorded by the presence owner may
+  // publish after the live owner handed off; a new identity or cut revokes it.
+  let paintEligibleIdentity: string | null = null;
   const publish = (next: PresenceHandoffRecord<T>) => {
     record = next;
     for (const listener of [...listeners]) listener();
@@ -390,7 +398,14 @@ export function createPresenceHandoff<T>(): PresenceHandoff<T> {
   const enter = (identity: string) => {
     if (record?.identity === identity) return;
     intent = null;
-    publish(Object.freeze({ identity, view: null, lastView: null, close: "preempted" }));
+    paintEligibleIdentity = null;
+    publish(Object.freeze({
+      identity,
+      view: null,
+      lastView: null,
+      paintedAtMs: null,
+      close: "preempted",
+    }));
   };
   return Object.freeze({
     getSnapshot: () => record,
@@ -403,8 +418,23 @@ export function createPresenceHandoff<T>(): PresenceHandoff<T> {
     enter,
     show: (identity: string, view: T) => {
       enter(identity);
+      paintEligibleIdentity = identity;
       if (record === null || (record.view === view && record.close === "preempted")) return;
-      publish(Object.freeze({ identity, view, lastView: view, close: "preempted" }));
+      publish(Object.freeze({
+        identity,
+        view,
+        lastView: view,
+        paintedAtMs: record.paintedAtMs,
+        close: "preempted",
+      }));
+    },
+    markPainted: (identity: string, paintedAtMs: number) => {
+      if (
+        record === null || record.identity !== identity || paintEligibleIdentity !== identity ||
+        record.paintedAtMs !== null ||
+        !Number.isFinite(paintedAtMs) || paintedAtMs < 0
+      ) return;
+      publish(Object.freeze({ ...record, paintedAtMs }));
     },
     intend: (identity: string, close: PresenceLeave) => {
       intent = Object.freeze({ identity, close });
@@ -417,13 +447,39 @@ export function createPresenceHandoff<T>(): PresenceHandoff<T> {
         identity,
         view: null,
         lastView: finalView ?? record.lastView,
+        paintedAtMs: record.paintedAtMs,
         close,
       }));
     },
     preempt: () => {
       intent = null;
+      paintEligibleIdentity = null;
       if (record !== null) publish(null);
     },
+  });
+}
+
+export type PointTalkDeliveryTiming = Readonly<{
+  minimumPendingMs: number;
+  /** Null means the visible opening has not produced its first-paint receipt yet. */
+  notBeforeMs: number | null;
+}>;
+
+/**
+ * Projects Point and Talk's two UI clocks into one delivery timing input. A
+ * detached opening owes no visible timing; a presented one fails closed until
+ * the presence owner receipts the exact identity's first paint.
+ */
+export function projectPointTalkDeliveryTiming<T>(
+  presented: boolean,
+  identity: string,
+  record: PresenceHandoffRecord<T>,
+): PointTalkDeliveryTiming {
+  if (!presented) return Object.freeze({ minimumPendingMs: 0, notBeforeMs: 0 });
+  const paintedAtMs = record?.identity === identity ? record.paintedAtMs : null;
+  return Object.freeze({
+    minimumPendingMs: POINT_TALK_TIMING.pendingMinMs,
+    notBeforeMs: paintedAtMs === null ? null : paintedAtMs + POINT_TALK_TIMING.minDwellMs,
   });
 }
 

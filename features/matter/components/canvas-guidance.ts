@@ -49,6 +49,8 @@ export type CanvasGuidanceInput = Readonly<{
   outcome?: MaterialOutcome | null;
   language: CanvasLanguageGuidanceState;
   material: CanvasMaterialGuidanceState;
+  /** An identified different build, presented only by the root's safe idle gate. */
+  deploymentChanged?: boolean;
 }>;
 
 type CanvasActionGuidanceId =
@@ -83,7 +85,8 @@ type CanvasActionGuidanceId =
   | "wiki-unsaved"
   | "wiki-passage-changed"
   | "picture-stale"
-  | "picture-stopped";
+  | "picture-stopped"
+  | "matter-changed";
 
 export type CanvasGuidanceId = CanvasActionGuidanceId | "canvas-zoom";
 
@@ -123,6 +126,7 @@ const EN_US_LINES = Object.freeze({
   "wiki-passage-changed": "Passage changed. Not restored.",
   "picture-stale": "Passage changed. Not drawn.",
   "picture-stopped": "Stopped. It may still count.",
+  "matter-changed": "Matter changed. Reload in Archive.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 const ZH_CN_LINES = Object.freeze({
@@ -158,6 +162,7 @@ const ZH_CN_LINES = Object.freeze({
   "wiki-passage-changed": "段落已变化，未恢复。",
   "picture-stale": "段落已变化，未绘图。",
   "picture-stopped": "已停止等待，仍可能计入用量。",
+  "matter-changed": "Matter 已变化，可在归档重新载入。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 export type CanvasGuidance =
@@ -230,6 +235,10 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
       break;
     default:
       return assertNever(input.language);
+  }
+
+  if (input.deploymentChanged && input.material.kind === "full" && input.material.selected === null) {
+    return guidance("matter-changed", "recovery");
   }
 
   switch (input.camera.kind) {
@@ -337,6 +346,7 @@ const ZH_TW_LINES = Object.freeze({
   "wiki-passage-changed": "段落已變更，未恢復。",
   "picture-stale": "段落已變更，未繪圖。",
   "picture-stopped": "已停止等待，仍可能計入用量。",
+  "matter-changed": "Matter 已變更，可在封存重新載入。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const JA_JP_LINES = Object.freeze({
   "allow-microphone": "マイクの使用を許可してください。",
@@ -371,6 +381,7 @@ const JA_JP_LINES = Object.freeze({
   "wiki-passage-changed": "段落が変わったため戻しませんでした。",
   "picture-stale": "段落が変わったため描きませんでした。",
   "picture-stopped": "待つのをやめました。描き終えて、利用枠に数えられることがあります。",
+  "matter-changed": "Matter が変わりました。アーカイブで再読み込み。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const DE_DE_LINES = Object.freeze({
   "allow-microphone": "Mikrofonzugriff erlauben.",
@@ -405,6 +416,7 @@ const DE_DE_LINES = Object.freeze({
   "wiki-passage-changed": "Passage geändert. Nicht wiederhergestellt.",
   "picture-stale": "Passage geändert. Nicht gezeichnet.",
   "picture-stopped": "Warten beendet. Das Bild kann trotzdem fertig werden und angerechnet werden.",
+  "matter-changed": "Matter geändert. Neu laden: Archiv.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 type GuidanceLocaleCopy = Readonly<{

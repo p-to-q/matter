@@ -117,9 +117,11 @@ describe("passage picture load", () => {
 
   it("keeps the browser URL calls in one adapter that only the loader drives", () => {
     const component = readFileSync(new URL("./PassagePicture.tsx", import.meta.url), "utf8");
+    const frame = readFileSync(new URL("./PictureFrame.tsx", import.meta.url), "utf8");
     const loader = readFileSync(new URL("./passage-picture-load.ts", import.meta.url), "utf8");
-    expect(component.match(/createObjectURL/gu)).toHaveLength(1);
-    expect(component.match(/revokeObjectURL/gu)).toHaveLength(1);
+    expect(frame.match(/createObjectURL/gu)).toHaveLength(1);
+    expect(frame.match(/revokeObjectURL/gu)).toHaveLength(1);
+    expect(component).not.toMatch(/createObjectURL|revokeObjectURL/u);
     expect(loader.match(/urls\.create\(/gu)).toHaveLength(1);
     expect(loader.match(/urls\.revoke\(/gu)).toHaveLength(1);
     expect(loader).not.toMatch(/createObjectURL|revokeObjectURL/u);

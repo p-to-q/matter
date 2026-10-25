@@ -133,3 +133,42 @@ test("an import the store cannot hold still succeeds, shows the picture, and say
   await expect(target.locator('.passage-picture[data-picture-state="absent"]')).toContainText(copy.absent);
   expect(browserErrors).toEqual([]);
 });
+
+test("an unavailable picture-store chunk refuses import without claiming temporary bytes or replacing material", async ({ page }) => {
+  const browserErrors: string[] = [];
+  page.on("pageerror", (error) => browserErrors.push(error.message));
+  await openMatter(page);
+  const plain = await plainArchiveOf(page);
+  const incoming = await withPictureOn(plain.bytes, plain.targetId);
+  let refusedChunks = 0;
+  await page.route((url) => /\/_next\/static\/chunks\/.+\.js$/u.test(url.pathname), async (route) => {
+    const response = await route.fetch();
+    const body = await response.text();
+    if (body.includes("matter-capability:picture-store")) {
+      refusedChunks += 1;
+      await route.abort("failed");
+    } else {
+      await route.fulfill({ response, body });
+    }
+  });
+
+  const sidebar = page.locator("aside.material-files");
+  await sidebar.getByRole("button", { name: files.archive, exact: true }).click();
+  const panel = sidebar.getByRole("region", { name: files.archivePanel });
+  await panel.getByLabel(files.archiveChooseMaterialArchive).setInputFiles({
+    name: "unavailable-picture-store.matter.zip",
+    mimeType: "application/zip",
+    buffer: Buffer.from(incoming),
+  });
+  await expect(panel).toContainText(files.archiveConfirmReplace);
+  await panel.getByRole("button", { name: files.archiveReplace, exact: true }).click();
+
+  await expect(panel.locator(".material-files__archive-error")).toHaveText(files.archiveErrorAction);
+  expect(refusedChunks).toBeGreaterThan(0);
+  await expect(panel).not.toContainText(files.archivePicturesNotSaved(1));
+  await expect(page.locator(".passage-picture")).toHaveCount(0);
+  expect(await readBlobRow(page, POINTER.contentHash)).toBeNull();
+  const exported = await exportKeepingPanel(page);
+  expect(exported.bytes).toEqual(plain.bytes);
+  expect(browserErrors).toEqual([]);
+});

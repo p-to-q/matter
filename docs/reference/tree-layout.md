@@ -87,24 +87,59 @@ Structure produces one constrained two-dimensional arrangement:
 
 The restored hackathon surface renders this geometry as frameless text with no
 persistent lineage connectors. The one exception is the **canvas trail**, drawn
-only for a passage that is being addressed and never stored: a dot in the left
-gutter of every passage on the path from the root to the target, one hairline
-joining them in each passage's top margin (never through text), and a small
-solid arrowhead where each edge reaches a passage. A single selected passage
+only for a passage that is being addressed and never stored. The integration
+candidate filters exact published parent-child edges; their existing gap
+corridor remains authoritative. T0-A attached their container midpoints, but
+owner screenshots exposed the empty space beside centred short text. The
+reopened T0-B candidate measures visible canonical text at the rendering edge:
+outgoing and incoming ports sit eight screen pixels outside the first real
+text row's right and left edges. Row centres remain the default. T0-C removes
+the typographic dogleg only for the actual top-aligned first child when both
+measured first-row interiors admit one shared horizontal ordinate; pixel
+snapping must keep it inside that intersection. All drawn siblings share that
+parent's one outgoing port, and a target bead uses its resolved incoming port.
+Without that measured compatible pair, retain actual centres and genuine turns,
+never infer an unmeasured sibling. A different current projection may therefore
+resolve a different in-row source ordinate; it is not another stored anchor.
+Text/picture envelopes
+bound the measurement; picture height never chooses a text port. Two small
+four-pixel soft corners join orthogonal legs only when the rows actually
+differ in height. Each adjacent step is its own bridge; no line crosses through
+the passage between steps. A missing, stale, duplicate or inconsistent edge
+or measured owner refuses the drawing rather than guessing by distance.
+A single selected passage
 also shows its children, and theirs while they fit, a little lighter; a branch
 with more than six children, anything deeper than two levels below, or more
 than eight grandchildren is cut at the first level with three dots on the last
 child drawn. Siblings of the path are never drawn. It is derived every render
 from the published layout by `trailPresentation` and drawn as one SVG beneath the
 passages; its sizes are screen sizes at every zoom, it fades to nothing at the
-paper's edge with one cue where the path continues, and it is never a map.
+paper's edge with one cue only where a real bridge continues, not where the
+viewport cuts through a passage. An offscreen passage does not become a fake
+point pinned to that edge. It is never a map. The local candidate uses a
+2.5 CSS-pixel paper-mixed line, 5px ordinary points and a 7px target, with no halo or solid
+triangle. Selected and operating differ in ink strength, not point size.
+The existing downward omission keeps three 2.5px dots; actual viewport
+continuation keeps the open chevron. Neither cue is a clickable fold or link.
+`OPERATION_TRAIL_PX` owns screen dimensions: geometry reads it, the render edge
+derives circle/cue coordinates with inverse zoom, and the existing passive host
+projects stroke/ordinary-point/omission-point sizes into CSS. Non-scaling
+strokes do not take inverse zoom again. The eight-pixel clearance is measured
+from text to point centre, leaving 5.5px / 4.5px nominal ink clearance before
+pixel snapping for ordinary / target points. These are current T0-D candidate
+dimensions, not owner visual acceptance. Keep attachment centres and truthful
+viewport clipping rather than moving a larger point to keep it visible.
+No-arrow and sidebar-family open-arrow hypotheses remain real-page test-only
+comparisons, not accepted final vocabulary. The
+[`connection design proposal`](material-connections-design.md) owns their open
+questions and the separate, unimplemented manual-association proposal.
 
 | Situation | Trail |
 | --- | --- |
 | nothing selected, no operation | none |
 | hover or focus alone | none |
 | a passage selected (pointer, index, keyboard) | root → passage and its children, light |
-| an AI operation addressed at a passage (Point and Talk, Elastic, text swap, picture) | the same trail at full strength; the target's ring grows once work is taken |
+| an AI operation addressed at a passage (Point and Talk, Elastic, text swap, picture) | the same trail at full strength; the endpoint keeps its size |
 | the operation ends on a still-selected passage | back to light, no remount |
 | selection moves from one passage to another | the drawing is replaced in place, no fade, shared ancestors do not blink |
 | a top-level passage | its own bead only |
@@ -116,7 +151,21 @@ paper's edge with one cue where the path continues, and it is never a map.
 | a result landed and nothing is selected | fades 160 ms |
 | layout republished, or another epoch than the published one | cut at once, never stale |
 | document switch, import, hydrate | cut at once (the layer is keyed by the document epoch) |
+| node dragging or invalid visible text owner | no stale attachments; wait for current render geometry |
 | reduced motion | no fade |
+
+Only the bounded addressed set is measured. During Elastic expansion the
+canonical button is transparent: its visible split text is measured instead,
+with an exact canonical partition and clipped witness, excluding the hidden
+tail and blank pocket. The measured flow already includes that pocket; its
+finite expansion extent must never be added twice. Font/source replacement
+invalidates an old receipt, while ordinary camera movement projects the same
+world values rather than becoming material or a new layout owner. These
+render-edge cases are part of T0-B's build/proof boundary, not proof of visual
+acceptance or other browsers.
+CSSOM containment permits at most one unzoomed canvas unit of rectangle
+rounding, including the published bottom and source bottom plus expansion.
+It does not relax exact parent-child edges, canonical text or first-row identity.
 
 The root column is the viewport anchor: adding
 material to the right or downward does not recenter the root. A transient camera

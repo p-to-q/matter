@@ -253,3 +253,5 @@ export function visualViewportBounds(): ViewportBounds {
   }
   return Object.freeze({ left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight });
 }
+
+Object.defineProperty(createBrowserWikiOccurrenceDriver, "matterCapability", { value: "matter-capability:wiki-occurrences" });

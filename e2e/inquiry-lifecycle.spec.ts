@@ -87,6 +87,30 @@ test("an IME confirmation in either engine order never asks or closes", async ({
   expect(requests).toBe(1);
 });
 
+test("missing browser CSPRNG keeps the inquiry draft and sends no weak identity", async ({ page }) => {
+  let requests = 0;
+  await page.route("**/api/inquiry", async (route) => {
+    requests += 1;
+    await route.abort();
+  });
+  await page.goto("/matter");
+  await page.evaluate(() => {
+    Object.defineProperty(globalThis.crypto, "randomUUID", { configurable: true, value: undefined });
+    Object.defineProperty(globalThis.crypto, "getRandomValues", { configurable: true, value: undefined });
+  });
+  await page.getByRole("button", { name: "询问 Matter", exact: true }).click();
+  const inquiry = page.getByRole("dialog", { name: "询问 Matter" });
+  const field = inquiry.getByRole("textbox", { name: "问一句关于这份材料的话" });
+  const question = "没有随机源时还保留吗？";
+  await field.fill(question);
+  await field.press("Enter");
+
+  await expect(field).toHaveValue(question);
+  await expect(inquiry.locator("[data-inquiry-role]")).toHaveCount(0);
+  await expect(inquiry.getByRole("status")).toHaveText("没能连上 Matter，这句话没有继续发送。");
+  expect(requests).toBe(0);
+});
+
 test("one Escape closes only the layer that owns it", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");

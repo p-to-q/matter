@@ -1,5 +1,124 @@
 # Release readiness
 
+## Main integration — 2026-10-25
+
+An isolated `codex/engineering-closure` branch includes the current main
+maintenance change and preserves the original dirty worktree. It is being
+prepared for PR review and owner-authorized main integration, not prerelease. Fresh owner-bundle R1–R5,
+deployment browser 2/2, focused W0 and picture retention checks pass. The
+final-source tests, types, lint and production compilation pass; runtime budgets
+fail explicitly (Wiki runtime 29,610 / 27,648 gzip bytes, Wiki settings
+11,745 / 10,752, settings cold entry 49,420 / 49,152). The owner accepted this
+budget debt for main only. CI runs the budget step non-blocking with a warning;
+restore blocking and resolve the debt before the next prerelease.
+
+Wiki external/CAS passive-evidence cutoff has focused coordinator coverage.
+Compiled-page recovery, full E2E and hosted CI/review still need fresh results;
+owner visual acceptance and actual-release-vehicle recovery remain prerelease
+gates. Image spend remains closed. The exact evidence limits, including old raw-log loss and required
+regeneration, are in
+[`reference/closure-wave.md`](reference/closure-wave.md#pr-continuation--2026-10-25).
+The dated integration receipts below are historical, not current qualification.
+
+## Integration candidate — 2026-10-16
+
+`claude/preview-65` continues from `c3b96c2`; its package version still reads
+Preview.64. It is not a released Preview.65. The active plan now records the
+owner-authorized craft, projection, identifier, robustness and documentation
+integration slices; the unfinished Wiki campaign is retained separately.
+
+The owner has since reopened the engineering gaps. A bounded first batch now
+passes its full check (Node 191, Vitest 5,497 / 7 skipped, Wiki 9/9 and
+types/lint/build/runtime). Both previously failed cases pass three unchanged
+repetitions each; all five picture Archive journeys pass after a new lazy-chunk
+counterexample corrected misleading error copy. These are local batch receipts,
+not a final complete matrix. Actual Next recovery qualification, serialized
+Wiki W0 and safe manual deployment-version recovery are active and not yet
+accepted. See the continuation table in
+[`reference/closure-wave.md`](reference/closure-wave.md#engineering-continuation--active-2026-10-16).
+No PR/CI/CodeRabbit/main receipt covers these dirty changes. NOT-GO remains.
+
+Earlier closure-only result: full `npm run check` **passes** (Node 184/184,
+Vitest 5,488 passed / 7 skipped, Wiki qualification 9/9, types/lint/build/runtime).
+Initial gzip is 402,437 B (393.0 KiB), below the unchanged 396 KiB limit; all 24
+capability entries pass. The prior failed browser scenarios were conservatively
+covered by nine cases because the old raw log was missing: **7 passed / 2
+failed**, zero retries. Native owner-bundle R1–R5 also pass with source/artifact
+identities and zero external requests, but do not qualify a deployable Next
+recovery release. Exact results and retained logs are in
+[`reference/closure-wave.md`](reference/closure-wave.md). The older green
+receipts below remain historical, not the latest candidate status.
+
+Current status is NOT-GO for merge/release. Database v7 requires a decided
+recovery path even while drawing is off; the trail's visual design still needs
+owner review; and the final candidate must pass full check, full E2E and CI.
+The baseline audit passed static/build checks and separately reran sandbox-
+restricted loopback tests, but was not a single complete check/E2E receipt.
+This paragraph must not be used as one.
+
+The earlier T0-B/B0 execution pass had a complete `npm run check` receipt:
+5,386 unit cases passed, 7 skipped; type generation/check, lint, build and
+runtime checks passed at 393.0 KiB initial gzip against the unchanged 396 KiB
+cap. Its first full fixture E2E was 323 passed / 16 skipped / 1 failed (focus).
+P0-F now has reproduced opening and ready-return focus-theft counterexamples
+and a narrow owner fix. The final six journeys passed ten repetitions each
+(60/60), followed by a complete passing check with the same counts and budget.
+The 343-case fixture E2E then ended 326 passed / 16 skipped / one index-readiness
+failure. Its narrow test-only synchronization correction passed ten repeats;
+T0-B geometry and B0 sample restoration then reopened the candidate. Their
+final-source full check now passes 5,417 unit cases, Wiki qualification 9/9,
+types/lint/build and runtime checks at 392.8 KiB initial gzip. The explicit
+Preview Branch build passed both restored paths plus the real-page gallery
+(3/3); the final 348-case default fixture matrix passed 331 with 17 intentional
+skips in 13.7 minutes. Visual
+acceptance, CI and release/migration gates remained open. That receipt predates
+the owner's later B0-R/T0-C correction; the current result is in
+[`handoff-post-preview-direction.md`](handoff-post-preview-direction.md), not
+the older historical receipts below.
+
+The B0-R/T0-C source before T0-D, after the selected-lens departure correction, passed
+the complete `npm run check`: Node 177/177, Vitest 5,426 passed / 7 skipped,
+Wiki qualification 9/9, types, lint, production build and runtime checks.
+Initial runtime is 393.0 KiB gzip against the unchanged 396 KiB cap. The latest
+focused default Chromium matrix passed 61 / 3 preview-only skips; the explicit
+Preview matrix passed 16 / 1 default-only skip. Preview hover is AI/context
+only, rail sample Branch is retained, and formal-default Under is unchanged.
+The latest correction did not rerun the older complete 348-case matrix. Native
+candidate frames, command logs, exact source/test/config inventory and the
+original reproduced timer failure are in the handoff. No visual acceptance,
+cross-browser qualification, CI, release or migration gate is closed by this
+local receipt; status remains NOT-GO.
+
+Earlier T0-D endpoint source also passed complete `npm run check`: Node 177/177,
+Vitest 5,428 passed / 7 skipped, Wiki qualification 9/9, types/lint/build/runtime
+and the unchanged 396 KiB initial gzip cap (actual 393.0 KiB). Default focused
+trail/geometry Chromium passed 31/31; explicit Preview passed 9 / 1 default-only
+skip, including DPR 1/2 zoom-bound attachment and text-clearance proof. Current
+points are 5/7px from one dimensional owner; no new interaction or schema.
+Those focused receipts are not a complete new matrix or owner visual approval.
+The handoff preserves prior receipts and current logs; NOT-GO and all existing
+release, recovery, complete-matrix and CI gates remain unchanged.
+
+That historical check did not run `proof:persistence`. The separate existing Chromium
+script now passed seven journal/upgrade/image checks and two quota scenarios on
+a fresh temporary origin; this is not the full recovery matrix. The
+[`physical-v7 recovery audit`](reference/persistence-recovery-audit.md) defines
+the then-missing all-store/history, blocked/aborted upgrade, old-reader refusal,
+readback and DB7-aware recovery-build receipts. The current native R1–R5 runner
+now covers the source-owner cases; the deployable recovery-build qualification
+remains open. Blob compaction is not built.
+Neither this document nor those research packets authorize release, migration,
+database clearing or image-byte deletion.
+
+Read-only Production observations on 2026-10-16: health identified
+`0.2.0-preview.64`, Elastic and Text Swap were `user-configurable`, and anonymous
+`provider-session/4` reported `available: true`, `credentialPresent: false`.
+These are configuration observations, not proof of a saved lease, successful
+model action, immutable release or exact deployed source identity. The older
+receipts below retain the facts observed on their own dates. #104 and #52 are
+still open; #68 is closed, with remaining operational controls tracked by #34.
+No managed material or paid-image surface is promoted by this observation.
+
 ## Preview.64 deployed receipt — material trust and addressable Wiki
 
 Merged to `main` through PR #124 as merge commit
@@ -228,7 +347,9 @@ The candidate must still look and behave like Matter after engineering work:
 - public material opens root-only, while expanded fixture branches remain a
   local/e2e proving surface;
 - laptop, 390 px, reduced-motion, dark/light paper, menu, lasso, archive, and
-  failure-recovery receipts show no overlap, clipped text, or console error.
+  failure-recovery receipts show no unintended overlap, clipped text, or console
+  error. The frozen 6px corner lens/material contact is intentional; detached
+  controls and fixed chrome still require full-carrier clearance.
 
 This is a release acceptance boundary, not permission for another visual
 redesign. The paper composition and its restrained monochrome vocabulary are

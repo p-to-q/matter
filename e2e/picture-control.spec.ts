@@ -31,20 +31,21 @@ const LANGUAGE = DEFAULT_CANVAS_PREFERENCES.language;
 const copy = pictureControlCopy(LANGUAGE);
 const PNG_SHA256 = createHash("sha256").update(PNG).digest("hex");
 
-// The picture control renders only when the health read says `available`, and
-// production has the gate off. These journeys answer that read and the image
+// Health admits drawing, not discovery; production keeps paid work off.
+// These journeys answer that read and the image
 // route in the browser; nothing in the application exposes a hook for it.
 type HealthRoute = { requests: number; answered: number };
 const HEALTH = new WeakMap<Page, HealthRoute>();
 
 async function answerHealth(
   page: Page,
-  options: Readonly<{ answer?: "available" | "unavailable"; delayMs?: number }> = {},
+  options: Readonly<{ answer?: "available" | "unavailable"; delayMs?: number; heldUntil?: Promise<void> }> = {},
 ): Promise<HealthRoute> {
   const state: HealthRoute = { requests: 0, answered: 0 };
   HEALTH.set(page, state);
   await page.route("**/api/health", async (route) => {
     state.requests += 1;
+    await options.heldUntil;
     if (options.delayMs !== undefined) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
     await route.fulfill({
       contentType: "application/json",
@@ -214,16 +215,18 @@ async function blobTransactions(page: Page): Promise<number> {
 }
 
 test.describe("the picture control", () => {
-  test("a closed gate renders no control anywhere in the field", async ({ page }) => {
+  test("a closed gate keeps the plain entry visible, explains it and sends no image request", async ({ page }) => {
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     const images = await routeImage(page);
     await openMatter(page);
     const field = await openPointTalk(page);
     await expect(page.getByRole("textbox", { name: "告诉 AI 这段文字应该怎样改变" })).toBeFocused();
-    // The real health read answers `fixture` here, which is not a reason to offer a paid control.
+    // The real health read answers `fixture`, which does not admit paid work.
     await page.waitForTimeout(600);
-    await expect(control(page)).toHaveCount(0);
+    await expect(control(page)).toBeVisible();
+    await expect(control(page)).toHaveAttribute("aria-disabled", "true");
+    await expect(control(page)).toHaveAccessibleDescription(copy.unavailable);
     const reached: string[] = [];
     for (let step = 0; step < 6; step += 1) {
       await page.keyboard.press("Tab");
@@ -234,9 +237,14 @@ test.describe("the picture control", () => {
           : (active.getAttribute("aria-label") ?? active.textContent ?? "").trim();
       }));
     }
-    expect(reached.join("|")).not.toContain(copy.control);
-    expect(reached.join("|")).not.toContain(copy.controlName);
-    await expect(field.getByRole("button", { name: copy.control })).toHaveCount(0);
+    expect(reached).toContain(copy.controlName);
+    await control(page).focus();
+    await page.keyboard.press("Enter");
+    await expect(field.getByRole("status")).toHaveText(copy.unavailable);
+    await expect(control(page)).toBeFocused();
+    await expect(field.locator(".point-talk__voice")).toBeVisible();
+    await expect(field.locator(".point-talk__submit")).toBeVisible();
+    await page.screenshot({ path: test.info().outputPath("drawing-entry-closed.png") });
     expect(images.requests).toBe(0);
     expect(browserErrors).toEqual([]);
   });
@@ -869,14 +877,14 @@ async function measureRowOnce(
   if (options.control) await answerHealth(page);
   await openMatter(page, options.viewport);
   const field = await openField(page, options.coarse);
-  if (options.control) await expect(control(page)).toBeVisible();
-  else await expect(control(page)).toHaveCount(0);
+  await expect(control(page)).toBeVisible();
+  if (!options.control) await expect(control(page)).toHaveAttribute("aria-disabled", "true");
   return rowGeometry(field);
 }
 
 test.describe("the popup's action row on a desktop screen", () => {
   for (const language of ALL_LANGUAGES) {
-    test(`${language}: one row, nothing clipped, the field grows by the control and the input keeps its width`, async ({ context, page }) => {
+    test(`${language}: one row, nothing clipped and availability never shrinks the input or controls`, async ({ context, page }) => {
       const viewport = { width: 1280, height: 800 };
       const baseline = await context.newPage();
       const without = await measureRowOnce(baseline, language, { control: false, coarse: false, viewport });
@@ -885,14 +893,11 @@ test.describe("the popup's action row on a desktop screen", () => {
 
       expectRow(without, { coarse: false, label: `${language} without the control` });
       expectRow(withControl, { coarse: false, label: `${language} with the control` });
-      // No control, no change: the base width stays 264, and the row is one line.
-      expectCloseTo(without.field.w, 264 * without.scale, 0.6, `${language}: base width`);
-      expect(without.draw).toBeNull();
+      // Both openings reserve the entry's width; a closed service cannot shrink the row.
+      expectCloseTo(without.field.w, 264 * without.scale + without.draw!.w + 4 * without.scale, 1.6, `${language}: reserved width`);
       expect(without.wrapped).toBe(false);
-      // With the control the field is wider by the control and one gap, so the input is as wide as before.
       expect(withControl.wrapped).toBe(false);
-      const drawWidth = withControl.draw!.w;
-      expectCloseTo(withControl.field.w - without.field.w, drawWidth + 4 * withControl.scale, 1.6, `${language}: growth`);
+      expectCloseTo(withControl.field.w, without.field.w, 1.6, `${language}: stable field`);
       expectCloseTo(withControl.input.w, without.input.w, 1.6, `${language}: input width with and without the control`);
       // Rewrite is the rightmost control, then Draw, then the microphone, right to left.
       expect(withControl.submit.x).toBeGreaterThan(withControl.draw!.right - 0.5);
@@ -908,6 +913,7 @@ test.describe("the popup's action row on a desktop screen", () => {
       await expect(page.locator(".matter-document")).toHaveAttribute("data-canvas-theme", "dark");
       expectRow(geometry, { coarse: false, label: `${language} dark` });
       expect(geometry.wrapped).toBe(false);
+      await page.screenshot({ path: test.info().outputPath(`drawing-entry-${language}-dark.png`) });
     });
   }
 });
@@ -927,7 +933,7 @@ test.describe("the popup's action row on a phone", () => {
     });
   }
 
-  test("without the control the row stays one line in every language, as it was", async ({ context }) => {
+  test("a closed service preserves the same phone control targets in every language", async ({ context }) => {
     for (const language of ALL_LANGUAGES) {
       const page = await context.newPage();
       const geometry = await measureRowOnce(page, language, {
@@ -937,8 +943,7 @@ test.describe("the popup's action row on a phone", () => {
       });
       await page.close();
       expectRow(geometry, { coarse: true, label: `${language} on a phone, no control` });
-      expect(geometry.wrapped, language).toBe(false);
-      expect(geometry.draw).toBeNull();
+      expect(geometry.draw!.h, language).toBeGreaterThanOrEqual(48);
     }
   });
 });
@@ -1009,7 +1014,7 @@ test.describe("when the control starts", () => {
       await expect(page.locator("[data-node-action=point-talk]")).toBeVisible();
       await page.locator("[data-node-action=point-talk]").click();
       await expect(page.locator('.point-talk[data-presence="present"]')).toHaveAttribute("data-placed", "");
-      await expect(control(page)).toHaveCount(0);
+      await expect(control(page)).toHaveAttribute("aria-disabled", "true");
       await page.keyboard.press("Escape");
       await expect(page.locator(".point-talk")).toHaveCount(0);
     }
@@ -1017,7 +1022,11 @@ test.describe("when the control starts", () => {
   });
 
   test("an answer that arrives after the field opened applies to the next opening; the open row never moves", async ({ page }) => {
-    const health = await answerHealth(page, { delayMs: 1_400 });
+    let releaseHealth!: () => void;
+    const heldUntil = new Promise<void>((resolve) => { releaseHealth = resolve; });
+    // A failed observation must not leave its intercepted request held forever.
+    page.once("close", releaseHealth);
+    const health = await answerHealth(page, { heldUntil });
     await routeImage(page);
     await openMatter(page);
     const field = await openPointTalk(page, ROOT_ID, { settled: false });
@@ -1042,10 +1051,16 @@ test.describe("when the control starts", () => {
     const layoutWidth = () => field.evaluate((element) => (element as HTMLElement).offsetWidth);
     const opened = await layoutWidth();
     expect(health.answered).toBe(0);
+    // Release only after opening and sampling: a slow host cannot turn a
+    // nominal timer delay into an answer that predates the observation.
+    await expect.poll(() => page.evaluate(() => (window as unknown as {
+      __rowSamples: unknown[];
+    }).__rowSamples.length)).toBeGreaterThan(20);
+    releaseHealth();
     await expect.poll(() => health.answered, { timeout: 5_000 }).toBe(1);
     await page.waitForTimeout(600);
     // The answer was `available`, and this opening did not hear it.
-    await expect(control(page)).toHaveCount(0);
+    await expect(control(page)).toHaveAttribute("aria-disabled", "true");
     expect(await layoutWidth()).toBe(opened);
     const samples = await page.evaluate(() => (window as unknown as {
       __rowSamples: Array<{ input: number; field: number; controls: number }>;
@@ -1057,14 +1072,15 @@ test.describe("when the control starts", () => {
     expect(Math.max(...samples.map((sample) => sample.field)) - Math.min(...samples.map((sample) => sample.field)))
       .toBeLessThanOrEqual(0.5);
 
-    // The next opening has the control, with the field grown by it, and asks nothing.
+    // The next opening admits drawing without changing the already reserved row.
     await page.keyboard.press("Escape");
     await page.keyboard.press("Escape");
     await expect(page.locator(".point-talk")).toHaveCount(0);
     const reopened = await openPointTalk(page, ROOT_ID);
     await expect(control(page)).toBeVisible();
-    const grown = await reopened.evaluate((element) => (element as HTMLElement).offsetWidth);
-    expect(grown).toBeGreaterThan(opened + 30);
+    await expect(control(page)).not.toHaveAttribute("aria-disabled", "true");
+    const reopenedWidth = await reopened.evaluate((element) => (element as HTMLElement).offsetWidth);
+    expect(reopenedWidth).toBe(opened);
     expect(health.requests).toBe(1);
   });
 
@@ -1081,6 +1097,74 @@ test.describe("when the control starts", () => {
 });
 
 test.describe("one focus rule for every control in the field", () => {
+  test("a returned spoken direction preserves outside focus when request identity is unavailable", async ({ page }) => {
+    let releaseTranscript!: () => void;
+    let receivedTranscript!: () => void;
+    const transcriptGate = new Promise<void>((resolve) => { releaseTranscript = resolve; });
+    const transcriptReceived = new Promise<void>((resolve) => { receivedTranscript = resolve; });
+    let swapRequests = 0;
+    await page.route(/\/api\/transcribe(?:\?|$)/u, async (route) => {
+      receivedTranscript();
+      await transcriptGate;
+      await route.continue();
+    });
+    await page.route("**/api/text-swap", async (route) => {
+      swapRequests += 1;
+      await route.abort();
+    });
+    await openMatter(page);
+    const field = await openPointTalk(page);
+    await expect(field.getByRole("textbox")).toBeFocused();
+    await field.getByRole("button", { name: "说出改写方向", exact: true }).click();
+    await expect(field).toHaveAttribute("data-phase", "recording");
+    await page.waitForTimeout(350);
+    await field.getByRole("button", { name: "完成", exact: true }).click();
+    await transcriptReceived;
+    const about = page.locator('[data-chrome-control="about"]');
+    await about.focus();
+    await page.evaluate(() => {
+      Object.defineProperty(globalThis.crypto, "randomUUID", { configurable: true, value: undefined });
+      Object.defineProperty(globalThis.crypto, "getRandomValues", { configurable: true, value: undefined });
+    });
+    releaseTranscript();
+    await expect(field).toHaveAttribute("data-phase", "ready");
+    await expect(field.getByRole("textbox")).not.toHaveValue("");
+    await page.evaluate(() => new Promise<void>((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+    }));
+    await expect(about).toBeFocused();
+    expect(swapRequests).toBe(0);
+  });
+
+  for (const choice of ["voice", "about"] as const) {
+    test(`opening autofocus never takes focus back from ${choice} chosen after placement`, async ({ page }) => {
+      await answerHealthAvailable(page);
+      await openMatter(page);
+      await page.evaluate((chosen) => {
+        const observer = new MutationObserver(() => {
+          const field = document.querySelector('.point-talk[data-presence="present"][data-placed]');
+          if (field === null) return;
+          const target = chosen === "voice"
+            ? field.querySelector<HTMLButtonElement>('button[aria-label="说出改写方向"]')
+            : document.querySelector<HTMLButtonElement>('[data-chrome-control="about"]');
+          if (target === null) return;
+          observer.disconnect();
+          // Choose a real control before the opening effect's delayed default.
+          target.focus({ preventScroll: true });
+        });
+        observer.observe(document.body, { subtree: true, childList: true, attributes: true });
+      }, choice);
+      const field = await openPointTalk(page);
+      await page.evaluate(() => new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }));
+      const chosen = choice === "voice"
+        ? field.getByRole("button", { name: "说出改写方向", exact: true })
+        : page.locator('[data-chrome-control="about"]');
+      await expect(chosen).toBeFocused();
+    });
+  }
+
   test("voice, Draw, Rewrite, Back, Keep, and Discard share one ring: 2 px, one pixel off", async ({ page }) => {
     await answerHealthAvailable(page);
     await routeImage(page);
@@ -1099,7 +1183,9 @@ test.describe("one focus rule for every control in the field", () => {
       };
     });
     const rings: Array<Awaited<ReturnType<typeof ring>>> = [];
+    await expect(field.getByRole("textbox")).toBeFocused();
     await field.getByRole("textbox").fill("x");
+    await expect(field.getByRole("button", { name: "改写", exact: true })).toBeEnabled();
     await page.keyboard.press("Tab");
     rings.push(await ring());
     await page.keyboard.press("Tab");

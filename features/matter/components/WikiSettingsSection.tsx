@@ -86,6 +86,7 @@ type Copy = Readonly<{
   loading: string;
   retry: string;
   unavailable: string;
+  superseded: string;
   damaged: string;
   recover: string;
   recoverQuestion: string;
@@ -399,7 +400,8 @@ export function WikiSettingsSection({
       {snapshot.status.phase === "loading" ? <p className={styles.state}>{copy.loading}</p> : null}
       {degraded ? (
         <div className={styles.state}>
-          <span>{corrupt ? copy.damaged : copy.unavailable}</span>
+          <span>{corrupt ? copy.damaged : snapshot.status.phase === "degraded" &&
+            snapshot.status.reason === "superseded" ? copy.superseded : copy.unavailable}</span>
           <button disabled={pending} onClick={() => void matterWikiConfiguration.retry()} type="button">
             {copy.retry}
           </button>
@@ -770,6 +772,7 @@ const ENGLISH: Copy = Object.freeze({
   loading: "Loading local words…",
   retry: "Retry",
   unavailable: "Local words are temporarily unavailable.",
+  superseded: "A newer Matter owns this local dictionary. Open it with that version.",
   damaged: "The saved Wiki is damaged.",
   recover: "Recover",
   recoverQuestion: "Replace the damaged data with the starter Wiki?",
@@ -822,6 +825,7 @@ const SIMPLIFIED_CHINESE: Copy = Object.freeze({
   loading: "正在读取本地词典…",
   retry: "重试",
   unavailable: "本地词典暂时不可用。",
+  superseded: "本地词典已由较新版本的 Matter 保存，请使用该版本打开。",
   damaged: "保存的词典已损坏。",
   recover: "恢复",
   recoverQuestion: "用初始词典替换损坏的数据？",
@@ -872,6 +876,7 @@ const TRADITIONAL_CHINESE: Copy = Object.freeze({
   loading: "正在載入本機詞典…",
   retry: "重試",
   unavailable: "本機詞典暫時無法使用。",
+  superseded: "本機詞典已由較新版本的 Matter 儲存，請使用該版本開啟。",
   damaged: "儲存的詞典已損壞。",
   recover: "復原",
   recoverQuestion: "用初始詞典取代損壞的資料？",
@@ -922,6 +927,7 @@ const JAPANESE: Copy = Object.freeze({
   loading: "ローカル辞書を読み込み中…",
   retry: "再試行",
   unavailable: "ローカル辞書を一時的に利用できません。",
+  superseded: "このローカル辞書は新しい Matter で保存されています。そのバージョンで開いてください。",
   damaged: "保存した辞書が破損しています。",
   recover: "復旧",
   recoverQuestion: "破損したデータを初期辞書に置き換えますか？",
@@ -972,6 +978,7 @@ const GERMAN: Copy = Object.freeze({
   loading: "Lokales Wörterbuch wird geladen…",
   retry: "Erneut versuchen",
   unavailable: "Das lokale Wörterbuch ist vorübergehend nicht verfügbar.",
+  superseded: "Eine neuere Matter-Version hat dieses lokale Wörterbuch gespeichert. Bitte dort öffnen.",
   damaged: "Das gespeicherte Wörterbuch ist beschädigt.",
   recover: "Wiederherstellen",
   recoverQuestion: "Beschädigte Daten durch das Ausgangswörterbuch ersetzen?",

@@ -449,8 +449,9 @@ rather than accepting an arbitrary locale string. Adding a locale therefore
 requires one config entry, UI copy, and focused server/client tests.
 
 The preview seed is a narrow composition exception, not a second locale owner.
-The initial graph contains the simplified-Chinese seed and five short Branch
-floors; the other visible seed copy and its journal migrator share one hashed
+The initial graph contains the simplified-Chinese seed; the Preview-only Branch
+floor is gated by `NEXT_PUBLIC_MATTER_PREVIEW_BRANCH`. The other visible seed
+copy and its journal migrator share one hashed
 post-mount loading path. After that path is ready, persistence hydration has
 settled, and every material turn that read current passages has settled (an
 admission, a Point-and-Talk draft or request, an Elastic request or parked
@@ -470,7 +471,7 @@ in the tree, structural history mementos, and exports. The resulting revision
 also makes every pre-change layout, lasso, and turn address stale; segmentation
 and address construction remain locale-independent.
 
-Branch composition has one explicit delivery tier. A small deterministic
+Preview-only Branch composition has one explicit delivery tier. A small deterministic
 five-locale floor is present in the initial client graph and keeps the Store
 action synchronous and undoable. Parent-specific alternatives are an
 interaction-only enhancement loaded after mount; before they arrive, or if the
@@ -479,6 +480,13 @@ sentence in the locale active at that click. Availability may therefore change
 which closed sentence a first Branch receives, even for the same tree and
 locale. Once committed, that sentence is ordinary material and never changes
 when the enhancement or another locale later arrives.
+
+The main product creates a human child through the selected passage's Under
+mark. `runtime/under-child.ts` derives admissibility from current material and
+activity; `runtime/voice-tool-route.ts` makes the fixed Voice action stop an
+armed recording instead of opening Point and Talk. The admission driver still
+owns normalization and ingress. This is transient address/routing state, not
+a persisted node attribute or a second insertion engine.
 
 | Lifetime | Owned state |
 | --- | --- |
@@ -544,6 +552,16 @@ A few cross-cutting owners are deliberately singular:
 | `interaction/use-delivery-window.ts` | the one visible, pointer-idle delivery window shared by admission, Point Talk, and Elastic; a pressed pointer is also released by evidence that its release was lost (capture lost or a move with no button held, window blur). |
 | `components/presence.ts` | appear, hold, and exit stages of every transient surface and status label, with one timer and frame; a frozen exit copy is inert. Motion itself is CSS. |
 | `components/outcome-line.ts`, `use-outcome-line.ts` | the guidance line's outcome queue: at most one entry per turn owner (expansion, rewrite, Wiki), shown in order and acknowledged by the person's next non-modifier action; held admission words take precedence. |
+
+Point and Talk's first-paint timestamp belongs to the existing presence/frame
+owner. One identity-scoped handoff receipt carries it to the React delivery
+adapter, which waits for both the pending cue and that exact opening's dwell.
+The adapter first closes delivery, updates all current gates, bindings and
+scope, then refreshes: `updateScope` may flush a resolved result and must not
+see an old open window. The driver receives only its boolean window, never a
+UI clock. Dismissing the field clears UI time floors, not submitted authority.
+The receipt, deadline and handoff remain transient and enter no material,
+history, persistence or network value.
 
 A shared coordinator is justified only when current behavior proves that two
 lifecycles share one invariant that the rendering edge cannot safely enforce.
@@ -645,7 +663,7 @@ adjudicated label, and the browser still revalidates current material and
 operation identity.
 
 Recovery stays with the state owner. Journal recovery attaches the bounded
-per-step journal (`persistence/history-journal.ts`, database schema v6,
+per-step journal (`persistence/history-journal.ts`, introduced at database v6,
 `historyEntries`) at constant cost: a shape check plus a dry-run of only the
 next Undo and Redo, with every deeper step validated by the engine at use. A
 step that cannot be read or no longer applies releases its stack with one
@@ -654,6 +672,17 @@ save; storage pressure sheds durable undo steps before material. Interaction
 cancel preserves its semantic address for pointer retry; persistence retains
 the latest dirty snapshot until a generation-checked save succeeds. An archive
 import starts a new journal epoch.
+
+The integration candidate opens database v7, adding the content-addressed
+`blobs` store. `tree/image-pointer.ts` owns pointer bounds;
+`protocol/image-verify.ts` owns shared byte verification; the blob repository
+owns durable bytes and cannot touch other stores. Keep stores verified bytes
+before the tree engine accepts one reversible pointer replacement. Availability
+is a disposable projection, and picture UI/storage code loads lazily. Orphan
+bytes are tolerated; automatic deletion on Undo is unsound because Redo can
+restore a pointer. Explicit unused-byte compaction is still unbuilt. The
+picture production gate stays off, but it does not prevent the v7 upgrade;
+release and rollback must account for old builds refusing the newer database.
 
 Every committed save, import, rollback, and repair is announced on the
 content-free `matter.document-generation.v1` BroadcastChannel. Adopting a newer

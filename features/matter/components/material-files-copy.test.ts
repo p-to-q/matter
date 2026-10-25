@@ -4,6 +4,17 @@ import { CANVAS_LANGUAGE_OPTIONS } from "./canvas-preferences";
 import { materialFilesCopy } from "./material-files-copy";
 
 describe("material files copy", () => {
+  it("distinguishes artifact change from newer storage in all five locales", () => {
+    const english = materialFilesCopy("en-US").archiveDeploymentChanged;
+    expect(CANVAS_LANGUAGE_OPTIONS).toHaveLength(5);
+    for (const { value: locale } of CANVAS_LANGUAGE_OPTIONS) {
+      const copy = materialFilesCopy(locale);
+      expect(copy.archiveDeploymentChanged).not.toBe(copy.archiveNoteSuperseded);
+      expect(copy.archiveDeploymentChanged).not.toBe(copy.durabilityNewerMatter);
+      if (locale !== "en-US") expect(copy.archiveDeploymentChanged).not.toBe(english);
+    }
+  });
+
   it.each(CANVAS_LANGUAGE_OPTIONS)("provides the fixed index labels in $label", ({ value: locale }) => {
     const copy = materialFilesCopy(locale);
     const labels = [
@@ -20,6 +31,7 @@ describe("material files copy", () => {
       copy.archiveReplacing,
       copy.archiveRepairing,
       copy.archiveNoteDefault,
+      copy.archiveDeploymentChanged,
       copy.archiveNoteCorrupt,
       copy.archiveNoteConflict,
       copy.archiveNoteStorageFull,
@@ -142,21 +154,21 @@ describe("material files copy", () => {
         "Receipt (.md)",
         "Copy receipt",
         "Receipt copied",
-        "Readable outline with each passage’s parent and order — not a backup.",
+        "Readable outline of the current context for people and AI — no pictures, not a backup.",
       ],
-      "zh-CN": ["回执 (.md)", "复制回执", "已复制回执", "可读的大纲，含每段的上级与顺序，不是备份。"],
-      "zh-TW": ["回執 (.md)", "複製回執", "已複製回執", "可讀的大綱，含每段的上層與順序，不是備份。"],
+      "zh-CN": ["回执 (.md)", "复制回执", "已复制回执", "当前语境的大纲，供人和 AI 阅读；不含图片，不是备份。"],
+      "zh-TW": ["回執 (.md)", "複製回執", "已複製回執", "目前語境的大綱，供人與 AI 閱讀；不含圖片，不是備份。"],
       "ja-JP": [
         "レシート (.md)",
         "レシートをコピー",
         "レシートをコピーしました",
-        "各段落の親と順序を含む読みやすいアウトライン。バックアップではありません。",
+        "現在の文脈を人とAIが読むためのアウトライン。画像は含まず、バックアップではありません。",
       ],
       "de-DE": [
         "Beleg (.md)",
         "Beleg kopieren",
         "Beleg kopiert",
-        "Lesbare Gliederung mit Elternteil und Reihenfolge jeder Passage — keine Sicherung.",
+        "Lesbare Gliederung des aktuellen Kontexts für Mensch und KI — ohne Bilder, keine Sicherung.",
       ],
     } as const;
     for (const { value: locale } of CANVAS_LANGUAGE_OPTIONS) {

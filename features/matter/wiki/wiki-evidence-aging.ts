@@ -10,6 +10,9 @@ import {
 } from "./wiki-learning-policy";
 import {
   isWikiStarterLexemeIdentity,
+  isHumanWikiLexeme,
+  wikiProducerFamily,
+  type WikiProducerFamily,
   type WikiAliasDescriptor,
   type WikiAliasEvidenceAggregate,
   type WikiLedgerTick,
@@ -33,6 +36,7 @@ import {
   transitionSuccess as success,
   type WikiCommit,
 } from "./wiki-transition";
+import { wikiNearSoundEnabled } from "./wiki-preferences";
 
 /**
  * Evidence aging and eviction: how one human turn ages the candidates it was
@@ -90,7 +94,7 @@ export function evictWeakestTermEvidence(
     const lexeme = lexemesByKey.get(lexemeKey(entry));
     const identity = JSON.stringify(["recent-material", entry.locale, entry.canonical]);
     if (observedThisTurn.has(identity) || (lexeme !== undefined && (
-      lexeme.provenance !== "aggregate-evidence" ||
+      isHumanWikiLexeme(lexeme) ||
       isWikiStarterLexemeIdentity(lexeme) ||
       dependents.has(lexeme.id)
     ))) continue;
@@ -177,7 +181,7 @@ export function advanceUnobservedEvidence(
 ): WikiTransitionResult {
   const initialTermKeys = new Set(state.termEvidence.map(lexemeKey));
   const hasOwnerlessAutomaticLexeme = state.lexemes.some((lexeme) =>
-    lexeme.provenance === "aggregate-evidence" &&
+    !isHumanWikiLexeme(lexeme) &&
     !isWikiStarterLexemeIdentity(lexeme) &&
     !initialTermKeys.has(lexemeKey(lexeme)));
   if (state.termEvidence.length === 0 && state.aliasEvidence.length === 0 &&
@@ -204,7 +208,8 @@ export function advanceUnobservedEvidence(
     ])));
   const agedTermEvidence = state.termEvidence.map((entry) => {
     if (observedTerms.has(lexemeKey(entry)) || !termAging.some((scope) =>
-      entry.locale === scope.locale &&
+      entry.locale === scope.locale && scope.channel === "spoken" &&
+      comparableFamily(entry.producer, scope.producerFamilies) &&
       wikiScriptsCover(scope.scripts, scriptsOf(entry.canonical)))) return entry;
     const aged = advanceWikiTermQuietTurn(entry);
     return Object.freeze({
@@ -219,13 +224,17 @@ export function advanceUnobservedEvidence(
     entry: Pick<WikiAliasDescriptor, "lexemeId" | "channel" | "form">,
   ): boolean => {
     const lexeme = lexemesById.get(entry.lexemeId);
-    return lexeme !== undefined && aliasAging.some((scope) =>
+    return lexeme !== undefined && wikiNearSoundEnabled(state.preferences, lexeme.locale) && aliasAging.some((scope) =>
       lexeme.locale === scope.locale && entry.channel === scope.channel &&
       wikiScriptsCover(scope.scripts, scriptsOf(entry.form)));
   };
   const aliasEvidence = state.aliasEvidence.map((entry) => {
-    if (!aliasComparable(entry)) return entry;
-    const lexeme = lexemesById.get(entry.lexemeId)!;
+    const lexeme = lexemesById.get(entry.lexemeId);
+    if (!aliasComparable(entry) || !aliasAging.some((scope) =>
+      lexeme?.locale === scope.locale && entry.channel === scope.channel &&
+      wikiScriptsCover(scope.scripts, scriptsOf(entry.form)) &&
+      comparableFamily(entry.producer, scope.producerFamilies))) return entry;
+    if (lexeme === undefined) return entry;
     const kept = advanceWikiKeptQuietTurn(entry);
     const observedKey = JSON.stringify([
       lexeme.locale, entry.channel, entry.boundary, entry.form, lexeme.canonical, entry.producer,
@@ -245,7 +254,13 @@ export function advanceUnobservedEvidence(
     });
   }).filter((entry) => entry.support > 0);
   const agedStrikes = state.revertStrikes.flatMap((entry) => {
-    if (!aliasComparable(entry)) return [entry];
+    // Legacy strikes do not name a producer. Any enabled alias-family scan
+    // can advance them; a scan with no alias producer cannot.
+    if (!aliasComparable(entry) || !aliasAging.some((scope) => {
+      const lexeme = lexemesById.get(entry.lexemeId);
+      return lexeme?.locale === scope.locale && entry.channel === scope.channel &&
+        wikiScriptsCover(scope.scripts, scriptsOf(entry.form)) && scope.producerFamilies.length > 0;
+    })) return [entry];
     const quietTurns = advanceWikiRevertStrikeTurn(entry.quietTurns);
     return quietTurns === null ? [] : [Object.freeze({ ...entry, quietTurns })];
   });
@@ -270,7 +285,7 @@ export function advanceUnobservedEvidence(
     .filter((entry) => entry.phase === "collected")
     .map(lexemeKey));
   const lexemes = state.lexemes.filter((lexeme) => {
-    if (lexeme.provenance !== "aggregate-evidence" ||
+    if (isHumanWikiLexeme(lexeme) ||
         isWikiStarterLexemeIdentity(lexeme)) return true;
     return collectedTermKeys.has(lexemeKey(lexeme)) ||
       retainedByDependents.has(lexeme.id);
@@ -304,7 +319,13 @@ type WikiAgingScope = Readonly<{
   locale: WikiRuleDescriptor["locale"];
   channel: WikiRuleDescriptor["channel"];
   scripts: WikiScriptMask;
+  producerFamilies: readonly WikiProducerFamily[];
 }>;
+
+function comparableFamily(producer: string, families: readonly WikiProducerFamily[]): boolean {
+  const family = wikiProducerFamily(producer);
+  return family === null || families.includes(family);
+}
 
 const NO_AGING: readonly WikiAgingScope[] = Object.freeze([]);
 
@@ -318,5 +339,6 @@ function agingScopes(tick: WikiLedgerTick): readonly WikiAgingScope[] {
     locale: opportunity.locale,
     channel: opportunity.channel,
     scripts: wikiScriptMaskFromClasses(opportunity.scripts),
+    producerFamilies: opportunity.producerFamilies ?? [],
   })));
 }

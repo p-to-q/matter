@@ -1,9 +1,9 @@
 /**
- * At most one picture in flight for the person. The server admits three per
- * window and two concurrent per instance, but a person is one, and a second
- * generation is a second charge. The slot is taken in this tab synchronously,
- * and the same person's other tabs are excluded by a Web Lock where the
- * browser has one.
+ * At most one picture in flight in this tab. The server admits three per window
+ * and two concurrent per instance, but a second generation is a second charge,
+ * so the slot is extended across same-origin tabs when a Web Lock can prove
+ * exclusive ownership. A browser without Web Locks retains only the in-tab
+ * guard; this is not distributed spend control.
  */
 export type PictureInFlightEntry = Readonly<{
   /** Idempotent, and frees the slot only for this entry, so a late release can never free a later holder. */
@@ -12,8 +12,9 @@ export type PictureInFlightEntry = Readonly<{
    * Takes the cross-tab lock for this entry. `true` means nothing more is
    * needed: either this entry holds the lock, or the browser has no Web Locks
    * and the in-tab slot is all there is. A promise settles `true` when the lock
-   * is held and `false` when another tab holds it, or when this entry was
-   * released before the lock was granted.
+   * is held and `false` when another tab holds it, when this entry was released
+   * before the lock was granted, or when a present lock manager cannot prove
+   * acquisition.
    */
   shareAcrossTabs(): true | Promise<boolean>;
 }>;
@@ -80,11 +81,11 @@ export function createPictureInFlightGate(
             };
             try {
               manager.request(PICTURE_IN_FLIGHT_LOCK, { ifAvailable: true }, granted)
-                // A browser that cannot answer the lock question leaves the
-                // in-tab slot as the whole protection, as without Web Locks.
-                .catch(() => resolve(true));
+                // Once Web Locks exists, failure to answer is not proof that
+                // this entry owns the cross-tab slot. Paid work fails closed.
+                .catch(() => resolve(false));
             } catch {
-              resolve(true);
+              resolve(false);
             }
           });
           return sharing;

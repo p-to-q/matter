@@ -3,10 +3,9 @@ import { readBoundedJsonResponse } from "./bounded-json-response";
 import { createRequestDeadline, type RequestDeadline } from "./request-deadline";
 
 /**
- * The picture control renders only on `available`. Everything else, and the
- * time before any answer, is `unavailable`: the server's `fixture` and
- * `user-configurable` states are deliberately not a reason to offer a paid
- * control. This is the server surface's word; the bytes behind a pointer have
+ * The picture driver may arm only on `available`. Everything else, and the
+ * time before any answer, is `unavailable`: a visible entry is not permission
+ * to offer a paid action. This is the server surface's word; the bytes behind a pointer have
  * their own, `ImageAvailability` in `persistence/image-availability.ts`.
  */
 export type ImageSurfaceAvailability = "available" | "unavailable";

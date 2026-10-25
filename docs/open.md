@@ -22,6 +22,8 @@ cold-load receipt.
 These candidates share one direction but are not one project. Their research
 order and promotion gates are in
 [`handoff-post-preview-direction.md`](handoff-post-preview-direction.md).
+Implemented baselines below describe the integration candidate, not Production.
+The active plan owns remaining work; this list is not a second dispatch queue.
 
 ### Coherent material projection and context receipt
 
@@ -33,10 +35,12 @@ Why it is wanted: current Archive, index Copy, material turns, and Inquiry each
 project the same tree differently. Plain copying loses relations, while making
 every renderer or prompt infer them independently risks drift and hidden scope.
 
-Promotion requires: deciding the receipt's human and machine purpose; resolving
-the stored Inquiry-record migration for `selection`, `lineage`, and
-`working-tree`; an explicit clipping and privacy model; and proof that the
-projection neither widens an address nor becomes a second document model.
+Baseline: pure projection, three address meanings, structured Copy and Receipt
+v2 are implemented; strict v1 verification remains. Shared adverse fixtures and
+focused v2 escape/order/size/delivery proofs exist. Remaining: final-source
+integration and the full Archive ordering/timezone matrix. Existing Inquiry vocabulary
+does not need a storage migration, and a small evaluation did not justify new
+wire parent fields; reopen for a concrete failure rather than a naming change.
 Archive remains the exact recovery format. Ordinary Copy carries a selection's
 own nesting as an indented plain outline (and a nested list for rich editors)
 but never ids, digests or headers; the strict receipt stays a separate act in
@@ -51,11 +55,13 @@ Why it is wanted: the relationship already governs focus and model context, but
 the index and canvas do not yet explain consistently which path is active and
 why a result belongs there.
 
-Promotion requires: a state table separating navigation, lasso selection,
-material-operation basis, and read-only Inquiry; a decision on when ancestors
-and connectors appear and disappear; accessible semantics that do not mark
-ancestors as selected; and proof that connector geometry remains transient view
-state rather than authored coordinates or permanent mind-map chrome.
+Baseline: index ancestry and a transient canvas trail are implemented, with a
+state table and epoch checks. Remaining: owner-reviewed visual redesign of the
+trail, using actual adjacent parent-child links, lighter legible ink and the
+sidebar's symbol family. The design-only
+[`material connections proposal`](reference/material-connections-design.md)
+defines quiet/reveal/dismiss behavior and distinguishes hierarchy from future
+manual associations. Implementation tests do not accept the visual design.
 
 ### Native editing-rail vocabulary
 
@@ -67,10 +73,10 @@ while selected Voice already owns Point and Talk. Treating a template as a
 permanent editing primitive makes the rail describe the preview rather than the
 material language.
 
-Promotion requires: an explicit Preview/demo composition boundary that preserves
-the existing seeded journey and tests; a decision on whether the main product
-needs a human-authored child-creation operation; a full rail inventory; and
-evidence that removal does not hide the only visible way to create structure.
+Baseline: Under admits a human-spoken child; Branch is confined to the explicit
+Preview flag. Remaining: real-use discovery and interaction review, and updating
+the independent film capture before it is used as evidence of the main product.
+Further native editing operations still require their own product decision.
 
 ### Local and private intelligence runtime
 
@@ -96,11 +102,11 @@ clarity of address, ownership and recovery as text material.
 Why it is wanted: generative media can make more kinds of thought visible, but
 an API result or decorative attachment is not yet material.
 
-Promotion requires: source address and direction; content identity and hash;
-original and derivative ownership; preview, acceptance and one perceivable
-commit; exact undo and redo; persistence, quota and garbage collection; Archive
-round-trip; deletion, accessibility, model-context and privacy rules. No Image
-control appears before that lifecycle closes.
+Baseline: the picture lifecycle is implemented in the candidate, including
+preview/Keep, pointer identity, bytes, Undo, persistence, Archive and missing
+states. Production remains closed. Opening it still requires spend and edge
+controls, real-relay evidence, unused-byte compaction, native copy review and a
+database v7 recovery decision. Other media require their own native lifecycle.
 
 ### Replicated computation and sync
 
@@ -225,12 +231,18 @@ breaks the thought.
 
 ### Cross-branch links
 
-Deferred from protocol `0.2`. See [`material.md`](material.md).
+Deferred from protocol `0.2`. See [`material.md`](material.md). The owner asked
+on 2026-10-16 to design manually authored dashed links, including distant
+passages, without implementing them yet. The
+[`design proposal`](reference/material-connections-design.md) recommends durable
+associations in the same document, not second parents or canvas-only decoration.
+That meaning still needs confirmation before build.
 
-Promotion requires: a rule for whether a linked node enters the lineage window.
-If it does, the context boundary stops being the path and the product contract
-needs rewriting. If it does not, the link is purely visual — which may be exactly
-right.
+Promotion requires: explicit association/reparent semantics; pointer/touch
+reveal, connect and cancel; bounded curve routing; tree-engine edits and exact
+Undo; versioned persistence/Archive/older-reader behavior; and real-page review.
+The proposed context rule is no automatic traversal or scope expansion. A
+durable association can matter to the person without becoming AI authority.
 
 ### Multiple roots per session
 

@@ -1,4 +1,5 @@
 import packageMetadata from "../../../package.json";
+import { MATTER_BUILD_ID } from "../config/build-identity";
 import { DEFAULT_MATTER_BASE_PATH, normalizeMatterBasePath } from "../config/base-path";
 import { PROTOCOL_VERSION } from "../tree/model";
 import { imageSurfaceConfigured, imageSurfaceMode } from "./image-surface";
@@ -15,6 +16,7 @@ export type MatterHealthSurface =
 export type MatterHealth = Readonly<{
   protocolVersion: typeof PROTOCOL_VERSION;
   appVersion: string;
+  buildId: string | null;
   basePath: string;
   status: "ok";
   surfaces: Readonly<{
@@ -62,6 +64,7 @@ export function healthSnapshot(): MatterHealth {
   return Object.freeze({
     protocolVersion: PROTOCOL_VERSION,
     appVersion: packageMetadata.version,
+    buildId: MATTER_BUILD_ID,
     basePath: configuredBasePath(),
     status: "ok",
     surfaces: Object.freeze({

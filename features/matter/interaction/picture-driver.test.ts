@@ -708,10 +708,12 @@ describe("picture driver", () => {
 
     it("drops a Keep in progress without reporting on it", async () => {
       let release!: () => void;
+      let completedWrites = 0;
       const h = createHarness();
       await h.toArrived();
       h.putImageBlob.mockImplementationOnce(async () => {
         await new Promise<void>((resolve) => { release = resolve; });
+        completedWrites += 1;
         return { ok: true, value: "written" } as const;
       });
       const keeping = h.driver.accept();
@@ -721,6 +723,11 @@ describe("picture driver", () => {
       release();
       await keeping;
       expect(h.states).toHaveLength(announced);
+      expect(completedWrites).toBe(1);
+      expect(h.putImageBlob).toHaveBeenCalledOnce();
+      expect(h.commit).not.toHaveBeenCalled();
+      expect(h.nodes.get(NODE)?.image).toBeUndefined();
+      expect(h.cache.snapshot().size).toBe(0);
     });
   });
 
@@ -941,6 +948,31 @@ describe("picture driver", () => {
       // The first tab's draw is untouched by the refusal.
       expect(first.driver.state.phase).toBe("drawing");
       expect(tabs.held.size).toBe(1);
+    });
+
+    it.each([
+      ["throws", (): PictureLockManager => ({
+        request: () => { throw new DOMException("denied", "SecurityError"); },
+      })],
+      ["rejects", (): PictureLockManager => ({
+        request: () => Promise.reject(new DOMException("denied", "SecurityError")),
+      })],
+    ] as const)("sends nothing when the present lock manager %s", async (_label, manager) => {
+      const h = createHarness({ locks: manager() });
+      h.driver.arm();
+      h.driver.confirm();
+      await flush();
+
+      expect(requestMock).not.toHaveBeenCalled();
+      expect(h.pending).toHaveLength(0);
+      expect(h.driver.state).toEqual({
+        phase: "failed-retryable",
+        reason: "another-picture-in-flight",
+        priorAttemptMayHaveBeenBilled: false,
+      });
+      expect(h.gate.heldBy()).toBeNull();
+      expect(h.treeListeners.size).toBe(0);
+      expect(h.exitListeners.size).toBe(0);
     });
 
     it("lets a later tab draw once the first one's picture has arrived", async () => {
@@ -1230,6 +1262,37 @@ describe("picture driver", () => {
       await h.driver.accept();
       expect(h.driver.state.phase).toBe("stale");
       expect(h.cache.snapshot().size).toBe(0);
+    });
+
+    it.each([
+      ["document epoch", (h: ReturnType<typeof createHarness>) => h.setEpoch(2)],
+      ["text without a timestamp change", (h: ReturnType<typeof createHarness>) => h.edit(NODE, { text: "changed while storing" })],
+      ["timestamp", (h: ReturnType<typeof createHarness>) => h.edit(NODE, { updatedAt: T1 })],
+      ["image", (h: ReturnType<typeof createHarness>) => h.edit(NODE, { image: picture(7).pointer })],
+      ["removal", (h: ReturnType<typeof createHarness>) => { h.nodes.delete(NODE); h.notifyTree(); }],
+    ] as const)("refuses the actual commit after a delayed write loses its %s", async (_label, invalidate) => {
+      let release!: () => void;
+      let completedWrites = 0;
+      const h = createHarness();
+      await h.toArrived();
+      h.putImageBlob.mockImplementationOnce(async () => {
+        await new Promise<void>((resolve) => { release = resolve; });
+        completedWrites += 1;
+        return { ok: true, value: "written" } as const;
+      });
+      const keeping = h.driver.accept();
+      await flush();
+
+      invalidate(h);
+      release();
+      await keeping;
+
+      expect(completedWrites).toBe(1);
+      expect(h.putImageBlob).toHaveBeenCalledOnce();
+      expect(h.commit).not.toHaveBeenCalled();
+      expect(h.cache.snapshot().size).toBe(0);
+      expect(h.driver.state.phase).toBe("stale");
+      expect(requestMock).toHaveBeenCalledOnce();
     });
 
     it("notices after a failed Keep that the passage moved meanwhile", async () => {

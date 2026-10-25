@@ -32,7 +32,7 @@ export type PictureStore = Readonly<{
   restoreBlobs: (
     blobs: ReadonlyMap<string, Uint8Array>,
     tree: ThoughtTree,
-  ) => Promise<RestoredPictures>;
+  ) => Promise<RestoredPictures | null>;
   close: () => void;
 }>;
 
@@ -55,3 +55,5 @@ export function createPictureStore(): PictureStore {
     close: () => handle.close(),
   });
 }
+
+Object.defineProperty(createPictureStore, "matterCapability", { value: "matter-capability:picture-store" });

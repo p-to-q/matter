@@ -35,6 +35,7 @@ export type MaterialFilesCopy = Readonly<{
   archiveReplacing: string;
   archiveRepairing: string;
   archiveNoteDefault: string;
+  archiveDeploymentChanged: string;
   archiveNoteCorrupt: string;
   archiveNoteConflict: string;
   archiveNoteStorageFull: string;
@@ -140,7 +141,7 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   archiveReceiptDownload: "Receipt (.md)",
   archiveReceiptCopy: "Copy receipt",
   archiveReceiptCopied: "Receipt copied",
-  archiveReceiptDescription: "Readable outline with each passage’s parent and order — not a backup.",
+  archiveReceiptDescription: "Readable outline of the current context for people and AI — no pictures, not a backup.",
   archiveRepairLocalStorage: "Repair local storage",
   archiveReloadStoredMaterial: "Reload stored material",
   archiveRetrySaving: "Retry saving",
@@ -150,6 +151,7 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   archiveReplacing: "Replacing material…",
   archiveRepairing: "Repairing local storage…",
   archiveNoteDefault: "Keep a portable copy, or bring one back into this material.",
+  archiveDeploymentChanged: "Matter changed. Reload is available once this material is saved and nothing you started is in progress.",
   archiveNoteCorrupt: "Stored material is damaged. Export a recovery copy before Matter atomically replaces the local row.",
   archiveNoteConflict: "Another tab saved a newer copy. Reload the stored material here, or export the current copy first.",
   archiveNoteStorageFull: "Local storage is full. Export a copy before freeing browser storage, then retry saving.",
@@ -256,7 +258,7 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveReceiptDownload: "回执 (.md)",
   archiveReceiptCopy: "复制回执",
   archiveReceiptCopied: "已复制回执",
-  archiveReceiptDescription: "可读的大纲，含每段的上级与顺序，不是备份。",
+  archiveReceiptDescription: "当前语境的大纲，供人和 AI 阅读；不含图片，不是备份。",
   archiveRepairLocalStorage: "修复本地存储",
   archiveReloadStoredMaterial: "重新载入已存材料",
   archiveRetrySaving: "重新保存",
@@ -266,6 +268,7 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveReplacing: "正在替换材料…",
   archiveRepairing: "正在修复本地存储…",
   archiveNoteDefault: "保留一份可携带的副本，或把一份副本带回这份材料。",
+  archiveDeploymentChanged: "Matter 已变化。材料保存完成、进行中的操作结束后，可以重新载入。",
   archiveNoteCorrupt: "已存材料已损坏。请先导出恢复副本，再让 Matter 原子替换本地记录。",
   archiveNoteConflict: "另一个标签页保存了更新的副本。可在这里重新载入已存材料，或先导出当前副本。",
   archiveNoteStorageFull: "本地存储已满。请先导出副本、释放浏览器存储后，再重试保存。",
@@ -367,7 +370,7 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveReceiptDownload: "回執 (.md)",
   archiveReceiptCopy: "複製回執",
   archiveReceiptCopied: "已複製回執",
-  archiveReceiptDescription: "可讀的大綱，含每段的上層與順序，不是備份。",
+  archiveReceiptDescription: "目前語境的大綱，供人與 AI 閱讀；不含圖片，不是備份。",
   archiveRepairLocalStorage: "修復本機儲存",
   archiveReloadStoredMaterial: "重新載入已存材料",
   archiveRetrySaving: "重新儲存",
@@ -377,6 +380,7 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveReplacing: "正在替換材料…",
   archiveRepairing: "正在修復本機儲存…",
   archiveNoteDefault: "保留一份可攜副本，或把一份副本帶回這份材料。",
+  archiveDeploymentChanged: "Matter 已變更。素材儲存完成、進行中的操作結束後，即可重新載入。",
   archiveNoteCorrupt: "已存材料已損壞。請先匯出復原副本，再讓 Matter 原子替換本機記錄。",
   archiveNoteConflict: "另一個分頁儲存了較新的副本。可在這裡重新載入已存材料，或先匯出目前副本。",
   archiveNoteStorageFull: "本機儲存已滿。請先匯出副本、釋放瀏覽器儲存後，再重試儲存。",
@@ -478,7 +482,7 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   archiveReceiptDownload: "レシート (.md)",
   archiveReceiptCopy: "レシートをコピー",
   archiveReceiptCopied: "レシートをコピーしました",
-  archiveReceiptDescription: "各段落の親と順序を含む読みやすいアウトライン。バックアップではありません。",
+  archiveReceiptDescription: "現在の文脈を人とAIが読むためのアウトライン。画像は含まず、バックアップではありません。",
   archiveRepairLocalStorage: "端末内ストレージを修復",
   archiveReloadStoredMaterial: "保存済みの素材を再読み込み",
   archiveRetrySaving: "保存を再試行",
@@ -488,6 +492,7 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   archiveReplacing: "素材を置き換えています…",
   archiveRepairing: "端末内ストレージを修復しています…",
   archiveNoteDefault: "持ち運べるコピーを保管するか、この素材にコピーを戻せます。",
+  archiveDeploymentChanged: "Matter が変わりました。素材の保存と進行中の操作が終わると再読み込みできます。",
   archiveNoteCorrupt: "保存済みの素材が壊れています。Matter が端末の記録を原子的に置き換える前に、復旧用コピーを書き出してください。",
   archiveNoteConflict: "別のタブがより新しいコピーを保存しました。ここで保存済みの素材を再読み込みするか、先に現在のコピーを書き出してください。",
   archiveNoteStorageFull: "端末内ストレージがいっぱいです。ブラウザの空き容量を作る前にコピーを書き出し、その後保存を再試行してください。",
@@ -589,7 +594,7 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   archiveReceiptDownload: "Beleg (.md)",
   archiveReceiptCopy: "Beleg kopieren",
   archiveReceiptCopied: "Beleg kopiert",
-  archiveReceiptDescription: "Lesbare Gliederung mit Elternteil und Reihenfolge jeder Passage — keine Sicherung.",
+  archiveReceiptDescription: "Lesbare Gliederung des aktuellen Kontexts für Mensch und KI — ohne Bilder, keine Sicherung.",
   archiveRepairLocalStorage: "Lokalen Speicher reparieren",
   archiveReloadStoredMaterial: "Gespeichertes Material neu laden",
   archiveRetrySaving: "Speichern erneut versuchen",
@@ -599,6 +604,7 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   archiveReplacing: "Material wird ersetzt…",
   archiveRepairing: "Lokaler Speicher wird repariert…",
   archiveNoteDefault: "Bewahren Sie eine portable Kopie auf oder holen Sie eine Kopie in dieses Material zurück.",
+  archiveDeploymentChanged: "Matter hat sich geändert. Neu laden ist möglich, sobald das Material gespeichert und alle begonnenen Vorgänge beendet sind.",
   archiveNoteCorrupt: "Gespeichertes Material ist beschädigt. Exportieren Sie eine Wiederherstellungskopie, bevor Matter den lokalen Eintrag atomar ersetzt.",
   archiveNoteConflict: "Ein anderer Tab hat eine neuere Kopie gespeichert. Laden Sie hier das gespeicherte Material neu oder exportieren Sie zuerst die aktuelle Kopie.",
   archiveNoteStorageFull: "Der lokale Speicher ist voll. Exportieren Sie eine Kopie, geben Sie Browser-Speicher frei und versuchen Sie das Speichern dann erneut.",
@@ -709,3 +715,5 @@ const BY_LOCALE: Readonly<Record<MatterLocale, MaterialFilesCopy>> = Object.free
 export function materialFilesCopy(locale: MatterLocale): MaterialFilesCopy {
   return BY_LOCALE[locale] ?? SIMPLIFIED_CHINESE;
 }
+
+Object.defineProperty(materialFilesCopy, "matterCapability", { value: "matter-capability:files-copy" });

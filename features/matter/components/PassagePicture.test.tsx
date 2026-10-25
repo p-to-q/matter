@@ -4,7 +4,12 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { MATTER_LOCALES } from "../config/locales";
 import type { ImagePointer } from "../tree/image-pointer";
-import { PictureFrame, pictureView, type PictureView } from "./PassagePicture";
+import { BROWSER_OBJECT_URLS, PictureFrame, pictureView, type PictureView } from "./PassagePicture";
+import {
+  BROWSER_OBJECT_URLS as sharedObjectUrls,
+  PictureFrame as SharedPictureFrame,
+  pictureView as sharedPictureView,
+} from "./PictureFrame";
 import { pictureBoxStyle, pictureLayoutKey } from "./passage-picture-box";
 import { pictureCopy } from "./picture-copy";
 
@@ -18,6 +23,13 @@ const POINTER: ImagePointer = {
 
 const render = (view: PictureView, pointer = POINTER, locale: (typeof MATTER_LOCALES)[number] = "en-US") =>
   renderToStaticMarkup(createElement(PictureFrame, { locale, pointer, view }));
+
+it("keeps the existing exports bound to the same shared render-edge owners", () => {
+  expect(BROWSER_OBJECT_URLS).toBe(sharedObjectUrls);
+  expect(PictureFrame).toBe(SharedPictureFrame);
+  expect(pictureView).toBe(sharedPictureView);
+  expect(Object.isFrozen(BROWSER_OBJECT_URLS)).toBe(true);
+});
 
 describe("picture copy", () => {
   it("names every state in every locale, in that locale's own words", () => {

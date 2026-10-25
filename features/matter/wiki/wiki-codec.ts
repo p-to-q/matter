@@ -11,6 +11,8 @@ import {
   isWikiDescriptor,
   isWikiForm,
   isWikiLexemeScope,
+  isWikiLexeme,
+  isWikiRuleMaturity,
   isWikiOccurrenceId,
   isWikiRevertStrike,
   isWikiTermEvidenceAggregate,
@@ -25,10 +27,12 @@ import {
   MAX_WIKI_LEXEMES,
   MAX_WIKI_LEXEME_TOMBSTONES,
   MAX_WIKI_REVERT_STRIKES,
+  MAX_WIKI_RULE_MATURITY,
   MAX_WIKI_SETTLED_OCCURRENCES,
   MAX_WIKI_STATE_BYTES,
   MAX_WIKI_TOMBSTONES,
   MAX_WIKI_V6_STATE_BYTES,
+  MAX_WIKI_V7_STATE_BYTES,
   WIKI_FITTING_VERSION,
   WIKI_RECENT_OBSERVATION_WINDOW,
   WIKI_SCHEMA_VERSION,
@@ -55,6 +59,8 @@ import {
   isWikiTermEvidenceProducer,
   reconcileWikiTermEvidence,
 } from "./wiki-learning-policy";
+import { DEFAULT_WIKI_PREFERENCES, isWikiPreferences } from "./wiki-preferences";
+import { EMPTY_WIKI_OUTCOME_COUNTERS, isWikiOutcomeCounters } from "./wiki-diagnostics";
 
 const LEGACY_RELATION_SCHEMA_VERSION = 2;
 const LEGACY_LEXEME_SCHEMA_VERSION = 3;
@@ -79,8 +85,11 @@ const CURRENT_STATE_KEYS = Object.freeze([
   "lexemeTombstones",
   "revertStrikes",
   "settledOccurrences",
+  "ruleMaturity", "outcomeCounters", "preferences",
 ]);
-const SPLIT_LEDGER_STATE_KEYS = Object.freeze(CURRENT_STATE_KEYS.filter((key) =>
+const V7_STATE_KEYS = Object.freeze(CURRENT_STATE_KEYS.filter((key) =>
+  key !== "ruleMaturity" && key !== "outcomeCounters" && key !== "preferences"));
+const SPLIT_LEDGER_STATE_KEYS = Object.freeze(V7_STATE_KEYS.filter((key) =>
   key !== "revertStrikes" && key !== "settledOccurrences"));
 
 export type WikiStateParse =
@@ -91,6 +100,45 @@ export type WikiEventParse =
   | Readonly<{ ok: true; event: WikiEvent }>
   | Readonly<{ ok: false; message: string }>;
 
+export type WikiV7State = Omit<WikiState, "schemaVersion" | "lexemes" |
+  "ruleMaturity" | "outcomeCounters" | "preferences"> & Readonly<{
+    schemaVersion: 7;
+    lexemes: readonly Readonly<Omit<WikiLexeme, "provenance" | "importBatchId"> & {
+      provenance: "human-confirmed" | "aggregate-evidence";
+    }>[];
+  }>;
+
+/** Only the lossless V7 subset may be written by read-time initialization. */
+export function encodeWikiStateAsV7(state: WikiState):
+  Readonly<{ ok: true; state: WikiV7State }> | Readonly<{ ok: false }> {
+  if (!validateWikiState(state).ok || state.ruleMaturity.length !== 0 ||
+      Object.values(state.outcomeCounters).some((count) => count !== 0) ||
+      state.preferences.nearSound.length !== 0 ||
+      state.lexemes.some((entry) => entry.provenance === "imported" || entry.provenance === "learned")) {
+    return Object.freeze({ ok: false });
+  }
+  const encoded: WikiV7State = Object.freeze({ schemaVersion: 7,
+    scoringVersion: state.scoringVersion, fittingVersion: state.fittingVersion,
+    revision: state.revision, nextLexemeId: state.nextLexemeId,
+    automaticLearningSaturated: state.automaticLearningSaturated,
+    termEvidence: state.termEvidence, aliasEvidence: state.aliasEvidence,
+    authorities: state.authorities, aliasTombstones: state.aliasTombstones,
+    lexemeTombstones: state.lexemeTombstones, revertStrikes: state.revertStrikes,
+    settledOccurrences: state.settledOccurrences,
+    lexemes: Object.freeze(state.lexemes.map((entry) => Object.freeze({
+      id: entry.id, locale: entry.locale, canonical: entry.canonical, scope: entry.scope,
+      provenance: entry.provenance === "manual" ? "human-confirmed" as const : "aggregate-evidence" as const,
+      confirmedAtRevision: entry.confirmedAtRevision,
+    }))),
+  });
+  const roundTrip = parseWikiState(encoded);
+  const original = parseWikiState(state);
+  if (!roundTrip.ok || !original.ok || JSON.stringify(roundTrip.state) !== JSON.stringify(original.state)) {
+    return Object.freeze({ ok: false });
+  }
+  return Object.freeze({ ok: true, state: encoded });
+}
+
 /**
  * Raw persisted bound for the schema that wrote a value, checked before
  * migration. Each bound is the previous one plus that migration's proved
@@ -99,6 +147,7 @@ export type WikiEventParse =
 export function maximumRawWikiStateBytes(value: unknown): number {
   const schemaVersion = isPlainObject(value) ? value.schemaVersion : undefined;
   if (schemaVersion === WIKI_SCHEMA_VERSION) return MAX_WIKI_STATE_BYTES;
+  if (schemaVersion === 7) return MAX_WIKI_V7_STATE_BYTES;
   if (schemaVersion === LEGACY_WHOLE_UNIT_SCHEMA_VERSION) return MAX_WIKI_V6_STATE_BYTES;
   return MAX_LEGACY_WIKI_STATE_BYTES;
 }
@@ -112,7 +161,7 @@ export function wikiStateStorageBytes(value: unknown): number {
   }
 }
 
-/** Strictly parses V7 or deterministically migrates a valid V2-V6 state. */
+/** Strictly parses V8 or deterministically migrates a valid V2-V7 state. */
 export function parseWikiState(value: unknown): WikiStateParse {
   // In-process domain transitions already own one strictly validated, deeply
   // immutable value. Reusing that exact object avoids reparsing recovery-sized
@@ -140,8 +189,9 @@ export function parseWikiState(value: unknown): WikiStateParse {
   if (value.schemaVersion === LEGACY_WHOLE_UNIT_SCHEMA_VERSION) {
     return parseLegacyWholeUnitWikiState(value);
   }
-  if (value.schemaVersion !== WIKI_SCHEMA_VERSION ||
-      !hasExactKeys(value, CURRENT_STATE_KEYS)) {
+  const legacyV7 = value.schemaVersion === 7;
+  if ((!legacyV7 && value.schemaVersion !== WIKI_SCHEMA_VERSION) ||
+      !hasExactKeys(value, legacyV7 ? V7_STATE_KEYS : CURRENT_STATE_KEYS)) {
     return invalidState("The Wiki state fields are invalid.");
   }
   if (
@@ -152,7 +202,8 @@ export function parseWikiState(value: unknown): WikiStateParse {
     typeof value.automaticLearningSaturated !== "boolean"
   ) return invalidState("The Wiki state version or revision is invalid.");
 
-  const lexemes = parseArray(value.lexemes, MAX_WIKI_LEXEMES, parseLexeme);
+  const lexemes = parseArray(value.lexemes, MAX_WIKI_LEXEMES,
+    legacyV7 ? parseLegacyScopedLexeme : parseLexeme);
   const termEvidence = parseArray(
     value.termEvidence,
     MAX_WIKI_EVIDENCE_RECORDS,
@@ -172,10 +223,15 @@ export function parseWikiState(value: unknown): WikiStateParse {
     parseRevertStrike);
   const settledOccurrences = parseArray(value.settledOccurrences,
     MAX_WIKI_SETTLED_OCCURRENCES, (entry) => isWikiOccurrenceId(entry) ? entry : null);
+  const ruleMaturity = legacyV7 ? [] : parseArray(value.ruleMaturity,
+    MAX_WIKI_RULE_MATURITY, (entry) => isWikiRuleMaturity(entry) ? Object.freeze({ ...entry }) : null);
+  const outcomeCounters = legacyV7 ? EMPTY_WIKI_OUTCOME_COUNTERS : value.outcomeCounters;
+  const preferences = legacyV7 ? DEFAULT_WIKI_PREFERENCES : value.preferences;
   if (lexemes === null || termEvidence === null || aliasEvidence === null ||
       authorities === null ||
       aliasTombstones === null || lexemeTombstones === null ||
-      revertStrikes === null || settledOccurrences === null) {
+      revertStrikes === null || settledOccurrences === null || ruleMaturity === null ||
+      !isWikiOutcomeCounters(outcomeCounters) || !isWikiPreferences(preferences)) {
     return invalidState("A Wiki collection is invalid.");
   }
   return validateParsedState(freezeWikiState({
@@ -193,6 +249,7 @@ export function parseWikiState(value: unknown): WikiStateParse {
     lexemeTombstones,
     revertStrikes,
     settledOccurrences,
+    ruleMaturity, outcomeCounters, preferences,
   }));
 }
 
@@ -200,6 +257,13 @@ export function parseWikiState(value: unknown): WikiStateParse {
 export function parseWikiEvent(value: unknown): WikiEventParse {
   if (!isPlainObject(value) || typeof value.type !== "string") {
     return invalidEvent("The Wiki event is not an object.");
+  }
+  if (value.type === "set-near-sound") {
+    if (!hasExactKeys(value, ["type", "locale", "enabled"]) ||
+        typeof value.locale !== "string" || !isMatterLocale(value.locale) ||
+        typeof value.enabled !== "boolean") return invalidEvent("The Wiki preference is invalid.");
+    return Object.freeze({ ok: true, event: Object.freeze({ type: "set-near-sound",
+      locale: value.locale, enabled: value.enabled }) });
   }
   if (value.type === "create-lexeme") {
     if (!hasExactKeys(value, ["type", "locale", "canonical", "scope"]) ||
@@ -305,7 +369,7 @@ function parseLegacyWholeUnitWikiState(
       typeof value.automaticLearningSaturated !== "boolean") {
     return invalidState("The legacy whole-unit Wiki state is invalid.");
   }
-  const lexemes = parseArray(value.lexemes, MAX_WIKI_LEXEMES, parseLexeme);
+  const lexemes = parseArray(value.lexemes, MAX_WIKI_LEXEMES, parseLegacyScopedLexeme);
   const termEvidence = parseArray(
     value.termEvidence,
     MAX_WIKI_EVIDENCE_RECORDS,
@@ -346,6 +410,8 @@ function parseLegacyWholeUnitWikiState(
     lexemeTombstones,
     revertStrikes: Object.freeze([]),
     settledOccurrences: Object.freeze([]),
+    ruleMaturity: [], outcomeCounters: EMPTY_WIKI_OUTCOME_COUNTERS,
+    preferences: DEFAULT_WIKI_PREFERENCES,
   }));
 }
 
@@ -359,7 +425,7 @@ function parseLegacySplitLedgerWikiState(
       typeof value.automaticLearningSaturated !== "boolean") {
     return invalidState("The legacy split-ledger Wiki state is invalid.");
   }
-  const lexemes = parseArray(value.lexemes, MAX_WIKI_LEXEMES, parseLexeme);
+  const lexemes = parseArray(value.lexemes, MAX_WIKI_LEXEMES, parseLegacyScopedLexeme);
   const legacyTermEvidence = parseArray(
     value.termEvidence,
     MAX_WIKI_EVIDENCE_RECORDS,
@@ -404,6 +470,8 @@ function parseLegacySplitLedgerWikiState(
     lexemeTombstones,
     revertStrikes: Object.freeze([]),
     settledOccurrences: Object.freeze([]),
+    ruleMaturity: [], outcomeCounters: EMPTY_WIKI_OUTCOME_COUNTERS,
+    preferences: DEFAULT_WIKI_PREFERENCES,
   }));
 }
 
@@ -449,7 +517,9 @@ function parseLegacyWikiState(value: Record<string, unknown>): WikiStateParse {
       id,
       ...identity,
       scope: "both" as const,
-      provenance: confirmedAtRevision === null ? "aggregate-evidence" as const : "human-confirmed" as const,
+      provenance: confirmedAtRevision === null
+        ? isWikiStarterLexemeIdentity(identity) ? "starter" as const : "collected" as const
+        : "manual" as const,
       confirmedAtRevision,
     });
   });
@@ -480,6 +550,8 @@ function parseLegacyWikiState(value: Record<string, unknown>): WikiStateParse {
     lexemeTombstones: Object.freeze([]),
     revertStrikes: Object.freeze([]),
     settledOccurrences: Object.freeze([]),
+    ruleMaturity: [], outcomeCounters: EMPTY_WIKI_OUTCOME_COUNTERS,
+    preferences: DEFAULT_WIKI_PREFERENCES,
   }));
 }
 
@@ -533,6 +605,8 @@ function parseLegacyLexemeWikiState(value: Record<string, unknown>): WikiStatePa
     lexemeTombstones,
     revertStrikes: Object.freeze([]),
     settledOccurrences: Object.freeze([]),
+    ruleMaturity: [], outcomeCounters: EMPTY_WIKI_OUTCOME_COUNTERS,
+    preferences: DEFAULT_WIKI_PREFERENCES,
   }));
 }
 
@@ -559,7 +633,7 @@ function parseLegacyScopedLexemeWikiState(
       typeof value.automaticLearningSaturated !== "boolean") {
     return invalidState("The legacy Wiki scoped-lexeme state is invalid.");
   }
-  const lexemes = parseArray(value.lexemes, MAX_WIKI_LEXEMES, parseLexeme);
+  const lexemes = parseArray(value.lexemes, MAX_WIKI_LEXEMES, parseLegacyScopedLexeme);
   const evidence = parseArray(
     value.evidence,
     MAX_WIKI_EVIDENCE_RECORDS,
@@ -594,10 +668,14 @@ function parseLegacyScopedLexemeWikiState(
     lexemeTombstones,
     revertStrikes: Object.freeze([]),
     settledOccurrences: Object.freeze([]),
+    ruleMaturity: [], outcomeCounters: EMPTY_WIKI_OUTCOME_COUNTERS,
+    preferences: DEFAULT_WIKI_PREFERENCES,
   }));
 }
 
-type LegacyLexeme = Omit<WikiLexeme, "scope">;
+type LegacyLexeme = Omit<WikiLexeme, "scope" | "provenance"> & Readonly<{
+  provenance: "manual" | "collected" | "starter";
+}>;
 
 function parseLegacyLexeme(value: unknown): LegacyLexeme | null {
   if (!isPlainObject(value) || !hasExactKeys(value, [
@@ -613,12 +691,13 @@ function parseLegacyLexeme(value: unknown): LegacyLexeme | null {
     id: value.id,
     locale: value.locale,
     canonical: value.canonical,
-    provenance: value.provenance,
+    provenance: value.provenance === "human-confirmed" ? "manual"
+      : isWikiStarterLexemeIdentity({ locale: value.locale, canonical: value.canonical }) ? "starter" : "collected",
     confirmedAtRevision: value.confirmedAtRevision,
   }) as LegacyLexeme;
 }
 
-function parseLexeme(value: unknown): WikiLexeme | null {
+function parseLegacyScopedLexeme(value: unknown): WikiLexeme | null {
   if (!isPlainObject(value) || !hasExactKeys(value, [
     "id", "locale", "canonical", "scope", "provenance", "confirmedAtRevision",
   ]) || !isLexemeId(value.id) || typeof value.locale !== "string" ||
@@ -634,9 +713,14 @@ function parseLexeme(value: unknown): WikiLexeme | null {
     locale: value.locale,
     canonical: value.canonical,
     scope: value.scope,
-    provenance: value.provenance,
+    provenance: value.provenance === "human-confirmed" ? "manual"
+      : isWikiStarterLexemeIdentity({ locale: value.locale, canonical: value.canonical }) ? "starter" : "collected",
     confirmedAtRevision: value.confirmedAtRevision,
   }) as WikiLexeme;
+}
+
+function parseLexeme(value: unknown): WikiLexeme | null {
+  return isWikiLexeme(value) ? Object.freeze({ ...value }) : null;
 }
 
 function parseTermEvidence(value: unknown): WikiTermEvidenceAggregate | null {
@@ -916,7 +1000,7 @@ function splitLegacyEvidence(
   }
   const identityById = new Map(lexemes
     .filter((lexeme) =>
-      lexeme.provenance === "aggregate-evidence" &&
+      lexeme.provenance === "collected" &&
       !isWikiStarterLexemeIdentity(lexeme))
     .map((lexeme) => [lexeme.id, {
       locale: lexeme.locale,

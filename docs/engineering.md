@@ -218,6 +218,13 @@ wrapper also restores generated references after every exit path, preserves the
 test process's failure when cleanup also fails, and treats a file that was never
 generated as normal cleanup.
 
+A simultaneous owner review may use only the reserved `.next-review` directory
+with `MATTER_REVIEW_RUNNER=owner-review`; production ignores both development
+directory overrides. Keep that server out of the build's `.next` and the E2E
+runner's `.next-e2e` so a review does not borrow or invalidate their manifests.
+The corresponding TypeScript generated-directory includes are build metadata,
+not material or another application configuration surface.
+
 Run the narrowest test first. Changes to commands prove forward result, exact
 inverse, invalid atomic rejection, and revision behavior. Protocol changes prove
 valid, malformed, bounded, and stale inputs. Interaction changes prove cancel,

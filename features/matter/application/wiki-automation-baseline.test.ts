@@ -52,7 +52,7 @@ describe("Wiki automation baseline", () => {
     expect(state.lexemes).toEqual([
       expect.objectContaining({
         canonical: "OpenAI",
-        provenance: "aggregate-evidence",
+        provenance: "collected",
       }),
     ]);
     const broad = Object.freeze({ ...distinctive, text: "We shape material" });

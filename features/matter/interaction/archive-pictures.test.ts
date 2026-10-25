@@ -131,6 +131,52 @@ describe("collectPictureBlobs", () => {
 });
 
 describe("restorePictureBlobs", () => {
+  it("refuses the entire session fallback batch without evicting the current document", async () => {
+    const [old, a, b] = ["a", "b", "c"].map((letter) => pictureOf(letter));
+    const cache = createPictureSessionCache({ maxEntries: 2, maxBytes: 8 });
+    cache.put(old!);
+    const before = cache.snapshot();
+    const result = await restorePictureBlobs(
+      new Map([[a!.pointer.contentHash, a!.bytes], [b!.pointer.contentHash, b!.bytes]]),
+      treeWith(a!.pointer, b!.pointer),
+      { cache, repository: repositoryOf({ putImageBlob: async () => refused("STORAGE_FULL") }) },
+    );
+    expect(result).toBeNull();
+    expect(cache.snapshot()).toEqual(before);
+    expect(await collectPictureBlobs(treeWith(old!.pointer), {
+      cache, repository: repositoryOf({}),
+    })).toEqual(before);
+  });
+
+  it("accepts durable imported bytes at a full cache without evicting sole-copy pictures", async () => {
+    const old = pictureOf("a");
+    const incoming = pictureOf("b");
+    const cache = createPictureSessionCache({ maxEntries: 1, maxBytes: 4 });
+    cache.put(old);
+    const before = cache.snapshot();
+    expect(await restorePictureBlobs(new Map([[incoming.pointer.contentHash, incoming.bytes]]),
+      treeWith(incoming.pointer), { cache, repository: repositoryOf({}) }))
+      .toEqual({ saved: 1, keptInSession: 0 });
+    expect(cache.snapshot()).toEqual(before);
+  });
+
+  it("rechecks capacity after an overlapping restore has retained its own session bytes", async () => {
+    const a = pictureOf("a");
+    const b = pictureOf("b");
+    const cache = createPictureSessionCache({ maxEntries: 1, maxBytes: 4 });
+    let release!: (value: ImageBlobResult<"written">) => void;
+    const first = restorePictureBlobs(new Map([[a.pointer.contentHash, a.bytes]]), treeWith(a.pointer), {
+      cache, repository: repositoryOf({ putImageBlob: () => new Promise((resolve) => { release = resolve; }) }),
+    });
+    expect(await restorePictureBlobs(new Map([[b.pointer.contentHash, b.bytes]]), treeWith(b.pointer), {
+      cache, repository: repositoryOf({ putImageBlob: async () => refused("STORAGE_FULL") }),
+    })).toEqual({ saved: 0, keptInSession: 1 });
+    release(refused("STORAGE_FULL"));
+    expect(await first).toBeNull();
+    expect(cache.get(b.pointer.contentHash)?.bytes).toEqual(b.bytes);
+    expect(cache.has(a.pointer.contentHash)).toBe(false);
+  });
+
   it("stores each imported blob under its pointer and seeds the cache for the first render", async () => {
     const a = pictureOf("a");
     const b = pictureOf("b", 8);

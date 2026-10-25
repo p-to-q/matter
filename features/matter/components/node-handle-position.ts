@@ -32,47 +32,24 @@ export type NodeHandleMetrics = Readonly<{
 }>;
 
 type MetricsInput = Readonly<{
-  /** Measured ink height of the material's first line. */
-  inkHeight: number;
   coarse: boolean;
 }>;
 
 /**
- * How far the glyphs may rest onto the first line at the corner placement.
- * The fog is translucent and the text stays exact, selectable and copyable
- * underneath, so a bounded descent reads as contact rather than occlusion.
- * It is a number, not an absence of one: every other placement stays clear.
+ * The corner action button boxes intentionally contact the first line by this
+ * many screen pixels. Decorative fog paints behind material; detached controls
+ * and every chrome collision remain clear of their complete carrier.
  */
-export const CORNER_GLYPH_DESCENT = 6;
-
-/** Ink height of root material, the size the base metrics were drawn for. */
-const BASE_INK_HEIGHT = 26;
-/**
- * A fine pointer may address a smaller target than a finger. Both floors are
- * accessibility limits, not visual taste: never scale a control under them.
- * The coarse floor is 48 rather than the 44 minimum because the shipped browser
- * receipt already proves 48 for touch, and scaling must not walk that back.
- */
-const FINE_POINTER_FLOOR = 32;
-const COARSE_POINTER_FLOOR = 48;
+export const CORNER_ACTION_OVERLAP = 6;
 
 export function projectNodeHandleMetrics(input: MetricsInput): NodeHandleMetrics {
-  const ratio = Number.isFinite(input.inkHeight) && input.inkHeight > 0
-    ? input.inkHeight / BASE_INK_HEIGHT
-    : 1;
-  const scale = Math.min(1, Math.max(0.7, ratio));
-  const floor = input.coarse ? COARSE_POINTER_FLOOR : FINE_POINTER_FLOOR;
-  const button = Math.max(floor, Math.round((input.coarse ? 48 : 44) * scale));
-  // Once a finger target reaches its accessibility floor, its surrounding
-  // carrier must stay equally addressable too. In particular, a paint-only
-  // selection may not shrink this chrome by changing the inline line box that
-  // supplied the optical ink measurement.
-  const carrierScale = input.coarse ? 1 : scale;
+  // These are screen-space instruments, not material ink. Depth, camera zoom
+  // and paint-only selection must never change their addressable footprint.
   return Object.freeze({
-    button,
-    gap: Math.max(4, Math.round(6 * carrierScale)),
-    paddingX: Math.max(9, Math.round(12 * carrierScale)),
-    paddingY: Math.max(8, Math.round(11 * carrierScale)),
+    button: input.coarse ? 48 : 44,
+    gap: 6,
+    paddingX: 12,
+    paddingY: 11,
   });
 }
 
@@ -86,13 +63,13 @@ type Input = Readonly<{
 }>;
 
 /**
- * A local action may disappear when its material has no clear adjacent space.
- * Clamping an overlapping control onto text would turn a layout edge case into
- * an accidental material action.
+ * A local action may disappear when its material has no safe adjacent space.
+ * Clamping beyond the deliberate corner contact would turn a layout edge case
+ * into an accidental material action.
  *
- * The preferred position sets the field at the passage's upper-left corner,
- * where the fog and a bounded part of the glyphs rest on the first line. Every
- * fallback placement stays clear of material entirely.
+ * The preferred position keeps the passage's first-line horizontal anchor with
+ * bounded button-box contact. Every fallback stays clear of material entirely;
+ * the separate decorative fog always paints behind it.
  */
 export function projectNodeHandlePosition(input: Input): NodeHandlePosition | null {
   if (!Number.isInteger(input.toolCount) || input.toolCount < 1) return null;
@@ -109,9 +86,7 @@ export function projectNodeHandlePosition(input: Input): NodeHandlePosition | nu
   const maximumTop = guidanceTop - height;
   if (maximumLeft < minimumLeft || maximumTop < minimumTop) return null;
 
-  // The corner position sets the fog well onto the first line and lets the
-  // glyphs descend a bounded distance with it.
-  const cornerOverlap = paddingY + CORNER_GLYPH_DESCENT;
+  const cornerOverlap = paddingY + CORNER_ACTION_OVERLAP;
   const sideTop = clamp(input.textRect.top - 10, minimumTop, maximumTop);
   const cornerLeft = clamp(
     input.textRect.left - paddingX - Math.round(button * 0.62),
@@ -134,16 +109,15 @@ export function projectNodeHandlePosition(input: Input): NodeHandlePosition | nu
 
   for (const candidate of candidates) {
     const rect = rectangle(candidate.left, candidate.top, width, height);
-    // Material is tested against the field minus its authorised descent;
-    // chrome is tested against the whole field, because a control must never
-    // sit under the rail or the guidance line.
-    const glyphRect = rectangle(candidate.left, candidate.top, width, height - candidate.clearance);
+    // Only the corner may contact material. Chrome always tests the complete
+    // carrier, and every detached candidate has zero overlap allowance.
+    const materialClearRect = rectangle(candidate.left, candidate.top, width, height - candidate.clearance);
     if (
       candidate.left >= minimumLeft &&
       candidate.left <= maximumLeft &&
       candidate.top >= minimumTop &&
       candidate.top <= maximumTop &&
-      !intersects(input.textRect, glyphRect) &&
+      !intersects(input.textRect, materialClearRect) &&
       !intersectsNullable(input.railRect, rect) &&
       !intersectsNullable(input.guidanceRect, rect)
     ) {

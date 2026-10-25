@@ -170,7 +170,7 @@ describe("acceptPicture", () => {
     });
 
     it("says so when even the session could not keep the bytes", async () => {
-      const refusing: PictureSessionCache = { ...createPictureSessionCache(), put: () => false };
+      const refusing: PictureSessionCache = { ...createPictureSessionCache(), putBatchIfRoom: () => false };
       const harness = createHarness({ blob: async () => ({ ok: false, code: "STORAGE_FULL" }) });
       const result = await acceptPicture(harness.input({ cache: refusing }));
       expect(result).toEqual({ ok: false, reason: "not-saved", keptInSession: false });
@@ -210,6 +210,30 @@ describe("acceptPicture", () => {
   });
 
   describe("success", () => {
+    it("does not evict another passage's only bytes while warming a durable Keep", async () => {
+      const old = picture(1, 300);
+      const incoming = picture(2, 300);
+      const cache = createPictureSessionCache({ maxEntries: 1, maxBytes: 300 });
+      cache.put(old);
+      const harness = createHarness();
+      expect(await acceptPicture(harness.input({ picture: incoming, cache }))).toEqual({ ok: true });
+      expect(harness.commit).toHaveBeenCalledOnce();
+      expect(cache.get(old.pointer.contentHash)?.bytes).toEqual(old.bytes);
+      expect(cache.has(incoming.pointer.contentHash)).toBe(false);
+    });
+
+    it("truthfully refuses failed Keep retention rather than evicting current material", async () => {
+      const old = picture(1, 300);
+      const incoming = picture(2, 300);
+      const cache = createPictureSessionCache({ maxEntries: 1, maxBytes: 300 });
+      cache.put(old);
+      const harness = createHarness({ blob: async () => ({ ok: false, code: "STORAGE_FULL" }) });
+      expect(await acceptPicture(harness.input({ picture: incoming, cache })))
+        .toEqual({ ok: false, reason: "not-saved", keptInSession: false });
+      expect(harness.commit).not.toHaveBeenCalled();
+      expect(cache.get(old.pointer.contentHash)?.bytes).toEqual(old.bytes);
+    });
+
     it("mirrors the accepted bytes into the session cache for export", async () => {
       const harness = createHarness();
       const held = picture(1, 300);

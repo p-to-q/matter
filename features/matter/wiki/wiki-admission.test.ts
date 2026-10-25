@@ -12,7 +12,7 @@ const TURN: WikiAdmissionTurn = Object.freeze({
   observed: Object.freeze({ locale: "en-US", channel: "spoken", text: "Englebart spoke" }),
   committed: Object.freeze({ locale: "en-US", channel: "spoken", text: "Engelbart spoke" }),
 });
-const ENGLISH = Object.freeze({ locale: "en-US", channel: "spoken", scripts: ["latin"] });
+const ENGLISH = Object.freeze({ locale: "en-US", channel: "spoken", scripts: ["latin"], producerFamilies: [] });
 
 describe("Wiki admission planning", () => {
   it("offers a complete scan as the turn's comparable opportunity", () => {
@@ -65,8 +65,8 @@ describe("Wiki admission planning", () => {
       observed: Object.freeze({ locale: "zh-CN", channel: "spoken", text: "我读了Englebart的论文" }),
       committed: Object.freeze({ locale: "zh-CN", channel: "spoken", text: "我读了Engelbart的论文" }),
     });
-    const own = Object.freeze({ locale: "zh-CN", channel: "spoken", scripts: ["latin", "han"] });
-    const latin = Object.freeze({ locale: "en-US", channel: "spoken", scripts: ["latin"] });
+    const own = Object.freeze({ locale: "zh-CN", channel: "spoken", scripts: ["latin", "han"], producerFamilies: [] });
+    const latin = Object.freeze({ locale: "en-US", channel: "spoken", scripts: ["latin"], producerFamilies: [] });
 
     expect(planWikiAdmissionBatch(
       chinese,

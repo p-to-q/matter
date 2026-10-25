@@ -46,7 +46,7 @@ export async function acceptPicture(input: AcceptPictureInput): Promise<AcceptPi
     switch (stored.code) {
       case "STORAGE_FULL":
       case "STORAGE_UNAVAILABLE":
-        return Object.freeze({ ok: false, reason: "not-saved", keptInSession: cache.put(picture) });
+        return Object.freeze({ ok: false, reason: "not-saved", keptInSession: cache.putBatchIfRoom([picture]) });
       case "REJECTED":
         return Object.freeze({ ok: false, reason: "blob-rejected" });
       case "SUPERSEDED":
@@ -63,6 +63,7 @@ export async function acceptPicture(input: AcceptPictureInput): Promise<AcceptPi
   });
   if (outcome === "stale") return Object.freeze({ ok: false, reason: "stale" });
   if (outcome === "rejected") return Object.freeze({ ok: false, reason: "commit-rejected" });
-  cache.put(picture);
+  // A convenience mirror cannot evict another passage's only surviving bytes.
+  cache.putBatchIfRoom([picture]);
   return Object.freeze({ ok: true });
 }

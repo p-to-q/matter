@@ -77,7 +77,11 @@ test("the index marks the path above the active passage without selecting it", a
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
-  const rows = page.locator("aside.material-files .material-file");
+  const sidebar = page.locator("aside.material-files");
+  const rows = sidebar.locator(".material-file");
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+  await expect(sidebar).not.toHaveAttribute("data-projection-stale", "true");
+  await expect(rows).toHaveCount(10);
   const deepIndex = await rows.evaluateAll((elements) =>
     elements.findIndex((element) => Number((element as HTMLElement).style.getPropertyValue("--material-file-depth")) >= 2));
   if (deepIndex < 0) throw new Error("index path fixture needs a passage two levels down");

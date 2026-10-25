@@ -3,7 +3,7 @@ import { expect, test, type Download, type Locator, type Page } from "@playwrigh
 import { CANVAS_PREFERENCES_STORAGE_KEY } from "../features/matter/components/canvas-preferences";
 import { materialFilesCopy } from "../features/matter/components/material-files-copy";
 import { MATTER_LOCALES } from "../features/matter/config/locales";
-import { parseContextReceipt } from "../features/matter/material/context-receipt";
+import { parseVersionedContextReceipt as parseContextReceipt } from "../features/matter/material/context-receipt-v2";
 import { renderOutlineMarkdown } from "../features/matter/material/render/list";
 import {
   SEEDED_DOCUMENT_NODE_IDS as IDS,
@@ -264,6 +264,7 @@ test("the receipt download is the active tree only, and the Archive export is no
   const receiptFile = await receiptDownload;
   expect(receiptFile.suggestedFilename()).toMatch(RECEIPT_NAME);
   const markdown = await downloadText(receiptFile);
+  expect(markdown).toContain("format: matter-receipt/2\n");
   const projection = await parsedReceipt(markdown);
   const revision = Number(/^matter-receipt-.{8}-r(\d+)\.md$/u.exec(receiptFile.suggestedFilename())?.[1]);
   expect(projection.revision).toBe(revision);
@@ -296,6 +297,39 @@ test("the receipt download is the active tree only, and the Archive export is no
   const zipAfterBytes = await readFile(zipAfterPath);
   expect(zipAfterBytes.equals(zipBeforeBytes)).toBe(true);
   expect(browserErrors).toEqual([]);
+});
+
+test("a refused clipboard write is recoverable: download stays usable and explicit retry copies v2", async ({ context, page }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const sidebar = await open(page);
+  await sidebar.getByRole("button", { name: copy.archive, exact: true }).click();
+  const archive = sidebar.getByRole("region", { name: copy.archivePanel });
+  const copyButton = archive.getByRole("button", { name: copy.archiveReceiptCopy, exact: true });
+  await page.evaluate(() => {
+    const original = navigator.clipboard.write.bind(navigator.clipboard);
+    let refuse = true;
+    Object.defineProperty(navigator.clipboard, "write", {
+      configurable: true,
+      value: (items: ClipboardItems) => {
+        if (refuse) {
+          refuse = false;
+          return Promise.reject(new DOMException("Fixture denial", "NotAllowedError"));
+        }
+        return original(items);
+      },
+    });
+  });
+  await copyButton.click();
+  await expect(archive).toContainText(copy.copyUnavailable);
+  await expect(copyButton).toBeFocused();
+  const download = page.waitForEvent("download");
+  await archive.getByRole("button", { name: copy.archiveReceiptDownload, exact: true }).click();
+  const markdown = await downloadText(await download);
+  expect(markdown).toContain("format: matter-receipt/2\n");
+  await parsedReceipt(markdown);
+  await copyButton.click();
+  await expect(archive).toContainText(copy.archiveReceiptCopied);
+  expect(await readClipboard(page)).toBe(markdown);
 });
 
 for (const locale of MATTER_LOCALES) {

@@ -4,8 +4,11 @@ import {
   type WikiOccurrenceAttribution,
   type WikiOccurrenceRegistry,
 } from "../wiki/wiki-occurrence-registry";
+import { MAX_WIKI_OUTCOME_COUNT, type WikiAppliedRule } from "../wiki/wiki-model";
+import type { WikiTransientOutcomes } from "../wiki/wiki-diagnostics";
 
-type OccurrenceOwnerSlot = Readonly<{ abi: 1; registry: WikiOccurrenceRegistry }>;
+type OccurrenceOwnerSlot = Readonly<{ abi: 1; registry: WikiOccurrenceRegistry;
+  outcomes?: { current: WikiTransientOutcomes } }>;
 
 // One origin-local registry survives Fast Refresh beside the lexical port that
 // mints into it; a second registry would orphan every live token.
@@ -13,13 +16,23 @@ const OWNER_KEY = Symbol.for("ptoq.matter.wiki-occurrence-registry");
 const ownerHost = globalThis as unknown as {
   [key: symbol]: OccurrenceOwnerSlot | undefined;
 };
-const slot: OccurrenceOwnerSlot = ownerHost[OWNER_KEY]?.abi === 1
-  ? ownerHost[OWNER_KEY]!
-  : Object.freeze({ abi: 1, registry: createWikiOccurrenceRegistry() });
+const previous = ownerHost[OWNER_KEY];
+const slot = Object.freeze({ abi: 1 as const,
+  registry: previous?.abi === 1 && typeof previous.registry.revokePassiveBefore === "function"
+    ? previous.registry : createWikiOccurrenceRegistry(),
+  outcomes: previous?.outcomes ?? { current: Object.freeze({ censored: 0, failed: 0, unattributed: 0 }) },
+});
 ownerHost[OWNER_KEY] = slot;
 const registry = slot.registry;
 
 const TOKEN_BYTES = 16;
+
+export function recordMatterWikiTransientOutcome(outcome: keyof WikiTransientOutcomes): void {
+  slot.outcomes.current = Object.freeze({ ...slot.outcomes.current,
+    [outcome]: Math.min(MAX_WIKI_OUTCOME_COUNT, slot.outcomes.current[outcome] + 1) });
+}
+
+export const readMatterWikiTransientOutcomes = (): WikiTransientOutcomes => slot.outcomes.current;
 
 /**
  * Mints one opaque random occurrence id for an applied edit. The id is never
@@ -58,8 +71,16 @@ export function renewMatterWikiOccurrence(occurrenceId: string): void {
 }
 
 /** Consumes one attribution; a second take of the same id returns nothing. */
-export function takeMatterWikiOccurrence(occurrenceId: string): WikiOccurrenceAttribution | null {
-  return registry.take(occurrenceId, monotonicNow());
+export function takeMatterWikiOccurrence(occurrenceId: string, passive = false): WikiOccurrenceAttribution | null {
+  return registry.take(occurrenceId, monotonicNow(), passive);
+}
+
+export function revokeMatterWikiPassiveBefore(revision: number): void {
+  registry.revokePassiveBefore(revision);
+}
+
+export function revokeMatterWikiOccurrences(rule: WikiAppliedRule, revision: number): void {
+  registry.revokeAppliedBefore(rule, revision);
 }
 
 function randomToken(): string | null {

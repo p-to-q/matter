@@ -11,6 +11,7 @@ import {
   decideMatterWiki,
   getMatterWikiStatus,
   readMatterWikiState,
+  readMatterWikiDiagnostics,
   resetCorruptMatterWiki,
   retryMatterWikiAuthority,
   startMatterWikiAuthority,
@@ -22,6 +23,7 @@ export type MatterWikiConfigurationSnapshot = Readonly<{
   stateRevision: number | null;
   hasStoredData: boolean;
   rules: readonly WikiConfigurationRule[];
+  diagnostics?: ReturnType<typeof readMatterWikiDiagnostics>;
 }>;
 
 export type MatterWikiConfiguration = Readonly<{
@@ -62,11 +64,13 @@ let cachedSnapshot: MatterWikiConfigurationSnapshot = Object.freeze({
 function getConfigurationSnapshot(): MatterWikiConfigurationSnapshot {
   const status = getMatterWikiStatus();
   const state = readMatterWikiState();
-  if (status === cachedStatus && state === cachedState) return cachedSnapshot;
+  const diagnostics = readMatterWikiDiagnostics();
+  if (status === cachedStatus && state === cachedState && diagnostics === cachedSnapshot.diagnostics) return cachedSnapshot;
   cachedStatus = status;
   cachedState = state;
   cachedSnapshot = Object.freeze({
     status,
+    diagnostics,
     stateRevision: state?.revision ?? null,
     hasStoredData: state !== null && (
       state.termEvidence.length > 0 ||

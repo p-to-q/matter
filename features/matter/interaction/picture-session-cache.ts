@@ -15,6 +15,8 @@ import {
 export type PictureSessionCache = Readonly<{
   /** False, storing nothing, when the pointer is invalid or does not describe the bytes. */
   put(picture: GeneratedPicture): boolean;
+  /** Atomic non-evicting admission: a refusal preserves every held byte. */
+  putBatchIfRoom(pictures: readonly GeneratedPicture[]): boolean;
   get(contentHash: string): GeneratedPicture | undefined;
   has(contentHash: string): boolean;
   delete(contentHash: string): boolean;
@@ -48,6 +50,28 @@ export function createPictureSessionCache(
   };
 
   return Object.freeze({
+    putBatchIfRoom(pictures) {
+      const pending = new Map<string, GeneratedPicture>();
+      let nextBytes = totalBytes;
+      let nextEntries = entries.size;
+      for (const picture of pictures) {
+        const pointer = parseImagePointer(picture.pointer);
+        if (pointer === null || !(picture.bytes instanceof Uint8Array) ||
+          picture.bytes.byteLength !== pointer.byteLength || pointer.byteLength > limits.maxBytes) return false;
+        const previous = pending.get(pointer.contentHash) ?? entries.get(pointer.contentHash);
+        if (previous === undefined) nextEntries += 1;
+        nextBytes += pointer.byteLength - (previous?.pointer.byteLength ?? 0);
+        pending.set(pointer.contentHash, { pointer, bytes: picture.bytes });
+      }
+      if (nextEntries > limits.maxEntries || nextBytes > limits.maxBytes) return false;
+      // Allocate the complete accepted batch before changing any existing holder.
+      for (const [hash, picture] of pending) {
+        pending.set(hash, Object.freeze({ pointer: picture.pointer, bytes: picture.bytes.slice() }));
+      }
+      for (const [hash, picture] of pending) entries.set(hash, picture);
+      totalBytes = nextBytes;
+      return true;
+    },
     put(picture) {
       const pointer = parseImagePointer(picture.pointer);
       if (

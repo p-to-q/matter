@@ -33,7 +33,7 @@ describe("Wiki export", () => {
       format: "matter-wiki",
       formatVersion: 3,
       state: createEmptyWikiState(),
-    }))).toEqual({ ok: false, code: "INVALID_FORMAT" });
+    }))).toEqual({ ok: false, code: "NEWER_VERSION" });
     expect(decodeWikiExport(bytes({
       format: "matter-wiki",
       formatVersion: 1,

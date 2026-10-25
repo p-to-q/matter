@@ -99,6 +99,42 @@ describe("picture session cache", () => {
   });
 
   describe("bounds and eviction", () => {
+    it("refuses an overfull non-evicting batch atomically, preserving bytes and order", () => {
+      const cache = createPictureSessionCache({ maxEntries: 2, maxBytes: 600 });
+      const a = picture(1, 300);
+      const b = picture(2, 300);
+      const c = picture(3, 300);
+      cache.put(a);
+      const before = cache.snapshot();
+      expect(cache.putBatchIfRoom([b, c])).toBe(false);
+      expect(cache.snapshot()).toEqual(before);
+      expect(cache.putBatchIfRoom([b, { ...c, bytes: new Uint8Array(1) }])).toBe(false);
+      expect(cache.snapshot()).toEqual(before);
+    });
+
+    it("counts shared hashes once and owns bytes in a non-evicting batch", () => {
+      const cache = createPictureSessionCache({ maxEntries: 2, maxBytes: 600 });
+      const a = picture(1, 300);
+      const b = picture(2, 300);
+      cache.put(a);
+      expect(cache.putBatchIfRoom([a, b, b])).toBe(true);
+      const original = b.bytes.slice();
+      b.bytes.fill(0);
+      expect(cache.snapshot().size).toBe(2);
+      expect(cache.get(b.pointer.contentHash)?.bytes).toEqual(original);
+      expect(cache.putBatchIfRoom([picture(3, 1)])).toBe(false);
+      expect(cache.get(a.pointer.contentHash)?.bytes).toEqual(a.bytes);
+    });
+
+    it("refuses non-evicting byte overflow even when entry slots remain", () => {
+      const cache = createPictureSessionCache({ maxEntries: 8, maxBytes: 600 });
+      const a = picture(1, 300);
+      cache.put(a);
+      expect(cache.putBatchIfRoom([picture(2, 200), picture(3, 101)])).toBe(false);
+      expect([...cache.snapshot().keys()]).toEqual([a.pointer.contentHash]);
+      expect(cache.putBatchIfRoom([picture(2, 200), picture(3, 100)])).toBe(true);
+    });
+
     it("evicts the oldest first when the entry count is exceeded", () => {
       const cache = createPictureSessionCache({ maxEntries: 3, maxBytes: 10_000 });
       const held = [1, 2, 3, 4, 5].map((seed) => picture(seed, 300));

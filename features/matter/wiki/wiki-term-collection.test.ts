@@ -182,7 +182,8 @@ describe("Wiki automatic term collection", () => {
       locale: "zh-CN",
       channel: "spoken",
       text: "ＯｐｅｎＡＩ",
-    })).toEqual({ status: "ok", events: [], scannedScripts: [], routedScripts: [] });
+    })).toEqual({ status: "ok", events: [], scannedScripts: [], routedScripts: [],
+      producerFamilies: ["shape-specific", "locale-segment"] });
   });
 
   it("never collects a full-width Latin spelling in any locale", () => {
@@ -195,7 +196,8 @@ describe("Wiki automatic term collection", () => {
     ] as const) {
       for (let turn = 0; turn < 2; turn += 1) {
         expect(collectCommittedWikiTermsResult({ locale, channel: "spoken", text }))
-          .toEqual({ status: "ok", events: [], scannedScripts: [], routedScripts: [] });
+          .toEqual({ status: "ok", events: [], scannedScripts: [], routedScripts: [],
+            producerFamilies: ["shape-specific", "locale-segment"] });
       }
     }
     // Its half-width spelling beside it is still collected, and still an opportunity.

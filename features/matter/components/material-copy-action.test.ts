@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseContextReceipt } from "../material/context-receipt";
+import { parseVersionedContextReceipt as parseContextReceipt } from "../material/context-receipt-v2";
 import { projectWorkingContext } from "../material/working-context";
 import { documentRootId } from "../tree/document-root";
 import { PROTOCOL_VERSION, type ThoughtNode, type ThoughtTree } from "../tree/model";
@@ -307,9 +307,73 @@ describe("copyActiveTreeReceipt", () => {
     await expect(copyActiveTreeReceipt({
       tree, active: active(tree), clipboard: stale.clipboard, stillCurrent: () => false,
     })).resolves.toBeNull();
+    expect(stale.state.writes).toBe(0);
     const denied = richClipboard({ rejectWrite: true });
     await expect(copyActiveTreeReceipt({ tree, active: active(tree), clipboard: denied.clipboard }))
       .resolves.toBe("failed");
+  });
+
+  it("never reports a delayed clipboard success on a replacement document", async () => {
+    const tree = fixture();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    const rich = richClipboard({ release: gate });
+    let current = true;
+    const pending = copyActiveTreeReceipt({
+      tree, active: active(tree), clipboard: rich.clipboard, stillCurrent: () => current,
+    });
+    current = false;
+    release();
+    await expect(pending).resolves.toBeNull();
+    expect(rich.state.texts).toEqual([]);
+
+    (globalThis as Globals).ClipboardItem = undefined;
+    current = true;
+    let entered!: () => void;
+    const writing = new Promise<void>((resolve) => { entered = resolve; });
+    let finish!: () => void;
+    const writeGate = new Promise<void>((resolve) => { finish = resolve; });
+    const plain = copyActiveTreeReceipt({
+      tree, active: active(tree), stillCurrent: () => current,
+      clipboard: { writeText: async () => { entered(); await writeGate; } },
+    });
+    await writing;
+    current = false;
+    finish();
+    await expect(plain).resolves.toBeNull();
+  });
+
+  it.each(["selection", "receipt"] as const)(
+    "does not report a delayed %s clipboard rejection on a replacement document",
+    async (kind) => {
+      (globalThis as Globals).ClipboardItem = undefined;
+      const tree = fixture();
+      let current = true;
+      let entered!: () => void;
+      const writing = new Promise<void>((resolve) => { entered = resolve; });
+      let deny!: (reason: unknown) => void;
+      const gate = new Promise<void>((_resolve, reject) => { deny = reject; });
+      const clipboard = { writeText: async () => { entered(); await gate; } };
+      const pending = kind === "receipt"
+        ? copyActiveTreeReceipt({ tree, active: active(tree), clipboard, stillCurrent: () => current })
+        : copyMaterialSelection({ tree, nodeIds: new Set(["a"]), clipboard, stillCurrent: () => current });
+      await writing;
+      current = false;
+      deny(new Error("late denial"));
+      await expect(pending).resolves.toBeNull();
+    },
+  );
+
+  it.each([false, true])("owns the promised part after constructor refusal (stale=%s)", async (stale) => {
+    const tree = fixture(stale ? "Valid text" : "lone surrogate \uD800");
+    const { clipboard } = richClipboard({ throwOnConstruct: true });
+    let current = true;
+    const pending = copyActiveTreeReceipt({ tree, active: active(tree), clipboard, stillCurrent: () => current });
+    if (stale) current = false;
+    // The constructor has already refused synchronously; the unconsumed part
+    // can still reject later when its receipt or document is no longer usable.
+    await expect(pending).resolves.toBe("failed");
+    await new Promise<void>((resolve) => setImmediate(resolve));
   });
 });
 

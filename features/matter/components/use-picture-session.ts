@@ -79,7 +79,7 @@ const NO_ACTIONS: PointTalkPictureActions = Object.freeze({
 
 /**
  * One picture turn for one open Point and Talk session on one passage. Whether
- * the control exists is decided once, when the session opens, from the newest
+ * the control may arm is decided once, when the session opens, from the newest
  * answer the app's single memo holds (the lens has normally asked already); a
  * read that finishes later is heard by the next opening, so the row never
  * changes under the person's hand. The driver exists only for an `available`
@@ -131,7 +131,7 @@ export function usePictureSession(input: Readonly<{
     const owner: { driver: PictureDriver | null } = { driver: null };
     let live = true;
     // The store (session cache, blob connection) is built here, on the first
-    // session that can draw, not when the app mounts. No control exists until it is.
+    // session that can draw, not merely because the discovery entry is visible.
     void authoring.loadStore().then(({ cache, repository }) => {
       if (!live) return;
       const created = new PictureDriver({

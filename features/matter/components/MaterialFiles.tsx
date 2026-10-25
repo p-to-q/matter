@@ -165,6 +165,8 @@ export type MaterialArchiveActionResult =
  * storage refused.
  */
 export type MaterialArchiveActions = Readonly<{
+  /** A different identified build is independent of local storage authority. */
+  deploymentUpdate?: Readonly<{ available: boolean; canReload: boolean; reload: () => boolean }>;
   /** Opening Archive is the intent signal: its actions' code loads before a press. */
   prepare?: () => void;
   exportCopy: () => Promise<MaterialArchiveActionResult>;
@@ -194,7 +196,12 @@ export function MaterialFiles(props: MaterialFilesProps) {
   );
   const [copyState, setCopyState] = useState<CopyState>("idle");
   const [showSaving, setShowSaving] = useState(false);
-  const [archivePhase, setArchivePhase] = useState<ArchivePhase>("idle");
+  const [archivePhase, publishArchivePhase] = useState<ArchivePhase>("idle");
+  const archivePhaseRef = useRef<ArchivePhase>("idle");
+  const setArchivePhase = (phase: ArchivePhase) => {
+    archivePhaseRef.current = phase;
+    publishArchivePhase(phase);
+  };
   const [archiveError, setArchiveError] = useState<string | null>(null);
   const [archiveNotice, setArchiveNotice] = useState<MaterialArchiveNotice | null>(null);
   // An import's notice belongs to the document it created, whose switch resets
@@ -922,6 +929,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
       clipboard: navigator.clipboard,
       stillCurrent: () => liveDocumentEpochRef.current === documentEpoch,
     });
+    if (liveDocumentEpochRef.current !== documentEpoch) return;
     if (outcome !== null) settleCopyState(outcome, copyResetRef, setCopyState);
   };
 
@@ -986,6 +994,10 @@ export function MaterialFiles(props: MaterialFilesProps) {
         setArchiveError(actionErrorMessage(copy));
       }
     }
+  };
+  const reloadChangedDeployment = () => {
+    if (archivePhaseRef.current !== "idle" || props.interactionPending || editing) return;
+    if (props.archive?.deploymentUpdate?.reload() === false) setArchiveError(copy.archiveErrorBusy);
   };
 
   const replaceArchiveImport = async () => {
@@ -1231,6 +1243,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
             onReplace={() => void replaceArchiveImport()}
             onRepairCorrupt={() => void repairCorruptStorage()}
             onReloadStored={() => void reloadStoredMaterial()}
+            deploymentUpdate={props.archive.deploymentUpdate}
+            onReloadDeployment={reloadChangedDeployment}
             onRetrySave={props.persistence.retry}
             onSelectImport={(file) => void validateArchiveImport(file)}
           />
@@ -1734,6 +1748,8 @@ function ArchivePanel({
   onRepairCorrupt,
   onReloadStored,
   onRetrySave,
+  deploymentUpdate,
+  onReloadDeployment,
   onSelectImport,
 }: Readonly<{
   busy: boolean;
@@ -1767,6 +1783,8 @@ function ArchivePanel({
   onReloadStored: () => void;
   onRetrySave: () => void;
   onSelectImport: (file: File) => void;
+  deploymentUpdate?: MaterialArchiveActions["deploymentUpdate"];
+  onReloadDeployment: () => void;
 }>) {
   const phaseLabel = phase === "exporting"
     ? copy.archiveExporting
@@ -1780,6 +1798,9 @@ function ArchivePanel({
   return (
     <section aria-busy={busy || undefined} aria-label={copy.archivePanel} className="material-files__archive">
       <p className="material-files__archive-note">{note}</p>
+      {deploymentUpdate?.available && !terminal ? (
+        <p className="material-files__archive-note">{copy.archiveDeploymentChanged}</p>
+      ) : null}
       <div className="material-files__archive-actions">
         <button disabled={busy} onClick={onExport} type="button">
           {copy.archiveExportCopy}
@@ -1794,6 +1815,16 @@ function ArchivePanel({
           </button>
         )}
       </div>
+      {deploymentUpdate?.available && !terminal ? (
+        <button
+          className="material-files__archive-retry"
+          disabled={busy || !deploymentUpdate.canReload}
+          onClick={onReloadDeployment}
+          type="button"
+        >
+          {copy.archiveReloadPage}
+        </button>
+      ) : null}
       {onDownloadReceipt === undefined || onCopyReceipt === undefined ? null : (
         <div className="material-files__archive-receipt">
           <div className="material-files__archive-receipt-actions">

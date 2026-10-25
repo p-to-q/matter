@@ -1,4 +1,5 @@
 import type { ImageBlobRepository } from "../persistence/image-blob-repository";
+import type { GeneratedPicture } from "../runtime/picture-turn";
 import type { ImagePointer } from "../tree/image-pointer";
 import type { ThoughtTree } from "../tree/model";
 import type { PictureSessionCache } from "./picture-session-cache";
@@ -42,36 +43,43 @@ export async function collectPictureBlobs(
 
 /**
  * Stores imported bytes before the imported tree becomes the document, so its
- * first render reads them. Never refuses: a pointer without durable bytes is a
- * state the app already renders honestly, and the session cache keeps what the
- * store would not. Blobs are content-addressed and orphan-tolerant, so
- * restoring for an import that is later cancelled or superseded corrupts
- * nothing and needs no deletion.
+ * first render reads them. Refuses when carried bytes cannot all be retained
+ * without evicting an existing holder: a later rejected tree import must not
+ * destroy the current document's session-only pictures. Accepted durable writes
+ * remain harmless content-addressed orphans when the import is refused.
  */
 export async function restorePictureBlobs(
   blobs: ReadonlyMap<string, Uint8Array>,
   tree: ThoughtTree,
   dependencies: ArchivePictureDependencies,
-): Promise<RestoredPictures> {
+): Promise<RestoredPictures | null> {
   const pointers = pointersByHash(tree);
-  let saved = 0;
-  let keptInSession = 0;
+  // Freeze every caller-owned array before the first repository await.
+  const importedPictures: GeneratedPicture[] = [];
   for (const [hash, imported] of blobs) {
     const pointer = pointers.get(hash);
-    if (pointer === undefined) continue;
-    // The caller's array may be reused once this resolves.
-    const bytes = imported.slice();
+    if (pointer !== undefined) importedPictures.push({ pointer, bytes: imported.slice() });
+  }
+  const sessionOnly: GeneratedPicture[] = [];
+  const durablePictures: GeneratedPicture[] = [];
+  let saved = 0;
+  for (const picture of importedPictures) {
+    const { bytes, pointer } = picture;
     let durable = false;
     try {
       durable = (await dependencies.repository.putImageBlob(pointer, bytes.slice().buffer)).ok;
     } catch {
       // A port that throws is a refusal like any other.
     }
-    dependencies.cache.put({ bytes, pointer });
-    if (durable) saved += 1;
-    else keptInSession += 1;
+    if (durable) {
+      saved += 1;
+      durablePictures.push(picture);
+    } else sessionOnly.push(picture);
   }
-  return Object.freeze({ saved, keptInSession });
+  if (!dependencies.cache.putBatchIfRoom(sessionOnly)) return null;
+  // Durable bytes already have an authority; warming their mirror is optional.
+  for (const picture of durablePictures) dependencies.cache.putBatchIfRoom([picture]);
+  return Object.freeze({ saved, keptInSession: sessionOnly.length });
 }
 
 function pointersByHash(tree: ThoughtTree): ReadonlyMap<string, ImagePointer> {

@@ -5,14 +5,37 @@ Modules: `features/matter/server/harness.ts`, `prompt-spine.ts`,
 `transform-harness.ts`, `text-swap-harness.ts`, `model-pool.ts`,
 `user-provider-registry.ts`, `openai-chat-completion.ts`, `completion-outcome.ts`
 
+The integration candidate also has `image-brief-harness.ts` and
+`image-harness.ts`. The image production gate remains closed. Their frozen
+versions are `image-brief/2` and `image/1`, respectively; they use the same
+scenario/pool lifecycle, with an image transport rather than another provider
+integration. The bounded image wire is documented in
+[`../protocol.md`](../protocol.md#picture-envelope-image1).
+
+The brief step reads only the addressed passage and optional direction as
+reference data, and must return one adjudicated short subject. Only that
+subject and the server's frozen illustration style reach the image renderer.
+`compileImagePrompt` deliberately does not use the text `composePrompt`
+section scaffold, whose words could become lettering in an image. Its input
+type cannot receive the passage. A lexical brief floor reduces known steering
+attempts; it does not prove semantic intent, palette, style or image contents.
+Byte format, size, dimensions and digest are checked independently.
+
+No usable brief means no paid render. Once rendering may have begun, a timeout
+or rejected image never triggers an automatic second paid generation or claims
+the first was cancelled. Keep is a later human act: verified bytes are stored
+before the tree engine commits the pointer. The model constructs neither that
+address nor a private tree mutation. Probe findings and residual risks remain
+in [`generated-image.md`](generated-image.md).
+
 ## Problem
 
-Five places in Matter need a model: repairing a heard transcript, naming a
+Five text scenarios in Matter need a model: repairing a heard transcript, naming a
 thought, answering one bounded question, expanding a stretched passage, and
 restating one selected passage from a bounded direction. Nothing about the
 product wants them to feel like five features — the AI is
 folded into material, and a person should never be aware of having addressed
-it. Written independently, though, they become five integrations: five
+it. Written independently, though, those text scenarios become five integrations: five
 deadlines, five retry policies, five ways of quoting a person's own writing
 into a prompt, and five places where the sentence that refuses instructions
 inside that writing might simply be forgotten.

@@ -75,7 +75,7 @@
 @media (hover: hover) {
   .point-talk__submit:hover { background: color-mix(in srgb, var(--ink) 88%, transparent) !important; color: var(--paper-solid) !important; }
 }
-/* The 绘图 control and every picture step are plain text: no plate, no icon. */
+/* The picture entry and every picture step are plain text: no plate, no icon. */
 .point-talk .point-talk__text-button { flex: 0 0 auto; background: transparent; color: var(--muted); white-space: nowrap; }
 .point-talk .point-talk__text-button[data-primary] { color: var(--ink); }
 @media (hover: hover) {
@@ -83,6 +83,8 @@
 }
 .point-talk .point-talk__text-button:focus-visible { color: var(--ink); }
 .point-talk .point-talk__text-button[aria-disabled="true"] { opacity: .28; cursor: default; }
+.point-talk .point-talk__draw[data-picture-availability="unavailable"] { opacity: 1; cursor: help; }
+.point-talk__unavailable { flex-basis: 100%; padding: calc(3px * var(--point-talk-scale)) 0; }
 .point-talk__picture { flex-direction: column; align-items: stretch; gap: calc(6px * var(--point-talk-scale)); padding: calc(8px * var(--point-talk-scale)); }
 .point-talk__picture[data-picture-step="drawing"] { flex-direction: row; align-items: center; justify-content: space-between; padding-top: calc(3px * var(--point-talk-scale)); padding-bottom: calc(3px * var(--point-talk-scale)); }
 .point-talk__picture[data-picture-step="preview"]:focus { outline: none; }

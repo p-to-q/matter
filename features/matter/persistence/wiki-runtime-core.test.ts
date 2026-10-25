@@ -22,7 +22,8 @@ const stubs = vi.hoisted(() => {
     })),
     start: vi.fn(),
     observe: vi.fn(),
-    subscribe: vi.fn(() => () => undefined),
+    settle: vi.fn(),
+    subscribe: vi.fn<() => () => void>(() => () => undefined),
     readState: vi.fn(() => null),
     getStatus: vi.fn(() => ({ phase: "loading" as const })),
     retry: vi.fn(),
@@ -32,7 +33,7 @@ const stubs = vi.hoisted(() => {
   };
   const generationChannel = {
     publish: vi.fn(),
-    subscribe: vi.fn(() => () => undefined),
+    subscribe: vi.fn<(listener: (generation: number) => void) => () => void>(() => () => undefined),
     close: vi.fn(),
   };
   return {
@@ -73,7 +74,7 @@ vi.mock("./wiki-generation-channel", () => ({
     refresh: () => Promise<unknown>,
   ) => {
     stubs.refresh = refresh;
-    return { request: vi.fn() };
+    return { request: vi.fn().mockResolvedValue(undefined) };
   },
 }));
 vi.mock("./wiki-repository", () => ({
@@ -101,6 +102,7 @@ const ENGLISH_OPPORTUNITY = Object.freeze({
   locale: "en-US",
   channel: "spoken",
   scripts: ["latin"],
+  producerFamilies: [],
 });
 const LEGACY_RUNTIME_KEYS = Object.freeze([
   Symbol.for("ptoq.matter.wiki-runtime.v7"),
@@ -120,6 +122,7 @@ afterEach(() => {
   vi.clearAllMocks();
   stubs.coordinator.start.mockReset();
   stubs.coordinator.observe.mockReset();
+  stubs.coordinator.settle.mockReset();
   stubs.coordinator.retry.mockReset();
   stubs.coordinator.readBasis.mockReset().mockReturnValue({
     stateRevision: 0,
@@ -147,6 +150,66 @@ afterEach(() => {
 });
 
 describe("Wiki runtime ownership", () => {
+  it("censors passive applications across a newer external generation without revoking refreshed or explicit intent", async () => {
+    stubs.coordinator.readBasis.mockReturnValue({ stateRevision: 3,
+      fitSnapshot: { marker: "hydrated" }, snapshot: { generation: 1 } });
+    stubs.coordinator.settle.mockResolvedValue({ ok: true, changed: true, generation: 2, stateRevision: 4 });
+    const runtime = await import("./wiki-runtime-core");
+    const rule = { locale: "en-US", channel: "spoken", boundary: "word", form: "Englebart",
+      canonical: "Engelbart", appliedAtRevision: 3 } as const;
+    const old = runtime.settleHydratedMatterWikiOccurrence({ occurrenceId: "old", outcome: "inspected-kept",
+      rule, origin: "human-admission" });
+    const notify = stubs.generationChannel.subscribe.mock.calls.at(-1)![0];
+    notify(2);
+    stubs.coordinator.readBasis.mockReturnValue({ stateRevision: 4,
+      fitSnapshot: { marker: "hydrated" }, snapshot: { generation: 2 } });
+    const fresh = runtime.settleHydratedMatterWikiOccurrence({ occurrenceId: "fresh", outcome: "inspected-kept",
+      rule: { ...rule, appliedAtRevision: 4 }, origin: "human-admission" });
+    const explicit = runtime.settleHydratedMatterWikiOccurrence({ occurrenceId: "explicit", outcome: "explicit-reject",
+      rule, origin: "human-admission" });
+    await expect(old).resolves.toMatchObject({ ok: true, changed: false });
+    await Promise.all([fresh, explicit]);
+    expect(stubs.coordinator.settle.mock.calls.map(([event]) => event.occurrenceId)).toEqual(["fresh", "explicit"]);
+  });
+  it("revokes queued old passive settlements only after a durable revert", async () => {
+    let finish!: (value: unknown) => void;
+    stubs.coordinator.settle.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }))
+      .mockResolvedValue({ ok: true, changed: true, generation: 3, stateRevision: 8 });
+    const runtime = await import("./wiki-runtime-core");
+    const rule = { locale: "en-US", channel: "spoken", boundary: "word", form: "Englebart",
+      canonical: "Engelbart", appliedAtRevision: 3 } as const;
+    const make = (occurrenceId: string, outcome: "reverted" | "inspected-kept" | "explicit-confirm" | "explicit-reject",
+      appliedAtRevision = 3) => ({ occurrenceId, outcome, origin: "human-admission" as const,
+        rule: { ...rule, appliedAtRevision } });
+    const revert = runtime.settleHydratedMatterWikiOccurrence(make("revert", "reverted"));
+    const old = runtime.settleHydratedMatterWikiOccurrence(make("old", "inspected-kept"));
+    const explicit = runtime.settleHydratedMatterWikiOccurrence(make("explicit", "explicit-confirm"));
+    const reject = runtime.settleHydratedMatterWikiOccurrence(make("reject", "explicit-reject"));
+    const secondRevert = runtime.settleHydratedMatterWikiOccurrence(make("second-revert", "reverted"));
+    const fresh = runtime.settleHydratedMatterWikiOccurrence(make("fresh", "inspected-kept", 8));
+    await vi.waitFor(() => expect(stubs.coordinator.settle).toHaveBeenCalledOnce());
+    finish({ ok: true, changed: true, generation: 3, stateRevision: 8 });
+    await expect(revert).resolves.toMatchObject({ ok: true, changed: true });
+    await expect(old).resolves.toMatchObject({ ok: true, changed: false });
+    await Promise.all([explicit, reject, secondRevert, fresh]);
+    expect(stubs.coordinator.settle.mock.calls.map(([event]) => event.occurrenceId))
+      .toEqual(["revert", "explicit", "reject", "second-revert", "fresh"]);
+  });
+
+  it("does not revoke queued applications when persistence refuses the revert", async () => {
+    stubs.coordinator.settle.mockResolvedValueOnce({ ok: false, code: "PERSISTENCE_FAILED" })
+      .mockResolvedValue({ ok: true, changed: true, generation: 2, stateRevision: 4 });
+    const runtime = await import("./wiki-runtime-core");
+    const rule = { locale: "en-US", channel: "spoken", boundary: "word", form: "Englebart",
+      canonical: "Engelbart", appliedAtRevision: 3 } as const;
+    const revert = runtime.settleHydratedMatterWikiOccurrence({ occurrenceId: "revert", outcome: "reverted",
+      rule, origin: "human-admission" });
+    const keep = runtime.settleHydratedMatterWikiOccurrence({ occurrenceId: "keep", outcome: "inspected-kept",
+      rule, origin: "human-admission" });
+    await expect(revert).resolves.toMatchObject({ ok: false });
+    await expect(keep).resolves.toMatchObject({ ok: true, changed: true });
+    expect(stubs.coordinator.settle).toHaveBeenCalledTimes(2);
+  });
   it("publishes only the conservative product producer release", async () => {
     const runtime = await import("./wiki-runtime-core");
 
@@ -191,7 +254,7 @@ describe("Wiki runtime ownership", () => {
       expect(close).toHaveBeenCalledOnce();
       expect(dispose).toHaveBeenCalledOnce();
       expect(host[legacyRuntimeKey]).toBeUndefined();
-      expect(host[RUNTIME_KEY]).toMatchObject({ abi: 15 });
+      expect(host[RUNTIME_KEY]).toMatchObject({ abi: 16 });
     },
   );
 
@@ -202,7 +265,7 @@ describe("Wiki runtime ownership", () => {
     await import("./wiki-runtime-core");
 
     expect(dispose).toHaveBeenCalledOnce();
-    expect(host[RUNTIME_KEY]).toMatchObject({ abi: 15 });
+    expect(host[RUNTIME_KEY]).toMatchObject({ abi: 16 });
   });
 
   it("announces each successfully hydrated generation only once", async () => {

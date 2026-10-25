@@ -21,7 +21,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   runWikiLearningPolicyQualification,
-} from "./learning-policy-v4";
+} from "./learning-policy-v5";
 import {
   runLocalLanguageQualifications,
 } from "./local-language-v1";

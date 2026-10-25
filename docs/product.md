@@ -237,8 +237,11 @@ lineage     why it belongs here   authored root → selected node
 
 Voice and the one-line field share the same transient direction port. One
 restrained white field aligns to that material's upper-left edge and prefers
-the space above it. Its idle form carries only the muted Voice entry and the
-ink submit action—no separate Cancel button—and may take focus because the
+the space above it. Its idle form carries the muted Voice entry, a plain-text
+picture entry (**生图**) and the ink submit action—no separate Cancel button.
+The picture entry names an unavailable capability without sending a request;
+only an available opening admits its separate confirmed generation path.
+The field may take focus because the
 person explicitly requested it. A pointer outside the field, a mode or surface
 change, or `Escape` cancels the local turn. It is not a permanent prompt box,
 is not available without a current node, and is never material, history,

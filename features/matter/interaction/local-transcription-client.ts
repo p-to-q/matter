@@ -49,6 +49,8 @@ const readyWorkers = new WeakSet<Worker>();
 /** Never-ready leases whose warm-up deadline passed while carrying work. */
 const overdueWorkers = new WeakSet<Worker>();
 
+Object.defineProperty(prepareLocalTranscription, "matterCapability", { value: "matter-capability:local-transcription" });
+
 /** Test-only cleanup keeps the lazy singleton from crossing isolated cases. */
 export function resetLocalTranscriptionForTests(): void {
   if (worker !== null) retireWorker(worker, new LocalTranscriptionError("failed"));

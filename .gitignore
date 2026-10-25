@@ -1,5 +1,6 @@
 .next/
 .next-e2e/
+.next-review/
 .next-e2e.lock
 node_modules/
 coverage/

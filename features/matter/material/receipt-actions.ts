@@ -1,4 +1,4 @@
-import { renderContextReceipt } from "./context-receipt";
+import { renderContextReceiptV2 } from "./context-receipt-v2";
 import { projectMaterial, type MaterialAddress } from "./material-projection";
 import type { ThoughtTree } from "../tree/model";
 
@@ -15,7 +15,7 @@ export type ActiveWorkingTree = Readonly<{
 /** Markdown for an address, or null when it is refused (size) or cannot be produced. */
 async function receiptFor(tree: ThoughtTree, address: MaterialAddress): Promise<string | null> {
   try {
-    return await renderContextReceipt(projectMaterial(tree, address));
+    return await renderContextReceiptV2(projectMaterial(tree, address));
   } catch {
     return null;
   }

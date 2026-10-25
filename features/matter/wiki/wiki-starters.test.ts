@@ -19,7 +19,7 @@ describe("Wiki starter lexemes", () => {
     expect(state.lexemes).toEqual(state.lexemes.map((entry, index) => expect.objectContaining({
       locale: index === 3 ? "zh-CN" : "en-US",
       scope: "both",
-      provenance: "aggregate-evidence",
+      provenance: "starter",
       confirmedAtRevision: null,
     })));
     expect(state.authorities).toEqual([
@@ -59,7 +59,7 @@ describe("Wiki starter lexemes", () => {
     if (!first.ok) return;
     expect(first.state.lexemes.map((entry) => entry.canonical)).toEqual(STARTERS);
     expect(first.state.lexemes).toEqual(first.state.lexemes.map(() => expect.objectContaining({
-      provenance: "aggregate-evidence",
+      provenance: "starter",
       confirmedAtRevision: null,
     })));
     expect(first.state.authorities).toHaveLength(2);
@@ -83,7 +83,7 @@ describe("Wiki starter lexemes", () => {
     const legacy = {
       ...initial,
       lexemes: initial.lexemes.map((entry) => entry.canonical === "[p → q]"
-        ? { ...entry, locale: "en-US" as const }
+        ? { ...entry, locale: "en-US" as const, provenance: "collected" as const }
         : entry),
     };
 
@@ -91,7 +91,7 @@ describe("Wiki starter lexemes", () => {
     expect(migrated.ok).toBe(true);
     if (!migrated.ok) return;
     expect(migrated.state.lexemes.filter((entry) => entry.canonical === "[p → q]")).toEqual([
-      expect.objectContaining({ id: 4, locale: "zh-CN", provenance: "aggregate-evidence" }),
+      expect.objectContaining({ id: 4, locale: "zh-CN", provenance: "starter" }),
     ]);
     expect(migrated.state.authorities).toEqual([
       expect.objectContaining({ lexemeId: 4, form: "P to Q" }),
@@ -109,7 +109,7 @@ describe("Wiki starter lexemes", () => {
         locale: "en-US" as const,
         canonical: "[p → q]",
         scope: "both" as const,
-        provenance: "aggregate-evidence" as const,
+        provenance: "collected" as const,
         confirmedAtRevision: null,
       }],
     };
@@ -128,7 +128,7 @@ describe("Wiki starter lexemes", () => {
     const legacy = {
       ...initial,
       lexemes: initial.lexemes.map((entry) => entry.canonical === "[p → q]"
-        ? { ...entry, locale: "en-US" as const }
+        ? { ...entry, locale: "en-US" as const, provenance: "collected" as const }
         : entry),
     };
     const removed = applyWikiEvent(legacy, { type: "remove-lexeme", lexemeId: 4 });
@@ -150,7 +150,7 @@ describe("Wiki starter lexemes", () => {
     const legacy = {
       ...initial,
       lexemes: initial.lexemes.map((entry) => entry.canonical === "[p → q]"
-        ? { ...entry, locale: "en-US" as const }
+        ? { ...entry, locale: "en-US" as const, provenance: "collected" as const }
         : entry),
       authorities: [{
         lexemeId: 4,
@@ -190,11 +190,11 @@ describe("Wiki starter lexemes", () => {
     if (!migrated.ok) return;
     expect(migrated.state.lexemes[0]).toEqual(expect.objectContaining({
       canonical: "Vannevar Bush",
-      provenance: "human-confirmed",
+      provenance: "manual",
     }));
     expect(migrated.state.lexemes.slice(1)).toEqual(
       migrated.state.lexemes.slice(1).map(() => expect.objectContaining({
-        provenance: "aggregate-evidence",
+        provenance: "starter",
         confirmedAtRevision: null,
       })),
     );
@@ -225,7 +225,7 @@ describe("Wiki starter lexemes", () => {
     if (!migrated.ok) return;
     const pToQ = migrated.state.lexemes.find((entry) => entry.canonical === "[p → q]");
     expect(pToQ).toEqual(expect.objectContaining({
-      provenance: "human-confirmed",
+      provenance: "manual",
       confirmedAtRevision: 1,
     }));
     expect(migrated.state.authorities.filter((entry) => entry.lexemeId === pToQ?.id))
@@ -298,7 +298,7 @@ describe("Wiki starter lexemes", () => {
         ...entry,
         locale: "en-US" as const,
         canonical: index === 0 ? legacyFirst : STARTERS[index]!,
-        provenance: "human-confirmed" as const,
+        provenance: "manual" as const,
         confirmedAtRevision: 0,
       })),
       authorities: [],

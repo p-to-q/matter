@@ -15,7 +15,7 @@ import type {
 } from "./wiki-learning-policy";
 import type { WikiScriptClass } from "./wiki-script";
 
-export const WIKI_SCHEMA_VERSION = 7 as const;
+export const WIKI_SCHEMA_VERSION = 8 as const;
 /** Scoring V4 stores quarter-observation units; V6 stored whole observations. */
 export const WIKI_SCORING_VERSION = 4 as const;
 export const WIKI_FITTING_VERSION = 1 as const;
@@ -69,8 +69,15 @@ export const MAX_WIKI_MIGRATION_HEADROOM_BYTES = 256 * 1_024;
 export const MAX_WIKI_V6_STATE_BYTES = MAX_LEGACY_WIKI_STATE_BYTES +
   MAX_WIKI_MIGRATION_HEADROOM_BYTES;
 export const MAX_WIKI_V7_MIGRATION_HEADROOM_BYTES = 160 * 1_024;
-export const MAX_WIKI_STATE_BYTES = MAX_WIKI_V6_STATE_BYTES +
+export const MAX_WIKI_V7_STATE_BYTES = MAX_WIKI_V6_STATE_BYTES +
   MAX_WIKI_V7_MIGRATION_HEADROOM_BYTES;
+// The three empty V8 facts add 206 compact UTF-8 bytes; provenance migration
+// only shortens existing strings and adds no per-lexeme placeholder fields.
+export const MAX_WIKI_V8_MIGRATION_HEADROOM_BYTES = 256;
+export const MAX_WIKI_STATE_BYTES = MAX_WIKI_V7_STATE_BYTES +
+  MAX_WIKI_V8_MIGRATION_HEADROOM_BYTES;
+export const MAX_WIKI_RULE_MATURITY = MAX_WIKI_AUTHORITY_RULES + MAX_WIKI_EVIDENCE_RECORDS;
+export const MAX_WIKI_OUTCOME_COUNT = 2_147_483_647;
 export const MAX_WIKI_APPLICABLE_RULES = 5_000;
 export const MAX_WIKI_APPLICABLE_CODE_POINTS = 256_000;
 
@@ -107,15 +114,41 @@ export type WikiRuleDescriptor = Readonly<{
   canonical: string;
 }>;
 
-export type WikiLexemeProvenance = "human-confirmed" | "aggregate-evidence";
+export type WikiLexemeProvenance = "manual" | "imported" | "learned" | "collected" | "starter";
+
+export function isHumanWikiLexeme(value: Pick<WikiLexeme, "provenance">): boolean {
+  return value.provenance === "manual" || value.provenance === "imported" ||
+    value.provenance === "learned";
+}
 
 export type WikiLexeme = Readonly<{
   id: number;
   locale: MatterLocale;
   canonical: string;
   scope: WikiLexemeScope;
-  provenance: WikiLexemeProvenance;
   confirmedAtRevision: number | null;
+}> & (Readonly<{ provenance: "imported"; importBatchId: string }> |
+  Readonly<{ provenance: Exclude<WikiLexemeProvenance, "imported"> }>);
+
+export type WikiRuleMaturity = WikiAliasDescriptor & Readonly<{
+  keptSettlements: 0 | 1 | 2 | 3;
+  establishedAt: number | null;
+  lastRevertedAtRevision: number | null;
+}>;
+
+export type WikiOutcomeCounters = Readonly<{
+  acceptedImplicit: number;
+  inspectedKept: number;
+  explicitConfirm: number;
+  explicitReject: number;
+  explicitReplace: number;
+  reverted: number;
+}>;
+
+export type WikiPreferences = Readonly<{
+  nearSound: readonly Readonly<{ locale: MatterLocale; enabled: boolean }>[];
+  accents: readonly [];
+  hints: null;
 }>;
 
 export type WikiAliasDescriptor = Readonly<{
@@ -188,6 +221,9 @@ export type WikiState = Readonly<{
   revertStrikes: readonly WikiRevertStrike[];
   /** Opaque, content-free occurrence identities, oldest first. */
   settledOccurrences: readonly string[];
+  ruleMaturity: readonly WikiRuleMaturity[];
+  outcomeCounters: WikiOutcomeCounters;
+  preferences: WikiPreferences;
 }>;
 
 export type WikiMatchRule = WikiRuleDescriptor & Readonly<{
@@ -226,7 +262,27 @@ export type WikiEvidenceOpportunity = Readonly<{
   locale: MatterLocale;
   channel: WikiChannel;
   scripts: readonly WikiScriptClass[];
+  producerFamilies?: readonly WikiProducerFamily[];
 }>;
+
+export const WIKI_PRODUCER_FAMILIES = Object.freeze([
+  "shape-specific", "locale-segment", "latin-internal-edit", "en-metaphone",
+  "en-exact-homophone", "zh-exact-homophone", "zh-final-pair",
+] as const);
+export type WikiProducerFamily = (typeof WIKI_PRODUCER_FAMILIES)[number];
+
+export function wikiProducerFamily(producer: string): WikiProducerFamily | null {
+  switch (producer) {
+    case "shape-specific-v1": return "shape-specific";
+    case "locale-segment-v1": return "locale-segment";
+    case "latin-internal-edit-v2": return "latin-internal-edit";
+    case "en-metaphone-v1": return "en-metaphone";
+    case "en-exact-homophone-v1": return "en-exact-homophone";
+    case "zh-exact-homophone-v1": return "zh-exact-homophone";
+    case "zh-final-pair-v1": return "zh-final-pair";
+    default: return null;
+  }
+}
 
 /**
  * A complete scan of a Chinese or Japanese turn that contained Latin words
@@ -320,7 +376,8 @@ export type WikiEvent =
   | WikiReplaceRuleEvent
   | WikiCreateLexemeEvent
   | WikiRenameLexemeEvent
-  | WikiRemoveLexemeEvent;
+  | WikiRemoveLexemeEvent
+  | Readonly<{ type: "set-near-sound"; locale: MatterLocale; enabled: boolean }>;
 
 export type WikiTransitionErrorCode =
   | "INVALID_STATE"

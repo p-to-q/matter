@@ -40,6 +40,7 @@ import type { WikiScriptClass } from "./wiki-script";
 import { parseWikiState } from "./wiki-codec";
 import { MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES } from
   "./wiki-qualified-producer-releases";
+import { WIKI_PRODUCER_FAMILIES } from "./wiki-model";
 
 const QUALIFIED = createWikiProjectionPolicy(MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES);
 
@@ -48,7 +49,7 @@ describe("Wiki evidence and authority", () => {
     const state = createEmptyWikiState();
 
     expect(state).toEqual({
-      schemaVersion: 7,
+      schemaVersion: 8,
       scoringVersion: 4,
       fittingVersion: 1,
       revision: 0,
@@ -62,6 +63,10 @@ describe("Wiki evidence and authority", () => {
       lexemeTombstones: [],
       revertStrikes: [],
       settledOccurrences: [],
+      ruleMaturity: [],
+      outcomeCounters: { acceptedImplicit: 0, inspectedKept: 0, explicitConfirm: 0,
+        explicitReject: 0, explicitReplace: 0, reverted: 0 },
+      preferences: { nearSound: [], accents: [], hints: null },
     });
     expect(WIKI_SCORE_POLICY.version).toBe(WIKI_SCORING_VERSION);
     expect(Object.isFrozen(state)).toBe(true);
@@ -78,7 +83,7 @@ describe("Wiki evidence and authority", () => {
 
     state = applyObservationBatch(state, [observe("recent-material")]);
     expect(state.lexemes).toEqual([
-      expect.objectContaining({ canonical: "Codex", provenance: "aggregate-evidence" }),
+      expect.objectContaining({ canonical: "Codex", provenance: "collected" }),
     ]);
     expect(state.termEvidence[0]).toMatchObject({ phase: "collected", support: 8 });
   });
@@ -356,7 +361,7 @@ describe("Wiki evidence and authority", () => {
       expect.objectContaining({ support: 1 }),
     ]);
     expect(state.lexemes).toEqual([
-      expect.objectContaining({ canonical: "Codex", provenance: "aggregate-evidence" }),
+      expect.objectContaining({ canonical: "Codex", provenance: "collected" }),
     ]);
     expect(parseWikiState(state)).toMatchObject({ ok: true });
 
@@ -635,7 +640,7 @@ describe("Wiki evidence and authority", () => {
     const lexeme = state.lexemes[0];
     expect(lexeme).toMatchObject({
       canonical: "Codex",
-      provenance: "aggregate-evidence",
+      provenance: "collected",
     });
 
     state = apply(state, {
@@ -648,7 +653,7 @@ describe("Wiki evidence and authority", () => {
 
     expect(state.lexemes[0]).toMatchObject({
       canonical: "OpenAI Codex",
-      provenance: "human-confirmed",
+      provenance: "manual",
     });
     expect(state.termEvidence).toEqual([]);
     expect(parseWikiState(state)).toMatchObject({ ok: true });
@@ -664,11 +669,11 @@ describe("Wiki evidence and authority", () => {
       scope: "both",
     });
     expect(created.termEvidence).toEqual([]);
-    expect(created.lexemes[0]).toMatchObject({ provenance: "human-confirmed" });
+    expect(created.lexemes[0]).toMatchObject({ provenance: "manual" });
 
     const confirmed = apply(collected, decision("confirm-rule", "Codex"));
     expect(confirmed.termEvidence).toEqual([]);
-    expect(confirmed.lexemes[0]).toMatchObject({ provenance: "human-confirmed" });
+    expect(confirmed.lexemes[0]).toMatchObject({ provenance: "learned" });
 
     let replaceBase = apply(createEmptyWikiState(), decision("confirm-rule", "Origin"));
     replaceBase = repeatEvidence(replaceBase, "recent-material", 2, "Codex");
@@ -679,7 +684,7 @@ describe("Wiki evidence and authority", () => {
     });
     expect(replaced.termEvidence).toEqual([]);
     expect(replaced.lexemes.find((entry) => entry.canonical === "Codex"))
-      .toMatchObject({ provenance: "human-confirmed" });
+      .toMatchObject({ provenance: "learned" });
   });
 
   it("bounds new human lexemes independently of the migration-safe structural table", () => {
@@ -691,7 +696,7 @@ describe("Wiki evidence and authority", () => {
       scope: "both",
     });
 
-    expect(state.lexemes.filter((entry) => entry.provenance === "human-confirmed"))
+    expect(state.lexemes.filter((entry) => entry.provenance === "manual"))
       .toHaveLength(MAX_WIKI_HUMAN_CONFIRMED_LEXEMES);
     expect(applyWikiEvent(state, {
       type: "create-lexeme",
@@ -724,7 +729,7 @@ describe("Wiki evidence and authority", () => {
     expect(renamed.lexemes[0]).toMatchObject({
       canonical: "Edited existing term",
       scope: "written",
-      provenance: "human-confirmed",
+      provenance: "manual",
     });
 
     const aliased = apply(state, {
@@ -1047,7 +1052,7 @@ describe("Wiki evidence and authority", () => {
       id: lexeme.id,
       locale: "de-DE",
       canonical: "Engelbart",
-      provenance: "human-confirmed",
+      provenance: "manual",
     }));
     expect(projectApplicableWikiRules(state)).toEqual([
       expect.objectContaining({ locale: "de-DE", canonical: "Engelbart" }),
@@ -1200,7 +1205,7 @@ describe("Wiki evidence and authority", () => {
     });
     expect(restored.lexemes).toContainEqual(expect.objectContaining({
       canonical: "Newest",
-      provenance: "human-confirmed",
+      provenance: "manual",
     }));
     expect(restored.automaticLearningSaturated).toBe(true);
   });
@@ -1326,13 +1331,13 @@ describe("Wiki evidence and authority", () => {
         .toEqual({ ok: true, state, changed: false });
     }
 
-    // Term recurrence has no channel; a relation ages only on its own channel.
+    // Product term admissions are spoken; written turns age neither ledger.
     const written = applyObservationBatch(state, [], tick("quiet", "quiet", {
       locale: "en-US",
       channel: "written",
       scripts: ["latin"],
     }));
-    expect(written.termEvidence[0]!.quietTurns).toBe(termQuiet + 1);
+    expect(written.termEvidence[0]!.quietTurns).toBe(termQuiet);
     expect(written.aliasEvidence[0]).toEqual(state.aliasEvidence[0]);
 
     const mixed = applyObservationBatch(state, [], tick("quiet", "quiet", {
@@ -1397,8 +1402,8 @@ describe("Wiki evidence and authority", () => {
   });
 
   it("rejects a routed opportunity for any ledger but the turn's own route", () => {
-    const own = { locale: "zh-CN", channel: "spoken", scripts: ["latin", "han"] };
-    const latin = { locale: "en-US", channel: "spoken", scripts: ["latin"] };
+    const own = { locale: "zh-CN", channel: "spoken", scripts: ["latin", "han"], producerFamilies: WIKI_PRODUCER_FAMILIES };
+    const latin = { locale: "en-US", channel: "spoken", scripts: ["latin"], producerFamilies: WIKI_PRODUCER_FAMILIES };
     for (const [opportunity, routedOpportunity] of [
       [{ ...own, locale: "en-US" }, latin],
       [{ ...own, locale: "de-DE" }, latin],
@@ -1515,12 +1520,16 @@ describe("Wiki evidence and authority", () => {
     state = settle(state, "accepted-implicit", appliedRule(state, "Engelbart"));
     expect(state.aliasEvidence[0]).toMatchObject({ kept: 4, keptQuietTurns: 0 });
     const rule = appliedRule(state, "Engelbart");
-    expect(applyWikiOccurrenceSettlement(state, {
+    const secondOccurrence = applyWikiOccurrenceSettlement(state, {
       occurrenceId: "second-occurrence",
       outcome: "accepted-implicit",
       rule,
       origin: "generated",
-    })).toEqual({ ok: true, state, changed: false });
+    });
+    expect(secondOccurrence).toMatchObject({ ok: true, changed: true,
+      state: { ruleMaturity: [{ keptSettlements: 2 }] } });
+    if (!secondOccurrence.ok) throw new Error(secondOccurrence.error.message);
+    expect(secondOccurrence.state.aliasEvidence).toEqual(state.aliasEvidence);
 
     state = applyObservationBatch(state, []);
     expect(state.aliasEvidence[0]).toMatchObject({ kept: 4, keptQuietTurns: 1 });
@@ -1534,7 +1543,7 @@ describe("Wiki evidence and authority", () => {
       keptQuietTurns: 0,
     });
     expect(state.authorities).toEqual([]);
-    expect(state.lexemes[0]).toMatchObject({ provenance: "human-confirmed" });
+    expect(state.lexemes[0]).toMatchObject({ provenance: "manual" });
     expect(parseWikiState(JSON.parse(JSON.stringify(state))))
       .toEqual({ ok: true, state });
   });
@@ -1792,12 +1801,18 @@ describe("Wiki evidence and authority", () => {
   it("reads authority from state, so confirmed rules stay outside scoring", () => {
     const confirmed = apply(createEmptyWikiState(), decision("confirm-rule", "Codex"));
     for (const outcome of ["accepted-implicit", "inspected-kept", "reverted", "censored"] as const) {
-      expect(applyWikiOccurrenceSettlement(confirmed, {
+      const settled = applyWikiOccurrenceSettlement(confirmed, {
         occurrenceId: `confirmed-${outcome}`,
         outcome,
         rule: appliedRule(confirmed, "Codex"),
         origin: "human-admission",
-      })).toEqual({ ok: true, state: confirmed, changed: false });
+      });
+      expect(settled.ok).toBe(true);
+      if (!settled.ok) throw new Error(settled.error.message);
+      expect(settled.changed).toBe(outcome !== "censored");
+      expect(settled.state.authorities).toEqual(confirmed.authorities);
+      expect(settled.state.aliasEvidence).toEqual(confirmed.aliasEvidence);
+      expect(settled.state.ruleMaturity).toHaveLength(outcome === "censored" ? 0 : 1);
     }
 
     // A provisional rule confirmed in the Wiki surface before its occurrence
@@ -1805,12 +1820,14 @@ describe("Wiki evidence and authority", () => {
     const active = activeMetaphoneAlias();
     const rule = appliedRule(active, "Engelbart");
     const promoted = apply(active, decision("confirm-rule", "Engelbart"));
-    expect(applyWikiOccurrenceSettlement(promoted, {
+    const revertedConfirmed = applyWikiOccurrenceSettlement(promoted, {
       occurrenceId: "promoted",
       outcome: "reverted",
       rule,
       origin: "human-admission",
-    })).toEqual({ ok: true, state: promoted, changed: false });
+    });
+    expect(revertedConfirmed).toMatchObject({ ok: true, changed: true,
+      state: { authorities: promoted.authorities, ruleMaturity: [{ keptSettlements: 0 }] } });
     expect(applyWikiOccurrenceSettlement(active, {
       occurrenceId: "relabelled",
       outcome: "reverted",
@@ -1904,7 +1921,7 @@ describe("Wiki evidence and authority", () => {
     expect(state.termEvidence.find((entry) => entry.locale === "en-US"))
       .toMatchObject({ phase: "collected", support: 8 });
     expect(state.lexemes).toEqual([
-      expect.objectContaining({ canonical: "morphogenesis", provenance: "aggregate-evidence" }),
+      expect.objectContaining({ canonical: "morphogenesis", provenance: "collected" }),
     ]);
   });
 
@@ -1924,7 +1941,7 @@ describe("Wiki evidence and authority", () => {
       locale: "zh-CN" as const,
       canonical: "材料",
       scope: "both" as const,
-      provenance: "aggregate-evidence" as const,
+      provenance: "collected" as const,
       confirmedAtRevision: null,
     });
     const state: WikiState = Object.freeze({
@@ -2040,7 +2057,7 @@ describe("Wiki evidence and authority", () => {
           locale: "en-US" as const,
           canonical: "Codex",
           scope: "both" as const,
-          provenance: "aggregate-evidence" as const,
+          provenance: "collected" as const,
           confirmedAtRevision: null,
         })]),
         termEvidence: Object.freeze([Object.freeze({
@@ -2122,7 +2139,7 @@ describe("Wiki evidence and authority", () => {
     state = applyObservationBatch(state, [observe("recent-material")]);
     expect(state.termEvidence[0]).toMatchObject({ phase: "collected", support: 10 });
     expect(state.lexemes).toEqual([
-      expect.objectContaining({ canonical: "Codex", provenance: "aggregate-evidence" }),
+      expect.objectContaining({ canonical: "Codex", provenance: "collected" }),
     ]);
   });
 });
@@ -2242,8 +2259,9 @@ function ledgerTick(
     return Object.freeze({ disposition });
   }
   return routedOpportunity === undefined
-    ? Object.freeze({ disposition, opportunity })
-    : Object.freeze({ disposition, opportunity, routedOpportunity });
+    ? Object.freeze({ disposition, opportunity: { ...opportunity, producerFamilies: WIKI_PRODUCER_FAMILIES } })
+    : Object.freeze({ disposition, opportunity: { ...opportunity, producerFamilies: WIKI_PRODUCER_FAMILIES },
+        routedOpportunity: { ...routedOpportunity, producerFamilies: WIKI_PRODUCER_FAMILIES } });
 }
 
 /** One complete Chinese spoken turn whose Latin words routed to en-US. */
@@ -2353,7 +2371,7 @@ function stateWithHumanLexemes(count: number, includeAggregate = false): WikiSta
       locale: "en-US" as const,
       canonical: `Term ${index.toString().padStart(5, "0")}`,
       scope: "both" as const,
-      provenance: "human-confirmed" as const,
+      provenance: "manual" as const,
       confirmedAtRevision: 1,
     }),
   );
@@ -2363,7 +2381,7 @@ function stateWithHumanLexemes(count: number, includeAggregate = false): WikiSta
       locale: "en-US" as const,
       canonical: "Collected candidate",
       scope: "both" as const,
-      provenance: "aggregate-evidence" as const,
+      provenance: "collected" as const,
       confirmedAtRevision: null,
     }));
   }

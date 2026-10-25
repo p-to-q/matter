@@ -17,6 +17,153 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-25 — deployment recovery requires an explicit safe reload
+Changed:    one build-frozen public identity reaches the client and health
+            response; a bounded idle observer may offer a manual Archive reload
+            only after current work and saving permit it
+Why:        detecting another artifact must not discard held or unsaved material
+Forecloses: treating automatic hard navigation as Matter's recovery contract;
+            platform routing and actual release recovery still need qualification
+
+## 2026-10-25 — Wiki V8 remains an unreleased integration boundary
+Changed:    W0 adds strict provenance, preferences, maturity and diagnostic
+            accounting under the active freeze; legacy reads do not write V8,
+            and physical IndexedDB remains v7
+Why:        preserve lexical ownership and bounded evolution without promoting
+            another producer or inventing stored human history
+Forecloses: merging this foundation before the external-generation/in-flight
+            CAS cutoff blocker and release checks are resolved
+
+## 2026-10-16 — deliberate receipts share Copy's readable body without widening context
+
+Changed: Receipt v2 uses a closed Atom-like permanent-ID/version contract,
+shared Markdown list text, positional relation metadata and exact UTF-8 SHA-256.
+V1 verification remains; ordinary single Copy stays literal, and Archive stays
+the recovery format. Nonrepresentable human/machine hierarchy is refused.
+
+Why: the owner wants people and machines to read the same coherence without
+generating a diagram or relying on a model to reconstruct relationships.
+
+Forecloses: silently changing v1, adding Mermaid, volatile timestamps, hidden
+context or importing a receipt as durable material. A future Archive format
+marker requires its own compatibility freeze.
+
+## 2026-10-16 — drawing discovery is independent of paid admission
+
+Changed: a drawable passage keeps plain-text **生图** between Voice and Rewrite.
+An unavailable activation explains locally and sends no request; health still
+admits only available openings. Existing popup dimensions and width reserve stay.
+
+Why: hiding a closed capability made the requested entry disappear and changed
+the apparent field width. Visibility must not imply service or spend readiness.
+
+Forecloses: enabling a paid service to make its UI visible, silent operator-paid
+fallback from a private API, or treating per-instance limits as a global budget.
+User-provided image funding remains a separate explicit capability, not a text lease.
+
+## 2026-10-16 — endpoint dimensions have one owner
+
+Changed: the structural trail candidate uses 5px attachment points and a 7px
+addressed target. Existing screen metrics now drive geometry, SVG circle/cue
+coordinates and projected stylesheet stroke sizes, without numeric CSS copies.
+
+Why: the owner delegated implementation after the endpoint review. Slightly
+larger points distinguish attachment and current address while the existing
+2.5px line, real ports, restrained ink and departure behavior remain steady.
+One dimensional owner makes later optical refinement a local change.
+
+Forecloses: treating round caps as extra node symbols, stacking arrows over
+points, turning passive marks into undisclosed controls, moving attachment
+centres to fit larger points or building a general graph/theme subsystem. The
+prior 4.5/6px frames remain trace; final visual acceptance is still the owner's.
+
+## 2026-10-16 — owner review restores two-action contact and removes the typographic stair
+
+Changed: the explicit local preview now has only AI and `−` / restore `+` in
+ordinary hover, using the stable pre-Under interaction reference `6b70e794`.
+Rail sample Branch and formal-default Under remain. Original 6px corner
+button-box contact is restored; the preceding 14px-gap experiment is rejected.
+Fixed 44/48px controls and behind-material background fog remain explicit
+current overrides, not a historical whole-file restoration.
+
+Why: the owner wanted the original overlapping relationship and quiet two-mark
+instrument. Independent large/small first-row centres also produced an unwanted
+stair. A truly top-aligned first-child pair may now share one measured in-row
+ordinate; all drawn siblings share its source, and line/target use one port.
+
+Forecloses: treating intended contact as an overlap bug, restoring old suspended
+trail anchors or guessing a missing first-child measure. Points become
+4.5/6px, downward omission keeps three 2.5px dots, and viewport continuation
+keeps the existing open chevron. No new graph, material mutation or control.
+
+## 2026-10-16 — local instruments stay fixed; their fog yields to material
+
+Changed: the local action lens uses fixed 44px desktop / 48px compact-or-coarse
+targets, independent of material type and camera zoom. One measured placement
+drives an inert fog behind the material world and the interactive toolbar above
+it. Corner targets end 14px above first-line ink, with the entire interactive
+carrier clear; hover never moves the target.
+
+Why: owner review recovered the earlier constant-size instrument intent, and a
+real middle-button hover capture exposed dense feedback obscuring the first
+line. Separating decorative paint and removing the old six-pixel overlap fixes
+the optical ownership without moving material or cloning interaction state.
+
+Forecloses: material-dependent tool sizing, backdrop blur sampling the addressed
+text, and an overlap exception for interactive targets. The faint outer hover
+halo is not promised to have zero pixel overlap. Branch versus Under remains an
+explicit preview/default decision; no generation or tree semantics changed.
+
+## 2026-10-16 — review builds restore sample Branch; trail ports meet visible language
+
+Changed: the explicit Preview Branch build restores its historical hover mark
+as well as the retained rail entry, both through the existing local fixture
+command and tree/history owner. The default Under lifecycle is unchanged. The
+candidate trail now attaches to actual first text-row ports, not centred column
+boxes, with a 2.5px line and 4px soft corners. Invalid current geometry cuts old
+ink; genuine dismissal keeps the existing departure motion.
+
+Why: owner review distinguished sample/adjacent-context exploration from human
+admission and showed that topologically correct container endpoints still left
+visible gaps and unnecessary bends.
+
+Forecloses: treating a sample fallback as contextual AI generation, reverting
+unrelated work to restore one affordance, or using hidden canonical Elastic text
+as a visible endpoint. The local review is not deployment or visual acceptance;
+manual dashed associations remain design-only.
+
+## 2026-10-16 — structural trail bridges the existing adjacent layout edges
+
+Changed: the candidate trail projects each exact parent-right-middle to
+child-left-middle layout edge, with rounded gap turns. It no longer maintains
+a second suspended gutter geometry or draws through intervening passages.
+Invalid addressed bridges refuse the whole drawing; visibility ownership,
+clipping/pinning and pointer passivity remain unchanged.
+
+Why: correct ancestry was rendered as a detached top line across columns,
+obscuring the adjacent relationship the material already owns.
+
+Forecloses: a proximity router, authored coordinates or a renderer-owned graph.
+Existing marker styling is not final acceptance; A/B remain test-only visual
+hypotheses and manual associations remain design-only.
+
+## 2026-10-16 — integration resumes against current material facts and explicit proof
+
+Changed: the active plan owns the current craft/projection/identity integration
+and retains the interrupted Wiki campaign separately. The handoff has one
+current resume point and explicitly historical earlier statuses. Material and
+protocol documentation now include the existing image pointer, Under admission
+and database v7 boundary. The workflow records six research, ownership,
+robustness, maintainability, prior-art and perceptual review questions.
+
+Why: the implementation had outgrown planning-only notices and old Branch/v6
+descriptions, so a new agent could repeat completed work or misread an unopened
+capability as a release. One output/scope matrix keeps tree projections coherent.
+
+Forecloses: promoting a feature, paid surface, migration or visual design by
+documentation alone. Existing principles and historical research remain intact;
+raw conversations and real material remain outside the public repository.
+
 ## 2026-10-12 — Copy is one button that carries structure; a trail shows the selected passage's lineage (first version, to be redesigned)
 
 Changed: in select mode, ticking a passage ticks its ancestors as muted "context" rows the person

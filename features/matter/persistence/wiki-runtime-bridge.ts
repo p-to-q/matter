@@ -13,6 +13,7 @@ import {
   mintMatterWikiOccurrence,
   renewMatterWikiOccurrence,
   takeMatterWikiOccurrence,
+  recordMatterWikiTransientOutcome,
 } from "./wiki-occurrence-owner";
 import { matterWikiBasisPublication } from "./wiki-runtime-publication";
 
@@ -93,7 +94,8 @@ export type MatterWikiOccurrenceSettleStatus =
 
 /**
  * Settles one applied occurrence exactly once. The attribution is consumed
- * before any write, so a repeated or late signal for the same id is inert. A
+ * after loading and immediately before enqueueing, so a committed revert can
+ * revoke an older application while loading. A repeated signal is inert. A
  * censored occurrence releases its memory without waking durable storage.
  * If the lazy wiki-runtime-core chunk fails to load, the settlement returns
  * "failed" and a retry is armed; the attribution is already consumed and cannot
@@ -104,9 +106,14 @@ export async function settleMatterWikiOccurrence(
   occurrenceId: string,
   outcome: Exclude<WikiOccurrenceOutcome, "explicit-replace">,
 ): Promise<MatterWikiOccurrenceSettleStatus> {
-  const attribution = takeMatterWikiOccurrence(occurrenceId);
-  if (attribution === null) return "unattributed";
-  if (outcome === "censored") return "neutral";
+  if (outcome === "censored") {
+    if (takeMatterWikiOccurrence(occurrenceId) === null) {
+      recordMatterWikiTransientOutcome("unattributed");
+      return "unattributed";
+    }
+    recordMatterWikiTransientOutcome("censored");
+    return "neutral";
+  }
   let coreModule: typeof import("./wiki-runtime-core") | null = null;
   try {
     coreModule = await import("./wiki-runtime-core");
@@ -114,10 +121,20 @@ export async function settleMatterWikiOccurrence(
     _coreRecovery.succeeded();
   } catch {
     // Load failure: arm backoff + recovery signals so subsequent calls may
-    // succeed. The attribution was already consumed; return "failed" now.
+    // succeed. Consume this failed settlement so retry cannot apply it twice.
     _coreStatus = "failed";
     _coreRecovery.failed();
+    takeMatterWikiOccurrence(occurrenceId);
+    recordMatterWikiTransientOutcome("failed");
     return "failed";
+  }
+  // Loading may have waited behind a committed revert. Keep attribution in
+  // its owner until now so that write can revoke an older application.
+  const attribution = takeMatterWikiOccurrence(occurrenceId,
+    outcome === "accepted-implicit" || outcome === "inspected-kept");
+  if (attribution === null) {
+    recordMatterWikiTransientOutcome("unattributed");
+    return "unattributed";
   }
   try {
     const result = await coreModule.settleHydratedMatterWikiOccurrence(Object.freeze({
@@ -126,8 +143,10 @@ export async function settleMatterWikiOccurrence(
       rule: attribution.rule,
       origin: attribution.origin,
     }));
+    if (!result.ok) recordMatterWikiTransientOutcome("failed");
     return result.ok ? result.changed ? "recorded" : "unchanged" : "failed";
   } catch {
+    recordMatterWikiTransientOutcome("failed");
     return "failed";
   }
 }

@@ -67,3 +67,5 @@ export function adjudicateAdmissionRepair(candidate: AdmissionRepairCandidate): 
   });
   return Object.freeze({ ok: true as const, text, changed: text !== candidate.expectedText });
 }
+
+Object.defineProperty(adjudicateAdmissionRepair, "matterCapability", { value: "matter-capability:repair-adjudication" });

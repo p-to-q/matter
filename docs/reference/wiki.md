@@ -3,6 +3,19 @@
 Status: first-release engineering contract. The scoring constants remain a
 corpus-calibration boundary, not a claim of product quality.
 
+Integration status (2026-10-25): the unreleased W0 candidate implements the
+record/state V8 foundation frozen in
+[`../../plans/active-tree-material.md`](../../plans/active-tree-material.md).
+Its physical IndexedDB database remains v7. The V7 discussion below describes
+the accepted predecessor; the active W0 freeze owns the exact additive shape,
+legacy read/first-write boundary, preferences, counters, maturity and byte
+allowance. This is not W1 producer promotion. Adopting an external generation
+now advances a coordinator-owned passive-evidence cutoff, checked on CAS rebase;
+old passive applications are censored while explicit decisions remain eligible.
+Some passive learning across unrelated external writes is deliberately lost.
+The integration and prerelease evidence boundaries are in
+[`closure-wave.md`](closure-wave.md#pr-continuation--2026-10-25).
+
 Wiki is a thin, origin-local authority for forms that Matter can resolve
 deterministically. It exists to make repeated recognition and wording mistakes
 disappear from future material. It is not a notebook, memory system, retrieval

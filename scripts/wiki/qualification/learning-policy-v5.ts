@@ -30,6 +30,7 @@ import {
 } from "../../../features/matter/wiki/wiki-learning-policy";
 import {
   WIKI_SCORING_VERSION,
+  WIKI_PRODUCER_FAMILIES,
   type WikiBoundary,
   type WikiChannel,
   type WikiLedgerTick,
@@ -55,6 +56,8 @@ const POLICY_SOURCE_FILES = Object.freeze([
   "features/matter/wiki/wiki-transition.ts",
   "features/matter/wiki/wiki-model.ts",
   "features/matter/wiki/wiki-invariants.ts",
+  "features/matter/wiki/wiki-preferences.ts",
+  "features/matter/wiki/wiki-diagnostics.ts",
   "features/matter/wiki/wiki-script.ts",
   "features/matter/wiki/wiki-script-routing.ts",
   "features/matter/wiki/wiki-producer-qualification.ts",
@@ -84,7 +87,8 @@ type AdmissionTurn = Readonly<{
   environment: WikiLearningReplayEnvironment;
   observations: readonly string[];
   scan: "complete" | "partial";
-  context: "comparable" | "other-locale" | "other-script" | "routed" | "unrouted";
+  context: "comparable" | "other-locale" | "other-script" | "routed" | "unrouted" |
+    "other-family" | "other-channel";
 }>;
 
 /**
@@ -203,7 +207,7 @@ const RESTRICTED_PAIR = Object.freeze([lexeme("zh-CN", "静音"), lexeme("zh-CN"
  */
 export const WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST = Object.freeze({
   qualificationVersion: WIKI_LEARNING_POLICY_QUALIFICATION_VERSION,
-  corpusVersion: "wiki-learning-policy-v4-corpus/2",
+  corpusVersion: "wiki-learning-policy-v5-corpus/1",
   policyVersion: WIKI_LEARNING_POLICY_VERSION,
   scoringVersion: WIKI_SCORING_VERSION,
   policyConstants: POLICY_CONSTANTS,
@@ -608,6 +612,30 @@ export const WIKI_LEARNING_POLICY_QUALIFICATION_MANIFEST = Object.freeze({
       checkpointTurns: [1, 2],
       expected: [checkpoint(1), checkpoint(2)],
     }),
+    aliasScenario({
+      scenarioId: "producer-family-opportunity-withholds-aging",
+      locale: "en-US", scripts: ["latin"], form: "Englebart", producer: "latin-internal-edit-v2",
+      lexemes: [lexeme("en-US", "Engelbart")],
+      turns: [human("Engelbart"), human("Engelbart"), human("Engelbart"), human("Engelbart"),
+        ...quiet(40, "other-family")],
+      checkpointTurns: [44],
+      expected: [checkpoint(44, { alias: [alias("Engelbart", "active", 16, 0)], qualified: [ROUTED_LATIN] })],
+    }),
+    termScenario({
+      scenarioId: "term-family-and-spoken-channel-withhold-aging",
+      turns: [human("morphogenesis"), human("morphogenesis"),
+        ...quiet(40, "other-family"), ...quiet(40, "other-channel")],
+      checkpointTurns: [82],
+      expected: [checkpoint(82, { term: [term("morphogenesis", "collected", 8, 0)], aggregate: ["morphogenesis"] })],
+    }),
+    aliasScenario({
+      scenarioId: "legacy-producer-retains-ledger-scan-aging",
+      locale: "en-US", scripts: ["latin"], form: "Englebart", producer: "legacy-v1",
+      lexemes: [lexeme("en-US", "Engelbart")],
+      turns: [human("Engelbart"), human("Engelbart"), human("Engelbart"), ...quiet(32, "other-family")],
+      checkpointTurns: [35],
+      expected: [checkpoint(35, { alias: [alias("Engelbart", "candidate", 6, 0)] })],
+    }),
   ]),
 });
 
@@ -770,7 +798,8 @@ function tickFor(
             locale: turn.context === "other-locale"
               ? otherLocale(scenario.locale)
               : scenario.locale,
-            channel: scenario.channel,
+            channel: turn.context === "other-channel" ? "written" : scenario.channel,
+            producerFamilies: turn.context === "other-family" ? [] : WIKI_PRODUCER_FAMILIES,
             scripts: turn.context === "other-script"
               ? otherScripts(scenario.scripts)
               : scenario.scripts,
@@ -791,6 +820,7 @@ function chineseTurnTick(
     locale: "zh-CN" as const,
     channel: scenario.channel,
     scripts: Object.freeze(containedLatin ? ["latin", "han"] as const : ["han"] as const),
+    producerFamilies: WIKI_PRODUCER_FAMILIES,
   });
   return containedLatin
     ? Object.freeze({
@@ -800,6 +830,7 @@ function chineseTurnTick(
           locale: scenario.locale,
           channel: scenario.channel,
           scripts: scenario.scripts,
+          producerFamilies: WIKI_PRODUCER_FAMILIES,
         }),
       })
     : Object.freeze({ disposition, opportunity });
@@ -838,7 +869,7 @@ function snapshot(state: WikiState, afterTurn: number): ScenarioCheckpoint {
     .map((entry) => canonicalOf(entry.lexemeId))
     .sort(compareCodeUnits);
   const aggregateLexemes = state.lexemes
-    .filter((entry) => entry.provenance === "aggregate-evidence")
+    .filter((entry) => entry.provenance === "collected" || entry.provenance === "starter")
     .map((entry) => entry.canonical)
     .sort(compareCodeUnits);
   const qualifiedProjection = projectApplicableWikiRules(

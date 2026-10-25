@@ -11,7 +11,7 @@ import type { PictureControlCopy } from "./picture-control-copy";
 import type { PointTalkCloseReason } from "./point-talk-close";
 
 /**
- * The pure rules of the 绘图 control: when it exists, what the bubble says for
+ * The pure rules of the picture control: when it exists, what the bubble says for
  * each state of the picture turn, and how the turn's transitions reach the
  * announcement region, the outcome line, and the bubble's close. The driver
  * and its reducer own the lifecycle; nothing here stores state.
@@ -21,12 +21,12 @@ import type { PointTalkCloseReason } from "./point-talk-close";
  * `disabled` waits on another interaction; `full` says the document cannot
  * keep another picture, and the control then names that reason.
  */
-export type PictureControlPresentation = "absent" | "enabled" | "disabled" | "full";
+export type PictureControlPresentation = "absent" | "unavailable" | "enabled" | "disabled" | "full";
 
 /**
- * The control exists only when the health read said `available`, this browser
- * can finish a picture it has paid for, and the passage can be drawn from. It
- * stays, `aria-disabled`, while another interaction is pending, the document
+ * Discovery is not admission: a drawable passage keeps its entry even when
+ * the service or browser cannot draw. Only an available opening may arm the
+ * driver. It stays, `aria-disabled`, while another interaction is pending, the document
  * is full, or the picture store could not be opened, so focus survives. Whether
  * the store is still opening is not an input: the row is decided when the field
  * opens and never changes after, so a store that is merely slow leaves the
@@ -43,12 +43,11 @@ export function pictureControlPresentation(input: Readonly<{
   /** The store could not be opened for this passage; the control stays, unable to start. */
   storeFailed: boolean;
 }>): PictureControlPresentation {
-  if (
-    input.availability !== "available" ||
-    !input.environmentSupported ||
-    !canDrawFromPassage(input.passageText)
-  ) return "absent";
-  if (input.interactionPending || input.storeFailed) return "disabled";
+  if (!canDrawFromPassage(input.passageText)) return "absent";
+  if (input.availability !== "available" || !input.environmentSupported || input.storeFailed) {
+    return "unavailable";
+  }
+  if (input.interactionPending) return "disabled";
   return input.documentHasRoom ? "enabled" : "full";
 }
 

@@ -88,6 +88,7 @@ export type NodeActionLensProps = Readonly<{
   onToggleHeldAside: (nodeId: string) => void;
   pointTalkEligibleNodeIds: ReadonlySet<string>;
   positioningRef: RefObject<HTMLElement | null>;
+  previewBranch: boolean;
   tree: ThoughtTree;
   under: NodeActionUnder;
   /** Live, disclosed Wiki changes by passage: the keyboard path to each takeover. */
@@ -115,6 +116,7 @@ export function NodeActionLens({
   onToggleHeldAside,
   pointTalkEligibleNodeIds,
   positioningRef,
+  previewBranch,
   tree,
   under,
   wikiReviews,
@@ -148,18 +150,22 @@ export function NodeActionLens({
     window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = null;
   }, []);
-  const close = useCallback(() => {
+  const releaseTransientTarget = useCallback(() => {
     clearCloseTimer();
     targetElementRef.current = null;
     pendingKeyboardEntryRef.current = null;
     setTarget(null);
-    setPlacement(null);
     noteKeyboardEntry(null);
   }, [clearCloseTimer, noteKeyboardEntry]);
+  const close = useCallback(() => {
+    releaseTransientTarget();
+    setPlacement(null);
+  }, [releaseTransientTarget]);
   const scheduleClose = useCallback(() => {
     clearCloseTimer();
-    closeTimerRef.current = window.setTimeout(close, CLOSE_DELAY_MS);
-  }, [clearCloseTimer, close]);
+    // Departure releases hover, not the placement still owned by a selection.
+    closeTimerRef.current = window.setTimeout(releaseTransientTarget, CLOSE_DELAY_MS);
+  }, [clearCloseTimer, releaseTransientTarget]);
   const focusPendingKeyboardEntry = useCallback((nodeId: string) => {
     const lens = lensRef.current;
     if (pendingKeyboardEntryRef.current !== nodeId || lens?.dataset.nodeId !== nodeId) return false;
@@ -340,7 +346,7 @@ export function NodeActionLens({
       ((activeTarget.source === "selection" && coarse) || keyboardNodeId === activeTarget.nodeId)
     ? (wikiReviews?.get(activeTarget.nodeId) ?? NO_WIKI_REVIEWS).slice(0, MAX_NODE_ACTION_WIKI_REVIEWS)
     : NO_WIKI_REVIEWS;
-  const actionCount = activeTarget === null ? 0 : 3 + reviews.length;
+  const actionCount = activeTarget === null ? 0 : (previewBranch ? 2 : 3) + reviews.length;
   const currentPlacement = placement !== null && activeTarget !== null &&
     placement.owner.actionCount === actionCount &&
     placement.owner.coarse === coarse &&
@@ -385,10 +391,7 @@ export function NodeActionLens({
       const paperRect = paper.getBoundingClientRect();
       const positioningRect = positioningRef.current?.getBoundingClientRect() ?? paperRect;
       const textRect = measureFirstLineInkRect(text);
-      // The field belongs to this passage, so it is sized from this passage's
-      // own type rather than one fixed control size for the whole tree.
       const metrics = projectNodeHandleMetrics({
-        inkHeight: textRect.height,
         coarse: coarse || compact,
       });
       const result = projectNodeHandlePosition({
@@ -518,8 +521,28 @@ export function NodeActionLens({
     pointTalkEligibleNodeIds.has(activeTarget.nodeId);
   const underLabel = underRecording ? copy.underCancel : copy.under;
   const underReasonText = underReason === null ? undefined : copy.underBlocked[underReason];
+  const lensStyle = {
+    left: currentPlacement.left,
+    top: currentPlacement.top,
+    "--lens-action-count": actionCount,
+    "--lens-button": `${currentPlacement.metrics.button}px`,
+    "--lens-gap": `${currentPlacement.metrics.gap}px`,
+    "--lens-pad-x": `${currentPlacement.metrics.paddingX}px`,
+    "--lens-pad-y": `${currentPlacement.metrics.paddingY}px`,
+    "--lens-material-x": `${currentPlacement.materialCorner?.x ?? currentPlacement.metrics.paddingX}px`,
+    "--lens-material-y": `${currentPlacement.materialCorner?.y ?? currentPlacement.metrics.paddingY}px`,
+  } as CSSProperties;
 
   return (
+    <>
+    <div
+      aria-hidden="true"
+      className="node-action-fog"
+      data-node-action-fog
+      data-node-id={activeTarget.nodeId}
+      data-relation={currentPlacement.relation}
+      style={lensStyle}
+    />
     <div
       aria-label={copy.actions}
       className="node-action-lens"
@@ -542,16 +565,7 @@ export function NodeActionLens({
       ref={lensRef}
       role="toolbar"
       aria-orientation="horizontal"
-      style={{
-        left: currentPlacement.left,
-        top: currentPlacement.top,
-        "--lens-button": `${currentPlacement.metrics.button}px`,
-        "--lens-gap": `${currentPlacement.metrics.gap}px`,
-        "--lens-pad-x": `${currentPlacement.metrics.paddingX}px`,
-        "--lens-pad-y": `${currentPlacement.metrics.paddingY}px`,
-        "--lens-material-x": `${currentPlacement.materialCorner?.x ?? currentPlacement.metrics.paddingX}px`,
-        "--lens-material-y": `${currentPlacement.materialCorner?.y ?? currentPlacement.metrics.paddingY}px`,
-      } as CSSProperties}
+      style={lensStyle}
     >
       <button
         aria-label={copy.rewrite}
@@ -573,28 +587,32 @@ export function NodeActionLens({
       >
         <MatterAiIcon />
       </button>
-      <button
-        aria-describedby={underReasonText === undefined ? undefined : underReasonId}
-        aria-disabled={underReason !== null || undefined}
-        aria-label={underLabel}
-        className="node-action-lens__button"
-        data-node-action="under"
-        data-under-state={underRecording ? "recording" : undefined}
-        onClick={(event) => {
-          // `aria-disabled`, not `disabled`: the mark stays focusable to say why.
-          if (underReason !== null) return;
-          // A keyboard activation has no pointer position (`detail` 0).
-          if (!underRecording) underKeyboardArmedRef.current = event.detail === 0;
-          under.onActivate(activeTarget.nodeId);
-        }}
-        tabIndex={underArmed ? 0 : -1}
-        title={underReasonText === undefined ? underLabel : `${underLabel} — ${underReasonText}`}
-        type="button"
-      >
-        <UnderIcon />
-      </button>
-      {underReasonText === undefined ? null : (
-        <span className="visually-hidden" id={underReasonId}>{underReasonText}</span>
+      {!previewBranch && (
+        <>
+          <button
+            aria-describedby={underReasonText === undefined ? undefined : underReasonId}
+            aria-disabled={underReason !== null || undefined}
+            aria-label={underLabel}
+            className="node-action-lens__button"
+            data-node-action="under"
+            data-under-state={underRecording ? "recording" : undefined}
+            onClick={(event) => {
+              // `aria-disabled`, not `disabled`: the mark stays focusable to say why.
+              if (underReason !== null) return;
+              // A keyboard activation has no pointer position (`detail` 0).
+              if (!underRecording) underKeyboardArmedRef.current = event.detail === 0;
+              under.onActivate(activeTarget.nodeId);
+            }}
+            tabIndex={underArmed ? 0 : -1}
+            title={underReasonText === undefined ? underLabel : `${underLabel} — ${underReasonText}`}
+            type="button"
+          >
+            <UnderIcon />
+          </button>
+          {underReasonText === undefined ? null : (
+            <span className="visually-hidden" id={underReasonId}>{underReasonText}</span>
+          )}
+        </>
       )}
       <button
         aria-label={activeTarget.kind === "active" ? copy.setAside : copy.include}
@@ -629,6 +647,7 @@ export function NodeActionLens({
         </button>
       ))}
     </div>
+    </>
   );
 }
 

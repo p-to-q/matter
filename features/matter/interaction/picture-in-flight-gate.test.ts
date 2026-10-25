@@ -160,18 +160,23 @@ describe("picture in-flight gate across tabs", () => {
     expect(fake.requests).toEqual([]);
   });
 
-  it("falls back to the in-tab slot when the browser cannot answer the lock question", async () => {
+  it("fails closed when a present lock manager throws before answering", async () => {
     const throwing: PictureLockManager = {
       request: () => { throw new DOMException("denied", "SecurityError"); },
     };
+    const gate = createPictureInFlightGate(() => throwing);
+    await expect(gate.tryEnter("node-1")!.shareAcrossTabs()).resolves.toBe(false);
+    // The entry still owns its in-tab slot until its caller handles the refusal.
+    expect(gate.tryEnter("node-2")).toBeNull();
+  });
+
+  it("fails closed when a present lock manager rejects without answering", async () => {
     const rejecting: PictureLockManager = {
       request: () => Promise.reject(new DOMException("denied", "SecurityError")),
     };
-    for (const manager of [throwing, rejecting]) {
-      const gate = createPictureInFlightGate(() => manager);
-      await expect(gate.tryEnter("node-1")!.shareAcrossTabs()).resolves.toBe(true);
-      // The in-tab slot still excludes a second entry.
-      expect(gate.tryEnter("node-2")).toBeNull();
-    }
+    const gate = createPictureInFlightGate(() => rejecting);
+    await expect(gate.tryEnter("node-1")!.shareAcrossTabs()).resolves.toBe(false);
+    // The entry still owns its in-tab slot until its caller handles the refusal.
+    expect(gate.tryEnter("node-2")).toBeNull();
   });
 });

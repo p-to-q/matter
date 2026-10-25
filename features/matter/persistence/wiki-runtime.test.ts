@@ -8,6 +8,7 @@ vi.mock("../wiki/wiki-configuration", () => ({
 
 const makeRuntimeCoreStub = (overrides?: Record<string, unknown>) => ({
   readMatterWikiState: vi.fn(() => null),
+  readMatterWikiDiagnostics: vi.fn(() => null),
   getMatterWikiStatus: vi.fn(() => ({ phase: "loading" as const })),
   decideMatterWiki: vi.fn(),
   resetCorruptMatterWiki: vi.fn(),

@@ -62,7 +62,10 @@ export type WikiOccurrenceRegistry = Readonly<{
    */
   renew(occurrenceId: string, nowMs: number): boolean;
   /** Consumes one claimed, unexpired attribution. */
-  take(occurrenceId: string, nowMs: number): WikiOccurrenceAttribution | null;
+  take(occurrenceId: string, nowMs: number, passive?: boolean): WikiOccurrenceAttribution | null;
+  /** Releases older applications of a reverted visible form after its durable commit. */
+  revokeAppliedBefore(rule: WikiAppliedRule, revision: number): void;
+  revokePassiveBefore(revision: number): void;
   size(): number;
   clear(): void;
 }>;
@@ -71,6 +74,7 @@ type Entry = {
   attribution: WikiOccurrenceAttribution;
   registeredAtMs: number;
   claimedAtMs: number | null;
+  passiveRevoked: boolean;
 };
 
 export function createWikiOccurrenceRegistry(
@@ -117,6 +121,7 @@ export function createWikiOccurrenceRegistry(
         }),
         registeredAtMs: nowMs,
         claimedAtMs: null,
+        passiveRevoked: false,
       });
       return true;
     },
@@ -140,17 +145,33 @@ export function createWikiOccurrenceRegistry(
       entry.claimedAtMs = Math.max(entry.claimedAtMs, nowMs);
       return true;
     },
-    take(occurrenceId, nowMs) {
+    take(occurrenceId, nowMs, passive = false) {
       const entry = entries.get(occurrenceId);
       if (entry === undefined) return null;
       entries.delete(occurrenceId);
-      return entry.claimedAtMs === null || !Number.isFinite(nowMs) || expired(entry, nowMs)
+      return entry.claimedAtMs === null || !Number.isFinite(nowMs) || expired(entry, nowMs) ||
+        passive && entry.passiveRevoked
         ? null
         : entry.attribution;
     },
     size: () => entries.size,
+    revokeAppliedBefore(rule, revision) {
+      for (const entry of entries.values()) {
+        if (sameWikiOccurrenceForm(entry.attribution.rule, rule) &&
+            entry.attribution.rule.appliedAtRevision < revision) entry.passiveRevoked = true;
+      }
+    },
+    revokePassiveBefore(revision) {
+      for (const entry of entries.values()) {
+        if (entry.attribution.rule.appliedAtRevision < revision) entry.passiveRevoked = true;
+      }
+    },
     clear: () => entries.clear(),
   });
+}
+
+export function sameWikiOccurrenceForm(left: WikiAppliedRule, right: WikiAppliedRule): boolean {
+  return left.locale === right.locale && left.channel === right.channel && left.form === right.form;
 }
 
 function isDuration(value: number): boolean {
