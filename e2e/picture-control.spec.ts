@@ -37,14 +37,35 @@ const PNG_SHA256 = createHash("sha256").update(PNG).digest("hex");
 type HealthRoute = { requests: number; answered: number };
 const HEALTH = new WeakMap<Page, HealthRoute>();
 
+async function trackImageHealthReads(page: Page): Promise<HealthRoute> {
+  const state: HealthRoute = { requests: 0, answered: 0 };
+  HEALTH.set(page, state);
+  await page.exposeFunction("__recordImageHealth", (kind: "requests" | "answered") => { state[kind] += 1; });
+  await page.addInitScript(() => {
+    const send = window.fetch;
+    window.fetch = (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      // The independent deployment observer explicitly omits credentials.
+      const imageRead = new URL(url, location.href).pathname.endsWith("/api/health") && init?.credentials !== "omit";
+      const report = (kind: "requests" | "answered") => {
+        void (window as unknown as { __recordImageHealth: (value: string) => Promise<void> }).__recordImageHealth(kind);
+      };
+      if (imageRead) report("requests");
+      return send.call(window, input, init).then((response) => {
+        if (imageRead) report("answered");
+        return response;
+      });
+    };
+  });
+  return state;
+}
+
 async function answerHealth(
   page: Page,
   options: Readonly<{ answer?: "available" | "unavailable"; delayMs?: number; heldUntil?: Promise<void> }> = {},
 ): Promise<HealthRoute> {
-  const state: HealthRoute = { requests: 0, answered: 0 };
-  HEALTH.set(page, state);
+  const state = await trackImageHealthReads(page);
   await page.route("**/api/health", async (route) => {
-    state.requests += 1;
     await options.heldUntil;
     if (options.delayMs !== undefined) await new Promise((resolve) => setTimeout(resolve, options.delayMs));
     await route.fulfill({
@@ -56,7 +77,6 @@ async function answerHealth(
         surfaces: { material: "available", imageGeneration: options.answer ?? "available" },
       }),
     }).catch(() => undefined);
-    state.answered += 1;
   });
   return state;
 }
@@ -239,8 +259,15 @@ test.describe("the picture control", () => {
     }
     expect(reached).toContain(copy.controlName);
     await control(page).focus();
+    const before = await field.boundingBox();
     await page.keyboard.press("Enter");
-    await expect(field.getByRole("status")).toHaveText(copy.unavailable);
+    const guidance = page.locator(".matter-guidance");
+    await expect(guidance).toHaveAttribute("data-guidance-state", "picture-unavailable");
+    await expect(guidance).toHaveText(copy.unavailable);
+    await expect(field.getByRole("status")).toHaveCount(0);
+    const after = await field.boundingBox();
+    expect(after!.width).toBe(before!.width);
+    expect(after!.height).toBe(before!.height);
     await expect(control(page)).toBeFocused();
     await expect(field.locator(".point-talk__voice")).toBeVisible();
     await expect(field.locator(".point-talk__submit")).toBeVisible();
@@ -1002,13 +1029,10 @@ test.describe("when the control starts", () => {
   });
 
   test("a closed deployment costs one health request for any number of marks and presses", async ({ page }) => {
-    const requests: string[] = [];
-    page.on("request", (request) => {
-      if (request.url().endsWith("/api/health")) requests.push(request.url());
-    });
+    const health = await trackImageHealthReads(page);
     await openMatter(page);
     await page.waitForTimeout(1_000);
-    expect(requests).toHaveLength(0);
+    expect(health.requests).toBe(0);
     for (let round = 0; round < 4; round += 1) {
       await page.locator(`[data-thought-text-id="${ROOT_ID}"]`).hover();
       await expect(page.locator("[data-node-action=point-talk]")).toBeVisible();
@@ -1018,7 +1042,7 @@ test.describe("when the control starts", () => {
       await page.keyboard.press("Escape");
       await expect(page.locator(".point-talk")).toHaveCount(0);
     }
-    expect(requests).toHaveLength(1);
+    expect(health.requests).toBe(1);
   });
 
   test("an answer that arrives after the field opened applies to the next opening; the open row never moves", async ({ page }) => {

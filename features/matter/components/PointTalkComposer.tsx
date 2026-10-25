@@ -98,6 +98,7 @@ export type PointTalkSurfaceView = Readonly<{
 }>;
 
 type PointTalkHandlers = Readonly<{
+  onPictureUnavailable: () => void;
   onRetry: () => void;
   onStartVoice: () => void;
   onStopVoice: () => void;
@@ -116,6 +117,7 @@ export function PointTalkComposer({
   locale,
   nodeId,
   onCancel,
+  onPictureUnavailable,
   onRetry,
   onStartVoice,
   onStopVoice,
@@ -140,6 +142,7 @@ export function PointTalkComposer({
   nodeId: string;
   /** The person dismissed the field. */
   onCancel: () => void;
+  onPictureUnavailable?: () => void;
   onRetry: () => void;
   onStartVoice: () => void;
   onStopVoice: () => void;
@@ -549,6 +552,7 @@ export function PointTalkComposer({
         content={content}
         copy={copy}
         handlers={{
+          onPictureUnavailable: onPictureUnavailable ?? ignore,
           onRetry,
           onStartVoice,
           onStopVoice,
@@ -663,6 +667,7 @@ function PointTalkContent({
           inputRef={inputRef}
           key={content.formKey}
           onArmPicture={handlers?.picture.arm ?? ignore}
+          onPictureUnavailable={handlers?.onPictureUnavailable ?? ignore}
           onStartVoice={handlers?.onStartVoice ?? ignore}
           onSubmit={handlers?.onSubmit ?? ignore}
           pictureControl={content.pictureControl}
@@ -810,6 +815,7 @@ function PointTalkForm({
   inputId,
   inputRef,
   onArmPicture,
+  onPictureUnavailable,
   onStartVoice,
   onSubmit,
   pictureControl,
@@ -823,6 +829,7 @@ function PointTalkForm({
   inputId: string;
   inputRef?: RefObject<HTMLInputElement | null>;
   onArmPicture: () => void;
+  onPictureUnavailable: () => void;
   onStartVoice: () => void;
   onSubmit: (direction: string) => void;
   pictureControl: PictureControlPresentation;
@@ -832,7 +839,6 @@ function PointTalkForm({
   const [direction, setDirection] = useState(initialDirection);
   const pictureFullReasonId = `${inputId}-picture-full`;
   const pictureUnavailableReasonId = `${inputId}-picture-unavailable`;
-  const [explainUnavailable, setExplainUnavailable] = useState(false);
   return (
     <form
       className="point-talk__composer"
@@ -879,8 +885,7 @@ function PointTalkForm({
             data-picture-control
             data-picture-availability={pictureControl}
             onClick={pictureControl === "enabled" ? onArmPicture
-              : pictureControl === "unavailable" ? () => setExplainUnavailable(true) : undefined}
-            title={pictureControl === "unavailable" ? pictureCopy.unavailable : undefined}
+              : pictureControl === "unavailable" ? onPictureUnavailable : undefined}
             type="button"
           >
             {pictureCopy.control}
@@ -894,8 +899,7 @@ function PointTalkForm({
         </button>
       </div>
       {pictureControl === "unavailable" ? (
-        <p className={explainUnavailable ? "point-talk__quiet point-talk__unavailable" : "visually-hidden"}
-          id={pictureUnavailableReasonId} role={explainUnavailable ? "status" : undefined}>
+        <p className="visually-hidden" id={pictureUnavailableReasonId}>
           {pictureCopy.unavailable}
         </p>
       ) : null}

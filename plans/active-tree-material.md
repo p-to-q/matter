@@ -2,6 +2,13 @@
 
 ## PR integration continuation — 2026-10-25
 
+Owner's final surface correction: the Chinese drawing entry is 绘图 (繪圖 in
+traditional Chinese). Invoking an unavailable entry reports through the existing
+paper outcome line at lower left, keeping the field's size, typed direction and
+focus intact; no visible footer or native title hint competes with that line.
+The hidden accessible description remains. The closed-gate browser proof checks
+zero image requests, exact before/after dimensions and the outcome owner.
+
 The owner subsequently authorized this integration to reach main so the latest
 product is visible. Preserve the original dirty worktree and use the isolated
 PR branch. Budget failures must remain explicit, but are non-blocking for this

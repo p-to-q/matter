@@ -27,6 +27,7 @@ export default defineConfig({
       "scripts/check-deployment.test.mjs",
       "scripts/check-vercel-config.test.mjs",
       "scripts/check-runtime-artifact.test.mjs",
+      "scripts/build-main-integration.test.mjs",
       "scripts/check-architecture.test.mjs",
       "scripts/probe-model-pool.test.mjs",
       "scripts/local-ai-demo.test.mjs",

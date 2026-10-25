@@ -84,7 +84,6 @@
 .point-talk .point-talk__text-button:focus-visible { color: var(--ink); }
 .point-talk .point-talk__text-button[aria-disabled="true"] { opacity: .28; cursor: default; }
 .point-talk .point-talk__draw[data-picture-availability="unavailable"] { opacity: 1; cursor: help; }
-.point-talk__unavailable { flex-basis: 100%; padding: calc(3px * var(--point-talk-scale)) 0; }
 .point-talk__picture { flex-direction: column; align-items: stretch; gap: calc(6px * var(--point-talk-scale)); padding: calc(8px * var(--point-talk-scale)); }
 .point-talk__picture[data-picture-step="drawing"] { flex-direction: row; align-items: center; justify-content: space-between; padding-top: calc(3px * var(--point-talk-scale)); padding-bottom: calc(3px * var(--point-talk-scale)); }
 .point-talk__picture[data-picture-step="preview"]:focus { outline: none; }

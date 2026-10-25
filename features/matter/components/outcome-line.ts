@@ -27,7 +27,7 @@ export type MaterialOutcome =
    * A Point-and-Talk picture the person stopped waiting for, or whose passage
    * changed. Failures are said by the bubble itself while it is open.
    */
-  | Readonly<{ owner: "picture"; reason: "stale" | "stopped" }>;
+  | Readonly<{ owner: "picture"; reason: "stale" | "stopped" | "unavailable" }>;
 
 export type OutcomeOwner = MaterialOutcome["owner"];
 

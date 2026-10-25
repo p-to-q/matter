@@ -4,8 +4,8 @@ import { pictureControlCopy } from "./picture-control-copy";
 import { pictureCopy } from "./picture-copy";
 
 const VISIBLE_LABELS = {
-  "zh-CN": "生图",
-  "zh-TW": "生圖",
+  "zh-CN": "绘图",
+  "zh-TW": "繪圖",
   "ja-JP": "描く",
   "en-US": "Draw",
   "de-DE": "Zeichnen",
@@ -52,7 +52,7 @@ describe("picture control copy", () => {
   });
 
   it("names a closed capability without implying that a request was sent", () => {
-    expect(pictureControlCopy("en-US").unavailable).toContain("No request will be sent");
+    expect(pictureControlCopy("en-US").unavailable).toContain("Nothing sent");
     expect(pictureControlCopy("zh-CN").unavailable).toContain("不会发送请求");
   });
 

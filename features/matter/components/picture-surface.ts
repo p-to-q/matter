@@ -169,7 +169,7 @@ export function pictureKeepOffered(failure: PictureAcceptFailure | null): boolea
   return failure !== "refused";
 }
 
-export type PictureOutcomeReason = "stale" | "stopped";
+export type PictureOutcomeReason = "stale" | "stopped" | "unavailable";
 
 // A table, not a chain: a new phase must say what it leaves behind to compile.
 const OUTCOME_ON_ENTERING = {

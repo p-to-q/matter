@@ -40,7 +40,7 @@ const PICTURE_CONTROL_COPY: Readonly<Record<MatterLocale, PictureControlCopy>> =
   "en-US": Object.freeze({
     control: "Draw",
     controlName: "Draw a picture from this passage",
-    unavailable: "Drawing isn’t available here yet. No request will be sent.",
+    unavailable: "Drawing unavailable. Nothing sent.",
     armStatement:
       "Draws one picture. Your passage goes to a text model; only a short line goes to an image service. Takes up to a minute. Leaving loses it.",
     armWarningBilled: "The last attempt may already have been used.",
@@ -63,9 +63,9 @@ const PICTURE_CONTROL_COPY: Readonly<Record<MatterLocale, PictureControlCopy>> =
     announceKept: "Kept. Undo is available.",
   }),
   "zh-CN": Object.freeze({
-    control: "生图",
-    controlName: "根据这段文字生图",
-    unavailable: "此处暂时无法生图，不会发送请求。",
+    control: "绘图",
+    controlName: "根据这段文字绘图",
+    unavailable: "此处暂时无法绘图，不会发送请求。",
     armStatement:
       "绘制一张图片。这段文字会交给文字模型，只有一句简短描述会发给图像服务。最多需要一分钟，离开就会丢失。",
     armWarningBilled: "上一次可能已产生用量。",
@@ -88,9 +88,9 @@ const PICTURE_CONTROL_COPY: Readonly<Record<MatterLocale, PictureControlCopy>> =
     announceKept: "已保留，可撤销。",
   }),
   "zh-TW": Object.freeze({
-    control: "生圖",
-    controlName: "根據這段文字生圖",
-    unavailable: "此處暫時無法生圖，不會傳送請求。",
+    control: "繪圖",
+    controlName: "根據這段文字繪圖",
+    unavailable: "此處暫時無法繪圖，不會傳送請求。",
     armStatement:
       "繪製一張圖片。這段文字會交給文字模型，只有一句簡短描述會傳給圖像服務。最多需要一分鐘，離開就會遺失。",
     armWarningBilled: "上一次可能已產生用量。",

@@ -356,6 +356,7 @@ export function PointTalkTurn({
       locale={locale}
       nodeId={nodeId}
       onCancel={close}
+      onPictureUnavailable={() => onPictureOutcome?.("unavailable")}
       onRetry={controller.retry}
       onStartVoice={controller.startRecording}
       onStopVoice={controller.stopRecording}

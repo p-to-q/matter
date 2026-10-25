@@ -188,6 +188,10 @@ describe("canvas guidance projection", () => {
   it("says a stale or stopped picture on the line, in every language and inside the narrow budget where one applies", () => {
     const stale: MaterialOutcome = { owner: "picture", reason: "stale" };
     const stopped: MaterialOutcome = { owner: "picture", reason: "stopped" };
+    const unavailable: MaterialOutcome = { owner: "picture", reason: "unavailable" };
+    expect(projectCanvasGuidance(input({ outcome: unavailable }))).toEqual({
+      id: "picture-unavailable", kind: "recovery", text: "Drawing unavailable. Nothing sent.",
+    });
     expect(projectCanvasGuidance(input({ outcome: stale }))).toEqual({
       id: "picture-stale",
       kind: "recovery",
@@ -201,7 +205,7 @@ describe("canvas guidance projection", () => {
     expect(outcomeGuidanceId(stale)).toBe("picture-stale");
     expect(outcomeGuidanceId(stopped)).toBe("picture-stopped");
     for (const { value: language } of CANVAS_LANGUAGE_OPTIONS) {
-      for (const outcome of [stale, stopped]) {
+      for (const outcome of [stale, stopped, unavailable]) {
         const localized = localizeOutcome(outcome, language);
         // The narrow budget binds the English line and the Chinese ones, as for every other line.
         if (language === "en-US" || language.startsWith("zh")) {

@@ -9,6 +9,25 @@ limit. No CodeRabbit review is claimed; local independent passes remain their
 own evidence. The owner subsequently prioritized main integration with explicit
 budget debt.
 
+Latest owner correction: the entry reads **绘图** / **繪圖**; the unavailable
+explanation uses the existing lower-left paper outcome line, with no visible
+footer beneath the field. Focus, exact field dimensions and zero image requests
+are held by the new browser assertion. Five focused unit suites (113 tests),
+TypeScript and eight browser journeys pass.
+
+Complete local browser first run: 334 passed, 18 skipped, six failed. Those six
+exposed stale health-read ownership, pre-drawing-control width expectations and
+V7 export-field assumptions. Their assertions now retain the correct owner,
+reserved geometry and strict V8 shape; all are covered in the eight passing
+journeys. This combined evidence is not a fresh all-green full matrix.
+
+Hosted CI exposed the new Node test missing from Vitest's exclusion list; it is
+now explicitly owned by `node --test` in both runner lists. Latest-head hosted
+results are required. Vercel has failed before an accessible build log is
+available: current local browser/CLI account lacks the deployment team's scope.
+The same dedicated-domain build succeeds locally with the three declared
+budget failures. Do not infer a hosted success or a precise platform error.
+
 Vercel's build entry now uses the bounded integration wrapper. Only the three
 recorded Wiki budget diagnostics are accepted, and only for package version
 `0.2.0-preview.64`; version changes, unknown/global budgets, malformed diagnostics

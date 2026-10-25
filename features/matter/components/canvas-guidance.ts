@@ -86,6 +86,7 @@ type CanvasActionGuidanceId =
   | "wiki-passage-changed"
   | "picture-stale"
   | "picture-stopped"
+  | "picture-unavailable"
   | "matter-changed";
 
 export type CanvasGuidanceId = CanvasActionGuidanceId | "canvas-zoom";
@@ -126,6 +127,7 @@ const EN_US_LINES = Object.freeze({
   "wiki-passage-changed": "Passage changed. Not restored.",
   "picture-stale": "Passage changed. Not drawn.",
   "picture-stopped": "Stopped. It may still count.",
+  "picture-unavailable": "Drawing unavailable. Nothing sent.",
   "matter-changed": "Matter changed. Reload in Archive.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
@@ -162,6 +164,7 @@ const ZH_CN_LINES = Object.freeze({
   "wiki-passage-changed": "段落已变化，未恢复。",
   "picture-stale": "段落已变化，未绘图。",
   "picture-stopped": "已停止等待，仍可能计入用量。",
+  "picture-unavailable": "此处暂时无法绘图，不会发送请求。",
   "matter-changed": "Matter 已变化，可在归档重新载入。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
@@ -285,7 +288,8 @@ export function outcomeGuidanceId(outcome: MaterialOutcome): CanvasActionGuidanc
     case "wiki":
       return outcome.reason === "passage-changed" ? "wiki-passage-changed" : "wiki-unsaved";
     case "picture":
-      return outcome.reason === "stale" ? "picture-stale" : "picture-stopped";
+      return outcome.reason === "unavailable" ? "picture-unavailable"
+        : outcome.reason === "stale" ? "picture-stale" : "picture-stopped";
     default:
       return assertNever(outcome);
   }
@@ -346,6 +350,7 @@ const ZH_TW_LINES = Object.freeze({
   "wiki-passage-changed": "段落已變更，未恢復。",
   "picture-stale": "段落已變更，未繪圖。",
   "picture-stopped": "已停止等待，仍可能計入用量。",
+  "picture-unavailable": "此處暫時無法繪圖，不會傳送請求。",
   "matter-changed": "Matter 已變更，可在封存重新載入。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const JA_JP_LINES = Object.freeze({
@@ -381,6 +386,7 @@ const JA_JP_LINES = Object.freeze({
   "wiki-passage-changed": "段落が変わったため戻しませんでした。",
   "picture-stale": "段落が変わったため描きませんでした。",
   "picture-stopped": "待つのをやめました。描き終えて、利用枠に数えられることがあります。",
+  "picture-unavailable": "ここではまだ絵を描けません。リクエストは送信されません。",
   "matter-changed": "Matter が変わりました。アーカイブで再読み込み。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const DE_DE_LINES = Object.freeze({
@@ -416,6 +422,7 @@ const DE_DE_LINES = Object.freeze({
   "wiki-passage-changed": "Passage geändert. Nicht wiederhergestellt.",
   "picture-stale": "Passage geändert. Nicht gezeichnet.",
   "picture-stopped": "Warten beendet. Das Bild kann trotzdem fertig werden und angerechnet werden.",
+  "picture-unavailable": "Zeichnen ist hier noch nicht verfügbar. Es wird keine Anfrage gesendet.",
   "matter-changed": "Matter geändert. Neu laden: Archiv.",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
