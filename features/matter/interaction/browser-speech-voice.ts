@@ -8,6 +8,44 @@ import { isWellFormedUnicodeText } from "../tree/unicode-text";
 
 export const SPEECH_START_TIMEOUT_MS = 8_000;
 
+// Only Latin, Cyrillic, Greek, and decimal digits are spaced-script word
+// characters. CJK, kana, and hangul run adjacent characters without breaks.
+const SPACED_SCRIPT_WORD_END = /[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Greek}\d]$/u;
+const SPACED_SCRIPT_WORD_START = /^[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Greek}\d]/u;
+// Sentence/clause punctuation that follows a spaced-script word char (possibly
+// through closing brackets or quotes). E.g. "hello.", "Yes,", "end)!", "see"?
+const SPACED_SCRIPT_PUNCT_END =
+  /[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Greek}\d][)”’'"]*[.,:;!?]$/u;
+// Closing bracket or quote immediately after a spaced-script word char (no
+// terminal punctuation). E.g. "end)", "value”".
+const SPACED_SCRIPT_BRACKET_END =
+  /[\p{Script=Latin}\p{Script=Cyrillic}\p{Script=Greek}\d][)”’'"]+$/u;
+// Decimal continuation exception: digit + period/comma. "3." + "5" → "3.5".
+const DECIMAL_TAIL = /\d[.,]$/u;
+
+/**
+ * Joins two partial transcripts, inserting exactly one space between them when
+ * the boundary matches a spaced-script word-to-word, word-to-punctuation, or
+ * closing-bracket-to-word pattern. CJK, kana, and hangul are never separated;
+ * existing whitespace at the boundary is never doubled. Decimal continuations
+ * ("3." + "5" → "3.5") are exempted from the punctuation rule.
+ */
+export function joinTranscript(before: string, after: string): string {
+  if (before.length === 0) return after;
+  if (after.length === 0) return before;
+  // Fast path: never insert a space when `after` does not start with a
+  // spaced-script word character (CJK, kana, hangul, whitespace, etc.).
+  if (!SPACED_SCRIPT_WORD_START.test(after)) return `${before}${after}`;
+  if (SPACED_SCRIPT_WORD_END.test(before)) return `${before} ${after}`;
+  if (SPACED_SCRIPT_PUNCT_END.test(before)) {
+    // Exception: decimal continuation — "3." + "5" → "3.5", "3," + "4" → "3,4".
+    if (DECIMAL_TAIL.test(before) && /^\d/u.test(after)) return `${before}${after}`;
+    return `${before} ${after}`;
+  }
+  if (SPACED_SCRIPT_BRACKET_END.test(before)) return `${before} ${after}`;
+  return `${before}${after}`;
+}
+
 type SpeechAlternative = { readonly transcript: string };
 type SpeechResult = ArrayLike<SpeechAlternative> & { readonly isFinal: boolean };
 type SpeechEvent = { readonly resultIndex: number; readonly results: ArrayLike<SpeechResult> };
@@ -157,9 +195,9 @@ export class BrowserSpeechVoicePort implements VoicePort {
         const text = result?.[0]?.transcript ?? "";
         if (result?.isFinal) finalText += text; else interimText += text;
       }
-      if (finalText) this.finalTranscript += finalText;
+      if (finalText) this.finalTranscript = joinTranscript(this.finalTranscript, finalText);
       this.interimTranscript = interimText;
-      const preview = `${this.finalTranscript} ${this.interimTranscript}`.trim();
+      const preview = joinTranscript(this.finalTranscript, this.interimTranscript).trim();
       if (!isWellFormedUnicodeText(preview) || hasPresentedEmoji(preview)) {
         this.fail(new VoiceError("RECORDING_FAILED"));
         return;
@@ -195,7 +233,7 @@ export class BrowserSpeechVoicePort implements VoicePort {
       }
       const operationValue = this.operation!;
       const transcript = normalizeSpokenTranscript({
-        text: `${this.finalTranscript} ${this.interimTranscript}`.trim(),
+        text: joinTranscript(this.finalTranscript, this.interimTranscript).trim(),
         locale: this.locale,
         maxOutputCodeUnits: MAX_NODE_TEXT_CODE_UNITS,
         maxOutputCodePoints: this.maxTranscriptCodePoints,

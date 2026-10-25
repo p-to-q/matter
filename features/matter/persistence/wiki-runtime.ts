@@ -11,6 +11,7 @@ import {
   decideMatterWiki,
   getMatterWikiStatus,
   readMatterWikiState,
+  readMatterWikiDiagnostics,
   resetCorruptMatterWiki,
   retryMatterWikiAuthority,
   startMatterWikiAuthority,
@@ -22,6 +23,7 @@ export type MatterWikiConfigurationSnapshot = Readonly<{
   stateRevision: number | null;
   hasStoredData: boolean;
   rules: readonly WikiConfigurationRule[];
+  diagnostics?: ReturnType<typeof readMatterWikiDiagnostics>;
 }>;
 
 export type MatterWikiConfiguration = Readonly<{
@@ -62,11 +64,13 @@ let cachedSnapshot: MatterWikiConfigurationSnapshot = Object.freeze({
 function getConfigurationSnapshot(): MatterWikiConfigurationSnapshot {
   const status = getMatterWikiStatus();
   const state = readMatterWikiState();
-  if (status === cachedStatus && state === cachedState) return cachedSnapshot;
+  const diagnostics = readMatterWikiDiagnostics();
+  if (status === cachedStatus && state === cachedState && diagnostics === cachedSnapshot.diagnostics) return cachedSnapshot;
   cachedStatus = status;
   cachedState = state;
   cachedSnapshot = Object.freeze({
     status,
+    diagnostics,
     stateRevision: state?.revision ?? null,
     hasStoredData: state !== null && (
       state.termEvidence.length > 0 ||
@@ -117,7 +121,16 @@ export const matterWikiConfiguration: MatterWikiConfiguration = Object.freeze({
   async exportFile() {
     const state = readMatterWikiState();
     if (state === null) return Object.freeze({ ok: false, code: "NOT_READY" });
-    const { encodeWikiExport, WIKI_EXPORT_FILE_NAME } = await import("../wiki/wiki-export");
+    // If the wiki-export chunk cannot load (e.g. a deployment moved on), return
+    // EXPORT_FAILED rather than letting the promise reject silently. The caller
+    // can present the same error path it would show for an encoding failure.
+    let exportModule: typeof import("../wiki/wiki-export");
+    try {
+      exportModule = await import("../wiki/wiki-export");
+    } catch {
+      return Object.freeze({ ok: false as const, code: "EXPORT_FAILED" as const });
+    }
+    const { encodeWikiExport, WIKI_EXPORT_FILE_NAME } = exportModule;
     const exported = encodeWikiExport(state);
     return exported.ok
       ? Object.freeze({

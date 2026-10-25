@@ -10,7 +10,7 @@ import type {
 
 export type WikiQualifiedLearningPolicyRelease = Readonly<{
   qualificationVersion: 2;
-  policyVersion: 4;
+  policyVersion: 5;
   scoringVersion: 4;
   policyConstants: Readonly<{
     unitsPerObservation: number;
@@ -39,7 +39,7 @@ export type WikiQualifiedLearningPolicyRelease = Readonly<{
  * its labelled scenarios, source files, or intermediate evidence. */
 export const MATTER_WIKI_QUALIFIED_LEARNING_POLICY = Object.freeze({
   qualificationVersion: 2,
-  policyVersion: 4,
+  policyVersion: 5,
   scoringVersion: 4,
   policyConstants: Object.freeze({
     unitsPerObservation: 4,
@@ -92,12 +92,12 @@ export const MATTER_WIKI_QUALIFIED_LEARNING_POLICY = Object.freeze({
       foregroundDwellMillisecondsToSettle: 60_000,
     }),
   }),
-  policySourceDigest: "sha256:af12966a8d79f8074cd3a30756a2647becd9983e4d38c903fdb10b1089a71e12",
+  policySourceDigest: "sha256:0f6578bccb4aab2b01c209880ef449e110c0a4e457f26921c600fa438f1eda17",
   corpus: Object.freeze({
-    corpusVersion: "wiki-learning-policy-v4-corpus/2",
-    corpusDigest: "sha256:a75bd008ffd31329b33fffdba3eee2904df1a9a64b606c020915cfc5a46d65c3",
-    scenarioCount: 18,
+    corpusVersion: "wiki-learning-policy-v5-corpus/1",
+    corpusDigest: "sha256:753bf1e2b05cb7efb7c4253ffa3b562e44b8b71e7d35e9250427a2326667ba68",
+    scenarioCount: 21,
   }),
-  resultDigest: "sha256:64c70e2bced4f9cc96414c677e8fbc8867ff3b85e8f0ad7265bb3951260e1bcf",
-  producerQualificationDigest: "sha256:3d6cb9576ee9ea0b2c4956d82ca64ce8795b3d9353d312ee2ebbffb7725bf5d9",
+  resultDigest: "sha256:c92f297933a2fbb7a67f7b8477558e1096ade435e3fbd19a7fef91632817b127",
+  producerQualificationDigest: "sha256:2bb99dfe637e615aba61e7a20c9023a4b330dc39eba2fb38a7c4a236df9692ca",
 }) satisfies WikiQualifiedLearningPolicyRelease;

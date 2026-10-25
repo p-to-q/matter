@@ -555,7 +555,7 @@ describe("IndexedDB document repository", () => {
     const repository = createIndexedDbDocumentRepository();
     const session = steps(seeded(), 1);
     memory.putRow({
-      storageSchemaVersion: 2,
+      storageSchemaVersion: 3,
       treeId: session.tree.id,
       writeGeneration: 9,
       layout: "unknown to this build",
@@ -585,7 +585,7 @@ describe("IndexedDB document repository", () => {
     expect(memory.snapshot()).toEqual(before);
     await expect(repository.readGeneration(session.tree.id)).resolves.toEqual({
       ok: true,
-      value: { writeGeneration: 9, storageSchemaVersion: 2 },
+      value: { writeGeneration: 9, storageSchemaVersion: 3 },
     });
   });
 
@@ -912,6 +912,156 @@ describe("IndexedDB document repository", () => {
     expect(labels.some(({ key }) => key === "tree model_0")).toBe(false);
     await expect(repository.reclaimDerivedStorage()).resolves.toBe(false);
   });
+  describe("snapshot row stamp", () => {
+    it("stamps a row 2 exactly when a node names an image, and 1 otherwise", async () => {
+      const repository = createIndexedDbDocumentRepository();
+      const plain: Session = { tree: seeded(), history: createTreeHistory() };
+      const first = await save(repository, plain, UNKNOWN);
+      if (!first.ok) throw new Error(first.error.code);
+      expect(memory.row(plain.tree.id)).toMatchObject({ storageSchemaVersion: 1 });
+
+      const picture: Session = { tree: pictured(plain.tree), history: plain.history };
+      const second = await save(repository, picture, first.value);
+      if (!second.ok) throw new Error(second.error.code);
+      expect(memory.row(plain.tree.id)).toMatchObject({ storageSchemaVersion: 2, writeGeneration: 2 });
+      const loaded = await loadValue(repository, plain.tree.id);
+      expect(loaded.tree).toEqual(picture.tree);
+
+      // The stamp follows the bytes: material without a picture is readable by every build.
+      const third = await save(repository, plain, second.value);
+      expect(third.ok).toBe(true);
+      expect(memory.row(plain.tree.id)).toMatchObject({ storageSchemaVersion: 1, writeGeneration: 3 });
+    });
+
+    it("stamps imports and corrupt replacements from the material they write", async () => {
+      const repository = createIndexedDbDocumentRepository();
+      const plain: Session = { tree: seeded(), history: createTreeHistory() };
+      const picture: Session = { tree: pictured(plain.tree), history: plain.history };
+      const saved = await save(repository, plain, UNKNOWN);
+      if (!saved.ok) throw new Error(saved.error.code);
+
+      const reserved = await repository.reserveImportedSnapshot(
+        picture.tree.id,
+        picture.tree.revision,
+        treeToBundle(picture.tree),
+        1,
+      );
+      if (!reserved.ok) throw new Error(reserved.error.code);
+      expect(reserved.value.imported.storageSchemaVersion).toBe(2);
+      expect(memory.row(plain.tree.id)).toMatchObject({ storageSchemaVersion: 2 });
+
+      memory.mutateRow(plain.tree.id, (row) => ({ ...row, bundle: { files: {} } }));
+      const exported = await repository.exportCorrupt(plain.tree.id);
+      if (!exported.ok) throw new Error(exported.error.message);
+      const replaced = await repository.replaceCorrupt({
+        treeId: plain.tree.id,
+        treeRevision: plain.tree.revision,
+        bundle: treeToBundle(plain.tree),
+        history: plain.history,
+        retention: FULL_HISTORY_RETENTION,
+      }, exported.value.basis);
+      expect(replaced.ok).toBe(true);
+      expect(memory.row(plain.tree.id)).toMatchObject({ storageSchemaVersion: 1 });
+
+      memory.mutateRow(plain.tree.id, (row) => ({ ...row, bundle: { files: {} } }));
+      const exportedAgain = await repository.exportCorrupt(plain.tree.id);
+      if (!exportedAgain.ok) throw new Error(exportedAgain.error.message);
+      await repository.replaceCorrupt({
+        treeId: picture.tree.id,
+        treeRevision: picture.tree.revision,
+        bundle: treeToBundle(picture.tree),
+        history: picture.history,
+        retention: FULL_HISTORY_RETENTION,
+      }, exportedAgain.value.basis);
+      expect(memory.row(plain.tree.id)).toMatchObject({ storageSchemaVersion: 2 });
+    });
+
+    it("restores a rolled-back row with the stamp it had, never a downgrade", async () => {
+      const repository = createIndexedDbDocumentRepository();
+      const plain: Session = { tree: seeded(), history: createTreeHistory() };
+      const picture: Session = { tree: pictured(plain.tree), history: plain.history };
+
+      for (const [previous, imported, previousStamp, importedStamp] of [
+        [picture, plain, 2, 1],
+        [plain, picture, 1, 2],
+      ] as const) {
+        memory.stores.get("snapshots")!.clear();
+        const saved = await save(repository, previous, UNKNOWN);
+        if (!saved.ok) throw new Error(saved.error.code);
+        const reserved = await repository.reserveImportedSnapshot(
+          imported.tree.id,
+          imported.tree.revision,
+          treeToBundle(imported.tree),
+          saved.value.writeGeneration,
+        );
+        if (!reserved.ok) throw new Error(reserved.error.code);
+        expect(memory.row(plain.tree.id)).toMatchObject({ storageSchemaVersion: importedStamp });
+
+        await expect(repository.rollbackImportedSnapshot(reserved.value)).resolves.toMatchObject({
+          ok: true,
+          value: { status: "rolled-back", writeGeneration: 3 },
+        });
+        expect(memory.row(plain.tree.id)).toMatchObject({ storageSchemaVersion: previousStamp });
+        expect((await loadValue(repository, plain.tree.id)).tree).toEqual(previous.tree);
+      }
+    });
+
+    it("reads stamps 1 and 2, calls a higher integer a newer schema, and calls anything else damage", async () => {
+      const repository = createIndexedDbDocumentRepository();
+      const session: Session = { tree: seeded(), history: createTreeHistory() };
+      const saved = await save(repository, session, UNKNOWN);
+      if (!saved.ok) throw new Error(saved.error.code);
+      const row = memory.row(session.tree.id)!;
+
+      for (const [stamp, code] of [
+        [1, null],
+        [2, null],
+        [3, "PERSISTENCE_SUPERSEDED"],
+        [Number.MAX_SAFE_INTEGER, "PERSISTENCE_SUPERSEDED"],
+        [0, "PERSISTENCE_CORRUPT"],
+        [-1, "PERSISTENCE_CORRUPT"],
+        [2.5, "PERSISTENCE_CORRUPT"],
+        ["2", "PERSISTENCE_CORRUPT"],
+        [null, "PERSISTENCE_CORRUPT"],
+      ] as const) {
+        memory.putRow({ ...row, storageSchemaVersion: stamp });
+        const loaded = await repository.load(session.tree.id);
+        if (code === null) expect(loaded).toMatchObject({ ok: true });
+        else expect(loaded).toMatchObject({ ok: false, error: { code } });
+      }
+    });
+
+    it("adopts a byte-identical stamp 2 row written by another tab", async () => {
+      const tabA = createIndexedDbDocumentRepository();
+      const tabB = createIndexedDbDocumentRepository();
+      const picture: Session = { tree: pictured(seeded()), history: createTreeHistory() };
+      const fromA = await save(tabA, picture, UNKNOWN);
+      if (!fromA.ok) throw new Error(fromA.error.code);
+
+      await expect(save(tabB, picture, UNKNOWN)).resolves.toMatchObject({
+        ok: true,
+        value: { writeGeneration: fromA.value.writeGeneration },
+      });
+      expect(memory.row(picture.tree.id)).toMatchObject({ storageSchemaVersion: 2, writeGeneration: 1 });
+    });
+  });
+
+  it("never reads, writes, or deletes image bytes when it reclaims derived storage", async () => {
+    const repository = createIndexedDbDocumentRepository();
+    for (let index = 0; index < MAX_NODES_PER_TREE + 3; index += 1) {
+      memory.putLabel({ key: `tree model_${index}`, origin: "model", updatedAt: new Date(index).toISOString() });
+    }
+    const hashes = ["a", "b", "c"].map((letter) => letter.repeat(64));
+    for (const contentHash of hashes) memory.putBlob({ contentHash, bytes: new ArrayBuffer(8) });
+    const before = memory.blobs();
+
+    await expect(repository.reclaimDerivedStorage()).resolves.toBe(true);
+
+    expect(memory.blobs()).toEqual(before);
+    expect(memory.blobs().map(({ contentHash }) => contentHash)).toEqual(hashes);
+    expect(memory.transactionStores).toEqual([["labels"]]);
+  });
+
 });
 
 type Session = Readonly<{ tree: ThoughtTree; history: TreeHistory }>;
@@ -994,6 +1144,21 @@ function seeded(): ThoughtTree {
   return createSeededDocument().tree;
 }
 
+/** The tree with one picture pointer on its first root child. */
+function pictured(tree: ThoughtTree): ThoughtTree {
+  const nodeId = tree.nodes[tree.rootId!]!.children[0]!;
+  return {
+    ...tree,
+    nodes: {
+      ...tree.nodes,
+      [nodeId]: {
+        ...tree.nodes[nodeId]!,
+        image: { mediaType: "image/png", byteLength: 120_000, width: 1024, height: 768, contentHash: "ab".repeat(32) },
+      },
+    },
+  };
+}
+
 function save(repository: Repository, session: Session, basis: SnapshotBasis, retention: HistoryRetention = FULL_HISTORY_RETENTION) {
   return repository.save({
     treeId: session.tree.id,
@@ -1065,6 +1230,7 @@ const STORE_KEY_PATHS: Readonly<Record<string, string | readonly string[]>> = {
   snapshots: "treeId",
   historyEntries: ["treeId", "epoch", "stack", "position"],
   labels: "key",
+  blobs: "contentHash",
 };
 const INDEX_KEY_PATHS: Readonly<Record<string, readonly string[]>> = {
   originUpdatedAt: ["origin", "updatedAt"],
@@ -1117,9 +1283,11 @@ class MemoryDatabase {
   throwOnPut: Readonly<{ store: string; error: unknown }> | null = null;
   recordPuts = 0;
   closed = 0;
+  transactionStores: string[][] = [];
   private commitFailures: unknown[] = [];
 
   transaction(names: string | string[], mode: Mode) {
+    this.transactionStores.push(typeof names === "string" ? [names] : [...names]);
     return new MemoryTransaction(this, typeof names === "string" ? [names] : names, mode);
   }
 
@@ -1195,6 +1363,17 @@ class MemoryDatabase {
 
   labels(): StoredValue[] {
     return [...this.stores.get("labels")!.values()].map(({ value }) => value);
+  }
+
+  putBlob(blob: StoredValue) {
+    this.stores.get("blobs")!.set(JSON.stringify(blob.contentHash), {
+      key: blob.contentHash as Key,
+      value: structuredClone(blob),
+    });
+  }
+
+  blobs(): StoredValue[] {
+    return [...this.stores.get("blobs")!.values()].map(({ value }) => value);
   }
 }
 

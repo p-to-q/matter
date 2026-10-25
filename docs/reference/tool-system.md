@@ -26,10 +26,10 @@ does not construct a `TreeCommand`, mutate the tree, store callbacks, rank tools
 or load plugins. A static closed catalog carries identity, grouping, label, and
 order; exhaustive predicates decide applicability.
 
-For the rooted slice, contextual tools are Add child, Focus, Fold/Unfold, and
-Show all when the current view needs it. Select remains a direct material
-interaction. The visible Branch slot targets the root when no node is selected;
-Canvas pan remains a reachable no-op/return action when lasso is off. Undo is the
+For the rooted slice, contextual tools are Focus, Fold/Unfold, and
+Show all when the current view needs it. Add child exists only in a Preview
+Branch build (below). Select remains a direct material
+interaction. Canvas pan remains a reachable no-op/return action when lasso is off. Undo is the
 stable utility action and remains visible but disabled when history is empty. An
 applicable tool temporarily locked by a pending interaction stays in place and
 disabled.
@@ -37,7 +37,7 @@ Unimplemented voice, lasso, stretch, draw, move, and AI tools are absent.
 
 The product surface restores the hackathon control island: a fixed paper rail on
 the right at laptop widths and a bottom rail respecting the safe area on narrow
-or coarse-pointer devices. It is not draggable. Voice, Lasso, Branch, Move, and
+or coarse-pointer devices. It is not draggable. Voice, Lasso, Move (shown as Pan), and
 Undo retain stable visual positions; unavailable capabilities are honestly
 disabled and never manufacture a command. Move describes the transient canvas
 camera, not a node mutation. Buttons have visible tooltips or labels, native tab
@@ -72,6 +72,14 @@ position and mounts one shared lens regardless of tree size. Lasso, stretch,
 pan, node drag, pending work, modal chrome, held descendants, and lack of clear
 adjacent space all suppress it. A held root alone retains the local `+` recovery
 and disables AI so set-aside text cannot become a transformation target.
+The lens's screen targets stay fixed at 44px desktop / 48px compact-or-coarse,
+not proportional to material text or camera zoom. Its main decorative fog
+shares the exact placement but paints behind the material world; the
+interactive controls remain in front. Neither paint plane owns another target,
+observer, action lifecycle, or material copy.
+The corner retains its original 6px button-box contact with first-line ink;
+the small overlap is intentional. Detached fallbacks and fixed chrome still
+use full-carrier clearance. Hover/press never shifts the target downward.
 Canvas Fold/Unfold remains an unpresented navigation capability in this
 first-release surface. The material index has a separate view-local disclosure
 control: it neither dispatches canvas Fold nor changes canvas visibility. Delete
@@ -81,6 +89,50 @@ Dispatch revalidates the projected target, revision-sensitive capability, and
 pending lock. Pointer down must not accidentally select material behind the
 rail. Removing a selected node through undo reconciles selection before the next
 projection.
+
+## Human child creation: Under
+
+Branch left the main product because it composed text the person never spoke.
+A person makes a child with the **Under** mark on a passage's local lens. Tapping it starts a
+Voice admission at once with that passage as parent (`runtime/under-child.ts`
+builds the handle with the same `createAdmissionAnchor`, so the child is
+appended last); the spoken words become the child through the existing repair,
+Wiki and tree-engine path, and the AI never writes them. Arming lasts one
+utterance: tapping the mark again or `Escape` withdraws it. Fixed Voice keeps
+its contextual meaning, but a live admission recording wins over a selected
+passage (`runtime/voice-tool-route.ts`), so tapping Voice stops an Under
+recording instead of opening Point and Talk. Selection does not move on commit,
+so speaking again appends the next sibling. The mark is `aria-disabled`, never
+removed, with a stated reason when the passage is held aside, is at the deepest
+level (`MAX_TREE_DEPTH`), holds `MAX_CHILDREN_PER_NODE` children, the tree holds
+`MAX_NODES_PER_TREE`, voice admission is unavailable, or another action is in flight.
+
+## Preview Branch flag
+
+`NEXT_PUBLIC_MATTER_PREVIEW_BRANCH=true`, read only by
+`config/preview-branch.ts` and allow-listed in `next.config.ts`, keeps the retired Branch
+tool: the fifth rail slot, the `insert-child` intent, `extendMaterial` and the seeded-branch
+prose. It defaults to `false`, is documented in `.env.example`, and is never set in
+`vercel.json`, so the deployed product has no Branch. `npm run test:e2e:preview-branch`
+proves the five-slot rail; the default run proves four.
+The owner review build restores the stable pre-Under two-action hover:
+AI and `−` / restore `+`, with no middle Branch or Under mark. The reference is
+`6b70e794`, not a whole-file rollback; optional Wiki reviews keep their bounded
+keyboard/touch contract. Fixed 44/48px sizing and behind-material fog are
+explicit current overrides of that historical visual baseline.
+Branch remains only on the preview rail and follows its selected parent or the
+default root, never the hovered passage. It uses the existing local fixture
+command, tree-engine history and Undo, with no generation or transcription
+request. The command appends the
+last direct child; layout derives its next-column position and authored sibling
+order. Known seed parents have continuation samples; arbitrary text gets the
+existing locale fallback, not an answer derived from that text. Future adjacent
+context, ideas and references require their own bounded-context freeze.
+The owner's correction reopens the historical retirement/placement decision;
+this review build does not settle the formal default or Under's eventual place.
+The earlier three-mark Branch hover and 14px detached-clearance experiments are
+superseded by the owner's later review; their evidence stays in the active
+plan and handoff, not as instructions to reintroduce them.
 
 ## Rejected
 

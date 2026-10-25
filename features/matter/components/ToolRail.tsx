@@ -26,6 +26,8 @@ export type ToolRailProps = {
   onIntent: (intent: ToolIntent) => void;
   onVoice: () => void;
   panActive: boolean;
+  /** Preview builds only: the retired Branch tool between Lasso and Pan. */
+  previewBranch: boolean;
   surface: ProjectedToolSurface;
   voiceActive: boolean;
   voiceAvailable: boolean;
@@ -46,6 +48,7 @@ export function ToolRail({
   onMove,
   onVoice,
   panActive,
+  previewBranch,
   surface,
   voiceActive,
   voiceAvailable,
@@ -87,20 +90,22 @@ export function ToolRail({
         shortLabel={copy.lasso}
         toolId="lasso"
       />
-      <ToolButton
-        disabled={interactionPending || branch?.availability !== "available"}
-        disabledReason={pendingReason ?? projectedToolReason(branch, copy.unavailableWithoutSelection, copy)}
-        group="material"
-        icon={<BranchIcon />}
-        label={copy.extendRelatedThought}
-        onClick={
-          branch?.availability === "available"
-            ? () => onIntent(branch.intent)
-            : undefined
-        }
-        shortLabel={copy.branch}
-        toolId="branch"
-      />
+      {previewBranch ? (
+        <ToolButton
+          disabled={interactionPending || branch?.availability !== "available"}
+          disabledReason={pendingReason ?? projectedToolReason(branch, copy.unavailableWithoutSelection, copy)}
+          group="material"
+          icon={<BranchIcon />}
+          label={copy.extendRelatedThought}
+          onClick={
+            branch?.availability === "available"
+              ? () => onIntent(branch.intent)
+              : undefined
+          }
+          shortLabel={copy.branch}
+          toolId="branch"
+        />
+      ) : null}
       <ToolButton
         active={panActive}
         disabled={interactionPending}

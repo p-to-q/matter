@@ -33,6 +33,8 @@ const MODIFIER_ONLY_KEYS: ReadonlySet<string> = new Set([
 export type OutcomeLineBinding = Readonly<{
   /** The head of the queue: the one outcome the guidance line may show. */
   current: OutcomeEntry | null;
+  /** Orders every report; an announcement older than it has been superseded. */
+  lastId: number;
   report: (outcome: MaterialOutcome) => void;
   acknowledge: (id: number) => void;
 }>;
@@ -61,7 +63,7 @@ export function useOutcomeLine(documentEpoch: number): OutcomeLineBinding {
   const acknowledge = useCallback((id: number) => {
     update((current) => acknowledgeOutcome(current, id));
   }, [update]);
-  return { current: currentOutcome(line), report, acknowledge };
+  return { current: currentOutcome(line), lastId: line.lastId, report, acknowledge };
 }
 
 /**

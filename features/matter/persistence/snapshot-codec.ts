@@ -1,3 +1,4 @@
+import { parseImagePointer, type ImagePointer } from "../tree/image-pointer";
 import { validateThoughtTree } from "../tree/invariants";
 import { PROTOCOL_VERSION, type ThoughtNode, type ThoughtTree } from "../tree/model";
 import { isWellFormedUnicodeText } from "../tree/unicode-text";
@@ -27,7 +28,10 @@ const MAX_BUNDLE_FILES = 2_002;
 const MAX_PATH_BYTES = 2_048;
 const MAX_BUNDLE_BYTES = 18_000_000;
 const CHILD_DIRECTORY = /^(\d{3})-([^/]+)$/u;
-const FRONTMATTER_KEYS = ["id", "createdAt", "updatedAt", "role"] as const;
+const FRONTMATTER_KEYS = ["id", "createdAt", "updatedAt", "role", "image"] as const;
+const FRONTMATTER_OPEN = "---\n";
+const FRONTMATTER_CLOSE = "\n---\n\n";
+const IMAGE_LINE_PREFIX = "image: ";
 const UTF8 = new TextEncoder();
 
 export function treeToBundle(tree: ThoughtTree): SnapshotBundle {
@@ -171,20 +175,54 @@ export function bundleToTree(bundle: unknown): SnapshotDecodeResult {
   });
 }
 
+/**
+ * Whether any node of the bundle names an image. The image line is always the
+ * last frontmatter line, so the answer is read from the bytes a writer
+ * produced rather than from a decoded tree.
+ */
+export function bundleCarriesImage(bundle: SnapshotBundle): boolean {
+  for (const content of Object.values(bundle.files)) {
+    if (!content.startsWith(FRONTMATTER_OPEN)) continue;
+    const end = content.indexOf(FRONTMATTER_CLOSE, FRONTMATTER_OPEN.length);
+    if (end < 0) continue;
+    const lastLine = content.slice(content.lastIndexOf("\n", end - 1) + 1, end);
+    if (lastLine.startsWith(IMAGE_LINE_PREFIX)) return true;
+  }
+  return false;
+}
+
 function encodeNode(node: ThoughtNode): string {
   const role = node.role === undefined ? "" : `\nrole: ${node.role}`;
-  return `---\nid: ${node.id}\ncreatedAt: ${node.createdAt}\nupdatedAt: ${node.updatedAt}${role}\n---\n\n${node.text}`;
+  const image = node.image === undefined ? "" : `\n${IMAGE_LINE_PREFIX}${canonicalImageJson(node.image)}`;
+  return `---\nid: ${node.id}\ncreatedAt: ${node.createdAt}\nupdatedAt: ${node.updatedAt}${role}${image}\n---\n\n${node.text}`;
+}
+
+/** Sorted keys, no whitespace: one byte sequence per pointer. */
+function canonicalImageJson(pointer: ImagePointer): string {
+  return JSON.stringify(Object.fromEntries(
+    Object.entries(pointer).sort(([left], [right]) => (left < right ? -1 : 1)),
+  ));
+}
+
+function decodeImage(text: string): ImagePointer | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  const pointer = parseImagePointer(value);
+  return pointer !== null && canonicalImageJson(pointer) === text ? pointer : null;
 }
 
 function decodeNode(content: string):
   | Readonly<{ ok: true; node: ThoughtNode }>
   | Extract<SnapshotDecodeResult, { ok: false }> {
-  const separator = "---\n";
-  if (!content.startsWith(separator)) return failure("INVALID_MARKDOWN", "Material frontmatter is missing.");
-  const end = content.indexOf("\n---\n\n", separator.length);
+  if (!content.startsWith(FRONTMATTER_OPEN)) return failure("INVALID_MARKDOWN", "Material frontmatter is missing.");
+  const end = content.indexOf(FRONTMATTER_CLOSE, FRONTMATTER_OPEN.length);
   if (end < 0) return failure("INVALID_MARKDOWN", "Material frontmatter is not closed.");
-  const lines = content.slice(separator.length, end).split("\n");
-  if (lines.length !== 3 && lines.length !== 4) {
+  const lines = content.slice(FRONTMATTER_OPEN.length, end).split("\n");
+  if (lines.length < 3 || lines.length > 5) {
     return failure("INVALID_MARKDOWN", "Material frontmatter has missing, duplicate, or unknown keys.");
   }
   const values = new Map<string, string>();
@@ -195,24 +233,34 @@ function decodeNode(content: string):
     }
     values.set(match[1], match[2]);
   }
-  const expectedKeys = values.has("role")
-    ? ["createdAt", "id", "role", "updatedAt"]
-    : ["createdAt", "id", "updatedAt"];
-  if (Array.from(values.keys()).sort().join("|") !== expectedKeys.join("|")) {
+  const expectedKeys = ["createdAt", "id", "updatedAt"];
+  if (values.has("role")) expectedKeys.push("role");
+  if (values.has("image")) expectedKeys.push("image");
+  // The image line is always last, so a writer has exactly one byte layout.
+  if (
+    Array.from(values.keys()).sort().join("|") !== expectedKeys.sort().join("|") ||
+    (values.has("image") && !lines[lines.length - 1].startsWith(IMAGE_LINE_PREFIX))
+  ) {
     return failure("INVALID_MARKDOWN", "Material frontmatter has missing, duplicate, or unknown keys.");
   }
   const role = values.get("role");
   if (role !== undefined && role !== "document-root") {
     return failure("INVALID_MARKDOWN", "Material frontmatter has an invalid node role.");
   }
+  const imageText = values.get("image");
+  const image = imageText === undefined ? null : decodeImage(imageText);
+  if (imageText !== undefined && image === null) {
+    return failure("INVALID_MARKDOWN", "Material frontmatter has an invalid image pointer.");
+  }
   return Object.freeze({
     ok: true,
     node: {
       id: values.get("id")!,
       ...(role === undefined ? {} : { role: "document-root" as const }),
+      ...(image === null ? {} : { image }),
       createdAt: values.get("createdAt")!,
       updatedAt: values.get("updatedAt")!,
-      text: content.slice(end + "\n---\n\n".length),
+      text: content.slice(end + FRONTMATTER_CLOSE.length),
       parentId: null,
       children: [],
     },

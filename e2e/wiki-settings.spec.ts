@@ -16,8 +16,11 @@ const WIKI_STATE_KEYS = Object.freeze([
   "lexemeTombstones",
   "lexemes",
   "nextLexemeId",
+  "outcomeCounters",
+  "preferences",
   "revertStrikes",
   "revision",
+  "ruleMaturity",
   "schemaVersion",
   "scoringVersion",
   "settledOccurrences",
@@ -192,7 +195,7 @@ test("desktop Wiki preserves a person's explicit dictionary journey and exports 
   expect(lexemes.find((entry) => entry.canonical === "Douglas Engelbart")).toMatchObject({
     canonical: "Douglas Engelbart",
     locale: "en-US",
-    provenance: "human-confirmed",
+    provenance: "manual",
     scope: "spoken",
   });
   expect(decoded.envelope.state.lexemes).toEqual(lexemes);

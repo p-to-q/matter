@@ -18,7 +18,7 @@ import {
 const T0 = "2026-08-03T00:00:00.000Z";
 const LIMITS = { maxEntries: 8, maxRetainedInverseBytes: 20_000 };
 
-function values(transcript = "  unfinished, exactly as spoken.  "): AdmissionValues {
+function values(transcript = "unfinished, exactly as spoken."): AdmissionValues {
   return {
     interactionId: "voice_1",
     commandId: "admit_1",
@@ -85,7 +85,8 @@ describe("human material admission", () => {
     const anchored = createAdmissionAnchor(tree, selected.navigation);
     if (!anchored.ok) throw new Error(anchored.error.code);
 
-    const translated = admissionToTreeCommand(tree, selected.navigation, anchored.anchor, values("child"));
+    // admissionToTreeCommand no longer normalizes (Task 1). Pass pre-normalized text.
+    const translated = admissionToTreeCommand(tree, selected.navigation, anchored.anchor, values("child."));
 
     expect(translated).toMatchObject({
       ok: true,
@@ -140,7 +141,9 @@ describe("human material admission", () => {
     const anchored = createAdmissionAnchor(tree, navigation);
     if (!anchored.ok) throw new Error(anchored.error.code);
 
-    expect(admissionToTreeCommand(tree, navigation, anchored.anchor, values("保留🚀这个想法"))).toMatchObject({
+    // admissionToTreeCommand no longer normalizes (Task 1: normalization owner
+    // is admission-driver.ts / prepareAdmissionIngress). Pass pre-normalized text.
+    expect(admissionToTreeCommand(tree, navigation, anchored.anchor, values("保留🚀这个想法。"))).toMatchObject({
       ok: true,
       command: { mutation: { root: { text: "保留🚀这个想法。" } } },
     });

@@ -20,8 +20,8 @@ import {
   projectMaterialFileOutline,
   projectMaterialFileSubtree,
   projectMaterialFiles,
-  serializeMaterialSelection,
 } from "../material/material-files";
+import { receiptFileName, renderActiveTreeReceipt, type ActiveWorkingTree } from "../material/receipt-actions";
 import { createNavigationState, type NavigationState } from "../runtime/navigation";
 import type { ThoughtTree } from "../tree/model";
 import type { MaterialFileRow } from "../material/material-files";
@@ -38,6 +38,15 @@ import {
 import { isCancelEscape, isCommitEnter, isImeKeydown } from "./composition-safe-keys";
 import { useEscapeLayer } from "./escape-layers";
 import { materialFilesCopy, type MaterialFilesCopy } from "./material-files-copy";
+import { copyActiveTreeReceipt, copyMaterialSelection } from "./material-copy-action";
+import {
+  EMPTY_SELECTION_SESSION,
+  isContextRow,
+  pruneSelectionSession,
+  toggleSelectionRow,
+  type SelectionSession,
+} from "../material/selection-session";
+import { downloadLocalBytes } from "./download-local-bytes";
 import {
   isTerminalDurability,
   projectArchiveNote,
@@ -46,6 +55,7 @@ import {
 import { projectMaterialFileGuideEdges, projectMaterialFileGuideSegments } from "./material-file-guides";
 import { projectMaterialFileTerminalMarkerIds } from "./material-file-terminal-markers";
 import {
+  materialFileAncestorIds,
   projectMaterialFileTreeSemantics,
   pruneMaterialFileNodeIds,
   resolveMaterialFileTreeKey,
@@ -60,6 +70,11 @@ export type MaterialFilesProps = Readonly<{
    * local file-picker, confirmation, and busy/error presentation.
    */
   archive?: MaterialArchiveActions;
+  /**
+   * The active view the model sees, derived once by the composition root. The
+   * Receipt download renders exactly this; without it the action is absent.
+   */
+  activeWorkingTree?: ActiveWorkingTree;
   documentEpoch: number;
   interactionPending: boolean;
   /**
@@ -125,9 +140,16 @@ type ArchivePhase = "idle" | "exporting" | "validating" | "replacing" | "repairi
 type IndexMode = "archive" | "browse" | "search" | "select";
 const COMPLETE_INDEX_NAVIGATION = createNavigationState();
 
+/** A success that still owes the person one sentence, stated by the surface in its own copy. */
+export type MaterialArchiveNotice = Readonly<{
+  kind: "pictures-not-exported" | "pictures-not-saved";
+  count: number;
+}>;
+
 export type MaterialArchiveActionResult =
   | Readonly<{
       ok: true;
+      notice?: MaterialArchiveNotice;
       /** Present only after a corrupt row has been exported by this action. */
       repairCorrupt?: () => Promise<MaterialArchiveActionResult>;
       /** A validated archive older than the current material. */
@@ -143,6 +165,8 @@ export type MaterialArchiveActionResult =
  * storage refused.
  */
 export type MaterialArchiveActions = Readonly<{
+  /** A different identified build is independent of local storage authority. */
+  deploymentUpdate?: Readonly<{ available: boolean; canReload: boolean; reload: () => boolean }>;
   /** Opening Archive is the intent signal: its actions' code loads before a press. */
   prepare?: () => void;
   exportCopy: () => Promise<MaterialArchiveActionResult>;
@@ -165,15 +189,36 @@ export function MaterialFiles(props: MaterialFilesProps) {
    * carry. Below that width it overlays the canvas and still needs a handle.
    */
   const [docked, setDocked] = useState(false);
-  const [mode, setMode] = useState<IndexMode>("browse");
+  const [indexMode, setMode] = useState<IndexMode>("browse");
   const [query, setQuery] = useState("");
-  const [selectionState, setSelectionState] = useState<Readonly<{ epoch: number; ids: ReadonlySet<string> }>>(
-    () => ({ epoch: props.documentEpoch, ids: new Set<string>() }),
+  const [selectionState, setSelectionState] = useState<Readonly<{ epoch: number; session: SelectionSession }>>(
+    () => ({ epoch: props.documentEpoch, session: EMPTY_SELECTION_SESSION }),
   );
   const [copyState, setCopyState] = useState<CopyState>("idle");
   const [showSaving, setShowSaving] = useState(false);
-  const [archivePhase, setArchivePhase] = useState<ArchivePhase>("idle");
+  const [archivePhase, publishArchivePhase] = useState<ArchivePhase>("idle");
+  const archivePhaseRef = useRef<ArchivePhase>("idle");
+  const setArchivePhase = (phase: ArchivePhase) => {
+    archivePhaseRef.current = phase;
+    publishArchivePhase(phase);
+  };
   const [archiveError, setArchiveError] = useState<string | null>(null);
+  const [archiveNotice, setArchiveNotice] = useState<MaterialArchiveNotice | null>(null);
+  // An import's notice belongs to the document it created, whose switch resets
+  // this surface. It is derived, not copied into state the reset could erase,
+  // so it holds the panel open however the switch and the import's answer order.
+  const [importNotice, setImportNotice] =
+    useState<Readonly<{ notice: MaterialArchiveNotice; fromEpoch: number }> | null>(null);
+  const switchedImportNotice = importNotice !== null && importNotice.fromEpoch !== props.documentEpoch
+    ? importNotice.notice
+    : null;
+  const mode: IndexMode = switchedImportNotice === null ? indexMode : "archive";
+  const shownNotice = switchedImportNotice ?? archiveNotice;
+  // A selection session lives only while select mode is open: leaving it, by
+  // Done, search or Archive, clears every tick and everything the person declined.
+  if (mode !== "select" && selectionState.session !== EMPTY_SELECTION_SESSION) {
+    setSelectionState({ epoch: props.documentEpoch, session: EMPTY_SELECTION_SESSION });
+  }
   const [preparedImport, setPreparedImport] = useState<PreparedImport | null>(null);
   // Opening Archive acknowledges a history notice; its note stays readable
   // for as long as the panel that explains it is open.
@@ -223,9 +268,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setTransientTreeBasis({ epoch: props.documentEpoch, nodes: props.tree.nodes });
     setSelectionState((current) => ({
       epoch: props.documentEpoch,
-      ids: documentChanged || current.epoch !== props.documentEpoch
-        ? new Set<string>()
-        : pruneMaterialFileNodeIds(current.ids, props.tree.nodes),
+      session: documentChanged || current.epoch !== props.documentEpoch
+        ? EMPTY_SELECTION_SESSION
+        : pruneSelectionSession(props.tree.nodes, current.session),
     }));
     setCollapsedState((current) => ({
       epoch: props.documentEpoch,
@@ -497,7 +542,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     if (archiveInputRef.current !== null) archiveInputRef.current.value = "";
     setMode("browse");
     setQuery("");
-    setSelectionState({ epoch: props.documentEpoch, ids: new Set<string>() });
+    setSelectionState({ epoch: props.documentEpoch, session: EMPTY_SELECTION_SESSION });
     setCollapsedState({ epoch: props.documentEpoch, ids: new Set<string>() });
     setFocusedRowState({ epoch: props.documentEpoch, nodeId: null });
     setRenaming(null);
@@ -506,6 +551,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     setCopyState("idle");
     setArchivePhase("idle");
     setArchiveError(null);
+    setArchiveNotice(null);
     setPreparedImport(null);
     setCorruptRepair(null);
     setScrollMetrics({ top: 0, height: bodyRef.current?.clientHeight ?? 0 });
@@ -647,27 +693,32 @@ export function MaterialFiles(props: MaterialFilesProps) {
     row.focus({ preventScroll: true });
   });
 
-  const currentSelectedIds = useMemo(
-    () => new Set(Array.from(selectionState.epoch === props.documentEpoch ? selectionState.ids : []).filter((nodeId) =>
-      Object.hasOwn(props.tree.nodes, nodeId),
-    )),
-    [props.documentEpoch, props.tree.nodes, selectionState],
-  );
+  const selectionSession = selectionState.epoch === props.documentEpoch
+    ? selectionState.session
+    : EMPTY_SELECTION_SESSION;
+  // Every checked row, the ancestors pulled in as context included.
+  const currentSelectedIds = selectionSession.ticked;
   const selectedCount = currentSelectedIds.size;
+  const toggleSelected = (nodeId: string) => {
+    setCopyState("idle");
+    setSelectionState((current) => ({
+      epoch: props.documentEpoch,
+      session: toggleSelectionRow(
+        props.tree.nodes,
+        current.epoch === props.documentEpoch ? current.session : EMPTY_SELECTION_SESSION,
+        nodeId,
+      ),
+    }));
+  };
   const persistenceStatus = props.persistence.status;
   const storageFull = persistenceStatus.errorCode === "PERSISTENCE_STORAGE_FULL";
   const corrupt = persistenceStatus.errorCode === "PERSISTENCE_CORRUPT";
   const durability = projectDurabilityLine(persistenceStatus, showSaving, copy);
   const terminalDurability = isTerminalDurability(persistenceStatus);
-  const activeLineageIds = useMemo(() => {
-    const lineage = new Set<string>();
-    let current = activeNodeId === null ? null : props.tree.nodes[activeNodeId]?.parentId ?? null;
-    while (current !== null && !lineage.has(current)) {
-      lineage.add(current);
-      current = props.tree.nodes[current]?.parentId ?? null;
-    }
-    return lineage;
-  }, [activeNodeId, props.tree.nodes]);
+  const activeLineageIds = useMemo(
+    () => materialFileAncestorIds(props.tree.nodes, activeNodeId),
+    [activeNodeId, props.tree.nodes],
+  );
 
   const openNode = (nodeId: string) => {
     if (props.navigation.mode === "focus") props.onFocusNode(nodeId);
@@ -727,13 +778,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       if (mode === "select") {
-        setCopyState("idle");
-        setSelectionState((current) => ({
-          epoch: props.documentEpoch,
-          ids: current.epoch === props.documentEpoch
-            ? toggleSetValue(current.ids, file.nodeId)
-            : new Set([file.nodeId]),
-        }));
+        toggleSelected(file.nodeId);
       } else {
         activateFile(file.nodeId, heldAside);
       }
@@ -767,18 +812,15 @@ export function MaterialFiles(props: MaterialFilesProps) {
   };
 
   const copySelection = async () => {
-    const result = serializeMaterialSelection(props.tree, currentSelectedIds);
-    if (!result.ok || navigator.clipboard?.writeText === undefined) {
-      settleCopyState("failed", copyResetRef, setCopyState);
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(result.text);
-      settleCopyState("copied", copyResetRef, setCopyState);
-      props.onMaterialCopied?.(new Set(currentSelectedIds));
-    } catch {
-      settleCopyState("failed", copyResetRef, setCopyState);
-    }
+    const documentEpoch = props.documentEpoch;
+    const outcome = await copyMaterialSelection({
+      tree: props.tree,
+      nodeIds: currentSelectedIds,
+      clipboard: navigator.clipboard,
+      stillCurrent: () => liveDocumentEpochRef.current === documentEpoch,
+      onCopied: props.onMaterialCopied,
+    });
+    if (outcome !== null) settleCopyState(outcome, copyResetRef, setCopyState);
   };
 
   // A document boundary must not race a live voice/lasso operation. The panel
@@ -803,6 +845,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const closeArchive = () => {
     if (archiveBusy) return;
     setArchiveError(null);
+    setArchiveNotice(null);
+    setImportNotice(null);
     setPreparedImport(null);
     setCorruptRepair(null);
     setArchiveHistoryNotice(null);
@@ -811,6 +855,8 @@ export function MaterialFiles(props: MaterialFilesProps) {
   const openArchive = () => {
     setCopyState("idle");
     setArchiveError(null);
+    setArchiveNotice(null);
+    setImportNotice(null);
     setPreparedImport(null);
     setArchiveHistoryNotice(persistenceStatus.historyNotice);
     props.archive?.prepare?.();
@@ -818,19 +864,30 @@ export function MaterialFiles(props: MaterialFilesProps) {
     props.persistence.acknowledgeHistoryNotice?.();
   };
 
+  // A notice that was holding Archive open hands that over to the mode itself.
+  const clearArchiveNotices = () => {
+    if (switchedImportNotice !== null) setMode("archive");
+    setArchiveNotice(null);
+    setImportNotice(null);
+  };
+
   const exportArchive = async () => {
     if (props.archive === undefined || archiveBusy) return;
     const documentEpoch = props.documentEpoch;
     setArchiveError(null);
+    clearArchiveNotices();
     if (corrupt) setCorruptRepair(null);
     setArchivePhase("exporting");
     try {
       const result = await props.archive.exportCopy();
       if (liveDocumentEpochRef.current === documentEpoch) {
         if (!result.ok) setArchiveError(result.message);
-        else if (corrupt && result.repairCorrupt !== undefined) {
-          const repair = result.repairCorrupt;
-          setCorruptRepair(() => repair);
+        else {
+          setArchiveNotice(result.notice ?? null);
+          if (corrupt && result.repairCorrupt !== undefined) {
+            const repair = result.repairCorrupt;
+            setCorruptRepair(() => repair);
+          }
         }
       }
     } catch {
@@ -840,6 +897,40 @@ export function MaterialFiles(props: MaterialFilesProps) {
     } finally {
       if (liveDocumentEpochRef.current === documentEpoch) setArchivePhase("idle");
     }
+  };
+
+  // A readable outline of the active view, rendered here from the one address
+  // the composition root derived; Export a copy stays the lossless archive.
+  const downloadReceipt = async () => {
+    if (props.activeWorkingTree === undefined || archiveBusy) return;
+    const documentEpoch = props.documentEpoch;
+    const { id, revision } = props.tree;
+    setArchiveError(null);
+    clearArchiveNotices();
+    const markdown = await renderActiveTreeReceipt(props.tree, props.activeWorkingTree);
+    if (liveDocumentEpochRef.current !== documentEpoch) return;
+    if (markdown === null) {
+      setArchiveError(actionErrorMessage(copy));
+      return;
+    }
+    downloadLocalBytes(new TextEncoder().encode(markdown), receiptFileName(id, revision), "text/markdown");
+  };
+
+  // The same receipt, on the clipboard. Started inside the click, so the
+  // clipboard write keeps the gesture while the digest is still being made.
+  const copyReceipt = async () => {
+    if (props.activeWorkingTree === undefined || archiveBusy) return;
+    const documentEpoch = props.documentEpoch;
+    setArchiveError(null);
+    clearArchiveNotices();
+    const outcome = await copyActiveTreeReceipt({
+      tree: props.tree,
+      active: props.activeWorkingTree,
+      clipboard: navigator.clipboard,
+      stillCurrent: () => liveDocumentEpochRef.current === documentEpoch,
+    });
+    if (liveDocumentEpochRef.current !== documentEpoch) return;
+    if (outcome !== null) settleCopyState(outcome, copyResetRef, setCopyState);
   };
 
   const repairCorruptStorage = async () => {
@@ -873,6 +964,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
     if (props.archive === undefined || archiveBusy) return;
     const documentEpoch = props.documentEpoch;
     setArchiveError(null);
+    clearArchiveNotices();
     setPreparedImport(null);
     setArchivePhase("validating");
     try {
@@ -903,16 +995,24 @@ export function MaterialFiles(props: MaterialFilesProps) {
       }
     }
   };
+  const reloadChangedDeployment = () => {
+    if (archivePhaseRef.current !== "idle" || props.interactionPending || editing) return;
+    if (props.archive?.deploymentUpdate?.reload() === false) setArchiveError(copy.archiveErrorBusy);
+  };
 
   const replaceArchiveImport = async () => {
     if (props.archive === undefined || preparedImport === null || archiveBusy) return;
     const documentEpoch = props.documentEpoch;
     setArchiveError(null);
+    clearArchiveNotices();
     setArchivePhase("replacing");
     try {
       const result = await props.archive.replaceImport(preparedImport.file, {
         replaceUnsaved: persistenceStatus.replaceableByImport,
       });
+      if (result.ok && result.notice !== undefined) {
+        setImportNotice({ notice: result.notice, fromEpoch: documentEpoch });
+      }
       if (liveDocumentEpochRef.current !== documentEpoch) return;
       if (result.ok) {
         setPreparedImport(null);
@@ -1112,6 +1212,9 @@ export function MaterialFiles(props: MaterialFilesProps) {
             busy={archiveBusy}
             copy={copy}
             error={archiveError}
+            notice={shownNotice === null ? null : archiveNoticeText(copy, shownNotice)}
+            noticeRisk={shownNotice?.kind === "pictures-not-saved"}
+            receiptCopyState={copyState}
             inputRef={archiveInputRef}
             phase={archivePhase}
             preparedImport={preparedImport}
@@ -1132,12 +1235,16 @@ export function MaterialFiles(props: MaterialFilesProps) {
               persistenceStatus.errorCode === "PERSISTENCE_ENGINE_UNAVAILABLE"
             }
             terminal={terminalDurability}
+            onCopyReceipt={props.activeWorkingTree === undefined ? undefined : () => void copyReceipt()}
+            onDownloadReceipt={props.activeWorkingTree === undefined ? undefined : () => void downloadReceipt()}
             onClose={closeArchive}
             onExport={() => void exportArchive()}
             onPickImport={() => archiveInputRef.current?.click()}
             onReplace={() => void replaceArchiveImport()}
             onRepairCorrupt={() => void repairCorruptStorage()}
             onReloadStored={() => void reloadStoredMaterial()}
+            deploymentUpdate={props.archive.deploymentUpdate}
+            onReloadDeployment={reloadChangedDeployment}
             onRetrySave={props.persistence.retry}
             onSelectImport={(file) => void validateArchiveImport(file)}
           />
@@ -1200,6 +1307,7 @@ export function MaterialFiles(props: MaterialFilesProps) {
               ) : null}
               {renderFileRanges(files, renderRanges, rowHeight, ({ file, index }) => {
                 const checked = currentSelectedIds.has(file.nodeId);
+                const contextRow = isContextRow(selectionSession, file.nodeId);
                 const active = activeNodeId === file.nodeId;
                 const lassoSelected = props.lassoSelectedNodeIds?.has(file.nodeId) === true;
                 const heldAside = props.heldAsideNodeIds?.has(file.nodeId) === true;
@@ -1308,25 +1416,27 @@ export function MaterialFiles(props: MaterialFilesProps) {
                       )
                     ) : null}
                     {mode === "select" ? (
-                      <label className="material-file__check" title={copy.includeWhenCopying(title)}>
+                      <label
+                        className="material-file__check"
+                        data-context={contextRow ? "true" : undefined}
+                        title={copy.includeWhenCopying(title)}
+                      >
                         <input
+                          aria-describedby={contextRow ? `${file.nodeId}-context` : undefined}
                           aria-label={copy.selectForCopying(title)}
                           checked={checked}
                           disabled={surface.rowInteractionDisabled}
-                          onChange={() => {
-                            setCopyState("idle");
-                            setSelectionState((current) => ({
-                              epoch: props.documentEpoch,
-                              ids: current.epoch === props.documentEpoch
-                                ? toggleSetValue(current.ids, file.nodeId)
-                                : new Set([file.nodeId]),
-                            }));
-                          }}
+                          onChange={() => toggleSelected(file.nodeId)}
                           tabIndex={-1}
                           type="checkbox"
                         />
                         <span aria-hidden="true" className="material-file__check-mark" />
                         <span className="material-file__title" dir="auto">{title}</span>
+                        {contextRow ? (
+                          <span className="visually-hidden" id={`${file.nodeId}-context`}>
+                            {copy.includedAsContext}
+                          </span>
+                        ) : null}
                       </label>
                     ) : activeRename === file.nodeId ? (
                       <>
@@ -1453,16 +1563,18 @@ export function MaterialFiles(props: MaterialFilesProps) {
                   ? copy.copyUnavailable
                   : copy.selectedCount(selectedCount)}
             </span>
-            <button
-              aria-label={copy.copySelectedThoughts(selectedCount)}
-              className="material-files__copy"
-              disabled={selectedCount === 0 || props.interactionPending}
-              onClick={() => void copySelection()}
-              type="button"
-            >
-              <CopyIcon />
-              <span>{copy.copy}</span>
-            </button>
+            <span className="material-files__copy-actions">
+              <button
+                aria-label={copy.copySelectedThoughts(selectedCount)}
+                className="material-files__copy"
+                disabled={selectedCount === 0 || props.interactionPending}
+                onClick={() => void copySelection()}
+                type="button"
+              >
+                <CopyIcon />
+                <span>{copy.copy}</span>
+              </button>
+            </span>
           </footer>
         ) : null}
         {/* Local identity stays a quiet, non-account presentation. Its one
@@ -1616,6 +1728,9 @@ function ArchivePanel({
   error,
   inputRef,
   note,
+  notice,
+  noticeRisk,
+  receiptCopyState,
   phase,
   preparedImport,
   replacesUnsaved,
@@ -1625,12 +1740,16 @@ function ArchivePanel({
   retryable,
   terminal,
   onClose,
+  onCopyReceipt,
+  onDownloadReceipt,
   onExport,
   onPickImport,
   onReplace,
   onRepairCorrupt,
   onReloadStored,
   onRetrySave,
+  deploymentUpdate,
+  onReloadDeployment,
   onSelectImport,
 }: Readonly<{
   busy: boolean;
@@ -1638,6 +1757,12 @@ function ArchivePanel({
   error: string | null;
   inputRef: RefObject<HTMLInputElement | null>;
   note: string;
+  /** What the last finished action owes the person; the status line yields to a running phase. */
+  notice: string | null;
+  /** A notice that says material will be lost is read in the active ink, not the muted one. */
+  noticeRisk: boolean;
+  /** The clipboard receipt's own one-line outcome, shown where the other outcomes are. */
+  receiptCopyState: CopyState;
   phase: ArchivePhase;
   preparedImport: PreparedImport | null;
   /** Replacing refused material says so, and says what an older copy loses. */
@@ -1649,6 +1774,8 @@ function ArchivePanel({
   /** A newer schema or cleared storage leaves only Export and a page reload. */
   terminal: boolean;
   onClose: () => void;
+  onCopyReceipt?: () => void;
+  onDownloadReceipt?: () => void;
   onExport: () => void;
   onPickImport: () => void;
   onReplace: () => void;
@@ -1656,6 +1783,8 @@ function ArchivePanel({
   onReloadStored: () => void;
   onRetrySave: () => void;
   onSelectImport: (file: File) => void;
+  deploymentUpdate?: MaterialArchiveActions["deploymentUpdate"];
+  onReloadDeployment: () => void;
 }>) {
   const phaseLabel = phase === "exporting"
     ? copy.archiveExporting
@@ -1669,6 +1798,9 @@ function ArchivePanel({
   return (
     <section aria-busy={busy || undefined} aria-label={copy.archivePanel} className="material-files__archive">
       <p className="material-files__archive-note">{note}</p>
+      {deploymentUpdate?.available && !terminal ? (
+        <p className="material-files__archive-note">{copy.archiveDeploymentChanged}</p>
+      ) : null}
       <div className="material-files__archive-actions">
         <button disabled={busy} onClick={onExport} type="button">
           {copy.archiveExportCopy}
@@ -1683,6 +1815,29 @@ function ArchivePanel({
           </button>
         )}
       </div>
+      {deploymentUpdate?.available && !terminal ? (
+        <button
+          className="material-files__archive-retry"
+          disabled={busy || !deploymentUpdate.canReload}
+          onClick={onReloadDeployment}
+          type="button"
+        >
+          {copy.archiveReloadPage}
+        </button>
+      ) : null}
+      {onDownloadReceipt === undefined || onCopyReceipt === undefined ? null : (
+        <div className="material-files__archive-receipt">
+          <div className="material-files__archive-receipt-actions">
+            <button disabled={busy} onClick={onDownloadReceipt} type="button">
+              {copy.archiveReceiptDownload}
+            </button>
+            <button disabled={busy} onClick={onCopyReceipt} type="button">
+              {copy.archiveReceiptCopy}
+            </button>
+          </div>
+          <p className="material-files__archive-helper">{copy.archiveReceiptDescription}</p>
+        </div>
+      )}
       {corrupt && corruptExported ? (
         <button
           className="material-files__archive-retry"
@@ -1726,8 +1881,16 @@ function ArchivePanel({
         type="file"
       />
       {/* Live regions mount before they speak, or their first line may be silent. */}
-      <p aria-live="polite" className="material-files__archive-status">{phaseLabel}</p>
-      <p aria-live="polite" className="material-files__archive-error">{error}</p>
+      <p
+        aria-live="polite"
+        className="material-files__archive-status"
+        data-tone={phaseLabel === null && notice !== null && noticeRisk ? "risk" : undefined}
+      >
+        {phaseLabel ?? (receiptCopyState === "copied" ? copy.archiveReceiptCopied : notice)}
+      </p>
+      <p aria-live="polite" className="material-files__archive-error">
+        {error ?? (receiptCopyState === "failed" ? copy.copyUnavailable : null)}
+      </p>
       {preparedImport !== null ? (
         <div className="material-files__archive-confirm">
           <p>
@@ -1742,6 +1905,12 @@ function ArchivePanel({
       ) : null}
     </section>
   );
+}
+
+function archiveNoticeText(copy: MaterialFilesCopy, notice: MaterialArchiveNotice): string {
+  return notice.kind === "pictures-not-exported"
+    ? copy.archivePicturesNotExported(notice.count)
+    : copy.archivePicturesNotSaved(notice.count);
 }
 
 /** An exception's own text is engineering detail, never archive copy. */

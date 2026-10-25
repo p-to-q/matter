@@ -120,14 +120,15 @@ describe("selected material address", () => {
     expect(rooted).toContain("const activePointTalkNodeId = pointTalkPresented ? pointTalkHostNodeId : null");
     expect(rooted).toContain("{pointTalkHostNodeId === null || pointTalkPresenceIdentity === null ? null : (");
     expect(rooted).toContain("presented={pointTalkPresented}");
+    // The routing itself is pure (runtime/voice-tool-route.ts); the host must feed it these two facts.
     expect(rooted).toMatch(
-      /onVoice=\{\(\) => \{\s*if \(pointTalkHostNodeId !== null && activePointTalkNodeId === null\) return;/,
+      /onVoice=\{\(\) => \{\s*const action = routeVoiceTool\(\{[^}]*pointTalkHosted: pointTalkHostNodeId !== null,\s*pointTalkActive: activePointTalkNodeId !== null,/,
     );
     expect(rooted).toMatch(
       /const selectedRewriteAvailable = selectedRewriteNodeId !== null &&\s*pointTalkHostNodeId === null &&/,
     );
     expect(rooted).toMatch(
-      /const voiceToolAvailable = pointTalkHostNodeId !== null\s*\? activePointTalkNodeId !== null && voiceAvailable/,
+      /const voiceToolAvailable = voiceToolIsAvailable\(\{[^}]*pointTalkHosted: pointTalkHostNodeId !== null,\s*pointTalkActive: activePointTalkNodeId !== null,\s*targetVoiceAvailable: voiceAvailable,/,
     );
   });
 

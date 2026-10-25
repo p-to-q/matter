@@ -34,18 +34,31 @@ export function usePresence<T>(
   live: PresenceLive<T>,
   close: PresenceClose,
   policy: () => PresencePolicy = defaultPresencePolicy,
+  onFirstPaint?: (identity: string, paintedAtMs: number) => void,
 ): PresenceFrame<T> {
+  // Like the policy, this port belongs to the surface for its whole lifetime.
+  const [publishFirstPaint] = useState(() => onFirstPaint);
   const [surfacePolicy] = useState(() => policy);
   const [store] = useState(() => createTimedStore<PresenceState<T>>(null, {
     deadline: (state) => state?.deadlineMs ?? null,
     advance: (state, nowMs) => advancePresence(state, nowMs, surfacePolicy()),
     frame: { due: presenceAwaitsPaint, mark: markPresencePainted },
     // Fresh live content renders from props; only a stage or identity change
-    // needs another render.
+    // needs another render. A requested first-paint receipt also needs one
+    // layout pass so it is published after the timed store committed it.
     notifies: (previous, next) =>
-      previous?.identity !== next?.identity || previous?.stage !== next?.stage,
+      previous?.identity !== next?.identity || previous?.stage !== next?.stage ||
+      (publishFirstPaint !== undefined &&
+        previous?.paintedAtMs !== next?.paintedAtMs),
   }));
   const state = useSyncExternalStore(store.subscribe, store.getState, store.getState);
+  const paintedIdentity = state?.paintedAtMs === null ? null : state?.identity ?? null;
+  const paintedAtMs = state?.paintedAtMs ?? null;
+  useLayoutEffect(() => {
+    if (paintedIdentity !== null && paintedAtMs !== null) {
+      publishFirstPaint?.(paintedIdentity, paintedAtMs);
+    }
+  }, [paintedAtMs, paintedIdentity, publishFirstPaint]);
   useLayoutEffect(() => {
     store.update((current, nowMs) => syncPresence(current, live, close, nowMs, surfacePolicy()));
   }, [close, live, store, surfacePolicy]);

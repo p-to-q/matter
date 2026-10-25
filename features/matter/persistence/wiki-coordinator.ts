@@ -34,7 +34,7 @@ export type WikiCoordinatorStatus =
   | Readonly<{ phase: "ready"; generation: number; stateRevision: number }>
   | Readonly<{
       phase: "degraded";
-      reason: "corrupt" | "conflict" | "storage" | "compile";
+      reason: "corrupt" | "conflict" | "storage" | "compile" | "superseded";
       errorCode: RepositoryErrorCode | "WIKI_COMPILE_FAILED";
     }>;
 
@@ -73,8 +73,8 @@ export type WikiCoordinator = Readonly<{
   ): Promise<WikiCoordinatorResult>;
   /**
    * Records the one settlement of one applied occurrence. Informed acceptance
-   * and inspection are soft evidence: they rebase over a concurrent write and
-   * pause silently under the byte bound. A person's explicit decision or
+   * and inspection are soft evidence: an external refresh censors older
+   * applications, and they pause silently under the byte bound. An explicit decision or
    * revert also rebases, because it addresses a rule rather than a view, but
    * reports every failure.
    */
@@ -142,6 +142,10 @@ export function createWikiCoordinator(
   let startPromise: Promise<WikiCoordinatorStatus> | null = null;
   let mutationTail: Promise<unknown> = Promise.resolve();
   let disposed = false;
+  // A refreshed row cannot prove the absence of an intervening revert. Keep
+  // this cutoff across CAS retries; new applications at the refreshed revision
+  // remain eligible, while explicit human decisions keep their own authority.
+  let passiveSettlementCutoff = 0;
   const listeners = new Set<() => void>();
   const qualifiedAliasProducers = new Set<WikiAliasEvidenceProducer>(
     projectionPolicy.qualifiedProducerReleases.flatMap((release) =>
@@ -213,6 +217,9 @@ export function createWikiCoordinator(
       return degraded;
     }
 
+    if (ready !== null && loaded.value.writeGeneration !== ready.writeGeneration) {
+      passiveSettlementCutoff = Math.max(passiveSettlementCutoff, loaded.value.state.revision);
+    }
     ready = {
       state: loaded.value.state,
       writeGeneration: loaded.value.writeGeneration,
@@ -448,7 +455,9 @@ export function createWikiCoordinator(
         settlement.outcome === "inspected-kept" ||
         settlement.outcome === "censored";
       return enqueue(
-        (state) => applyWikiOccurrenceSettlement(state, settlement, qualifiedAliasProducers),
+        (state) => soft && settlement.rule.appliedAtRevision < passiveSettlementCutoff
+          ? Object.freeze({ ok: true as const, state, changed: false })
+          : applyWikiOccurrenceSettlement(state, settlement, qualifiedAliasProducers),
         undefined,
         true,
         soft,
@@ -532,7 +541,7 @@ function readyStatus(basis: WikiBasis): WikiCoordinatorStatus {
 function degradedStatus(code: RepositoryErrorCode): WikiCoordinatorStatus {
   return Object.freeze({
     phase: "degraded",
-    reason: code === "PERSISTENCE_CORRUPT"
+    reason: code === "PERSISTENCE_SUPERSEDED" ? "superseded" : code === "PERSISTENCE_CORRUPT"
       ? "corrupt"
       : code === "PERSISTENCE_CONFLICT"
         ? "conflict"

@@ -31,6 +31,7 @@ import { wikiLatinLedgerLocale } from
   "../../../features/matter/wiki/wiki-script-routing";
 import { selectBestCompleteWikiPerformanceTrial } from "./performance-trials";
 import { recordWikiProducerVotes, type WikiProducerCaseVotes } from "./producer-votes";
+import { createEmptyWikiState } from "../../../features/matter/wiki/wiki-evidence";
 
 const ROOT = resolve(import.meta.dirname, "../../..");
 const PRODUCER_FILES = Object.freeze([
@@ -364,10 +365,11 @@ function stateWithCanonicals(
     locale,
     canonical,
     scope: "both",
-    provenance: "human-confirmed",
+    provenance: "manual",
     confirmedAtRevision: 1,
   }));
   return Object.freeze({
+    ...createEmptyWikiState(),
     schemaVersion: WIKI_SCHEMA_VERSION,
     scoringVersion: WIKI_SCORING_VERSION,
     fittingVersion: WIKI_FITTING_VERSION,

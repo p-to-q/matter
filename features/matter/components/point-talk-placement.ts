@@ -218,6 +218,27 @@ export function projectPointTalkPlacement(input: Readonly<{
   });
 }
 
+/** The gap between a field's controls at scale 1: the stylesheet's `4px`. */
+export const POINT_TALK_GAP_PX = 4;
+
+/**
+ * The room the picture control lends the field: its own laid-out width at
+ * scale 1, rounded up, plus one gap. The field's width is its base plus this
+ * (times its scale), so the direction input is as wide with the control as
+ * without it. A control with no width is hidden behind a picture step and
+ * reports nothing, so the field keeps the room it already took.
+ */
+export function projectPointTalkControlReserve(input: Readonly<{
+  controlWidth: number;
+  /** The scale the control was laid out at; anything unusable reads as 1. */
+  scale: number;
+}>): number | null {
+  const { controlWidth } = input;
+  if (!Number.isFinite(controlWidth) || controlWidth <= 0) return null;
+  const scale = Number.isFinite(input.scale) && input.scale > 0 ? input.scale : 1;
+  return Math.ceil(controlWidth / scale) + POINT_TALK_GAP_PX;
+}
+
 function finiteNonNegative(value: number | undefined, fallback: number): number {
   return value !== undefined && Number.isFinite(value) && value >= 0 ? value : fallback;
 }

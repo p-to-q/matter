@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { WIKI_PRODUCER_FAMILIES } from "./wiki-model";
 import {
   maximumRawWikiStateBytes,
   parseWikiEvent,
@@ -20,6 +21,8 @@ import {
   MAX_WIKI_STATE_BYTES,
   MAX_WIKI_V6_STATE_BYTES,
   MAX_WIKI_V7_MIGRATION_HEADROOM_BYTES,
+  MAX_WIKI_V7_STATE_BYTES,
+  MAX_WIKI_V8_MIGRATION_HEADROOM_BYTES,
   type WikiEvent,
   type WikiObservationTick,
 } from "./wiki-model";
@@ -212,7 +215,7 @@ describe("Wiki codec", () => {
         id: lexeme.id,
         locale: lexeme.locale,
         canonical: lexeme.canonical,
-        provenance: lexeme.provenance,
+        provenance: "human-confirmed",
         confirmedAtRevision: lexeme.confirmedAtRevision,
       })),
       evidence: [],
@@ -226,7 +229,7 @@ describe("Wiki codec", () => {
     expect(parsed).toMatchObject({
       ok: true,
       state: {
-        schemaVersion: 7,
+        schemaVersion: 8,
         lexemes: [{ canonical: "Engelbart", scope: "both" }],
         revertStrikes: [],
       },
@@ -274,7 +277,7 @@ describe("Wiki codec", () => {
     expect(parsed).toMatchObject({
       ok: true,
       state: {
-        schemaVersion: 7,
+        schemaVersion: 8,
         scoringVersion: 4,
         termEvidence: [{
           locale: "en-US",
@@ -402,7 +405,8 @@ describe("Wiki codec", () => {
     expect(legacyBytes).toBeLessThanOrEqual(MAX_LEGACY_WIKI_STATE_BYTES);
     // Support 1 scales to 4 without a new digit, isolating the producer field.
     expect(migratedBytes - legacyBytes)
-      .toBe(producerFieldBytes * MAX_WIKI_EVIDENCE_RECORDS + strikeCollectionBytes);
+      .toBe(producerFieldBytes * MAX_WIKI_EVIDENCE_RECORDS + strikeCollectionBytes -
+        MAX_WIKI_EVIDENCE_RECORDS * 9 + 206);
     expect(migratedBytes - legacyBytes - strikeCollectionBytes).toBeLessThanOrEqual(
       MAX_WIKI_MIGRATION_HEADROOM_BYTES,
     );
@@ -452,7 +456,7 @@ describe("Wiki codec", () => {
     }
     expect(state.aliasEvidence).toEqual([]);
     expect(state.lexemes).toEqual([
-      expect.objectContaining({ canonical: "Engelbart", provenance: "aggregate-evidence" }),
+      expect.objectContaining({ canonical: "Engelbart", provenance: "starter" }),
     ]);
   });
 
@@ -573,7 +577,7 @@ describe("Wiki codec", () => {
     expect(parsed).toMatchObject({
       ok: true,
       state: {
-        schemaVersion: 7,
+        schemaVersion: 8,
         fittingVersion: 1,
         revision: 2,
         nextLexemeId: 3,
@@ -656,7 +660,7 @@ describe("Wiki codec", () => {
     if (!parsed.ok) throw new Error(parsed.message);
 
     expect(parsed.state).toMatchObject({
-      schemaVersion: 7,
+      schemaVersion: 8,
       scoringVersion: 4,
       revertStrikes: [],
       termEvidence: [
@@ -781,16 +785,17 @@ describe("Wiki codec", () => {
     expect(migratedBytes - legacyBytes).toBe(
       MAX_WIKI_EVIDENCE_RECORDS * (keptFieldBytes + 1) +
       MAX_WIKI_EVIDENCE_RECORDS * 1 +
-      strikeCollectionBytes,
+      strikeCollectionBytes - MAX_WIKI_EVIDENCE_RECORDS * 9 + 206,
     );
     expect(migratedBytes - legacyBytes)
       .toBeLessThanOrEqual(MAX_WIKI_V7_MIGRATION_HEADROOM_BYTES);
     expect(MAX_WIKI_STATE_BYTES)
-      .toBe(MAX_WIKI_V6_STATE_BYTES + MAX_WIKI_V7_MIGRATION_HEADROOM_BYTES);
+      .toBe(MAX_WIKI_V6_STATE_BYTES + MAX_WIKI_V7_MIGRATION_HEADROOM_BYTES + MAX_WIKI_V8_MIGRATION_HEADROOM_BYTES);
   }, 30_000);
 
   it("bounds raw storage by the schema version that wrote it", () => {
-    expect(maximumRawWikiStateBytes({ schemaVersion: 7 })).toBe(MAX_WIKI_STATE_BYTES);
+    expect(maximumRawWikiStateBytes({ schemaVersion: 8 })).toBe(MAX_WIKI_STATE_BYTES);
+    expect(maximumRawWikiStateBytes({ schemaVersion: 7 })).toBe(MAX_WIKI_V7_STATE_BYTES);
     expect(maximumRawWikiStateBytes({ schemaVersion: 6 })).toBe(MAX_WIKI_V6_STATE_BYTES);
     for (const legacy of [{ schemaVersion: 5 }, { schemaVersion: 2 }, null, "state"]) {
       expect(maximumRawWikiStateBytes(legacy)).toBe(MAX_LEGACY_WIKI_STATE_BYTES);
@@ -806,6 +811,7 @@ function englishTick(
     locale: "en-US" as const,
     channel: "spoken" as const,
     scripts: Object.freeze(["latin" as const]),
+    producerFamilies: WIKI_PRODUCER_FAMILIES,
   });
   return Object.freeze({
     term: Object.freeze({ disposition: term, opportunity }),

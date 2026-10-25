@@ -4,6 +4,7 @@ import { projectTools } from "./project-tools";
 import { TOOL_CATALOG } from "./catalog";
 
 const IDLE_FULL_CONTEXT: ToolContext = Object.freeze({
+  previewBranch: false,
   view: "full",
   selected: null,
   canUndo: false,
@@ -23,10 +24,22 @@ describe("projectTools", () => {
     ]);
   });
 
-  it("projects fixed-order tools for a selected leaf", () => {
+  it("projects no add-child capability in the main product", () => {
+    const tools = projectTools({
+      ...IDLE_FULL_CONTEXT,
+      selected: { nodeId: "leaf", hasChildren: true, isFolded: false },
+      canUndo: true,
+    });
+
+    expect(tools.map((tool) => tool.id)).toEqual(["focus", "fold", "undo"]);
+    expect(JSON.stringify(tools)).not.toContain("insert-child");
+  });
+
+  it("projects fixed-order tools for a selected leaf in a Preview Branch build", () => {
     expect(
       projectTools({
         ...IDLE_FULL_CONTEXT,
+        previewBranch: true,
         selected: { nodeId: "leaf", hasChildren: false, isFolded: false },
         canUndo: true,
       }),
@@ -71,6 +84,7 @@ describe("projectTools", () => {
   ] as const)("projects $id as an explicit target state", ({ isFolded, id, label, folded }) => {
     const tools = projectTools({
       ...IDLE_FULL_CONTEXT,
+      previewBranch: true,
       selected: { nodeId: "branch", hasChildren: true, isFolded },
     });
 
@@ -87,6 +101,7 @@ describe("projectTools", () => {
   it("shows only show-all and stable undo utility in focus view", () => {
     expect(
       projectTools({
+        previewBranch: true,
         view: "focus",
         selected: { nodeId: "focus", hasChildren: true, isFolded: false },
         canUndo: true,
@@ -112,6 +127,7 @@ describe("projectTools", () => {
 
   it("keeps applicable tools in place but disables them while work is pending", () => {
     const tools = projectTools({
+      previewBranch: true,
       view: "full",
       selected: { nodeId: "branch", hasChildren: true, isFolded: false },
       canUndo: true,
@@ -146,6 +162,7 @@ describe("projectTools", () => {
 
   it("returns a deterministic serializable value without mutating context", () => {
     const context = Object.freeze({
+      previewBranch: true,
       view: "full" as const,
       selected: Object.freeze({
         nodeId: "branch",

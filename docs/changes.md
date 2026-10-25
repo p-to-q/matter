@@ -17,6 +17,693 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-10-25 — deployment recovery requires an explicit safe reload
+Changed:    one build-frozen public identity reaches the client and health
+            response; a bounded idle observer may offer a manual Archive reload
+            only after current work and saving permit it
+Why:        detecting another artifact must not discard held or unsaved material
+Forecloses: treating automatic hard navigation as Matter's recovery contract;
+            platform routing and actual release recovery still need qualification
+
+## 2026-10-25 — Wiki V8 remains an unreleased integration boundary
+Changed:    W0 adds strict provenance, preferences, maturity and diagnostic
+            accounting under the active freeze; legacy reads do not write V8,
+            and physical IndexedDB remains v7
+Why:        preserve lexical ownership and bounded evolution without promoting
+            another producer or inventing stored human history
+Forecloses: merging this foundation before the external-generation/in-flight
+            CAS cutoff blocker and release checks are resolved
+
+## 2026-10-16 — deliberate receipts share Copy's readable body without widening context
+
+Changed: Receipt v2 uses a closed Atom-like permanent-ID/version contract,
+shared Markdown list text, positional relation metadata and exact UTF-8 SHA-256.
+V1 verification remains; ordinary single Copy stays literal, and Archive stays
+the recovery format. Nonrepresentable human/machine hierarchy is refused.
+
+Why: the owner wants people and machines to read the same coherence without
+generating a diagram or relying on a model to reconstruct relationships.
+
+Forecloses: silently changing v1, adding Mermaid, volatile timestamps, hidden
+context or importing a receipt as durable material. A future Archive format
+marker requires its own compatibility freeze.
+
+## 2026-10-16 — drawing discovery is independent of paid admission
+
+Changed: a drawable passage keeps plain-text **生图** between Voice and Rewrite.
+An unavailable activation explains locally and sends no request; health still
+admits only available openings. Existing popup dimensions and width reserve stay.
+
+Why: hiding a closed capability made the requested entry disappear and changed
+the apparent field width. Visibility must not imply service or spend readiness.
+
+Forecloses: enabling a paid service to make its UI visible, silent operator-paid
+fallback from a private API, or treating per-instance limits as a global budget.
+User-provided image funding remains a separate explicit capability, not a text lease.
+
+## 2026-10-16 — endpoint dimensions have one owner
+
+Changed: the structural trail candidate uses 5px attachment points and a 7px
+addressed target. Existing screen metrics now drive geometry, SVG circle/cue
+coordinates and projected stylesheet stroke sizes, without numeric CSS copies.
+
+Why: the owner delegated implementation after the endpoint review. Slightly
+larger points distinguish attachment and current address while the existing
+2.5px line, real ports, restrained ink and departure behavior remain steady.
+One dimensional owner makes later optical refinement a local change.
+
+Forecloses: treating round caps as extra node symbols, stacking arrows over
+points, turning passive marks into undisclosed controls, moving attachment
+centres to fit larger points or building a general graph/theme subsystem. The
+prior 4.5/6px frames remain trace; final visual acceptance is still the owner's.
+
+## 2026-10-16 — owner review restores two-action contact and removes the typographic stair
+
+Changed: the explicit local preview now has only AI and `−` / restore `+` in
+ordinary hover, using the stable pre-Under interaction reference `6b70e794`.
+Rail sample Branch and formal-default Under remain. Original 6px corner
+button-box contact is restored; the preceding 14px-gap experiment is rejected.
+Fixed 44/48px controls and behind-material background fog remain explicit
+current overrides, not a historical whole-file restoration.
+
+Why: the owner wanted the original overlapping relationship and quiet two-mark
+instrument. Independent large/small first-row centres also produced an unwanted
+stair. A truly top-aligned first-child pair may now share one measured in-row
+ordinate; all drawn siblings share its source, and line/target use one port.
+
+Forecloses: treating intended contact as an overlap bug, restoring old suspended
+trail anchors or guessing a missing first-child measure. Points become
+4.5/6px, downward omission keeps three 2.5px dots, and viewport continuation
+keeps the existing open chevron. No new graph, material mutation or control.
+
+## 2026-10-16 — local instruments stay fixed; their fog yields to material
+
+Changed: the local action lens uses fixed 44px desktop / 48px compact-or-coarse
+targets, independent of material type and camera zoom. One measured placement
+drives an inert fog behind the material world and the interactive toolbar above
+it. Corner targets end 14px above first-line ink, with the entire interactive
+carrier clear; hover never moves the target.
+
+Why: owner review recovered the earlier constant-size instrument intent, and a
+real middle-button hover capture exposed dense feedback obscuring the first
+line. Separating decorative paint and removing the old six-pixel overlap fixes
+the optical ownership without moving material or cloning interaction state.
+
+Forecloses: material-dependent tool sizing, backdrop blur sampling the addressed
+text, and an overlap exception for interactive targets. The faint outer hover
+halo is not promised to have zero pixel overlap. Branch versus Under remains an
+explicit preview/default decision; no generation or tree semantics changed.
+
+## 2026-10-16 — review builds restore sample Branch; trail ports meet visible language
+
+Changed: the explicit Preview Branch build restores its historical hover mark
+as well as the retained rail entry, both through the existing local fixture
+command and tree/history owner. The default Under lifecycle is unchanged. The
+candidate trail now attaches to actual first text-row ports, not centred column
+boxes, with a 2.5px line and 4px soft corners. Invalid current geometry cuts old
+ink; genuine dismissal keeps the existing departure motion.
+
+Why: owner review distinguished sample/adjacent-context exploration from human
+admission and showed that topologically correct container endpoints still left
+visible gaps and unnecessary bends.
+
+Forecloses: treating a sample fallback as contextual AI generation, reverting
+unrelated work to restore one affordance, or using hidden canonical Elastic text
+as a visible endpoint. The local review is not deployment or visual acceptance;
+manual dashed associations remain design-only.
+
+## 2026-10-16 — structural trail bridges the existing adjacent layout edges
+
+Changed: the candidate trail projects each exact parent-right-middle to
+child-left-middle layout edge, with rounded gap turns. It no longer maintains
+a second suspended gutter geometry or draws through intervening passages.
+Invalid addressed bridges refuse the whole drawing; visibility ownership,
+clipping/pinning and pointer passivity remain unchanged.
+
+Why: correct ancestry was rendered as a detached top line across columns,
+obscuring the adjacent relationship the material already owns.
+
+Forecloses: a proximity router, authored coordinates or a renderer-owned graph.
+Existing marker styling is not final acceptance; A/B remain test-only visual
+hypotheses and manual associations remain design-only.
+
+## 2026-10-16 — integration resumes against current material facts and explicit proof
+
+Changed: the active plan owns the current craft/projection/identity integration
+and retains the interrupted Wiki campaign separately. The handoff has one
+current resume point and explicitly historical earlier statuses. Material and
+protocol documentation now include the existing image pointer, Under admission
+and database v7 boundary. The workflow records six research, ownership,
+robustness, maintainability, prior-art and perceptual review questions.
+
+Why: the implementation had outgrown planning-only notices and old Branch/v6
+descriptions, so a new agent could repeat completed work or misread an unopened
+capability as a release. One output/scope matrix keeps tree projections coherent.
+
+Forecloses: promoting a feature, paid surface, migration or visual design by
+documentation alone. Existing principles and historical research remain intact;
+raw conversations and real material remain outside the public repository.
+
+## 2026-10-12 — Copy is one button that carries structure; a trail shows the selected passage's lineage (first version, to be redesigned)
+
+Changed: in select mode, ticking a passage ticks its ancestors as muted "context" rows the person
+may untick (declines are remembered for the session), and one Copy writes `text/plain` and
+`text/html`. With no ancestor-to-descendant structure the text is the literal join, byte for
+byte; with structure it is a Markdown nested list produced by `material/render/{escape,list,html}`
+with an exact parse inverse and an escape inventory that stops any text from becoming a tag,
+link, entity or block. The Archive panel keeps `Receipt (.md)` and adds `Copy receipt` with a
+visible helper line. The canvas draws a trail for a selected passage, for an AI operation and for
+an open Ask Matter over lassoed passages, derived by one pure `trailPresentation`, with the
+state table in `reference/tree-layout.md`.
+
+Why: structure is the context, so selection should pull it in, and a plain paste must stay
+readable everywhere.
+
+Forecloses: a second Copy button and ids or digests in a casual paste. Known weakness, recorded
+by the owner after review: the trail's FIRST VERSION looks wrong (too dark, too thin, symbols
+nobody asked for, and it joins passages across levels instead of each passage to the one below
+it). It is merged because it is correct and tested, not because it is finished; the redesign is
+the first item of the next round in `handoff-post-preview-direction.md`.
+
+## 2026-10-12 — the popup row never squeezes Rewrite, the Draw control is known before the popup opens, and previews keep their shape
+
+Changed: in the Point-and-Talk field the order is input, mic, Draw, Rewrite, right-aligned to
+Rewrite. Rewrite and Draw never shrink or wrap; only the input flexes, with a floor. With the
+control present the field grows by the control's measured width (264→309 in en-US) so the input
+keeps its width; when the floor cannot be kept, the three controls take a second row, still
+right-aligned, with 48 px targets. One focus ring (2 px, 1 px offset) serves every control in the
+field. Availability is now asked when a selectable passage's lens first shows, not when the field
+opens, each opening decides its row once from the newest answer ever received, and a late answer
+applies to the next opening; a closed gate costs at most one health request a minute, and page
+load alone never asks. A picture previews and sits in the passage at its true aspect (height
+capped at 248 px in the popup, min(320 px, 60vh) in the passage), placeholder plates are opaque,
+and the drawing step says "up to a minute". German picture copy uses the formal address.
+
+Why: with the control present, Rewrite was clipped in 8 of 40 measured language/width/theme
+combinations ("Rewrite" 48.4 px wide for a 54.5 px label; "Ändern" 38.7 px for 54 px), and the
+control appeared a moment after the field and reflowed it.
+
+Forecloses: a control that pops into an open field, and a preview whose shape differs from the
+kept picture. The 100→270 px jump on reload that the craft review attributed to the picture is
+the seeded document being replaced by the stored one and affects every restored document; it is
+recorded in `open.md` as a separate hydration decision.
+
+## 2026-10-12 — a person adds a child by tapping Under and speaking; Branch leaves the main rail
+
+Changed: the selected-passage lens has a third mark, Under. Tapping it arms one utterance of
+admission with the selected passage as parent; what is said becomes the new last child through
+the ordinary admission pipeline (repair, Wiki, tree-engine insert), so the AI never writes the
+text. Tapping it again or Escape withdraws it. It stays visible but `aria-disabled`, with a
+spoken reason in five locales, when the passage is held aside, at the deepest level, at the
+children or passage limit, when voice is unavailable, or when something else is busy. While an
+Under recording is live, Voice stops it instead of opening Point and Talk. The main rail is
+voice, lasso, move, undo; `NEXT_PUBLIC_MATTER_PREVIEW_BRANCH=true` restores the fifth slot, the
+fixed-sentence insertion and its seeded prose for demos, and `vercel.json` does not set it.
+
+Why: a selected passage routes Voice to Point and Talk by design, so Branch was the only visible
+way to create a human-written child, and it composed material the person did not speak. The
+spoken child is two undoable steps (the words, then the repair), which the specs now count.
+
+Forecloses: composing child text for the person in the main product, and a rail slot whose only
+purpose is a demo. The lens is wider by one mark (about 50 px), which can cover the start of a
+first-line Wiki word at narrow widths; Escape dismisses it. `studio/film/capture.ts` still clicks
+the Branch tool and needs the flag or a switch to Under before the launch film is re-captured.
+
+## 2026-10-12 — hardening from the independent verifiers: a paid picture survives, caps are checked before paying, hostile ZIPs cannot balloon
+
+Changed: a held picture now defers stored-material replacement and relocalization like any
+other pending turn (the open Point-and-Talk field already did, so this is defence in depth);
+the 32-picture and 32 MiB caps are checked before the control offers a draw and again before
+sending, so nothing is paid for that cannot be kept; one hash declared with two different
+pointers is invalid everywhere; ZIPs written with data descriptors import (the central
+directory is the size authority); and the synchronous inflater replaces the worker one, which
+let a 52 MB hostile archive allocate 2 GB before any bound could run (now refused with bounded
+memory). Escape on the preview no longer discards a paid picture; arrival and failure are
+announced; a timeout is retryable only if the render never began; the paid lane is rate-limited
+only by headers the platform sets; the cost statement is legible; the control is absent where
+the browser could not finish a paid picture; the one-in-flight gate also holds across tabs when
+Web Locks exist. The Chinese control name is now 绘图 / 繪圖. Receipt text containing CR, NEL,
+LS or PS is refused rather than escaped, because a Markdown viewer would break lines on them.
+
+Why: each was found by an adversarial reader, with a reproduction, in code that had passed its
+own tests.
+
+Forecloses: charging before the document can hold the result, and a receipt that claims text
+cannot forge structure while allowing line separators other than LF.
+
+## 2026-10-12 — picture facts have one owner each, picture code leaves the initial bundle, and Keep asks for persistent storage
+
+Changed: media types, the byte bound and the side bounds are declared once, in
+`tree/image-pointer.ts`; the contract, the structure inspector, the model pool, the client
+and the archive's path table derive from it, and a test fails if a fourth type is added in
+one place. One `sha256Hex` and one `verifyPictureBytes(pointer, bytes)` replace five hashes
+and three different "bytes match the pointer" checks; accepted bytes are structure-checked
+when written to the store. The server-surface type is `ImageSurfaceAvailability`, so it no
+longer shares a name with the four-state bytes projection, and a contract test feeds the real
+health output to the reader. The blob repository can only reach the `blobs` store. Keep asks
+the browser for persistent storage synchronously in the click. `PassagePicture`, its copy, the
+session cache and the blob repository load only when a picture needs them, behind a
+same-size placeholder, and a test keeps them out of the initial graph.
+
+Why: the release build was over the gzip budget on the CI basis (407,305 against 405,504 bytes
+on the baseline), and the same fact was written in seven places. Initial JS is now 390.5 KiB
+gzip against 396. A paid picture is irreplaceable, so asking for persistence belongs at the
+moment it is kept.
+
+Forecloses: re-declaring a picture bound or a hash helper outside its owner, and importing
+picture code statically into the page. Import after Replace does not call persistence a second
+time: the Replace click already asked, and a later call without the gesture's activation could
+record a refusal that quiets the next real gesture for seven days.
+
+## 2026-10-12 — the picture feature can be tried on localhost, with real relays by default
+
+Changed: `npm run dev:image` starts the app with `MATTER_IMAGE_ADAPTER=live` and the
+developer's own chat and image pools from `.env.local`; it prints which relays are real and
+that they spend credits, and refuses to start with a plain error if no image station is
+configured. `--fake-image` replaces only the image pool with a loopback relay (127.0.0.1,
+random key, POST only, 64 KiB cap) that returns a real decodable picture after a
+configurable delay, with flags to fail every Nth request or answer slowly so Drawing, Stop
+waiting and the failure paths can be exercised. A contract test holds the launcher against
+the real pool readers, the surface gate and the image route.
+
+Why: the control only exists when the health read says `available`, so without this nobody
+could see it, and the owner needs to judge it by eye before it is opened to anyone.
+
+Forecloses: a launcher that reads or prints `.env.local` values, and a fake chat relay (the
+brief step always uses the developer's real pool).
+
+## 2026-10-12 — while an AI operation owns a passage, the canvas draws the line from the root down to it
+
+Changed: one thin SVG line, beneath the passages and never hit-tested, joins the root
+to the passage that Point and Talk, Elastic, a pending text swap or a paid picture
+currently addresses, and disappears the moment the operation ends. It is the subset of
+the layout's already-computed edges whose child is on the lineage, drawn only for the
+current layout epoch and only where both endpoints are mounted. A single derived value
+(`operationTargetNodeId`) says which passage owns it. Plain selection, hover and focus
+draw nothing, and the index underline of the same ancestors is unchanged.
+
+Why: the tree already knows where a session came from, and an operation is the moment a
+person needs to see it. Keeping the line operation-scoped keeps the canvas from
+becoming a mind map.
+
+Forecloses: persistent connectors, a line that animates in, and any stored coordinates.
+A target at the top level has no edges and draws nothing.
+
+## 2026-10-12 — naming each passage's parent did not help Ask Matter, so the wire stays as it is
+
+Changed: nothing in the product. A gated live eval (`inquiry-structure.live.test.ts`,
+skipped unless `MATTER_LIVE_STRUCTURE_EVAL=1`) asked the configured chat model six
+structural questions three times each: which items sit under a heading, which heading
+holds a leaf, and which of two identical "Notes" headings a note belongs to, in English
+and Chinese. Depth-ordered text, which is what Inquiry sends today, scored 18 of 18.
+The same prompt with every passage naming its parent also scored 18 of 18.
+
+Why: the earlier plan assumed the AI entries would be better for being handed the
+tree's relations. Preorder plus true depth already carries them, and a model reads
+that as well as an explicit parent field, so widening a strict wire for it would be a
+protocol bump with no observed gain.
+
+Forecloses: adding parent ids to the Inquiry or material-turn wire on the argument that
+the model needs them. The receipt stays for people and for tools that cannot read an
+indented outline. Reopen with a failing case; this eval used small trees.
+
+## 2026-10-12 — the picture control exists, and nothing opens it
+
+Changed: Point and Talk gains a plain-text control (zh-CN 生图, zh-TW 生圖, ja-JP 描く,
+en-US Draw, de-DE Zeichnen) between Voice and the submit button. It appears only when
+`/api/health` reports the literal `available` for image generation and the passage can
+be drawn. Clicking it never sends: an arm step states what goes where and what it may
+cost, then Draw, Back, "Drawing…" with "Stop waiting", and a preview with Keep and
+Discard. A press elsewhere does not discard a picture that was paid for; leaving, or
+the passage changing, does and says so. A failure after the relay was contacted offers
+no retry and the next arm warns that the last attempt may have been used. Keep is one
+pointer-undoable step; Undo and Redo make no network or storage call. The production
+gate stays off, so for real users nothing appears.
+
+Why: a control that cannot act is a claim about an unbuilt capability, so it is built
+whole and kept unopened until the owner decides who pays and how spend is limited.
+
+Forecloses: showing the control before the surface is open, a retry that spends again
+without a warning, and discarding paid work on an incidental press. All non-English
+copy is provisional until a native speaker reviews it.
+
+## 2026-10-12 — a person can copy passages with their context, and download the whole receipt
+
+Changed: the Files panel's select mode has "Copy with context" beside Copy, and the
+Archive panel has "Receipt (.md)". Copy with context writes a context receipt of the
+selected passages with their real parent and order; the download is the whole active
+working tree (what the AI sees: view minus fold minus held-aside), named
+`matter-receipt-<tree id head>-r<revision>.md`. Native Copy is unchanged and still
+the literal join; the Archive ZIP is unchanged. One module is now the only place a
+selection reaches the clipboard, and both forms report the same node ids to Wiki once
+and only after the clipboard accepted the write. The receipt form hands the clipboard
+a promise inside the gesture (`ClipboardItem`), because it needs an async digest and
+Safari honours a clipboard write only during the gesture.
+
+Why: the receipt only matters if a person can ask for it, and asking must be explicit
+so Copy never becomes a place where structure leaks into plain text.
+
+Forecloses: a context-bearing default Copy, and a download that names held-aside
+material or how much of it exists.
+
+## 2026-10-12 — the brief step was measured against a real model; quoted text is refused
+
+Changed: a gated live eval runs the brief step over 22 passages in five locales
+against the configured chat pool. Prompt is now `image-brief/2`: the never list also
+refuses naming an object whose point is to carry words or pictures, and the
+adjudicator refuses a line with double quotation marks, guillemets or German low
+quotes (`QUOTED_TEXT`). Results are recorded in `reference/generated-image.md`.
+
+Why: the first measurement showed a model happily writing "a chart labelled ..." and
+"a note reading ...", which the renderer would draw as lettering. Benign acceptance
+stayed 12 to 13 of 16 because the remaining refusals are passages that are made of
+words, where refusing is correct.
+
+Forecloses: tuning the prompt to push acceptance above what the adjudicator should
+allow, and counting a refusal on a text-made passage as a failure.
+
+## 2026-10-12 — a projection of the tree can be written as one checkable Markdown receipt
+
+Changed: `projectMaterial` projects the tree for three addresses (selection,
+lineage, working-tree) with real parents, sibling rank and depth, and
+`renderContextReceipt` / `parseContextReceipt` write and strictly read it as one
+Markdown file: fixed front matter, an outline whose text is always inside quoted
+lines, a canonical machine block, and a SHA-256 digest. Parsing re-renders and
+requires byte equality, so there is exactly one spelling of a receipt. Sibling rank
+counts only the siblings the address carries, so a receipt cannot reveal how much
+material was held aside. A test pins its node sequence to the Inquiry projection so
+the two cannot drift. Nothing calls it yet; Copy stays literal text.
+
+Why: Archive is lossless but not readable; native Copy is readable but loses the
+relations. One projection that both people and models can read, and that can be
+checked, lets a later "Copy with context" and the AI entries share coherence without
+each re-deriving structure from text.
+
+Forecloses: node text forging a front-matter line, a bullet, the machine block or
+the digest; a receipt that names a node it does not carry; and Mermaid or JSON-LD
+becoming the source format. A newline-heavy full-size tree can exceed the receipt
+size bound (about 14 MB); callers pass limits then.
+
+## 2026-10-12 — pictures travel through Export and Import, and import never aborts for want of storage
+
+Changed: Export gathers each referenced picture from the session cache, then the
+blob store, and the archive reports how many files were not on this device on the
+existing archive status line. Import stores the bytes before the document is
+committed, so the first render can read them. If the store refuses a picture, the
+import still succeeds, the picture stays visible from the session cache, and the
+same status line says how many will be gone when the tab closes.
+
+Why: a pointer without durable bytes is a state the app already renders honestly,
+and aborting the import would cost the person their material to protect a
+convenience. This reverses the earlier audit note that a blob quota refusal should
+abort an import.
+
+Forecloses: an import that fails because pictures could not be saved, and an
+export that fails because pictures are missing. The corrupt-recovery JSON export
+does not carry pictures.
+
+## 2026-10-12 — a picture turn has a driver, a one-in-flight gate, and a health-gated availability read
+
+Changed: `PictureDriver` owns one picture turn on one passage: it sends the
+passage's current text once, goes stale (and stops waiting) if that passage or the
+document changes, holds an arrival while the page is hidden, never accepts on its
+own, and drops any late response. Keep uses the basis mementos, not the live
+node. A gate allows one picture in flight across the whole app. The availability
+read treats anything but the server's literal `available` as unavailable, so the
+control can render nothing until the surface is genuinely open.
+
+Why: the server admits three a window and two at once per instance, but a person
+is one, and a second draw is a second charge. A control that appears for a gate
+that is closed is a promise nothing keeps.
+
+Forecloses: more than one picture in flight, a driver that accepts for the person,
+and treating fixture or user-configurable as an open public surface.
+
+## 2026-10-12 — a passage that carries a picture shows it, or says honestly that it cannot
+
+Changed: a passage with an image pointer renders a picture box after its text,
+sized from the pointer alone (aspect ratio, width up to 320 px) so layout does not
+move when bytes arrive, are missing, or are damaged. Bytes come from the session
+cache, then the blob store, and the four-state availability projection decides what
+shows; a placeholder names its state in all five locales, and the resident image's
+alt is a neutral per-locale name, never model text. An object URL exists only
+inside the component that shows it and is revoked on unmount or pointer change. The
+measured-height cache is keyed by the picture, so attaching, replacing or undoing
+re-measures the passage. The `/performance` research renderer fails closed on a
+tree with pictures rather than publish a short height.
+
+Why: the tree holds a pointer, never bytes, so every device that opens the document
+must be able to say what it has. A box fixed from the pointer keeps the page still,
+and an invented height would put every passage after it in the wrong place.
+
+Forecloses: deriving a picture's box from the loaded image, an alt text taken from
+the brief, and keying passage geometry by text alone.
+
+## 2026-10-12 — Keep is a store action: one undoable human step, stale by mementos
+
+Changed: `attachPicture` commits a `replace-image` as an ordinary human step.
+It is stale when the document epoch moved, the passage is gone, its clock differs,
+or it already holds a different picture; an unrelated edit elsewhere does not make
+it stale. The engine's own refusal is reported as rejected, not stale. Text and
+`updatedAt` are untouched, and Undo and Redo move the pointer without any I/O.
+
+Why: the person paid for the picture, so a revision bump from an edit in another
+branch must not throw it away, while a changed or already-illustrated passage must,
+because the picture was drawn for different material.
+
+Forecloses: deciding picture staleness by tree revision.
+
+## 2026-10-12 — the picture turn has a client, a state machine, and a Keep order; nothing calls them
+
+Changed: `requestPicture` makes one attempt at `/api/image` and accepts only bytes
+whose SHA-256, media type, dimensions and length agree with the response headers;
+it marks a failure retryable only when the server says so and the status is 429,
+503 or 422. A pure reducer holds the turn (arm, confirm, drawing, arrived,
+accepted, discarded, failed, stale, cancelled) with a sticky "a prior attempt may
+have been billed" flag. A bounded session cache mirrors held bytes so export works
+when IndexedDB does not. `acceptPicture` stores the bytes first and commits the
+pointer second; if the bytes cannot be saved nothing is committed and the preview
+can be kept again at no cost.
+
+Why: a pointer to bytes that cannot be saved is a promise the session cannot
+keep, and a network failure or timeout after a relay was contacted may already
+have been paid for, so retrying must be a deliberate act behind a warning.
+
+Forecloses: committing a pointer before its bytes are durable, and an automatic
+retry after any ambiguous failure.
+
+## 2026-10-12 — the database has a place for picture bytes, and nothing writes there yet
+
+Changed: database version 7 adds a `blobs` store keyed by SHA-256, with a
+repository that verifies bytes against their pointer before writing, reports a
+row that exists but cannot be trusted as `damaged` (never `absent`), and treats a
+row from a newer build as superseded. Snapshot rows are stamped 2 exactly when a
+node names an image and 1 otherwise; readers accept 1 and 2, and a restored row
+keeps its stamp so rollback never downgrades it. The global schema version that
+labels, inquiry and Wiki compare with `!==` is unchanged. Derived-storage
+reclaim never touches `blobs`.
+
+Why: a picture is not derived, so cache pressure must never take it, and the
+stamp follows the bytes written so a build that cannot read an image calls the row
+newer rather than corrupt and offers to overwrite it.
+
+Forecloses: opening v7 and then running an older build, which now sees every
+document as superseded, images or not. That is the accepted rollback cost in
+`reference/virtual-file-system.md`, and nothing creates a picture yet, which is
+why it ships first. Known gap: a row whose image was later removed is stamped 1
+while its history may still hold `replace-image`; an older build releases that
+history with its unavailable notice and loses no material.
+
+## 2026-10-12 — the archive can carry pictures, and never needs them
+
+Changed: an archive may hold `matter/blobs/<sha256>.<jpg|png|webp>` beside the
+text snapshot. Import judges every picture before it is returned: the SHA-256
+equals the filename, the length and the structure equal the pointer, no picture is
+unreferenced or duplicated, and sizes are bounded from the central directory
+before any byte is inflated, in a budget separate from text. A pointer with no
+picture is legal and imports with that hash absent. Export writes only referenced
+pictures that pass the same check and reports `missingImages`; a missing or
+damaged cache entry never costs the person their archive. A tree without images
+exports byte-identical to before (pinned by hash). Compressed input is fed to the
+unzipper in 16 KiB slices so a small deflate bomb cannot allocate its whole output
+before a bound is read.
+
+Why: the archive is the only defence against whole-origin browser eviction, so it
+must be the lenient direction on export and the strict direction on import, and
+this is the first binary input in the product.
+
+Forecloses: a picture whose bytes were never verified entering the content-
+addressed store, and an export that fails for want of bytes. A worker-inflated
+entry (compressed size over about 320,000 bytes) is not exercised by any test.
+
+## 2026-10-12 — image byte structure is judged by one browser-safe function
+
+Changed: sniffing, dimension reading, and truncation detection moved out of the
+server gate into `protocol/image-structure.ts` (`inspectImageStructure`). It takes
+decoded bytes, uses no Node API, and the server gate now calls it after its own
+data-URL, base64 and size work. Server behaviour and every refusal reason are
+unchanged.
+
+Why: the archive is about to accept image bytes in the browser, where the first
+binary input must be judged by the same rule as the route that produced it, not a
+second copy that can drift. `protocol/` already serves code that both the browser
+and the route run.
+
+Forecloses: a second implementation of "what counts as a valid generated image".
+
+## 2026-10-12 — a node may carry an image pointer; nothing yet creates one
+
+Changed: `ThoughtNode.image` is an optional, strictly parsed pointer
+(`mediaType, byteLength, width, height, contentHash`) and `replace-image` is a
+self-inverse mutation that sets or clears it without touching `updatedAt`. The
+snapshot codec round-trips it as one canonical trailing frontmatter line, history
+recovery knows the mutation, and the tree validator caps a document at 32 pictures
+and 32 MiB of distinct hashes, rejecting one hash declared with two sizes.
+`insert-node` cannot carry an image and the document root cannot either.
+
+Why: the pointer is data about a picture, never the picture, so undo and redo need
+no I/O and the history byte reasoning is unchanged. Leaving `updatedAt` alone keeps
+Text Swap and transform staleness checks valid when a picture is attached.
+
+Forecloses: images in text, images as child nodes, and any producer before the
+storage, archive and availability slices exist. `PROTOCOL_VERSION` and
+`STORAGE_SCHEMA_VERSION` are deliberately unchanged; the pointer bounds are
+duplicated in the innermost layer and a test pins them to the image contract.
+
+## 2026-10-12 — the active working projection is one function, and it is the shipped one
+
+Changed: `projectActiveViewContext(view, activeNodeIds)` replaces the inline
+filter in the Material root and the `projectActiveWorkingContext` helper that only
+tests called. The view is the first term, as `reference/working-context.md`
+already said.
+
+Why: the reference named one pure authority, but the tested projector derived
+active material from the tree alone while production derived it from the current
+view. A model could have been tested against material that focus and fold would
+have withheld. Now the tests exercise the code that ships, including a focus view
+and a folded view that had no coverage.
+
+Forecloses: deriving the working projection from the tree without a view.
+
+## 2026-10-12 — Wave 1 decided; an unclassified image failure is never retryable
+
+Changed: the five research packets are recorded in the handoff's Wave 1
+synthesis. Decided there: the stored Inquiry vocabulary is mapped, not migrated;
+a receipt carries canonical text only; Branch stays in the main rail until human
+child creation has another home; an image pointer lives on the node, not in text;
+no image label before the lifecycle exists. In code, a cancelled image request and
+an unclassified image failure now answer `retryable: false`.
+
+Why: the text-pointer shape would spend 145 of 2,000 code units and invite lasso,
+Text Swap and Wiki to touch a hash. A failure nobody classified may have come
+after a relay billed, and a caller that left may have been paid for; neither may
+invite a second paid attempt.
+
+Forecloses: an unclassified image failure being retried by a client, and S2 using
+text as the pointer carrier. The earlier S2 line that said "a text pointer" is
+superseded.
+
+## 2026-10-12 — the index marks the path above the active passage
+
+Changed: while browsing, the index underlines the ancestors of the active
+passage, quietly and statically. The ancestor set is one pure function
+(`materialFileAncestorIds`) that was already computed inline and already emitted
+as `data-in-lineage` with no reader. Ancestors never receive `aria-selected` or
+`aria-current`; those stay with the target.
+
+Why: a passage was a point with no visible line back to the root, and the line is
+already known. An underline was chosen because weight and plate are taken by
+active and lasso, colour alone is invisible on rows that are already full ink,
+and a text decoration needs no animation exception and survives forced colours.
+
+Forecloses: reading the mark as "what the model receives". It is navigation
+only; an operation's basis is shown during that operation, not here. Canvas
+connectors are not part of this change and need a 2,000-node measurement first.
+
+## 2026-10-12 — an image is drawn from a brief, never from the passage
+
+Changed: a gated `POST /api/image` turns an addressed passage into one image in
+two server-side steps. A text scenario reads the passage and returns one short
+visual subject; the renderer receives only the frozen style plus that adjudicated
+line. The route answers with the relay's own bytes, unmodified, and ships closed:
+`MATTER_IMAGE_ADAPTER` is `off` in `vercel.json` and unset is closed in
+production. Image relays live in a parallel `MATTER_IMAGE_*` pool namespace that
+the chat reader never sees, and run as a `PoolTransport` inside the existing
+pool rather than as a second fetch path. `PoolLimits` gains an optional
+`maxCandidateAttempts`, unset for text and one for images. No control, no
+durable material, and no tree mutation: S1 only.
+
+Why: an image model has no instruction hierarchy. A probe put a hostile passage
+in the subject position of the complete style prompt and the model complied
+fully, down to lettering the word it was told to write, so the style cannot be
+guaranteed by wording and the passage must never reach the renderer. The defence
+therefore sits in the cheap text step, where fencing is evidenced, rather than on
+the finished picture, which a person or the platform has already paid for. A
+separate fetch path would have silently lost seven inherited protections, so the
+transport lives in the pool. And because a relay can bill a generation and then
+return something unusable, the pool's ordinary fallback to a second candidate
+could pay twice for one picture, which is why the cap is a pool limit and not a
+convention about station order.
+
+Verified against real relay output rather than only fixtures: thirteen images
+all pass the byte gate with their provenance manifest intact and the bytes
+identical to what the relay sent, and truncated copies of all thirteen are
+refused. Review found and this change closed: a brief gate that admitted other
+scripts and letter lookalikes, a media type guessed from a hint instead of the
+bytes, and a renderer that could outlive the route and bill an image nobody
+received.
+
+Forecloses: sending a person's passage to a renderer, a second outbound fetch
+path outside the reviewed pool, a retry or fallback after a billed generation,
+telling a client a billed failure is retryable, accepting a provider link as a
+result, modifying provider bytes, and opening the gate before a distributed edge
+rule and a provider budget exist. The brief adjudicator is a lexical floor, not
+a proof; a hostile passage that persuades the text model into a clean line made
+of unlisted words can still steer a picture, and that residual is accepted.
+
+## 2026-10-03 — material outlives the model
+
+Changed: Matter's long direction now makes the rooted material, rather than a
+provider, the durable authority. Private APIs and qualified on-device runtimes
+are replaceable sources of intelligence; network dependence in the current web
+product remains explicit. Any future text, image, voice, or other generative
+modality must first define one coherent material lifecycle across address,
+context, result, acceptance, reversal, persistence, export, and privacy.
+
+Why: a local-first document can preserve personal agency only when its meaning,
+portability, and interaction contract survive provider, model, deployment, and
+connectivity changes. This keeps the road to private and offline computation
+open without pretending that the present release already supplies it.
+
+Forecloses: making a remote provider the owner of material or context; claiming
+offline generation from local document storage alone; and exposing a modality
+as product chrome before it has a reversible, exportable material contract.
+
+## 2026-09-30 — N1: normalization owner, provisional-edit withhold, join fix, per-gap resilience, near-silence guard
+
+Changed: locale-bound normalization runs exactly once per admission in
+`prepareAdmissionIngress` (the single owner); the locale-less second pass in
+`admissionToTreeCommand` is removed. Provisional Wiki edits are withheld when
+the occurrence registry is full and attribution is impossible; confirmed edits
+are applied unmarked. Web Speech final-result concatenation and restart joins
+insert one space only when both adjacent characters are word characters of a
+spaced script (Latin/Cyrillic/Greek/digits); CJK and kana boundaries get no
+space. Malformed Whisper chunks (null end timestamp) drop only the adjacent gap,
+not all pauses. On-device transcription rejects near-silent audio (all 20 ms
+RMS frames below 0.001) before invoking the model, returning `no-speech`.
+
+Why: the locale-less second normalization pass could add spurious punctuation
+marks on already-normalized text, breaking Wiki rule attribution. Provisional
+edits that cannot be settled should never reach material silently. Web Speech
+restarts concatenated without spacing, producing run-together words for Latin
+script. One malformed Whisper chunk discarded all acoustic pause evidence.
+Whisper hallucinates on silent recordings, producing spurious admissions.
+
+Forecloses: normalization inside `admissionToTreeCommand`; applying provisional
+Wiki edits without an attributable occurrence when the registry is full;
+inserting spaces between CJK/kana/hangul boundaries in Web Speech joins;
+discarding all pauses when any single Whisper chunk has a null end timestamp.
+
 ## 2026-09-30 — the Point and Talk field leaves only for a named, visible reason
 
 Changed: the field has exactly five close reasons — the person's close,

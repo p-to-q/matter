@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
 import type { MatterLocale } from "../config/locales";
 import type { MaterialTurnCommitResult } from "../interaction/material-turn-result";
 import {
@@ -15,10 +22,31 @@ import {
 } from "../runtime/text-swap-interaction";
 import type { TextSwapCommittedChange } from "../store/matter-store";
 import type { ThoughtTree } from "../tree/model";
+import type { PictureTurnPhase } from "../runtime/picture-turn";
+import { pictureControlCopy } from "./picture-control-copy";
+import {
+  pictureAnnouncementOnTransition,
+  pictureAnnouncementText,
+  pictureCloseOnTransition,
+  pictureHold,
+  pictureKeepFailureAnnouncement,
+  pictureOutcomeOnTransition,
+  projectPictureBubble,
+  type PictureHold,
+  type PictureOutcomeReason,
+} from "./picture-surface";
+import { usePictureSession } from "./use-picture-session";
 import type { PointTalkCloseReason } from "./point-talk-close";
 import type { PointTalkBounds, PointTalkOrigin } from "./point-talk-placement";
-import { POINT_TALK_TIMING, type PresenceHandoff } from "./presence";
-import { PointTalkComposer, type PointTalkSurfaceView } from "./PointTalkComposer";
+import {
+  projectPointTalkDeliveryTiming,
+  type PresenceHandoff,
+} from "./presence";
+import {
+  findPointTalkTarget,
+  PointTalkComposer,
+  type PointTalkSurfaceView,
+} from "./PointTalkComposer";
 
 /**
  * How submitted work ended when no field was left to show it. The field never
@@ -37,6 +65,7 @@ export function PointTalkTurn({
   enabled,
   exitHandoff,
   geometryKey,
+  interactionPending,
   interactionScopeKey,
   locale,
   nodeId,
@@ -44,6 +73,10 @@ export function PointTalkTurn({
   onCommitted,
   onDeliveryParkedChange,
   onPhaseChange,
+  onPictureAnnouncement,
+  onPictureHoldChange,
+  onPictureKept,
+  onPictureOutcome,
   onReleased,
   onReleasedOutcome,
   origin,
@@ -68,8 +101,10 @@ export function PointTalkTurn({
   documentEpoch: number;
   deliveryVisibleNodeIds?: ReadonlySet<string>;
   enabled: boolean;
-  exitHandoff?: PresenceHandoff<PointTalkSurfaceView>;
+  exitHandoff: PresenceHandoff<PointTalkSurfaceView>;
   geometryKey: string;
+  /** Another interaction is pending: the picture control stays but cannot act. */
+  interactionPending: boolean;
   interactionScopeKey: string;
   locale: MatterLocale;
   nodeId: string;
@@ -79,6 +114,14 @@ export function PointTalkTurn({
   /** Receives an explicit release while a resolved result is parked, else null. */
   onDeliveryParkedChange?: (release: (() => void) | null) => void;
   onPhaseChange?: (phase: TextSwapInteractionState["phase"]) => void;
+  /** The words said once through the paper's polite region. */
+  onPictureAnnouncement?: (text: string) => void;
+  /** Whether a press elsewhere may end the picture turn. */
+  onPictureHoldChange?: (hold: PictureHold) => void;
+  /** Keep succeeded: the picture is the ending, as a delivered rewrite is. */
+  onPictureKept: (basis: Readonly<{ documentEpoch: number; nodeId: string; treeId: string }>) => void;
+  /** A picture ended without its change and no bubble is left to say so. */
+  onPictureOutcome?: (reason: PictureOutcomeReason) => void;
   onReleased: () => void;
   onReleasedOutcome?: (outcome: PointTalkReleasedOutcome) => void;
   /** Where the person summoned the field, in client pixels; null for Voice. */
@@ -106,6 +149,15 @@ export function PointTalkTurn({
       selectedText: node.text,
     });
   }, [enabled, nodeId, tree]);
+  const presenceRecord = useSyncExternalStore(
+    exitHandoff.subscribe,
+    exitHandoff.getSnapshot,
+    exitHandoff.getSnapshot,
+  );
+  const deliveryTiming = useMemo(
+    () => projectPointTalkDeliveryTiming(presented, presenceIdentity, presenceRecord),
+    [presenceIdentity, presenceRecord, presented],
+  );
   const controller = useTextSwap<TextSwapCommittedChange>({
     tree,
     documentEpoch,
@@ -117,13 +169,101 @@ export function PointTalkTurn({
     commit,
     onCommitted,
     deliveryWindowAvailable: surfaceAvailable,
-    // A presented field stays visibly pending for a minimum time before its
-    // result may change the passage, so a fast result never flashes it.
-    // Detached work has no field to show and delivers as soon as it may.
-    minimumPendingMs: presented ? POINT_TALK_TIMING.pendingMinMs : 0,
+    // The visible opening owns both clocks: pending time and the exact
+    // first-paint dwell. Detached work owes neither visible delay.
+    minimumPendingMs: deliveryTiming.minimumPendingMs,
+    deliveryNotBeforeMs: deliveryTiming.notBeforeMs,
   });
   const appliedVoiceCommandIdRef = useRef<number | null>(null);
   const phase = controller.state.phase;
+  const picture = usePictureSession({
+    nodeId,
+    locale,
+    documentEpoch,
+    passageText: selection === null ? null : selection.selectedText,
+    interactionPending,
+  });
+  const picturePhase: PictureTurnPhase = picture?.state.phase ?? "idle";
+  const hold = pictureHold(picturePhase);
+  const holdRef = useRef(hold);
+  const picturePhaseRef = useRef(picturePhase);
+  const pictureStateRef = useRef(picture?.state ?? null);
+  useEffect(() => {
+    holdRef.current = hold;
+    picturePhaseRef.current = picturePhase;
+    pictureStateRef.current = picture?.state ?? null;
+  });
+  useEffect(() => {
+    onPictureHoldChange?.(hold);
+  }, [hold, onPictureHoldChange]);
+  useEffect(() => () => onPictureHoldChange?.("free"), [onPictureHoldChange]);
+  // A passage that changed under a picture is one stale picture, whichever of
+  // the two turns noticed first.
+  const pictureStaleReportedRef = useRef(false);
+  const reportPictureStale = useCallback(() => {
+    if (pictureStaleReportedRef.current) return;
+    pictureStaleReportedRef.current = true;
+    onPictureOutcome?.("stale");
+  }, [onPictureOutcome]);
+  const keepFailure = picture?.state.phase === "arrived"
+    ? picture.state.lastAcceptFailure ?? null
+    : null;
+  const previousKeepFailureRef = useRef(keepFailure);
+  useEffect(() => {
+    const announcement = pictureKeepFailureAnnouncement(previousKeepFailureRef.current, keepFailure);
+    previousKeepFailureRef.current = keepFailure;
+    if (announcement !== null) {
+      onPictureAnnouncement?.(pictureAnnouncementText(pictureControlCopy(locale), announcement));
+    }
+  }, [keepFailure, locale, onPictureAnnouncement]);
+  const previousPicturePhaseRef = useRef<PictureTurnPhase>("idle");
+  useEffect(() => {
+    const previous = previousPicturePhaseRef.current;
+    previousPicturePhaseRef.current = picturePhase;
+    if (previous === picturePhase) return;
+    const announcement = pictureAnnouncementOnTransition(previous, picturePhase);
+    if (announcement !== null) {
+      const view = pictureStateRef.current === null ? null : projectPictureBubble(pictureStateRef.current);
+      onPictureAnnouncement?.(pictureAnnouncementText(
+        pictureControlCopy(locale),
+        announcement,
+        view?.step === "failed" ? view.notice : null,
+      ));
+    }
+    const outcome = pictureOutcomeOnTransition(previous, picturePhase);
+    if (outcome === "stale") reportPictureStale();
+    else if (outcome !== null) onPictureOutcome?.(outcome);
+    const close = pictureCloseOnTransition(picturePhase);
+    if (close === null) return;
+    if (close === "result") {
+      onPictureKept(Object.freeze({ documentEpoch, nodeId, treeId: tree.id }));
+      return;
+    }
+    // Every close names its reason where it is called.
+    if (close === "target-changed") onClose("target-changed");
+    else onClose("person");
+    onReleased();
+    if (close === "person") {
+      // The picture was the person's to decline; the passage keeps their place.
+      queueMicrotask(() => {
+        const canvas = canvasRef.current;
+        if (canvas !== null) findPointTalkTarget(canvas, nodeId)?.focus({ preventScroll: true });
+      });
+    }
+  }, [
+    canvasRef,
+    documentEpoch,
+    locale,
+    nodeId,
+    onClose,
+    onPictureAnnouncement,
+    onPictureKept,
+    onPictureOutcome,
+    onReleased,
+    picturePhase,
+    reportPictureStale,
+    tree.id,
+  ]);
   useEffect(() => {
     if (!presented || selection === null || phase !== "idle" || controller.enter()) return;
     // The exact policy or a changed passage refused the summoned turn before
@@ -147,6 +287,12 @@ export function PointTalkTurn({
   useEffect(() => {
     if (!presented || voiceCommand === null || voiceCommand === undefined) return;
     if (appliedVoiceCommandIdRef.current === voiceCommand.id) return;
+    // A picture step owns the bubble; Voice is consumed rather than kept for
+    // whenever the form returns.
+    if (holdRef.current !== "free") {
+      appliedVoiceCommandIdRef.current = voiceCommand.id;
+      return;
+    }
     if (voiceCommand.type === "start") {
       if (phase !== "eligible" && phase !== "ready" && phase !== "error") return;
       if (!controller.startRecording()) return;
@@ -160,7 +306,10 @@ export function PointTalkTurn({
     if (!presented) controller.detachPresentation();
   }, [controller, presented]);
   useEffect(() => {
-    if (surfaceAvailable || !presented || textSwapActionWasSubmitted(controller.state)) return;
+    if (
+      surfaceAvailable || !presented || textSwapActionWasSubmitted(controller.state) ||
+      holdRef.current === "paid"
+    ) return;
     // A modal or hidden page: the one 0 ms cut. An unsubmitted draft ends.
     const retained = controller.detachPresentation();
     onClose("cut");
@@ -172,9 +321,11 @@ export function PointTalkTurn({
     const previous = releasedPhaseRef.current;
     releasedPhaseRef.current = phase;
     const outcome = pointTalkReleasedOutcome(presented, previous, phase);
-    if (outcome !== null) onReleasedOutcome?.(outcome);
+    if (outcome === "stale" && (holdRef.current !== "free" || picturePhaseRef.current === "stale")) {
+      reportPictureStale();
+    } else if (outcome !== null) onReleasedOutcome?.(outcome);
     if (presented && phase === "stale" && previous !== "stale") onClose("target-changed");
-  }, [onClose, onReleasedOutcome, phase, presented]);
+  }, [onClose, onReleasedOutcome, phase, presented, reportPictureStale]);
   useEffect(() => {
     if (pointTalkTurnReleasesOwner(presented, phase)) onReleased();
   }, [onReleased, phase, presented]);
@@ -205,10 +356,12 @@ export function PointTalkTurn({
       locale={locale}
       nodeId={nodeId}
       onCancel={close}
+      onPictureUnavailable={() => onPictureOutcome?.("unavailable")}
       onRetry={controller.retry}
       onStartVoice={controller.startRecording}
       onStopVoice={controller.stopRecording}
       penActive={penActive}
+      picture={picture}
       onSubmit={(direction) => {
         if (!controller.acceptDirection(direction)) return;
         controller.submit();
@@ -252,3 +405,5 @@ export function pointTalkTurnReleasesOwner(
   if (presented) return phase === "success" || phase === "stale";
   return phase === "idle" || phase === "error" || phase === "stale" || phase === "success";
 }
+
+Object.defineProperty(PointTalkTurn, "matterCapability", { value: "matter-capability:point-talk" });

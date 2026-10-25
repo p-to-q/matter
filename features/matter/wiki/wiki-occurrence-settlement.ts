@@ -3,6 +3,7 @@ import {
   isWikiOccurrenceId,
   storedAliasKey,
   storedDecisionKey,
+  storedDescriptorKey,
   validateWikiState,
 } from "./wiki-invariants";
 import {
@@ -22,6 +23,8 @@ import {
   type WikiOccurrenceSettlement,
   type WikiRevertStrike,
   type WikiRuleDescriptor,
+  type WikiRuleMaturity,
+  type WikiOutcomeCounters,
   type WikiState,
   type WikiTransitionResult,
 } from "./wiki-model";
@@ -33,6 +36,7 @@ import {
   transitionFailure as failure,
   transitionSuccess as success,
 } from "./wiki-transition";
+import { incrementWikiOutcome } from "./wiki-diagnostics";
 
 /**
  * Occurrence settlement: the state transition for one applied occurrence's
@@ -78,10 +82,11 @@ export function settleWikiOccurrence(
     currentAuthority(state, rule),
     settlement.origin,
   );
-  if (effect.kind === "neutral") return success(state, false);
+  if (settlement.outcome === "censored") return success(state, false);
   const explicit = effect.kind === "confirm" || effect.kind === "reject" ||
     effect.kind === "replace";
-  if (!explicit && state.settledOccurrences.includes(settlement.occurrenceId)) {
+  const duplicate = state.settledOccurrences.includes(settlement.occurrenceId);
+  if (!explicit && duplicate) {
     return success(state, false);
   }
   let result: WikiTransitionResult;
@@ -100,7 +105,7 @@ export function settleWikiOccurrence(
     }));
   } else if (effect.kind === "strike") {
     result = strikeRevertedAlias(state, rule, settlement.rule.appliedAtRevision, decide);
-  } else {
+  } else if (effect.kind === "kept") {
     result = keepAppliedAlias(
       state,
       rule,
@@ -108,9 +113,69 @@ export function settleWikiOccurrence(
       effect,
       qualifiedAliasProducers,
     );
+  } else {
+    result = success(state, false);
   }
-  if (!result.ok || !result.changed) return result;
-  return recordSettledOccurrence(result.state, settlement.occurrenceId);
+  if (!result.ok) return result;
+  if (!duplicate) {
+    const maturity = settleMaturity(state, result.state, rule, settlement);
+    if (!maturity.ok) return maturity;
+    result = success(maturity.state, result.changed || maturity.changed);
+  }
+  if (!result.ok) return result;
+  if (!result.changed) return result;
+  const counter = outcomeCounter(settlement.outcome);
+  const counted = counter === null ? result : commitAtRevision(result.state, result.state.revision, {
+    outcomeCounters: incrementWikiOutcome(result.state.outcomeCounters, counter),
+  });
+  return counted.ok ? recordSettledOccurrence(counted.state, settlement.occurrenceId) : counted;
+}
+
+function outcomeCounter(outcome: WikiOccurrenceSettlement["outcome"]): keyof WikiOutcomeCounters | null {
+  switch (outcome) {
+    case "accepted-implicit": return "acceptedImplicit";
+    case "inspected-kept": return "inspectedKept";
+    case "explicit-confirm": return "explicitConfirm";
+    case "explicit-reject": return "explicitReject";
+    case "explicit-replace": return "explicitReplace";
+    case "reverted": return "reverted";
+    default: return null;
+  }
+}
+
+function settleMaturity(
+  original: WikiState, state: WikiState, rule: WikiRuleDescriptor,
+  settlement: WikiOccurrenceSettlement,
+): WikiTransitionResult {
+  const kept = settlement.outcome === "accepted-implicit" || settlement.outcome === "inspected-kept";
+  const reverted = settlement.outcome === "reverted";
+  if (!kept && !reverted) return success(state, false);
+  const lexeme = findLexeme(state, rule);
+  if (lexeme === undefined) return success(state, false);
+  const alias = aliasDescriptor(rule, lexeme.id);
+  const key = storedDescriptorKey(alias);
+  const confirmed = state.authorities.some((entry) => storedDescriptorKey(entry) === key);
+  if (!confirmed && (state.automaticLearningSaturated ||
+      !state.aliasEvidence.some((entry) => storedDescriptorKey(entry) === key) ||
+      strikeSince(state, storedDecisionKey(alias), settlement.rule.appliedAtRevision) !== undefined)) {
+    return success(state, false);
+  }
+  const previous = state.ruleMaturity.find((entry) => storedDescriptorKey(entry) === key);
+  if (previous?.lastRevertedAtRevision !== null && previous?.lastRevertedAtRevision !== undefined &&
+      settlement.rule.appliedAtRevision < previous.lastRevertedAtRevision) return success(state, false);
+  if (kept && previous?.keptSettlements === 3) return success(state, false);
+  if (state.revision === original.revision && state.revision === Number.MAX_SAFE_INTEGER) {
+    return failure("BOUND_EXCEEDED", "The Wiki revision bound is exceeded.");
+  }
+  const revision = state.revision === original.revision ? state.revision + 1 : state.revision;
+  const count = reverted ? 0 : Math.min(3, (previous?.keptSettlements ?? 0) + 1) as 1 | 2 | 3;
+  const maturity: WikiRuleMaturity = Object.freeze({ ...alias, keptSettlements: count,
+    establishedAt: count === 3 ? revision : null,
+    lastRevertedAtRevision: reverted ? revision : previous?.lastRevertedAtRevision ?? null,
+  });
+  return commitAtRevision(state, revision, { ruleMaturity: Object.freeze([
+    ...state.ruleMaturity.filter((entry) => storedDescriptorKey(entry) !== key), maturity,
+  ]) });
 }
 
 function currentAuthority(

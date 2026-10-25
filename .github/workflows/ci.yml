@@ -12,6 +12,8 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      MATTER_BUILD_ID: ci-${{ github.run_id }}-${{ github.run_attempt }}
     # The serial e2e matrix alone runs ~11.5 min on the hosted runner; the job
     # ceiling guards against hangs, not suite size.
     timeout-minutes: 25
@@ -38,6 +40,25 @@ jobs:
       - run: npm run typegen
       - run: npm run typecheck
       - run: npm run lint
-      - run: npm run build
+      - name: Freeze production build inputs
+        run: |
+          mkdir -p test-results
+          git ls-files -z -- app features e2e scripts public .github package.json package-lock.json next.config.ts next.config.test.ts tsconfig.json eslint.config.mjs vitest.config.mts playwright.config.ts playwright.production.config.ts | xargs -0 sha256sum > test-results/ci-build-inputs.sha256
+      - run: npx next build --webpack
+      # Owner-authorized integration debt, 2026-10-25. Keep the actual check
+      # and report its failure; restore blocking before the next prerelease.
+      - name: Runtime budget (recorded integration debt)
+        id: runtime_budget
+        continue-on-error: true
+        run: npm run check:runtime
+      - name: Report outstanding runtime budget
+        if: steps.runtime_budget.outcome == 'failure'
+        run: |
+          echo "::warning::Runtime budget failed. Accepted only for this main integration; prerelease remains blocked."
+          echo "Runtime budget: **FAILED**. Owner-approved main integration debt; restore blocking before the next prerelease." >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify production build inputs stayed fixed
+        run: sha256sum --check --quiet test-results/ci-build-inputs.sha256
       - run: npx playwright install --with-deps chromium
+      - name: Qualify compiled-page database recovery
+        run: node scripts/prove-recovery-next.mjs --source-inventory test-results/ci-build-inputs.sha256
       - run: npm run test:e2e

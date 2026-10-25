@@ -331,11 +331,12 @@ function oversizedWikiState(): WikiState {
       locale: "en-US" as const,
       canonical: `${"x".repeat(120)}${suffix}`,
       scope: "both" as const,
-      provenance: "human-confirmed" as const,
+      provenance: "manual" as const,
       confirmedAtRevision: 1,
     };
   });
   return {
+    ...createEmptyWikiState(),
     schemaVersion: WIKI_SCHEMA_VERSION,
     scoringVersion: WIKI_SCORING_VERSION,
     fittingVersion: 1,
@@ -371,11 +372,12 @@ function maximumMatcherState(): WikiState {
       locale: "en-US" as const,
       canonical: `Canonical-${suffix}`.padEnd(canonicalLength, "c"),
       scope: "both" as const,
-      provenance: "human-confirmed" as const,
+      provenance: "manual" as const,
       confirmedAtRevision: 1,
     };
   });
   return {
+    ...createEmptyWikiState(),
     schemaVersion: WIKI_SCHEMA_VERSION,
     scoringVersion: WIKI_SCORING_VERSION,
     fittingVersion: 1,
@@ -406,11 +408,12 @@ function recoverySizeState(withTermEvidence = false): WikiState {
     canonical: `Term${index.toString(36).padStart(8, "0")}`,
     scope: "both" as const,
     provenance: index === 0 && withTermEvidence
-      ? "aggregate-evidence" as const
-      : "human-confirmed" as const,
+      ? "collected" as const
+      : "manual" as const,
     confirmedAtRevision: index === 0 && withTermEvidence ? null : 1,
   }));
   return freezeWikiState({
+    ...createEmptyWikiState(),
     schemaVersion: WIKI_SCHEMA_VERSION,
     scoringVersion: WIKI_SCORING_VERSION,
     fittingVersion: 1,

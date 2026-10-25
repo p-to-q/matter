@@ -106,3 +106,5 @@ function throwIfAborted(signal: AbortSignal): void {
     throw signal.reason ?? new DOMException("Transcript repair was cancelled.", "AbortError");
   }
 }
+
+Object.defineProperty(createTranscriptRepairPort, "matterCapability", { value: "matter-capability:transcript-repair" });

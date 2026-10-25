@@ -97,6 +97,11 @@
 .material-files:not([data-mode="browse"]) .material-file__open { grid-column: 1 / -1; padding-left: 10px; }
 .material-file__title { max-width: 100%; overflow: hidden; font: 400 13px/1.35 var(--matter-face); letter-spacing: 0; text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
 .material-file[data-active="true"] .material-file__title { font-weight: 600; }
+/* The path above the active passage, marked without weight or plate (both are
+   taken by active and lasso) and without colour alone: ancestors are branches
+   and already read at full ink. Browsing only; static, so reduced motion needs
+   no exception, and a text decoration survives forced colours. */
+.material-files[data-mode="browse"] .material-file[data-in-lineage="true"] .material-file__title { text-decoration: underline; text-decoration-color: rgba(22,29,39,.3); text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .material-file__path { max-width: 100%; overflow: hidden; color: var(--index-faint); font: 10px/1.2 var(--mono); text-overflow: ellipsis; white-space: nowrap; unicode-bidi: plaintext; }
 .material-file__structure-control,
 .material-file__context-space { position: relative; z-index: 1; display: grid; width: var(--material-file-action-width); height: var(--index-row); place-items: center; padding: 0; border: 0; background: transparent; color: inherit; }
@@ -165,6 +170,10 @@
 .material-file__check-mark { box-sizing: border-box; display: grid; width: 11px; height: 11px; justify-self: center; place-items: center; border: 1px solid rgba(22,29,39,.5); border-radius: 2px; background: transparent; transition: border-color 120ms ease; }
 .material-file__check input:checked + .material-file__check-mark { border-color: var(--active); background: transparent; }
 .material-file__check input:checked + .material-file__check-mark::after { width: 5px; height: 2.5px; border-bottom: 1px solid var(--active); border-left: 1px solid var(--active); content: ""; transform: translateY(-.5px) rotate(-45deg); }
+/* A row ticked only because a passage under it is: still checked, in a quieter ink. */
+.material-file__check[data-context="true"] input:checked + .material-file__check-mark { border-color: var(--index-faint); }
+.material-file__check[data-context="true"] input:checked + .material-file__check-mark::after { border-color: var(--index-faint); }
+.material-file__check[data-context="true"] .material-file__title { color: var(--index-muted); }
 .material-file__check input:focus-visible + .material-file__check-mark { outline: 2px solid var(--ink); outline-offset: 3px; }
 .material-file__rename { width: calc(100% - 12px); min-width: 0; height: calc(var(--index-row) - 10px); margin: 0 2px 0 0; grid-column: 2; padding: 0 5px; border: 1px solid var(--active); border-radius: 5px; background: rgba(255,255,255,.62); color: var(--index-ink); font: 400 12px/1.35 var(--matter-face); unicode-bidi: plaintext; }
 .material-file__rename:focus-visible { outline: 1px solid var(--ink); outline-offset: 1px; }
@@ -174,14 +183,21 @@
 .material-files__archive { min-height: 0; padding: 8px 8px 6px; color: var(--index-muted); font: 10px/1.6 var(--mono); }
 .material-files__archive-note { max-width: 188px; margin: 0 0 14px; }
 .material-files__archive-actions { display: grid; gap: 5px; }
+/* The readable receipt: download and clipboard side by side, then one line saying what it is. */
+.material-files__archive-receipt { margin-top: 5px; }
+.material-files__archive-receipt-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.material-files__archive-helper { max-width: 224px; margin: 8px 0 0; color: var(--index-muted); font-size: 10px; line-height: 1.5; }
 .material-files__archive-actions button,
+.material-files__archive-receipt-actions button,
 .material-files__archive-confirm button { min-height: 34px; padding: 0 10px; border: 1px solid rgba(22,29,39,.1); border-radius: 8px; background: rgba(255,255,255,.34); color: var(--index-ink); font: 9px/1 var(--mono); text-align: left; cursor: pointer; transition: background 120ms ease, border-color 120ms ease; }
 
 @media (hover: hover) {
   .material-files__archive-actions button:hover:not(:disabled),
+  .material-files__archive-receipt-actions button:hover:not(:disabled),
   .material-files__archive-confirm button:hover:not(:disabled) { border-color: rgba(22,29,39,.22); background: rgba(255,255,255,.62); }
 }
 .material-files__archive-actions button:disabled,
+.material-files__archive-receipt-actions button:disabled,
 .material-files__archive-confirm button:disabled { cursor: default; opacity: .45; }
 .material-files__archive-retry { width: 100%; min-height: 34px; margin-top: 7px; border: 1px solid var(--index-line); border-radius: 8px; background: transparent; color: var(--active); font: 9px/1 var(--mono); cursor: pointer; }
 
@@ -193,6 +209,8 @@
 .material-files__archive-status,
 .material-files__archive-error { margin: 12px 0 0; font-size: 9px; line-height: 1.5; }
 .material-files__archive-error { color: var(--active); }
+/* A notice that says material will be lost when the tab closes is read, not skimmed. */
+.material-files__archive-status[data-tone="risk"] { color: var(--active); font-size: 10px; }
 .material-files__archive-status:empty,
 .material-files__archive-error:empty { position: absolute; width: 1px; height: 1px; margin: 0; overflow: hidden; clip-path: inset(50%); }
 .material-files__archive-confirm { margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--index-line); }
@@ -202,8 +220,9 @@
 .material-files__archive-confirm button:first-child { text-align: center; }
 
 /* Copy bar, only while selecting. */
-.material-files__footer { display: flex; min-height: 38px; align-items: center; justify-content: space-between; gap: 8px; margin: 5px 3px 0; padding-top: 6px; border-top: 1px solid var(--index-line); color: var(--index-faint); animation: material-selection-enter 120ms ease both; }
-.material-files__copy-status { overflow: hidden; padding-left: 7px; font: 9px/1 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.material-files__footer { display: flex; min-height: 38px; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; margin: 5px 3px 0; padding-top: 6px; border-top: 1px solid var(--index-line); color: var(--index-faint); animation: material-selection-enter 120ms ease both; }
+.material-files__copy-status { flex: 1 1 7em; min-width: 7em; overflow: hidden; padding-left: 7px; font: 9px/1 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.material-files__copy-actions { display: flex; flex: none; margin-left: auto; gap: 5px; }
 .material-files__copy { display: flex; height: 30px; align-items: center; gap: 6px; padding: 0 10px; border: 0; border-radius: 8px; background: rgba(22,29,39,.07); color: var(--index-ink); font: 9px/1 var(--mono); cursor: pointer; transition: background 120ms ease; }
 .material-files__copy svg { width: 13px; height: 13px; }
 
@@ -273,6 +292,7 @@
   .material-files__copy { min-width: 48px; height: 48px; }
   .material-files__profile-action { width: 48px; height: 48px; }
   .material-files__archive-actions button,
+  .material-files__archive-receipt-actions button,
   .material-files__archive-confirm button { min-height: 48px; }
 }
 
@@ -303,6 +323,7 @@
   .material-files__copy { min-width: 48px; min-height: 48px; }
   .material-files__search { min-height: 48px; }
   .material-files__archive-actions button,
+  .material-files__archive-receipt-actions button,
   .material-files__archive-confirm button,
   .material-files__archive-retry { min-height: 48px; }
   .material-files__tree { --material-file-action-width: 48px; --material-file-context-width: 48px; }

@@ -1,5 +1,6 @@
 import type { MatterLocale } from "../config/locales";
 import type { WikiBoundary, WikiLexemeScope, WikiState } from "./wiki-model";
+import { isHumanWikiLexeme } from "./wiki-model";
 
 const WORD_EDGE = /^[\p{L}\p{M}\p{N}].*[\p{L}\p{M}\p{N}]$/u;
 const SINGLE_WORD_EDGE = /^[\p{L}\p{M}\p{N}]$/u;
@@ -45,6 +46,6 @@ export function projectWikiConfigurationRules(
       locale: lexeme.locale,
       canonical: lexeme.canonical,
       scope: lexeme.scope,
-      origin: lexeme.provenance === "human-confirmed" ? "confirmed" as const : "automatic" as const,
+      origin: isHumanWikiLexeme(lexeme) ? "confirmed" as const : "automatic" as const,
     })));
 }

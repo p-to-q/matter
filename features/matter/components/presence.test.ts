@@ -11,6 +11,7 @@ import {
   POINT_TALK_TIMING,
   PRESENCE_TIMING,
   presenceReservesSpace,
+  projectPointTalkDeliveryTiming,
   projectPresence,
   projectSettledStatus,
   settledStatusDeadline,
@@ -286,6 +287,7 @@ describe("presence handoff", () => {
       identity: "turn_1",
       view: "Rewording…",
       lastView: "Rewording…",
+      paintedAtMs: null,
       close: "preempted",
     });
 
@@ -295,6 +297,7 @@ describe("presence handoff", () => {
       identity: "turn_1",
       view: null,
       lastView: "Rewording…",
+      paintedAtMs: null,
       close: "finished",
     });
     expect(listener).toHaveBeenCalledTimes(3);
@@ -321,6 +324,7 @@ describe("presence handoff", () => {
       identity: "turn_2",
       view: null,
       lastView: null,
+      paintedAtMs: null,
       close: "preempted",
     });
     // A late release from the replaced owner cannot rewrite the new record.
@@ -344,6 +348,87 @@ describe("presence handoff", () => {
     handoff.enter("turn_1");
     handoff.show("turn_1", "form");
     expect(handoff.getSnapshot()).toMatchObject({ view: "form", close: "preempted" });
+  });
+
+  it("receipts one first paint per identity without inheriting stale or preempted paint", () => {
+    const handoff = createPresenceHandoff<string>();
+    const listener = vi.fn();
+    handoff.subscribe(listener);
+    handoff.enter("turn_1");
+    listener.mockClear();
+    handoff.markPainted("turn_1", 800);
+    expect(handoff.getSnapshot()?.paintedAtMs).toBeNull();
+    expect(listener).not.toHaveBeenCalled();
+
+    handoff.show("turn_1", "form");
+    listener.mockClear();
+
+    handoff.markPainted("turn_old", 900);
+    handoff.markPainted("turn_1", Number.NaN);
+    expect(handoff.getSnapshot()?.paintedAtMs).toBeNull();
+    expect(listener).not.toHaveBeenCalled();
+
+    handoff.markPainted("turn_1", 1_000);
+    handoff.markPainted("turn_1", 1_100);
+    expect(handoff.getSnapshot()?.paintedAtMs).toBe(1_000);
+    expect(listener).toHaveBeenCalledTimes(1);
+    handoff.show("turn_1", "pending");
+    handoff.release("turn_1", "pending", "finished");
+    expect(handoff.getSnapshot()?.paintedAtMs).toBe(1_000);
+
+    handoff.enter("turn_2");
+    expect(handoff.getSnapshot()?.paintedAtMs).toBeNull();
+    handoff.markPainted("turn_1", 1_200);
+    expect(handoff.getSnapshot()?.paintedAtMs).toBeNull();
+    handoff.show("turn_2", "form");
+    handoff.markPainted("turn_2", 1_300);
+    expect(handoff.getSnapshot()?.paintedAtMs).toBe(1_300);
+    handoff.preempt();
+    handoff.markPainted("turn_2", 1_400);
+    expect(handoff.getSnapshot()).toBeNull();
+  });
+
+  it("accepts an already-recorded frame receipt after release, until another identity enters", () => {
+    const handoff = createPresenceHandoff<string>();
+    handoff.show("turn_1", "form");
+    handoff.release("turn_1", "form", "person");
+    handoff.markPainted("turn_1", 1_000);
+    expect(handoff.getSnapshot()).toMatchObject({
+      identity: "turn_1",
+      view: null,
+      paintedAtMs: 1_000,
+    });
+
+    handoff.enter("turn_2");
+    handoff.markPainted("turn_1", 1_100);
+    expect(handoff.getSnapshot()).toMatchObject({
+      identity: "turn_2",
+      paintedAtMs: null,
+    });
+  });
+});
+
+describe("Point and Talk delivery timing", () => {
+  it("fails closed before the matching paint and clears both clocks when detached", () => {
+    const handoff = createPresenceHandoff<string>();
+    handoff.show("turn_1", "form");
+    expect(projectPointTalkDeliveryTiming(true, "turn_1", handoff.getSnapshot())).toEqual({
+      minimumPendingMs: POINT_TALK_TIMING.pendingMinMs,
+      notBeforeMs: null,
+    });
+    handoff.markPainted("turn_other", 1_000);
+    expect(projectPointTalkDeliveryTiming(true, "turn_1", handoff.getSnapshot()).notBeforeMs)
+      .toBeNull();
+
+    handoff.markPainted("turn_1", 1_000);
+    expect(projectPointTalkDeliveryTiming(true, "turn_1", handoff.getSnapshot())).toEqual({
+      minimumPendingMs: POINT_TALK_TIMING.pendingMinMs,
+      notBeforeMs: 1_000 + POINT_TALK_TIMING.minDwellMs,
+    });
+    expect(projectPointTalkDeliveryTiming(false, "turn_1", handoff.getSnapshot())).toEqual({
+      minimumPendingMs: 0,
+      notBeforeMs: 0,
+    });
   });
 });
 

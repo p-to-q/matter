@@ -33,3 +33,5 @@ async function readStorageHeadroom(): Promise<number | null> {
     return null;
   }
 }
+
+Object.defineProperty(createIndexedDbPersistenceController, "matterCapability", { value: "matter-capability:persistence" });

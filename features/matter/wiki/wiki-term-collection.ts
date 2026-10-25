@@ -12,6 +12,8 @@ import {
 } from "./wiki-learning-policy";
 import {
   MAX_WIKI_OBSERVATIONS_PER_LEDGER,
+  wikiProducerFamily,
+  type WikiProducerFamily,
   type WikiObserveEvidenceEvent,
 } from "./wiki-model";
 import type {
@@ -180,6 +182,9 @@ export function collectCommittedWikiTermsResult(
       left.canonical.localeCompare(right.canonical, request.locale))),
     scannedScripts: wikiScriptClassesFromMask(scannedScripts),
     routedScripts: wikiScriptClassesFromMask(routedScripts),
+    producerFamilies: Object.freeze(["shape-specific-v1", "locale-segment-v1"]
+      .filter((producer) => enabledProducers === undefined || enabledProducers.has(producer as WikiTermEvidenceProducer))
+      .map(wikiProducerFamily).filter((family): family is WikiProducerFamily => family !== null)),
   });
 }
 

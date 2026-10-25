@@ -5,7 +5,7 @@ import { createStoragePersistence, type StoragePersistenceGesture } from "./stor
 
 /**
  * Reads whether this origin's storage is persistent once, without prompting,
- * and exposes the one request an explicit Export, Retry, or Replace gesture
+ * and exposes the one request an explicit Export, Retry, Replace, or Keep gesture
  * may make. `request` must be called synchronously inside that gesture.
  */
 export function useStoragePersistence() {

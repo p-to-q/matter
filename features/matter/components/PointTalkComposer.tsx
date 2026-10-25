@@ -4,7 +4,6 @@
 import "./PointTalkComposer.css";
 import {
   useCallback,
-  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -31,6 +30,7 @@ import {
 import { usePresence, useSettledStatus } from "./use-presence";
 import { pointTalkPresenceClose, pointTalkReleaseReason } from "./point-talk-close";
 import {
+  projectPointTalkControlReserve,
   projectPointTalkEntrance,
   projectPointTalkPlacementWithinSurfaces,
   projectPointTalkScale,
@@ -42,6 +42,19 @@ import {
 import { constrainPointTalkDirectionInput } from "./point-talk-direction-input";
 import { useEscapeLayer } from "./escape-layers";
 import { useOutsidePressDismissal } from "./touch-commitment";
+import {
+  pictureControlCopy,
+  type PictureControlCopy,
+} from "./picture-control-copy";
+import {
+  pictureEscapeAction,
+  pictureHold,
+  projectPictureBubble,
+  type PictureBubbleView,
+  type PictureControlPresentation,
+} from "./picture-surface";
+import { PointTalkPicturePanel } from "./PointTalkPicturePanel";
+import type { PictureSession, PointTalkPictureActions } from "./use-picture-session";
 
 export type PointTalkStatusPhase = Extract<
   TextSwapInteractionState["phase"],
@@ -51,7 +64,15 @@ export type PointTalkStatusPhase = Extract<
 type PointTalkFeedbackAction = "stop" | "retry" | "record-again";
 
 type PointTalkSurfaceContent =
-  | Readonly<{ kind: "form"; direction: string; formKey: string; voiceAvailable: boolean }>
+  | Readonly<{
+      kind: "form";
+      direction: string;
+      formKey: string;
+      voiceAvailable: boolean;
+      /** The picture step that takes the form row's place; the row itself is null. */
+      picture: PictureBubbleView | null;
+      pictureControl: PictureControlPresentation;
+    }>
   | Readonly<{
       kind: "feedback";
       /** The settled phase label; the only text a live region announces. */
@@ -70,15 +91,20 @@ export type PointTalkSurfaceView = Readonly<{
   top: number;
   maxWidth: number;
   scale: number;
+  /** The measured room the picture control lends the field's width, at scale 1; 0 without one. */
+  controlReserve: number;
   entrance: PointTalkEntrance | null;
   content: PointTalkSurfaceContent;
 }>;
 
 type PointTalkHandlers = Readonly<{
+  onPictureUnavailable: () => void;
   onRetry: () => void;
   onStartVoice: () => void;
   onStopVoice: () => void;
   onSubmit: (direction: string) => void;
+  picture: PointTalkPictureActions;
+  keeping: boolean;
 }>;
 
 export function PointTalkComposer({
@@ -91,12 +117,14 @@ export function PointTalkComposer({
   locale,
   nodeId,
   onCancel,
+  onPictureUnavailable,
   onRetry,
   onStartVoice,
   onStopVoice,
   onSubmit,
   origin,
   penActive,
+  picture,
   positioningRef,
   presenceIdentity,
   surfaceAvailable,
@@ -114,6 +142,7 @@ export function PointTalkComposer({
   nodeId: string;
   /** The person dismissed the field. */
   onCancel: () => void;
+  onPictureUnavailable?: () => void;
   onRetry: () => void;
   onStartVoice: () => void;
   onStopVoice: () => void;
@@ -121,6 +150,8 @@ export function PointTalkComposer({
   /** Where the person summoned the field; its entrance grows from there. */
   origin: PointTalkOrigin | null;
   penActive: (timeStamp: number) => boolean;
+  /** The passage's picture turn; null when the app has no picture store. */
+  picture: PictureSession | null;
   positioningRef: RefObject<HTMLElement | null>;
   /** One opening of the field; a new opening never inherits the last one's exit. */
   presenceIdentity: string;
@@ -131,9 +162,11 @@ export function PointTalkComposer({
   const bubbleRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const retryRef = useRef<HTMLButtonElement>(null);
+  const openingFocusConsumedIdentityRef = useRef<string | null>(null);
   const measurementFrameRef = useRef<number | null>(null);
   const [placement, setPlacement] = useState<PointTalkPlacement | null>(null);
   const [entrance, setEntrance] = useState<PointTalkEntrance | null>(null);
+  const [measuredReserve, setMeasuredReserve] = useState(0);
   const inputId = useId();
   const phase = controller.state.phase;
   const submitted = textSwapActionWasSubmitted(controller.state);
@@ -144,6 +177,14 @@ export function PointTalkComposer({
   const visualScale = projectPointTalkScale(canvasZoom);
   const formVisible = phase === "eligible" || phase === "ready";
   const copy = pointTalkCopy(locale);
+  const pictureView = useMemo(
+    () => picture === null ? null : projectPictureBubble(picture.state),
+    [picture],
+  );
+  const pictureStep = pictureView?.step ?? null;
+  const pictureActions = picture?.actions ?? null;
+  const picturePaid = picture !== null && pictureHold(picture.state.phase) === "paid";
+  const pictureControl: PictureControlPresentation = picture?.control ?? "absent";
   const cancelAndRestoreFocus = useCallback(() => {
     onCancel();
     queueMicrotask(() => {
@@ -264,7 +305,14 @@ export function PointTalkComposer({
   // this presentation. An IME candidate dismissal never reaches it. The field
   // is a paper surface, so chrome or a panel that covers it closes first.
   useEscapeLayer(pointTalkSurfaceVisible(controller.state.phase), "paper", () => {
-    cancelAndRestoreFocus();
+    switch (pictureEscapeAction(formVisible ? pictureStep : null)) {
+      case "back": pictureActions?.back(); break;
+      case "stop-waiting": pictureActions?.stopWaiting(); break;
+      case "focus-preview":
+        bubbleRef.current?.querySelector<HTMLElement>("[data-picture-anchor]")?.focus({ preventScroll: true });
+        break;
+      case "cancel-field": cancelAndRestoreFocus(); break;
+    }
     return true;
   });
 
@@ -287,19 +335,32 @@ export function PointTalkComposer({
         insideSlotOwner: targetElement?.closest('[data-chrome-control="inquiry"]') != null,
         insideVoiceTool: targetElement?.closest('[data-tool-id="voice"]') != null,
         submitted,
+        holdsPaidWork: picturePaid,
       }) ? onCancel : null;
     },
     penActive,
   });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (
       !surfaceAvailable || !formVisible || !placementReady ||
       document.visibilityState !== "visible"
     ) return;
-    const frame = requestAnimationFrame(() => inputRef.current?.focus({ preventScroll: true }));
+    const focusAtSchedule = document.activeElement;
+    const frame = requestAnimationFrame(() => {
+      const input = inputRef.current;
+      const bubble = bubbleRef.current;
+      const active = document.activeElement;
+      if (input === null || bubble === null || document.visibilityState !== "visible") return;
+      const opening = openingFocusConsumedIdentityRef.current !== presenceIdentity;
+      openingFocusConsumedIdentityRef.current = presenceIdentity;
+      // Default focus cannot undo a newer choice, including a picture step's anchor.
+      if (active !== null && bubble.contains(active)) return;
+      if (active !== document.body && (!opening || active !== focusAtSchedule)) return;
+      input.focus({ preventScroll: true });
+    });
     return () => cancelAnimationFrame(frame);
-  }, [formVisible, placementReady, surfaceAvailable]);
+  }, [formVisible, placementReady, presenceIdentity, surfaceAvailable]);
 
   useLayoutEffect(() => {
     if (
@@ -308,6 +369,24 @@ export function PointTalkComposer({
     ) return;
     retryRef.current?.focus({ preventScroll: true });
   }, [placementReady, recoveryAvailable, surfaceAvailable]);
+
+  // Each picture step moves focus to its own anchor, and a return to the form
+  // moves it back to the control that was pressed, but only while the person's
+  // focus is still in the field or lost: it never takes focus from elsewhere.
+  const previousPictureStepRef = useRef<typeof pictureStep>(null);
+  useLayoutEffect(() => {
+    const previous = previousPictureStepRef.current;
+    previousPictureStepRef.current = pictureStep;
+    const bubble = bubbleRef.current;
+    if (previous === pictureStep || bubble === null || !placementReady) return;
+    if (!surfaceAvailable || document.visibilityState !== "visible") return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body && !bubble.contains(active)) return;
+    const target = pictureStep === null
+      ? bubble.querySelector<HTMLElement>("[data-picture-control]") ?? inputRef.current
+      : bubble.querySelector<HTMLElement>("[data-picture-anchor]");
+    target?.focus({ preventScroll: true });
+  }, [pictureStep, placementReady, surfaceAvailable]);
 
   const activeState = controller.state;
   const surfaceLive = pointTalkSurfaceVisible(activeState.phase);
@@ -333,6 +412,8 @@ export function PointTalkComposer({
         direction: readyDirection,
         formKey: `${nodeId}:${readyDirection}`,
         voiceAvailable,
+        picture: pictureView,
+        pictureControl,
       });
     }
     const label = shownStatus === null ? "" : pointTalkPhaseLabel(shownStatus, locale);
@@ -350,10 +431,41 @@ export function PointTalkComposer({
     nodeId,
     partialDirection,
     pendingEcho,
+    pictureControl,
+    pictureView,
     readyDirection,
     shownStatus,
     voiceAvailable,
   ]);
+  // The picture control is plain text whose width depends on the language, so
+  // the field learns it from the control itself: read before the first paint
+  // (the field is still hidden then) and again if the font arrives later. The
+  // field is wider by that width plus one gap, which keeps the direction input
+  // as wide as it is without the control. The last width is kept while a
+  // picture step hides the row, so the field never narrows under its steps.
+  const hasPictureControl = pictureControl !== "absent";
+  // A field without the control takes no room for it, whatever an earlier opening measured.
+  const controlReserve = hasPictureControl ? measuredReserve : 0;
+  const formKey = content.kind === "form" ? content.formKey : null;
+  useLayoutEffect(() => {
+    const bubble = bubbleRef.current;
+    if (!hasPictureControl || bubble === null || !formVisible) return;
+    const control = bubble.querySelector<HTMLElement>("[data-picture-control]");
+    if (control === null) return;
+    const read = () => {
+      const next = projectPointTalkControlReserve({
+        controlWidth: control.offsetWidth,
+        scale: Number.parseFloat(getComputedStyle(bubble).getPropertyValue("--point-talk-scale")),
+      });
+      if (next !== null) setMeasuredReserve((current) => current === next ? current : next);
+    };
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(read);
+    observer.observe(control);
+    return () => observer.disconnect();
+  }, [formKey, formVisible, hasPictureControl, locale, pictureStep]);
+
   const surfaceView = useMemo<PointTalkSurfaceView | null>(
     () => !surfaceLive || !surfaceAvailable || placement === null
       ? null
@@ -363,10 +475,11 @@ export function PointTalkComposer({
           top: placement.top,
           maxWidth: placement.maxWidth,
           scale: visualScale,
+          controlReserve,
           entrance,
           content,
         }),
-    [content, entrance, phase, placement, surfaceAvailable, surfaceLive, visualScale],
+    [content, controlReserve, entrance, phase, placement, surfaceAvailable, surfaceLive, visualScale],
   );
   const lastSurfaceViewRef = useRef<PointTalkSurfaceView | null>(null);
   const typedDirectionRef = useRef<Readonly<{ formKey: string; value: string }> | null>(null);
@@ -423,12 +536,13 @@ export function PointTalkComposer({
       inert={!surfaceAvailable || undefined}
       ref={bubbleRef}
       style={!placed
-        ? { visibility: "hidden" }
+        ? { visibility: "hidden", ...pointTalkReserveStyle(controlReserve) } as CSSProperties
         : {
             left: placement.left,
             top: placement.top,
             "--point-talk-available-width": `${placement.maxWidth}px`,
             "--point-talk-scale": visualScale,
+            ...pointTalkReserveStyle(controlReserve),
             ...pointTalkEntranceStyle(entrance),
           } as CSSProperties}
       onInput={recordTypedDirection}
@@ -437,9 +551,18 @@ export function PointTalkComposer({
       <PointTalkContent
         content={content}
         copy={copy}
-        handlers={{ onRetry, onStartVoice, onStopVoice, onSubmit }}
+        handlers={{
+          onPictureUnavailable: onPictureUnavailable ?? ignore,
+          onRetry,
+          onStartVoice,
+          onStopVoice,
+          onSubmit,
+          picture: pictureActions ?? NO_PICTURE_ACTIONS,
+          keeping: picture?.keeping ?? false,
+        }}
         inputId={inputId}
         inputRef={inputRef}
+        locale={locale}
         retryRef={retryRef}
       />
     </div>
@@ -472,6 +595,7 @@ export function PointTalkExit({
     live,
     available ? record?.close ?? "preempted" : "preempted",
     pointTalkPresencePolicy,
+    handoff.markPainted,
   );
   if (
     frame === null ||
@@ -494,6 +618,7 @@ export function PointTalkExit({
         top: view.top,
         "--point-talk-available-width": `${view.maxWidth}px`,
         "--point-talk-scale": view.scale,
+        ...pointTalkReserveStyle(view.controlReserve),
         ...pointTalkEntranceStyle(view.entrance),
         // The fade lasts exactly as long as the timer that unmounts it.
         "--presence-exit-duration": `${
@@ -501,7 +626,12 @@ export function PointTalkExit({
         }ms`,
       } as CSSProperties}
     >
-      <PointTalkContent content={view.content} copy={pointTalkCopy(locale)} handlers={null} />
+      <PointTalkContent
+        content={view.content}
+        copy={pointTalkCopy(locale)}
+        handlers={null}
+        locale={locale}
+      />
     </div>
   );
 }
@@ -512,6 +642,7 @@ function PointTalkContent({
   handlers,
   inputId,
   inputRef,
+  locale,
   retryRef,
 }: Readonly<{
   content: PointTalkSurfaceContent;
@@ -520,21 +651,39 @@ function PointTalkContent({
   handlers: PointTalkHandlers | null;
   inputId?: string;
   inputRef?: RefObject<HTMLInputElement | null>;
+  locale: CanvasLanguage;
   retryRef?: RefObject<HTMLButtonElement | null>;
 }>) {
   const frozenInputId = useId();
   if (content.kind === "form") {
+    const pictureCopy = pictureControlCopy(locale);
     return (
-      <PointTalkForm
-        copy={copy}
-        initialDirection={content.direction}
-        inputId={inputId ?? frozenInputId}
-        inputRef={inputRef}
-        key={content.formKey}
-        onStartVoice={handlers?.onStartVoice ?? ignore}
-        onSubmit={handlers?.onSubmit ?? ignore}
-        voiceAvailable={content.voiceAvailable}
-      />
+      <>
+        <PointTalkForm
+          copy={copy}
+          hidden={content.picture !== null}
+          initialDirection={content.direction}
+          inputId={inputId ?? frozenInputId}
+          inputRef={inputRef}
+          key={content.formKey}
+          onArmPicture={handlers?.picture.arm ?? ignore}
+          onPictureUnavailable={handlers?.onPictureUnavailable ?? ignore}
+          onStartVoice={handlers?.onStartVoice ?? ignore}
+          onSubmit={handlers?.onSubmit ?? ignore}
+          pictureControl={content.pictureControl}
+          pictureCopy={pictureCopy}
+          voiceAvailable={content.voiceAvailable}
+        />
+        {content.picture === null ? null : (
+          <PointTalkPicturePanel
+            actions={handlers?.picture ?? null}
+            copy={pictureCopy}
+            keeping={handlers?.keeping ?? false}
+            locale={locale}
+            view={content.picture}
+          />
+        )}
+      </>
     );
   }
   const live = handlers !== null;
@@ -573,8 +722,30 @@ function withTypedDirection(
 
 function ignore(): void {}
 
+const NO_PICTURE_ACTIONS: PointTalkPictureActions = Object.freeze({
+  arm: ignore,
+  confirm: ignore,
+  back: ignore,
+  stopWaiting: ignore,
+  keep: ignore,
+  discard: ignore,
+  tryAgain: ignore,
+  dismissFailure: ignore,
+});
+
 function pointTalkPresencePolicy() {
   return POINT_TALK_PRESENCE_POLICY;
+}
+
+/**
+ * The picture control lends the field its own width plus one gap, so the
+ * direction input keeps the room it has without the control. Unscaled: the
+ * stylesheet multiplies it by the field's scale.
+ */
+export function pointTalkReserveStyle(controlReserve: number): CSSProperties {
+  return controlReserve > 0
+    ? { "--point-talk-control-reserve": `${controlReserve}px` } as CSSProperties
+    : {};
 }
 
 /** The entrance's origin, travel, and duration, all read by CSS. */
@@ -611,12 +782,15 @@ function pointTalkSurfaceVisible(phase: TextSwapController["state"]["phase"]): b
 }
 
 export function pointTalkOutsidePointerDismisses({
+  holdsPaidWork = false,
   insideBubble,
   insideCanvasChrome,
   insideSlotOwner = false,
   insideVoiceTool,
   submitted,
 }: Readonly<{
+  /** A picture is being drawn or waits for Keep: only its own controls end it. */
+  holdsPaidWork?: boolean;
   insideBubble: boolean;
   insideCanvasChrome: boolean;
   /** A control that opens another AI surface, which takes the slot itself. */
@@ -624,6 +798,7 @@ export function pointTalkOutsidePointerDismisses({
   insideVoiceTool: boolean;
   submitted: boolean;
 }>): boolean {
+  if (holdsPaidWork) return false;
   // Chrome may temporarily occlude accepted work, but draft and capture still
   // follow their visible control and remain easy to dismiss. The fixed Voice
   // tool belongs to the current turn even though it lives outside the bubble.
@@ -635,25 +810,39 @@ export function pointTalkOutsidePointerDismisses({
 
 function PointTalkForm({
   copy,
+  hidden,
   initialDirection,
   inputId,
   inputRef,
+  onArmPicture,
+  onPictureUnavailable,
   onStartVoice,
   onSubmit,
+  pictureControl,
+  pictureCopy,
   voiceAvailable,
 }: Readonly<{
   copy: ReturnType<typeof pointTalkCopy>;
+  /** A picture step has taken the row's place; the typed direction is kept for its return. */
+  hidden: boolean;
   initialDirection: string;
   inputId: string;
   inputRef?: RefObject<HTMLInputElement | null>;
+  onArmPicture: () => void;
+  onPictureUnavailable: () => void;
   onStartVoice: () => void;
   onSubmit: (direction: string) => void;
+  pictureControl: PictureControlPresentation;
+  pictureCopy: PictureControlCopy;
   voiceAvailable: boolean;
 }>) {
   const [direction, setDirection] = useState(initialDirection);
+  const pictureFullReasonId = `${inputId}-picture-full`;
+  const pictureUnavailableReasonId = `${inputId}-picture-unavailable`;
   return (
     <form
       className="point-talk__composer"
+      hidden={hidden}
       onSubmit={(event) => {
         event.preventDefault();
         onSubmit(direction);
@@ -671,24 +860,54 @@ function PointTalkForm({
         type="text"
         value={direction}
       />
-      <button
-        aria-label={copy.voice}
-        className="point-talk__voice"
-        disabled={!voiceAvailable}
-        onClick={onStartVoice}
-        title={copy.voice}
-        type="button"
-      >
-        <VoiceIcon />
-      </button>
-      <button className="point-talk__submit" disabled={direction.trim().length === 0} type="submit">
-        {copy.apply}
-      </button>
+      {/* One cluster, right-aligned to the submit button's edge: when the input
+          cannot keep its floor beside it, the whole cluster takes a row of its own. */}
+      <div className="point-talk__actions">
+        <button
+          aria-label={copy.voice}
+          className="point-talk__voice"
+          disabled={!voiceAvailable}
+          onClick={onStartVoice}
+          title={copy.voice}
+          type="button"
+        >
+          <VoiceIcon />
+        </button>
+        {pictureControl === "absent" ? null : (
+          // Never `disabled`: focus must survive a pending interaction. It
+          // ignores the typed direction and is not the form's submit.
+          <button
+            aria-describedby={pictureControl === "full" ? pictureFullReasonId
+              : pictureControl === "unavailable" ? pictureUnavailableReasonId : undefined}
+            aria-disabled={pictureControl !== "enabled" || undefined}
+            aria-label={pictureCopy.controlName}
+            className="point-talk__text-button point-talk__draw"
+            data-picture-control
+            data-picture-availability={pictureControl}
+            onClick={pictureControl === "enabled" ? onArmPicture
+              : pictureControl === "unavailable" ? onPictureUnavailable : undefined}
+            type="button"
+          >
+            {pictureCopy.control}
+          </button>
+        )}
+        {pictureControl === "full" ? (
+          <span className="visually-hidden" id={pictureFullReasonId}>{pictureCopy.documentFull}</span>
+        ) : null}
+        <button className="point-talk__submit" disabled={direction.trim().length === 0} type="submit">
+          {copy.apply}
+        </button>
+      </div>
+      {pictureControl === "unavailable" ? (
+        <p className="visually-hidden" id={pictureUnavailableReasonId}>
+          {pictureCopy.unavailable}
+        </p>
+      ) : null}
     </form>
   );
 }
 
-function findPointTalkTarget(canvas: HTMLElement, nodeId: string): HTMLElement | undefined {
+export function findPointTalkTarget(canvas: HTMLElement, nodeId: string): HTMLElement | undefined {
   for (const candidate of canvas.querySelectorAll<HTMLElement>("[data-thought-text-id]")) {
     if (candidate.dataset.thoughtTextId === nodeId) return candidate;
   }

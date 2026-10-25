@@ -304,7 +304,8 @@ test("a real double-click gives native copy sole paint ownership over structural
   await page.evaluate(() => document.fonts.ready);
   const before = await materialTextLayoutReceipt(root);
 
-  await label.dblclick({ position: { x: 80, y: 12 } });
+  // Past the selected passage's three-mark lens, which rests over the first line's start.
+  await label.dblclick({ position: { x: 220, y: 12 } });
   await expect.poll(() => page.evaluate(() => {
     const selection = window.getSelection();
     return selection !== null && !selection.isCollapsed && selection.toString().length > 0;
@@ -377,7 +378,7 @@ test("structural and native selection paint without changing material line geome
   const structural = await materialLineGeometry(root);
   expect(structural).toEqual(before);
 
-  await root.locator(".spatial-thought__label").dblclick({ position: { x: 80, y: 12 } });
+  await root.locator(".spatial-thought__label").dblclick({ position: { x: 220, y: 12 } });
   await expect(page.locator("main.matter-shell"))
     .toHaveAttribute("data-material-address-owner", "native");
   await expect(page.locator(

@@ -100,7 +100,7 @@ test.describe("passage-local Point and Talk", () => {
       };
     }, ROOT_ID)).toEqual({
       fieldHeight: 38,
-      fieldWidth: 264,
+      fieldWidth: 304,
       leftDifference: 0,
       upperGap: 14,
     });
@@ -452,6 +452,7 @@ test.describe("passage-local Point and Talk", () => {
           height: bounds.height,
           scale: Number.parseFloat(getComputedStyle(element).getPropertyValue("--point-talk-scale")),
           width: bounds.width,
+          controlWidth: element.querySelector<HTMLElement>("[data-picture-control]")!.offsetWidth,
         };
       });
     };
@@ -459,14 +460,14 @@ test.describe("passage-local Point and Talk", () => {
     await setCanvasZoom(-1e6);
     const maximum = await openAndMeasure();
     expect(maximum.scale).toBe(1.1);
-    expect(maximum.width).toBeCloseTo(264 * maximum.scale, 1);
+    expect(maximum.width).toBeCloseTo((264 + Math.ceil(maximum.controlWidth / maximum.scale) + 4) * maximum.scale, 1);
     expect(maximum.height).toBeCloseTo(38 * maximum.scale, 1);
     await page.keyboard.press("Escape");
 
     await setCanvasZoom(1e6);
     const minimum = await openAndMeasure();
     expect(minimum.scale).toBe(.74);
-    expect(minimum.width).toBeCloseTo(264 * minimum.scale, 1);
+    expect(minimum.width).toBeCloseTo((264 + Math.ceil(minimum.controlWidth / minimum.scale) + 4) * minimum.scale, 1);
     expect(minimum.height).toBeGreaterThanOrEqual(38 * minimum.scale);
     expect(minimum.height).toBeLessThan(29);
   });

@@ -2,6 +2,7 @@ import {
   freezeWikiState,
   storedAliasKey,
   storedDecisionKey,
+  storedDescriptorKey,
   validateWikiState,
 } from "./wiki-invariants";
 import {
@@ -76,7 +77,17 @@ export function publishStaged(original: WikiState, staged: WikiState): WikiTrans
 
 function stage(state: WikiState, revision: number, replacement: Partial<WikiState>): WikiState {
   const merged = { ...state, ...replacement, revision };
-  return freezeWikiState({ ...merged, revertStrikes: retainRevertStrikes(merged) });
+  const live = new Set([...merged.authorities, ...merged.aliasEvidence].map(storedDescriptorKey));
+  const previousLexemes = new Map(state.lexemes.map((entry) => [entry.id, entry]));
+  const lexemes = new Map(merged.lexemes.map((entry) => [entry.id, entry]));
+  const ruleMaturity = merged.ruleMaturity.filter((entry) => {
+    const before = previousLexemes.get(entry.lexemeId);
+    const after = lexemes.get(entry.lexemeId);
+    return live.has(storedDescriptorKey(entry)) && after !== undefined &&
+      (before === undefined || before.locale === after.locale && before.canonical === after.canonical);
+  });
+  return freezeWikiState({ ...merged, ruleMaturity,
+    revertStrikes: retainRevertStrikes(merged) });
 }
 
 /**

@@ -5,6 +5,7 @@ vi.mock("server-only", () => ({}));
 import packageMetadata from "../../../package.json";
 import { GET } from "../../../app/api/health/route";
 import { healthSnapshot } from "./health-route";
+import { MATTER_BUILD_ID } from "../config/build-identity";
 
 const originalEnvironment = { ...process.env };
 
@@ -25,6 +26,7 @@ describe("Matter health route", () => {
     process.env.MATTER_TEXT_SWAP_SURFACE = "public";
     process.env.MATTER_TRANSFORM_ADAPTER = "fixture";
     process.env.MATTER_TEXT_SWAP_ADAPTER = "fixture";
+    process.env.MATTER_IMAGE_ADAPTER = "off";
     delete process.env.NEXT_PUBLIC_MATTER_TRANSCRIPT_REPAIR_ENABLED;
     process.env.MATTER_BASE_PATH = "/matter";
     const response = GET();
@@ -34,6 +36,7 @@ describe("Matter health route", () => {
     await expect(response.json()).resolves.toEqual({
       protocolVersion: "0.2",
       appVersion: packageMetadata.version,
+      buildId: MATTER_BUILD_ID,
       basePath: "/matter",
       status: "ok",
       surfaces: {
@@ -45,9 +48,16 @@ describe("Matter health route", () => {
         inquiry: "unavailable",
         transformTurn: "fixture",
         textSwap: "fixture",
+        imageGeneration: "unavailable",
         archiveExportImport: "available",
       },
     });
+  });
+
+  it("does not replace the frozen build identity from runtime operator/platform values", () => {
+    vi.stubEnv("MATTER_BUILD_ID", "runtime_other");
+    vi.stubEnv("VERCEL_DEPLOYMENT_ID", "runtime_platform");
+    expect(healthSnapshot().buildId).toBe(MATTER_BUILD_ID);
   });
 
   it("marks live admission unavailable until a supported adapter is configured", () => {
@@ -138,6 +148,81 @@ describe("Matter health route", () => {
     process.env.MATTER_MODEL_PRIMARY_MODELS = "fast";
 
     expect(healthSnapshot().surfaces.transformTurn).toBe("unavailable");
+  });
+
+  describe("image generation", () => {
+    const configureImagePool = () => {
+      process.env.MATTER_MODEL_POOL = "primary";
+      process.env.MATTER_MODEL_PRIMARY_BASE_URL = "https://models.example/v1";
+      process.env.MATTER_MODEL_PRIMARY_API_KEY = "test-only";
+      process.env.MATTER_MODEL_PRIMARY_MODELS = "fast";
+      process.env.MATTER_IMAGE_POOL = "draw";
+      process.env.MATTER_IMAGE_DRAW_BASE_URL = "https://images.example/v1";
+      process.env.MATTER_IMAGE_DRAW_API_KEY = "test-only";
+      process.env.MATTER_IMAGE_DRAW_MODELS = "image-a";
+      process.env.MATTER_IMAGE_DRAW_SHAPE = "images";
+    };
+    const clearPools = () => {
+      for (const name of Object.keys(process.env)) {
+        if (/^MATTER_(MODEL|IMAGE|LABEL)_/.test(name)) delete process.env[name];
+      }
+    };
+
+    it("is unavailable when the gate is off, even with every pool configured", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      configureImagePool();
+      process.env.MATTER_IMAGE_ADAPTER = "off";
+
+      expect(healthSnapshot().surfaces.imageGeneration).toBe("unavailable");
+    });
+
+    it("is unavailable in production when unset or when a fixture is asked for", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      configureImagePool();
+      delete process.env.MATTER_IMAGE_ADAPTER;
+      expect(healthSnapshot().surfaces.imageGeneration).toBe("unavailable");
+
+      process.env.MATTER_IMAGE_ADAPTER = "fixture";
+      expect(healthSnapshot().surfaces.imageGeneration).toBe("unavailable");
+    });
+
+    it("reports a fixture outside production, and only then", () => {
+      vi.stubEnv("NODE_ENV", "test");
+      process.env.MATTER_IMAGE_ADAPTER = "fixture";
+      expect(healthSnapshot().surfaces.imageGeneration).toBe("fixture");
+
+      delete process.env.MATTER_IMAGE_ADAPTER;
+      expect(healthSnapshot().surfaces.imageGeneration).toBe("fixture");
+    });
+
+    it("is available only when live and both the image and chat pools are configured", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      clearPools();
+      configureImagePool();
+      process.env.MATTER_IMAGE_ADAPTER = "live";
+
+      expect(healthSnapshot().surfaces.imageGeneration).toBe("available");
+    });
+
+    it("is unavailable when live but unconfigured, and never user-configurable", () => {
+      vi.stubEnv("NODE_ENV", "production");
+      clearPools();
+      // A provider session is available, which would make the other surfaces
+      // user-configurable. A person's lease must never reach image generation.
+      process.env.MATTER_PROVIDER_SESSION_KEYS = `active:${Buffer.alloc(32, 7).toString("base64url")}`;
+      process.env.MATTER_IMAGE_ADAPTER = "live";
+      expect(healthSnapshot().surfaces.imageGeneration).toBe("unavailable");
+
+      // The chat pool alone is not enough: the brief step needs the image relay.
+      configureImagePool();
+      delete process.env.MATTER_IMAGE_POOL;
+      expect(healthSnapshot().surfaces.imageGeneration).toBe("unavailable");
+
+      // Nor is the image relay alone: the brief step runs on the chat pool.
+      configureImagePool();
+      delete process.env.MATTER_MODEL_POOL;
+      expect(healthSnapshot().surfaces.imageGeneration).toBe("unavailable");
+    });
   });
 
   it("falls back to the canonical Matter base path for unsafe deployment values", () => {

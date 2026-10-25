@@ -3,7 +3,7 @@ import { PROTOCOL_VERSION, type ThoughtNode, type ThoughtTree } from "../tree/mo
 import {
   createHeldAsideNodeIds,
   isNodeHeldAside,
-  projectActiveWorkingContext,
+  projectActiveViewContext,
   projectWorkingContext,
   reconcileHeldAsideNodeIds,
   restoreHeldAsideLineage,
@@ -33,6 +33,23 @@ function tree(): ThoughtTree {
   };
 }
 
+/** The full, unfolded view: authored preorder with true depth, document root omitted. */
+function fullView(material: ThoughtTree): readonly Readonly<{ node: ThoughtNode; depth: number }>[] {
+  const view: { node: ThoughtNode; depth: number }[] = [];
+  const visit = (nodeId: string, depth: number): void => {
+    const current = material.nodes[nodeId];
+    if (current === undefined) return;
+    if (current.role !== "document-root") view.push({ node: current, depth });
+    for (const childId of current.children) visit(childId, current.role === "document-root" ? 0 : depth + 1);
+  };
+  if (material.rootId !== null) visit(material.rootId, 0);
+  return view;
+}
+
+function activeOf(material: ThoughtTree, held: ReadonlySet<string>) {
+  return projectActiveViewContext(fullView(material), projectWorkingContext(material, held).activeNodeIds);
+}
+
 describe("working context", () => {
   it("starts with no held-aside material", () => {
     expect(createHeldAsideNodeIds()).toEqual(new Set());
@@ -43,7 +60,7 @@ describe("working context", () => {
     const held = toggleHeldAsideBranch(material, new Set(), "a");
 
     expect(held).toEqual(new Set(["a"]));
-    expect(projectActiveWorkingContext(material, held).map(({ nodeId }) => nodeId))
+    expect(activeOf(material, held).map(({ nodeId }) => nodeId))
       .toEqual(["b", "b1"]);
 
     expect(toggleHeldAsideBranch(material, held, "a")).toEqual(new Set());
@@ -78,7 +95,7 @@ describe("working context", () => {
     const restored = restoreHeldAsideLineage(material, new Set(["a", "b"]), "a2");
 
     expect(restored).toEqual(new Set(["b"]));
-    expect(projectActiveWorkingContext(material, restored).map(({ nodeId }) => nodeId))
+    expect(activeOf(material, restored).map(({ nodeId }) => nodeId))
       .toEqual(["a", "a1", "a2"]);
   });
 
@@ -117,7 +134,7 @@ describe("working context", () => {
 
   it("preserves original depth when a sibling branch is held aside", () => {
     const material = tree();
-    const projection = projectActiveWorkingContext(material, new Set(["a"]));
+    const projection = activeOf(material, new Set(["a"]));
 
     expect(projection).toEqual([
       { nodeId: "b", depth: 0 },
@@ -132,7 +149,7 @@ describe("working context", () => {
     const allHeld = toggleHeldAsideBranch(material, held, "b");
 
     expect(afterDocument).toEqual(new Set());
-    expect(projectActiveWorkingContext(material, allHeld)).toEqual([]);
+    expect(activeOf(material, allHeld)).toEqual([]);
   });
 
   it("fails closed for missing lineage targets", () => {
@@ -142,5 +159,48 @@ describe("working context", () => {
     expect(toggleHeldAsideBranch(material, held, "missing")).toBe(held);
     expect(isNodeHeldAside(material, held, "missing")).toBe(false);
     expect(restoreHeldAsideLineage(material, held, "missing")).toBe(held);
+  });
+});
+
+describe("active view context", () => {
+  const material = tree();
+  const active = (ids: string[]) => new Set(ids);
+
+  it("keeps the view's own order and depth and drops what is withheld", () => {
+    expect(projectActiveViewContext(fullView(material), active(["a", "a2", "b1"]))).toEqual([
+      { nodeId: "a", depth: 0 },
+      { nodeId: "a2", depth: 1 },
+      { nodeId: "b1", depth: 1 },
+    ]);
+  });
+
+  it("follows a focus view, whose depth is the position on the path", () => {
+    const focus = [
+      { node: material.nodes.a as ThoughtNode, depth: 0 },
+      { node: material.nodes.a2 as ThoughtNode, depth: 1 },
+    ];
+    // b and b1 are active material but not in the focused view: they must not
+    // reach a model just because the tree holds them.
+    expect(projectActiveViewContext(focus, active(["a", "a1", "a2", "b", "b1"])).map(({ nodeId }) => nodeId))
+      .toEqual(["a", "a2"]);
+  });
+
+  it("omits folded descendants because the view omits them", () => {
+    const folded = [
+      { node: material.nodes.a as ThoughtNode, depth: 0 },
+      { node: material.nodes.b as ThoughtNode, depth: 0 },
+      { node: material.nodes.b1 as ThoughtNode, depth: 1 },
+    ];
+    expect(projectActiveViewContext(folded, active(["a", "a1", "a2", "b", "b1"])).map(({ nodeId }) => nodeId))
+      .toEqual(["a", "b", "b1"]);
+  });
+
+  it("returns a frozen result and never mutates its inputs", () => {
+    const view = fullView(material);
+    const ids = active(["a"]);
+    const result = projectActiveViewContext(view, ids);
+    expect(Object.isFrozen(result)).toBe(true);
+    expect(view).toHaveLength(5);
+    expect(ids).toEqual(new Set(["a"]));
   });
 });

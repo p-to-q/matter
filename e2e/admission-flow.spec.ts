@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { REPAIR_REVEAL_HOLD_MS } from "../features/matter/interaction/repair-reveal";
+import { selectThoughtThroughMaterialIndex } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const heardTranscript = "呃，我觉得我觉得这个方案可以，但是它的实现事件比预期长。";
@@ -88,7 +89,6 @@ for (const viewport of [
           rect.bottom > box.y;
       }).map((node) => node.getAttribute("data-thought-id")), feedbackBox!);
     expect(overlaps).toEqual([]);
-    await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true })).toBeDisabled();
     await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true })).toBeDisabled();
     // MediaRecorder chunks are asynchronous; this crosses one 250 ms capture
     // interval so Stop can prove the final dataavailable boundary with audio.
@@ -715,16 +715,26 @@ test("Record again after an unrelated edit re-anchors the turn instead of droppi
   await expect(failure).toContainText("没能把这段录音变成文字。");
 
   // Any committed edit advances the revision the failed attempt was frozen at.
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
-  await expect(page.locator('[data-thought-id^="thought_"]')).toHaveCount(initialNodeCount + 1);
+  // Deleting a selected leaf is one that needs no voice of its own.
+  const leafId = (await page.locator("[data-thought-id]").evaluateAll((nodes) =>
+    nodes.map((node) => node.getAttribute("data-thought-id")),
+  )).at(-1);
+  if (leafId === undefined || leafId === null) throw new Error("the fixture has no leaf to delete");
+  await selectThoughtThroughMaterialIndex(page, leafId);
+  await page.keyboard.press("Delete");
+  await expect(page.locator(`[data-thought-id="${leafId}"]`)).toHaveCount(0);
+  await expect(page.locator('[data-thought-id^="thought_"]')).toHaveCount(initialNodeCount - 1);
   await expect(failure).toBeVisible();
 
-  await failure.getByRole("button", { name: "重新录音", exact: true }).click();
+  // Index navigation recentred the camera, so the box may sit outside the viewport.
+  await failure.getByRole("button", { name: "重新录音", exact: true })
+    .evaluate((button: HTMLButtonElement) => button.click());
   recording = page.locator('.admission-feedback[data-phase="recording"]');
   await expect(recording).toBeVisible({ timeout: FIXTURE_RECORDING_START_TIMEOUT_MS });
   await page.waitForTimeout(350);
-  await recording.getByRole("button", { name: "停止录音", exact: true }).click();
-  await expect(page.locator('[data-thought-id^="thought_"]')).toHaveCount(initialNodeCount + 2);
+  await recording.getByRole("button", { name: "停止录音", exact: true })
+    .evaluate((button: HTMLButtonElement) => button.click());
+  await expect(page.locator('[data-thought-id^="thought_"]')).toHaveCount(initialNodeCount);
   expect(transcriptionRequests).toBe(2);
 });
 

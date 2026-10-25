@@ -42,6 +42,7 @@ export type InquiryEvent =
   | Readonly<{ type: "listened" }>
   | Readonly<{ type: "listen-failed"; notice: InquiryVoiceNotice }>
   | Readonly<{ type: "ask" }>
+  | Readonly<{ type: "ask-refused"; reason: InquiryUnavailableReason }>
   | Readonly<{ type: "answer"; id: number; outcome: InquiryTurnOutcome }>
   /**
    * Returns a question that received no answer to the composer. `reason` names
@@ -130,6 +131,11 @@ export function reduceInquiry(state: InquiryState, event: InquiryEvent): Inquiry
         nextTurnId: state.nextTurnId + 2,
       });
     }
+    case "ask-refused":
+      return freeze({
+        ...state,
+        notice: Object.freeze({ kind: "answer", reason: event.reason }),
+      });
     case "answer":
       return freeze({
         ...state,

@@ -2,15 +2,16 @@
  * Asks the browser to keep this origin's storage out of eviction. Persistence
  * is a safeguard, never a promise, and never a prompt Matter raises on its
  * own: `persisted()` only reads, and `request()` belongs inside an explicit
- * Export, Retry, or Replace gesture.
+ * Export, Retry, Replace, or Keep gesture.
  *
  * `request()` calls `persist()` synchronously, before any await, because some
  * engines honour it only while the gesture's activation lasts. Most refusals
  * are silent heuristics (engagement, installation) rather than a person's
- * answer, so a refusal only quiets Retry and Replace for a cooldown; Export,
- * the gesture that most directly says "keep this", always asks again.
+ * answer, so a refusal only quiets Retry, Replace and Keep for a cooldown; Export,
+ * the gesture that most directly says "keep this", always asks again. A Kept
+ * picture is paid and cannot be regenerated, which is why Keep asks at all.
  */
-export type StoragePersistenceGesture = "export" | "retry" | "replace";
+export type StoragePersistenceGesture = "export" | "retry" | "replace" | "keep";
 
 export type StoragePersistence = Readonly<{
   /** `null` when the browser has no storage manager or the read failed. */
@@ -25,7 +26,7 @@ export type StoragePersistenceEnvironment = Readonly<{
 }>;
 
 const DENIAL_KEY = "matter.storage-persistence-denied.v1";
-/** How long a refusal quiets Retry and Replace on this device. */
+/** How long a refusal quiets Retry, Replace and Keep on this device. */
 export const PERSISTENCE_DENIAL_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1_000;
 
 export function createStoragePersistence(

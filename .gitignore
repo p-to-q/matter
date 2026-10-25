@@ -1,5 +1,6 @@
 .next/
 .next-e2e/
+.next-review/
 .next-e2e.lock
 node_modules/
 coverage/
@@ -15,3 +16,6 @@ next-env.d.ts
 tmp/
 /studio/film/artifacts/
 omi/
+
+# Vitest 5 writes a reporter cache here on every run.
+.vitest/

@@ -716,6 +716,84 @@ describe("local transcription audio projection", () => {
   });
 });
 
+describe("near-silence guard", () => {
+  afterEach(() => {
+    resetLocalTranscriptionForTests();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("rejects a fully silent recording without invoking the worker", async () => {
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: class extends FakeAudioContext {
+        async decodeAudioData() {
+          return {
+            numberOfChannels: 1,
+            sampleRate: 16_000,
+            getChannelData: () => new Float32Array(16_000), // all zeros — 1s of silence
+          };
+        }
+      },
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() { super(); workers.push(this); }
+    });
+    const preparation = prepareLocalTranscription();
+    workers[0]?.emit({ status: "ready" });
+    await preparation;
+
+    const ac = new AbortController();
+    const result = transcribeLocally({
+      interactionId: "silent",
+      attempt: 1,
+      purpose: "admission",
+      locale: "zh-CN",
+      audio: new Blob(["audio"], { type: "audio/webm" }),
+      signal: ac.signal,
+    });
+
+    await expect(result).rejects.toMatchObject({ reason: "no-speech" });
+    // The worker must not receive any transcription request for a silent recording.
+    expect(workers[0]?.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "transcribe" }),
+    );
+  });
+
+  it("passes non-silent recordings through to the worker", async () => {
+    const workers: FakeWorker[] = [];
+    vi.stubGlobal("window", {
+      AudioContext: FakeAudioContext, // default: [0.25, -0.25] — audible
+      clearTimeout,
+      setTimeout,
+    });
+    vi.stubGlobal("Worker", class extends FakeWorker {
+      constructor() { super(); workers.push(this); }
+    });
+    const preparation = prepareLocalTranscription();
+    workers[0]?.emit({ status: "ready" });
+    await preparation;
+
+    const ac = new AbortController();
+    const result = transcribeLocally({
+      interactionId: "audible",
+      attempt: 1,
+      purpose: "admission",
+      locale: "zh-CN",
+      audio: new Blob(["audio"], { type: "audio/webm" }),
+      signal: ac.signal,
+    });
+
+    await vi.waitFor(() => expect(workers[0]?.postMessage).toHaveBeenCalledTimes(1));
+    expect(workers[0]?.postMessage.mock.calls[0]?.[0]).toMatchObject({ type: "transcribe" });
+    workers[0]?.emit({ id: "audible:1:1", status: "started" });
+    workers[0]?.emit({ id: "audible:1:1", status: "complete", text: "hello" });
+    await expect(result).resolves.toBe("hello");
+  });
+});
+
 function request(signal: AbortSignal, interactionId: string) {
   return {
     interactionId,

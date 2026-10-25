@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { RECORDING_LIMIT_MS, RECORDING_STOP_TIMEOUT_MS } from "./audio-policy";
 import {
   BrowserSpeechVoicePort,
+  joinTranscript,
   prepareBrowserSpeechRecognition,
   resetBrowserSpeechPreparationForTests,
   SPEECH_START_TIMEOUT_MS,
@@ -49,6 +50,69 @@ afterEach(() => {
   FakeRecognition.events = [];
   resetBrowserSpeechPreparationForTests();
   vi.unstubAllGlobals();
+});
+
+describe("joinTranscript", () => {
+  it("joins two Latin fragments with exactly one space", () => {
+    expect(joinTranscript("hello", "world")).toBe("hello world");
+    expect(joinTranscript("don't", "stop")).toBe("don't stop");
+  });
+
+  it("joins Cyrillic and Greek word characters with a space", () => {
+    expect(joinTranscript("привет", "мир")).toBe("привет мир");
+    expect(joinTranscript("γεια", "σου")).toBe("γεια σου");
+  });
+
+  it("joins digits with Latin without doubling a space", () => {
+    expect(joinTranscript("version", "3")).toBe("version 3");
+    expect(joinTranscript("3", "items")).toBe("3 items");
+  });
+
+  it("never inserts a space between CJK characters", () => {
+    expect(joinTranscript("你好", "世界")).toBe("你好世界");
+    expect(joinTranscript("おはよう", "世界")).toBe("おはよう世界");
+    expect(joinTranscript("안녕", "세상")).toBe("안녕세상");
+  });
+
+  it("never inserts a space when CJK meets Latin", () => {
+    expect(joinTranscript("你好", "world")).toBe("你好world");
+    expect(joinTranscript("hello", "世界")).toBe("hello世界");
+  });
+
+  it("returns the non-empty side when the other is empty", () => {
+    expect(joinTranscript("", "hello")).toBe("hello");
+    expect(joinTranscript("hello", "")).toBe("hello");
+    expect(joinTranscript("", "")).toBe("");
+  });
+
+  it("does not double a space already present at the boundary", () => {
+    // before ends in space: not a word char, no space inserted
+    expect(joinTranscript("hello ", "world")).toBe("hello world");
+    // after starts with space: not a word char, no space inserted
+    expect(joinTranscript("hello", " world")).toBe("hello world");
+  });
+
+  it("inserts a space after sentence punctuation before a spaced-script word", () => {
+    // coordinator-mandated cases (follow-up 1)
+    expect(joinTranscript("hello.", "world")).toBe("hello. world");
+    expect(joinTranscript("Yes,", "maybe")).toBe("Yes, maybe");
+  });
+
+  it("does not insert a space for decimal continuation (digit+period/comma before digit)", () => {
+    // coordinator-mandated case (follow-up 1)
+    expect(joinTranscript("3.", "5")).toBe("3.5");
+    expect(joinTranscript("3,", "4")).toBe("3,4");
+  });
+
+  it("never inserts a space after CJK sentence-ending punctuation", () => {
+    // coordinator-mandated case (follow-up 1) — CJK fast path via WORD_START
+    expect(joinTranscript("你好。", "世界")).toBe("你好。世界");
+  });
+
+  it("inserts a space after a closing bracket following a spaced-script word", () => {
+    // coordinator-mandated case (follow-up 1)
+    expect(joinTranscript("end)", "next")).toBe("end) next");
+  });
 });
 
 describe("BrowserSpeechVoicePort", () => {

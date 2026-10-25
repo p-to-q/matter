@@ -10,11 +10,14 @@ import {
   MAX_WIKI_LEXEME_TOMBSTONES,
   MAX_WIKI_OCCURRENCE_ID_LENGTH,
   MAX_WIKI_REVERT_STRIKES,
+  MAX_WIKI_RULE_MATURITY,
   MAX_WIKI_SETTLED_OCCURRENCES,
   MAX_WIKI_TOMBSTONES,
   WIKI_FITTING_VERSION,
   WIKI_SCHEMA_VERSION,
   WIKI_SCORING_VERSION,
+  isHumanWikiLexeme,
+  isWikiStarterLexemeIdentity,
   type WikiAliasDescriptor,
   type WikiAliasEvidenceAggregate,
   type WikiAuthorityRule,
@@ -24,6 +27,7 @@ import {
   type WikiLexemeScope,
   type WikiLexemeTombstone,
   type WikiRevertStrike,
+  type WikiRuleMaturity,
   type WikiRuleDescriptor,
   type WikiState,
   type WikiTermEvidenceAggregate,
@@ -39,6 +43,8 @@ import {
   isWikiLearningUnits,
 } from "./wiki-learning-policy";
 import { hasUnsafeWikiFormatControl } from "./wiki-text-safety";
+import { freezeWikiPreferences, isWikiPreferences } from "./wiki-preferences";
+import { isWikiOutcomeCounters } from "./wiki-diagnostics";
 
 const ASCII_CONTROL = /[\u0000-\u001f\u007f]/u;
 const OCCURRENCE_ID = new RegExp(`^[A-Za-z0-9_-]{1,${MAX_WIKI_OCCURRENCE_ID_LENGTH}}$`);
@@ -113,6 +119,7 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
         "lexemeTombstones",
         "revertStrikes",
         "settledOccurrences",
+        "ruleMaturity", "outcomeCounters", "preferences",
       ])) {
     return invalid("The Wiki state is not an object.");
   }
@@ -136,7 +143,7 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     !Array.isArray(state.aliasTombstones) ||
     !Array.isArray(state.lexemeTombstones) ||
     !Array.isArray(state.revertStrikes) ||
-    !Array.isArray(state.settledOccurrences)
+    !Array.isArray(state.settledOccurrences) || !Array.isArray(state.ruleMaturity)
   ) return invalid("The Wiki collections are invalid.");
   if (
     state.lexemes.length > MAX_WIKI_LEXEMES ||
@@ -146,8 +153,12 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     state.aliasTombstones.length > MAX_WIKI_TOMBSTONES ||
     state.lexemeTombstones.length > MAX_WIKI_LEXEME_TOMBSTONES ||
     state.revertStrikes.length > MAX_WIKI_REVERT_STRIKES ||
-    state.settledOccurrences.length > MAX_WIKI_SETTLED_OCCURRENCES
+    state.settledOccurrences.length > MAX_WIKI_SETTLED_OCCURRENCES ||
+    state.ruleMaturity.length > MAX_WIKI_RULE_MATURITY
   ) return invalid("The Wiki collection bound is exceeded.");
+  if (!isWikiPreferences(state.preferences) || !isWikiOutcomeCounters(state.outcomeCounters)) {
+    return invalid("The Wiki preferences or outcome counters are invalid.");
+  }
 
   const lexemeIds = new Set<number>();
   const lexemeKeys = new Set<string>();
@@ -182,7 +193,8 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     if (aggregate.phase === "collected" && !lexemeKeys.has(key)) {
       return invalid("Collected Wiki term evidence has no lexeme.");
     }
-    if (lexemesByKey.get(key)?.provenance === "human-confirmed") {
+    const target = lexemesByKey.get(key);
+    if (target !== undefined && isHumanWikiLexeme(target)) {
       return invalid("Human-owned Wiki lexemes cannot retain automatic recurrence.");
     }
     termEvidenceKeys.add(key);
@@ -288,6 +300,21 @@ export function validateWikiState(state: WikiState): WikiInvariantResult {
     settledOccurrences.add(occurrenceId);
   }
 
+  const liveRelations = new Set([...state.authorities, ...state.aliasEvidence].map(storedDescriptorKey));
+  const maturityKeys = new Set<string>();
+  for (const entry of state.ruleMaturity) {
+    if (!isWikiRuleMaturity(entry)) return invalid("A Wiki maturity record is invalid.");
+    const key = storedDescriptorKey(entry);
+    if (!liveRelations.has(key) || maturityKeys.has(key) ||
+        (entry.establishedAt !== null && entry.establishedAt > state.revision) ||
+        (entry.lastRevertedAtRevision !== null && entry.lastRevertedAtRevision > state.revision) ||
+        (entry.establishedAt !== null && entry.lastRevertedAtRevision !== null &&
+          entry.establishedAt <= entry.lastRevertedAtRevision)) {
+      return invalid("A Wiki maturity record is invalid.");
+    }
+    maturityKeys.add(key);
+  }
+
   if (normalizedWikiStates.has(state)) validatedWikiStates.add(state);
   return VALID_WIKI_STATE;
 }
@@ -361,6 +388,10 @@ export function freezeWikiState(state: WikiState): WikiState {
     lexemeTombstones: Object.freeze(lexemeTombstones),
     revertStrikes: Object.freeze(revertStrikes),
     settledOccurrences: Object.freeze(settledOccurrences),
+    ruleMaturity: freezeWikiCollection(state.ruleMaturity,
+      (entry) => Object.freeze({ ...entry }), compareAliasDescriptor),
+    outcomeCounters: Object.freeze({ ...state.outcomeCounters }),
+    preferences: freezeWikiPreferences(state.preferences),
   });
   normalizedWikiStates.add(normalized);
   return normalized;
@@ -440,19 +471,37 @@ function isWikiText(value: unknown, maxCodePoints: number): value is string {
     Array.from(value).length <= maxCodePoints;
 }
 
-function isWikiLexeme(value: unknown): value is WikiLexeme {
+export function isWikiLexeme(value: unknown): value is WikiLexeme {
   if (!isPlainObject(value) || !hasExactKeys(value, [
     "id", "locale", "canonical", "scope", "provenance", "confirmedAtRevision",
+    ...(value.provenance === "imported" ? ["importBatchId"] : []),
   ])) return false;
   if (!isLexemeId(value.id) || typeof value.locale !== "string" ||
       !isMatterLocale(value.locale) || !isWikiCanonical(value.canonical) ||
       !isWikiLexemeScope(value.scope)) {
     return false;
   }
-  if (value.provenance === "human-confirmed") {
+  if (value.provenance === "imported" && (typeof value.importBatchId !== "string" ||
+      !/^[A-Za-z0-9._:-]{1,64}$/.test(value.importBatchId))) return false;
+  if (value.provenance === "manual" || value.provenance === "imported" || value.provenance === "learned") {
     return isRevision(value.confirmedAtRevision);
   }
-  return value.provenance === "aggregate-evidence" && value.confirmedAtRevision === null;
+  if (value.provenance === "starter" && !isWikiStarterLexemeIdentity({
+    locale: value.locale, canonical: value.canonical,
+  })) return false;
+  return (value.provenance === "collected" || value.provenance === "starter") &&
+    value.confirmedAtRevision === null;
+}
+
+export function isWikiRuleMaturity(value: unknown): value is WikiRuleMaturity {
+  const row = value as Record<string, unknown> | null;
+  return isPlainObject(value) && hasExactKeys(value, ["lexemeId", "channel", "boundary",
+    "form", "keptSettlements", "establishedAt", "lastRevertedAtRevision"]) &&
+    isWikiAliasDescriptor(value) && row !== null && Number.isInteger(row.keptSettlements) &&
+    (row.keptSettlements as number) >= 0 && (row.keptSettlements as number) <= 3 &&
+    (row.lastRevertedAtRevision === null || isRevision(row.lastRevertedAtRevision)) &&
+    (row.keptSettlements === 3 ? isRevision(row.establishedAt) : row.establishedAt === null) &&
+    (row.keptSettlements !== 0 || row.lastRevertedAtRevision !== null);
 }
 
 function isWikiLexemeTombstone(value: unknown): value is WikiLexemeTombstone {
@@ -550,7 +599,8 @@ function freezeLexeme(value: WikiLexeme): WikiLexeme {
     scope: value.scope,
     provenance: value.provenance,
     confirmedAtRevision: value.confirmedAtRevision,
-  });
+    ...(value.provenance === "imported" ? { importBatchId: value.importBatchId } : {}),
+  }) as WikiLexeme;
 }
 
 function freezeTermEvidence(value: WikiTermEvidenceAggregate): WikiTermEvidenceAggregate {

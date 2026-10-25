@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { fixtureUiCopy } from "./matter-ui-copy";
+import { addChildUnder, prewarmAdmissionRoutes } from "./under-driver";
 
 const rootId = "thought_fixture_root";
 const originalText =
@@ -10,6 +11,9 @@ for (const viewport of [
   { name: "narrow", width: 390, height: 844 },
 ]) {
   test(`rooted material and geometry stay handleable at ${viewport.name} width`, async ({ page }) => {
+    // Four children are spoken through the Under mark, each with its own repair.
+    test.setTimeout(180_000);
+    await prewarmAdmissionRoutes(page);
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => {
@@ -60,7 +64,7 @@ for (const viewport of [
     await expect(page.locator(".spatial-thought svg")).toHaveCount(0);
     expect(await page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).locator("[data-tool-id]").evaluateAll(
       (buttons) => buttons.map((button) => button.getAttribute("data-tool-id")),
-    )).toEqual(["voice", "lasso", "branch", "move", "undo"]);
+    )).toEqual(["voice", "lasso", "move", "undo"]);
     await expect(page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools }).locator('[data-tool-id="focus"]')).toHaveCount(0);
     await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
     const ambientVideo = page.locator("video.matter-ambient__video");
@@ -127,18 +131,18 @@ for (const viewport of [
       // The visible rail stays 60px wide, while each real pointer target reaches
       // slightly beyond it. The outside strip must hover and invoke the same
       // control without overlapping the tools above or below.
-      const branchTool = page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true });
-      const branchBox = await branchTool.boundingBox();
-      if (branchBox === null) throw new Error("branch target is not visible");
-      expect(branchBox.x).toBeLessThan(initialRail.x);
-      await page.mouse.move(initialRail.x - 4, branchBox.y + branchBox.height / 2);
-      await expect.poll(() => branchTool.evaluate((button) =>
+      const panTool = page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true });
+      const panBox = await panTool.boundingBox();
+      if (panBox === null) throw new Error("pan target is not visible");
+      expect(panBox.x).toBeLessThan(initialRail.x);
+      await page.mouse.move(initialRail.x - 4, panBox.y + panBox.height / 2);
+      await expect.poll(() => panTool.evaluate((button) =>
         getComputedStyle(button, "::before").backgroundColor,
       )).toBe("rgb(245, 245, 242)");
-      await page.mouse.click(initialRail.x - 4, branchBox.y + branchBox.height / 2);
-      await expect.poll(() => visibleIds(page)).toHaveLength(initialIds.length + 1);
-      await tool("Undo").click();
-      await expect.poll(() => visibleIds(page)).toEqual(initialIds);
+      await page.mouse.click(initialRail.x - 4, panBox.y + panBox.height / 2);
+      await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "pan");
+      await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitCanvasPan, exact: true }).click();
+      await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
 
       await voiceTool.focus();
       await page.keyboard.press("Shift+Tab");
@@ -150,22 +154,28 @@ for (const viewport of [
       }))).toEqual({ outlineStyle: "solid", outlineWidth: "2px" });
     }
 
-    await tool(fixtureUiCopy.toolRail.extendRelatedThought).click();
+    // A child spoken under the root is two ordinary steps (its words, then the
+    // repair): Undo and the platform Redo chords each cross both.
+    const defaultRootChildId = await addChildUnder(page, rootId);
     await expect.poll(() => visibleIds(page)).toHaveLength(initialIds.length + 1);
-    const defaultRootChildId = (await visibleIds(page)).at(-1);
-    if (defaultRootChildId === undefined) throw new Error("default root child missing");
     expect(defaultRootChildId).not.toBe(rootId);
     await expect(tool("Undo")).toBeEnabled();
-    await tool("Undo").click();
+    const undoSpoken = async () => {
+      await tool("Undo").click();
+      await tool("Undo").click();
+    };
+    await undoSpoken();
     await expect.poll(() => visibleIds(page)).toEqual(initialIds);
     await expect(page.getByRole("button", { name: "Redo last change", exact: true })).toHaveCount(0);
     await page.keyboard.press("Meta+Shift+z");
+    await page.keyboard.press("Meta+Shift+z");
     await expect.poll(() => visibleIds(page)).toHaveLength(initialIds.length + 1);
-    await tool("Undo").click();
+    await undoSpoken();
     await expect.poll(() => visibleIds(page)).toEqual(initialIds);
     await page.keyboard.press("Control+y");
+    await page.keyboard.press("Control+y");
     await expect.poll(() => visibleIds(page)).toHaveLength(initialIds.length + 1);
-    await tool("Undo").click();
+    await undoSpoken();
     await expect.poll(() => visibleIds(page)).toEqual(initialIds);
 
     await selectThought(rootId);
@@ -176,14 +186,8 @@ for (const viewport of [
       const rect = node.getBoundingClientRect();
       return { x: rect.x, y: rect.y };
     });
-    await tool(fixtureUiCopy.toolRail.extendRelatedThought).click();
-    const firstChildId = (await visibleIds(page)).at(-1);
-    if (firstChildId === undefined) throw new Error("first child missing");
-    await selectThought(rootId);
-    await tool(fixtureUiCopy.toolRail.extendRelatedThought).click();
-    const idsAfterTwoChildren = await visibleIds(page);
-    const secondChildId = idsAfterTwoChildren.at(-1);
-    if (secondChildId === undefined) throw new Error("second child missing");
+    const firstChildId = await addChildUnder(page, rootId);
+    const secondChildId = await addChildUnder(page, rootId);
 
     const geometry = await readGeometry(page);
     const initialTreeBottom = Math.max(...initialIds.map((nodeId) => geometry[nodeId]!.bottom));
@@ -260,11 +264,11 @@ for (const viewport of [
     });
     await expect.poll(async () => (await readViewportAndGeometry(page)).zoom)
       .toBeGreaterThan(afterTextPan.zoom);
+    // Material mode again: the passage's Under mark does not exist while Pan owns the canvas.
+    await page.getByRole("button", { name: fixtureUiCopy.toolRail.exitCanvasPan, exact: true }).click();
+    await expect(page.locator("main.matter-shell")).toHaveAttribute("data-canvas-mode", "material");
     await selectThought(rootId);
-    await tool(fixtureUiCopy.toolRail.extendRelatedThought).click();
-    const idsAfterZoomGrowth = await visibleIds(page);
-    const thirdChildId = idsAfterZoomGrowth.at(-1);
-    if (thirdChildId === undefined) throw new Error("third child missing");
+    const thirdChildId = await addChildUnder(page, rootId);
     const zoomGeometry = await readGeometry(page);
     expect(Math.abs(zoomGeometry[firstChildId]!.x - zoomGeometry[thirdChildId]!.x)).toBeLessThanOrEqual(1);
     expect(zoomGeometry[thirdChildId]!.y).toBeGreaterThan(zoomGeometry[secondChildId]!.bottom);

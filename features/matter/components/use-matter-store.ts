@@ -110,6 +110,24 @@ export function useMatterStore<T>(selector: (state: MatterStoreViewState) => T):
   return useStore(viewStore(), selector);
 }
 
+/**
+ * Imperative reads of the one store, for a driver that outlives a render and
+ * must see the document as it is when its callback fires.
+ */
+export type MatterStoreAccess = Readonly<{
+  getState: () => MatterStoreViewState;
+  subscribe: (listener: () => void) => () => void;
+}>;
+
+const storeAccess: MatterStoreAccess = Object.freeze({
+  getState: () => viewStore().getState(),
+  subscribe: (listener) => viewStore().subscribe(() => listener()),
+});
+
+export function useMatterStoreAccess(): MatterStoreAccess {
+  return storeAccess;
+}
+
 /** The one committed-occurrence owner for this material session. */
 export function useWikiOccurrences(): WikiOccurrenceDriver {
   return wikiOccurrences;

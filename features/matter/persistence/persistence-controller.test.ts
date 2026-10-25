@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSeededDocument } from "../material/seeded-document";
 import {
+  SNAPSHOT_SCHEMA_VERSION,
   STORAGE_SCHEMA_VERSION,
   type CorruptSnapshotExport,
   type DocumentRepository,
@@ -88,7 +89,7 @@ describe("persistence controller", () => {
     superseded.observeStoredGeneration({
       treeId: tree.id,
       writeGeneration: 4,
-      storageSchemaVersion: STORAGE_SCHEMA_VERSION + 1,
+      storageSchemaVersion: SNAPSHOT_SCHEMA_VERSION + 1,
     });
     const hydrate = vi.fn(() => KEPT_HISTORY);
     expect(superseded.adoptStored(candidate!, hydrate)).toBe("stale");
@@ -466,7 +467,7 @@ describe("persistence controller", () => {
     expect(controller.observeStoredGeneration({
       treeId: tree.id,
       writeGeneration: 3,
-      storageSchemaVersion: STORAGE_SCHEMA_VERSION + 1,
+      storageSchemaVersion: SNAPSHOT_SCHEMA_VERSION + 1,
     })).toBe("superseded");
     controller.publish({ ...tree, revision: tree.revision + 1 });
     controller.retry();
@@ -1525,4 +1526,131 @@ async function waitFor(assertion: () => boolean) {
     await Promise.resolve();
   }
   throw new Error("condition did not settle");
+}
+
+describe("persistence controller snapshot stamps", () => {
+  it("announces the stamp of the material each save wrote", async () => {
+    const tree = createSeededDocument().tree;
+    const repository = controlledRepository();
+    const announceGeneration = vi.fn();
+    const controller = createPersistenceController(repository.port, { announceGeneration });
+    await startAccepted(controller, tree);
+    let generation = 0;
+    const settleUntilSaved = async () => {
+      while (controller.getStatus().phase !== "saved") {
+        await waitFor(() => repository.pending.length === 1);
+        generation += 1;
+        repository.settleNext({ ok: true, value: generation });
+        await waitFor(() => repository.pending.length === 1 || controller.getStatus().phase === "saved");
+      }
+    };
+    const stamps = () => announceGeneration.mock.calls.map(([announced]) => announced.storageSchemaVersion);
+
+    controller.publish({ ...pictured(tree), revision: tree.revision + 1 });
+    await settleUntilSaved();
+    expect(stamps().at(-1)).toBe(2);
+    controller.publish({ ...tree, revision: tree.revision + 2 });
+    await settleUntilSaved();
+    expect(stamps().at(-1)).toBe(1);
+    expect(announceGeneration.mock.calls.map(([announced]) => announced.writeGeneration))
+      .toEqual(Array.from({ length: generation }, (_, index) => index + 1));
+  });
+
+  it("meets a row stamped 2 as ordinary news and a row stamped 3 as a newer schema", async () => {
+    const tree = createSeededDocument().tree;
+    const controller = createPersistenceController(controlledRepository(stored(tree, 2)).port);
+    await startAccepted(controller, tree);
+
+    expect(controller.observeStoredGeneration({
+      treeId: tree.id,
+      writeGeneration: 3,
+      storageSchemaVersion: 2,
+    })).toBe("refresh");
+    expect(controller.observeStoredGeneration({
+      treeId: tree.id,
+      writeGeneration: 3,
+      storageSchemaVersion: 3,
+    })).toBe("superseded");
+  });
+
+  it("announces the imported row's stamp on activation and the restored row's stamp on rollback", async () => {
+    const imported = pictured(createSeededDocument().tree);
+    const previous = createSeededDocument().tree;
+    const base = importReservation(imported, 4, previous, 3);
+    const reservation: ImportedSnapshotReservation = Object.freeze({
+      ...base,
+      imported: Object.freeze({ ...base.imported, storageSchemaVersion: 2 as const }),
+      previous: Object.freeze({ ...base.previous!, storageSchemaVersion: 2 as const }),
+    });
+    const announceGeneration = vi.fn();
+    const repository: DocumentRepository = {
+      ...inertPort(),
+      load: async () => ({ ok: true, value: stored(previous, 3) }),
+      save: vi.fn(),
+      reserveImportedSnapshot: async () => ({ ok: true, value: reservation }),
+      rollbackImportedSnapshot: async () => ({ ok: true, value: { status: "rolled-back", writeGeneration: 5 } }),
+      close: () => undefined,
+    };
+    const controller = createPersistenceController(repository, { announceGeneration });
+    await startAccepted(controller, previous);
+
+    const activated = await controller.prepareImportedTree(imported);
+    if (!activated.ok) throw new Error("import preparation rejected");
+    controller.activateImportedDocument(activated);
+    expect(announceGeneration).toHaveBeenLastCalledWith({
+      treeId: imported.id,
+      writeGeneration: 4,
+      storageSchemaVersion: 2,
+    });
+
+    const discarded = await controller.prepareImportedTree(imported);
+    if (!discarded.ok) throw new Error("import preparation rejected");
+    await expect(controller.discardImportedDocument(discarded)).resolves.toBeNull();
+    expect(announceGeneration).toHaveBeenLastCalledWith({
+      treeId: imported.id,
+      writeGeneration: 5,
+      storageSchemaVersion: 2,
+    });
+  });
+
+  it("announces a replaced corrupt row with the stamp of the material it wrote", async () => {
+    const tree = pictured(createSeededDocument().tree);
+    const basis = { treeId: tree.id, serialized: "{\"damaged\":true}" };
+    const announceGeneration = vi.fn();
+    const repository: DocumentRepository = {
+      ...inertPort(),
+      load: async () => ({ ok: false, error: { code: "PERSISTENCE_CORRUPT", message: "damaged" } }),
+      save: vi.fn(),
+      exportCorrupt: async () => ({
+        ok: true,
+        value: { basis, bytes: new TextEncoder().encode(basis.serialized) },
+      }),
+      replaceCorrupt: async () => ({ ok: true, value: { writeGeneration: 6, journal: emptyHistoryJournal(1) } }),
+      close: () => undefined,
+    };
+    const controller = createPersistenceController(repository, { announceGeneration });
+    await startAccepted(controller, tree);
+    await controller.exportCorruptRecovery();
+
+    await expect(controller.replaceCorrupt()).resolves.toEqual({ ok: true });
+    expect(announceGeneration).toHaveBeenCalledExactlyOnceWith({
+      treeId: tree.id,
+      writeGeneration: 6,
+      storageSchemaVersion: 2,
+    });
+  });
+});
+
+function pictured(tree: ThoughtTree): ThoughtTree {
+  const nodeId = tree.nodes[tree.rootId!]!.children[0]!;
+  return {
+    ...tree,
+    nodes: {
+      ...tree.nodes,
+      [nodeId]: {
+        ...tree.nodes[nodeId]!,
+        image: { mediaType: "image/png", byteLength: 120_000, width: 1024, height: 768, contentHash: "ab".repeat(32) },
+      },
+    },
+  };
 }

@@ -3,6 +3,7 @@ import { fixtureMaterialFilesToggleName, fixtureUiCopy } from "./matter-ui-copy"
 import { CANVAS_PREFERENCES_STORAGE_KEY } from "../features/matter/components/canvas-preferences";
 import { MATTER_LOCALES } from "../features/matter/config/locales";
 import { materialFilesCopy } from "../features/matter/components/material-files-copy";
+import { addChildUnder } from "./under-driver";
 
 const rootId = "matter_document_root_matter_fixture_rooted_01";
 const firstBranchText = "我们怀念的也许不是一个真实存在过的过去，而是那个过去在今天仍然允许我们想象的其他生活。";
@@ -70,6 +71,35 @@ async function expectIndexCameraMotion(
   // correct short camera motion disappear between actionability and polling.
   await expect(world).toHaveAttribute("data-e2e-index-camera-transition", "transform");
 }
+
+test("the index marks the path above the active passage without selecting it", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+
+  const sidebar = page.locator("aside.material-files");
+  const rows = sidebar.locator(".material-file");
+  await expect(sidebar).toHaveAttribute("data-open", "true");
+  await expect(sidebar).not.toHaveAttribute("data-projection-stale", "true");
+  await expect(rows).toHaveCount(10);
+  const deepIndex = await rows.evaluateAll((elements) =>
+    elements.findIndex((element) => Number((element as HTMLElement).style.getPropertyValue("--material-file-depth")) >= 2));
+  if (deepIndex < 0) throw new Error("index path fixture needs a passage two levels down");
+  await rows.nth(deepIndex).locator(".material-file__open").click();
+
+  const active = rows.nth(deepIndex);
+  await expect(active).toHaveAttribute("data-active", "true");
+  await expect(active).not.toHaveAttribute("data-in-lineage", "true");
+
+  const path = page.locator("aside.material-files .material-file[data-in-lineage='true']");
+  await expect.poll(() => path.count()).toBeGreaterThan(0);
+  for (const row of await path.all()) {
+    await expect(row).not.toHaveAttribute("aria-selected", "true");
+    await expect(row).not.toHaveAttribute("aria-current", "page");
+    await expect(row.locator(".material-file__title")).toHaveCSS("text-decoration-line", "underline");
+  }
+  await expect(active.locator(".material-file__title")).toHaveCSS("text-decoration-line", "none");
+});
 
 test("an index passage lands at the browser's visual centre, including a repeated click", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -526,7 +556,8 @@ for (const viewport of [
     // One continuous document journey owns directory geometry, disclosure,
     // local context, persistence, search, selection, archive, and reload. Keep
     // every action assertion bounded while giving the whole receipt room to run.
-    test.setTimeout(60_000);
+    // A child is spoken through the Under mark, so two voice round trips are included.
+    test.setTimeout(120_000);
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
     page.on("console", (message) => {
@@ -827,7 +858,10 @@ for (const viewport of [
     // returned to the reading centre. A different descendant can legitimately
     // remain outside a compact viewport after its ancestor is addressed.
     if (viewport.name === "narrow") await expectThoughtAtVisualCentre(page, heldResultNodeId);
-    await page.locator(`[data-thought-id="${heldResultNodeId}"] [data-thought-text-id]`).click();
+    // The selected passage's three-mark lens can rest over a narrow passage's
+    // centre, so the selection click is delivered to the passage itself.
+    await page.locator(`[data-thought-id="${heldResultNodeId}"] [data-thought-text-id]`)
+      .evaluate((button: HTMLButtonElement) => button.click());
     if (viewport.name === "narrow") await setSidebarOpen(true);
     await expect(rows).toHaveCount(10);
 
@@ -919,13 +953,13 @@ for (const viewport of [
     const before = await rows.evaluateAll((elements) =>
       elements.map((element) => element.getAttribute("data-node-id")),
     );
-    await clickTool(page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }));
+    const speakingParentId = before[0];
+    if (speakingParentId === undefined || speakingParentId === null) throw new Error("the first row has no node id");
+    // The passage's Under mark lives on the paper, which the narrow drawer covers.
+    if (viewport.name === "narrow") await setSidebarOpen(false);
+    const admittedId = await addChildUnder(page, speakingParentId);
+    if (viewport.name === "narrow") await setSidebarOpen(true);
     await expect(rows).toHaveCount(11);
-    const after = await rows.evaluateAll((elements) =>
-      elements.map((element) => element.getAttribute("data-node-id")),
-    );
-    const admittedId = after.find((nodeId) => !before.includes(nodeId));
-    if (admittedId === undefined) throw new Error("the admitted thought never reached the index");
     await expect(page.locator("[data-thought-id]")).toHaveCount(11);
     await expect(sidebar).toHaveAttribute("data-persistence-phase", "saved");
 
@@ -1006,14 +1040,18 @@ for (const viewport of [
     // Undoing the newest thought must take its selection with it, rather than
     // leave a count that counts a thought that is gone.
     await sidebar.locator(`.material-file[data-node-id="${admittedId}"]`).getByRole("checkbox").check();
+    // The admitted thought sits under the first passage, which is ticked already.
     await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(2));
     await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.copySelectedThoughts(2) }).click();
     await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.copied);
     const copied = await page.evaluate(() => navigator.clipboard.readText());
-    expect(copied.startsWith(firstBranchText)).toBe(true);
-    expect(copied.split("\n\n")).toHaveLength(2);
+    // One passage inside the other: a nested Markdown list, not the literal join.
+    expect(copied.startsWith(`- ${firstBranchText}\n  - `)).toBe(true);
+    expect(copied.split("\n").filter((line) => /^ *- /u.test(line))).toHaveLength(2);
     await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(2));
 
+    // The spoken child is two steps: its words, then their separately undoable repair.
+    await clickTool(page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange }));
     await clickTool(page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange }));
     await expect(page.locator("[data-thought-id]")).toHaveCount(10);
     await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(1));
@@ -1066,6 +1104,8 @@ test("the flat virtual DOM follows tree keyboard semantics", async ({ page }) =>
 });
 
 test("a mixed sibling group renders one directed arrow-to-terminal guide", async ({ page }) => {
+  // Two children are spoken through the Under mark.
+  test.setTimeout(120_000);
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
@@ -1086,16 +1126,15 @@ test("a mixed sibling group renders one directed arrow-to-terminal guide", async
   }
 
   await sidebar.locator(`[data-node-id="${firstLeafId}"] .material-file__open`).click();
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
+  const nestedLeafId = await addChildUnder(page, firstLeafId);
   await expect(rows).toHaveCount(11);
   const afterNestedInsert = await rows.evaluateAll((elements) =>
     elements.map((element) => element.dataset.nodeId ?? ""),
   );
-  const nestedLeafId = afterNestedInsert.find((id) => !initialIds.includes(id));
-  if (nestedLeafId === undefined) throw new Error("nested leaf was not admitted");
+  if (!afterNestedInsert.includes(nestedLeafId)) throw new Error("nested leaf was not admitted");
 
   await sidebar.locator(`[data-node-id="${parentId}"] .material-file__open`).click();
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
+  await addChildUnder(page, parentId);
   await expect(rows).toHaveCount(12);
   const finalIds = await rows.evaluateAll((elements) =>
     elements.map((element) => element.dataset.nodeId ?? ""),
@@ -1166,7 +1205,10 @@ test("deleted local selection and disclosure do not return with Undo", async ({ 
   const leafId = await leaf.getAttribute("data-node-id");
   if (leafId === null) throw new Error("transient selection leaf is missing");
   await leaf.getByRole("checkbox").check();
-  await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(1));
+  // The leaf and the ancestors ticking it pulled in as context.
+  const ticked = await sidebar.locator(".material-file__check input:checked").count();
+  expect(ticked).toBeGreaterThanOrEqual(1);
+  await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(ticked));
   await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.done, exact: true }).click();
   await leaf.locator(".material-file__open").click();
   await page.keyboard.press("Delete");

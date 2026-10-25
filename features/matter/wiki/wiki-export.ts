@@ -20,7 +20,7 @@ export type WikiExportParseResult =
   | Readonly<{ ok: true; envelope: WikiExportEnvelope }>
   | Readonly<{
       ok: false;
-      code: "INVALID_ENCODING" | "INVALID_JSON" | "INVALID_FORMAT" | "BOUND_EXCEEDED";
+      code: "INVALID_ENCODING" | "INVALID_JSON" | "INVALID_FORMAT" | "BOUND_EXCEEDED" | "NEWER_VERSION";
     }>;
 
 /** One deterministic, lossless format for personal Wiki authority and evidence. */
@@ -54,6 +54,12 @@ export function decodeWikiExport(input: Uint8Array): WikiExportParseResult {
     value = JSON.parse(text);
   } catch {
     return Object.freeze({ ok: false, code: "INVALID_JSON" });
+  }
+  if (isPlainObject(value) && value.format === WIKI_EXPORT_FORMAT &&
+      ((Number.isSafeInteger(value.formatVersion) && (value.formatVersion as number) > WIKI_EXPORT_FORMAT_VERSION) ||
+        (isPlainObject(value.state) && Number.isSafeInteger(value.state.schemaVersion) &&
+          (value.state.schemaVersion as number) > 8))) {
+    return Object.freeze({ ok: false, code: "NEWER_VERSION" });
   }
   if (!isPlainObject(value) || !hasExactKeys(value, ["format", "formatVersion", "state"]) ||
       value.format !== WIKI_EXPORT_FORMAT ||

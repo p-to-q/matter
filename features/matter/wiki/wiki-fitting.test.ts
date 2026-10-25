@@ -276,7 +276,7 @@ describe("Wiki fitting", () => {
             ? "Newesttarget"
             : `Filler${alphaSuffix(index)}`,
         scope: "both" as const,
-        provenance: "human-confirmed" as const,
+        provenance: "manual" as const,
         confirmedAtRevision: index + 1,
       }),
     );
@@ -361,6 +361,7 @@ describe("script-routed Wiki fitting", () => {
       }],
       scannedScripts: ["latin", "han"],
       routedScripts: ["latin"],
+      producerFamilies: ["latin-internal-edit"],
     });
     expect(fit(state, "zh-TW", "我讀了Morphogenasis的論文").events).toEqual([
       expect.objectContaining({ locale: "en-US", canonical: "Morphogenesis" }),
@@ -486,6 +487,7 @@ describe("script-routed Wiki fitting", () => {
       events: [],
       scannedScripts: ["han"],
       routedScripts: [],
+      producerFamilies: ["latin-internal-edit"],
     });
   });
 

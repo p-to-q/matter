@@ -49,9 +49,9 @@ export const LAYERS = Object.freeze([
 const PROVIDER_MODULE = "features/matter/server/model-pool.ts";
 const WIKI_ROOT = "features/matter/wiki/";
 /** Modules that own the shape of persisted material: snapshots, the undo
- * journal, and the archive a person exports. */
-const PERSISTED_MATERIAL_MODULE =
-  /^features\/matter\/persistence\/(?:archive|snapshot|history)-[^/]+$/u;
+ * journal, the archive a person exports, and the bytes behind image pointers. */
+export const PERSISTED_MATERIAL_MODULE =
+  /^features\/matter\/persistence\/(?:archive|snapshot|history|image-blob)-[^/]+$/u;
 
 /**
  * Runtime value specifiers only.
@@ -231,7 +231,7 @@ export function findProblems(graph) {
       if (path !== null) {
         problems.push(
           `${file} reaches Wiki through ${path.join(" -> ")}. ` +
-          "Archive, snapshot, and history modules carry material only; Wiki stays outside them.",
+          "Archive, snapshot, history, and image-blob modules carry material only; Wiki stays outside them.",
         );
       }
     }

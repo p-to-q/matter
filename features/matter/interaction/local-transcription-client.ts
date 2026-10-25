@@ -4,8 +4,15 @@ import {
   type TranscriptionPurpose,
 } from "../protocol/transcription-contract";
 import { browserAudioContextConstructor } from "./browser-audio-context";
+import { frameEnergies } from "./speech-pause-evidence";
 
 const WHISPER_SAMPLE_RATE = 16_000;
+// Conservative RMS energy floor. Below this level the waveform contains no
+// meaningful speech signal and Whisper is likely to hallucinate. The threshold
+// is intentionally strict (10× below a quiet-room voice) so real near-whisper
+// admissions still reach the model.
+const NEAR_SILENCE_RMS_THRESHOLD = 0.001;
+const NEAR_SILENCE_FRAME_MS = 20;
 const LOCAL_TRANSCRIPTION_TIMEOUT_MS = 180_000;
 export const LOCAL_TRANSCRIPTION_PREPARE_TIMEOUT_MS = 15_000;
 
@@ -41,6 +48,8 @@ const pageExitCleanup = new WeakMap<Worker, () => void>();
 const readyWorkers = new WeakSet<Worker>();
 /** Never-ready leases whose warm-up deadline passed while carrying work. */
 const overdueWorkers = new WeakSet<Worker>();
+
+Object.defineProperty(prepareLocalTranscription, "matterCapability", { value: "matter-capability:local-transcription" });
 
 /** Test-only cleanup keeps the lazy singleton from crossing isolated cases. */
 export function resetLocalTranscriptionForTests(): void {
@@ -124,6 +133,9 @@ export async function transcribeLocally(input: Readonly<{
     // recording in the visible transcribing state forever.
     const audio = await decodeRecording(input.audio, deadline.signal);
     throwIfAborted(deadline.signal);
+    // Pre-transcription silence gate: Whisper hallucinates text on near-silent
+    // recordings. Reject before the model runs to avoid spurious admissions.
+    if (isNearSilent(audio)) throw new LocalTranscriptionError("no-speech");
     // The protocol identity may be reused after a component remount. A local
     // lease id must not be: a queued cancellation acknowledgement for an older
     // turn otherwise aliases the new pending request and leaves it unresolved.
@@ -381,6 +393,19 @@ export function resampleChannels(
     output[index] = sample / channels.length;
   }
   return output;
+}
+
+/**
+ * Returns true when the decoded PCM waveform is near-silent. Uses the same
+ * 20 ms RMS frame approach as the acoustic pause detector so that the floor
+ * is consistent. Fully silent (all-zero) buffers always match; any frame
+ * whose RMS is above the threshold keeps the recording alive.
+ */
+function isNearSilent(audio: Float32Array): boolean {
+  if (audio.length === 0) return true;
+  const frameSize = Math.max(1, Math.round(WHISPER_SAMPLE_RATE * NEAR_SILENCE_FRAME_MS / 1_000));
+  const energies = frameEnergies(audio, frameSize);
+  return energies.every((e) => !Number.isFinite(e) || e < NEAR_SILENCE_RMS_THRESHOLD);
 }
 
 function settle(id: string, error: LocalTranscriptionError): void {

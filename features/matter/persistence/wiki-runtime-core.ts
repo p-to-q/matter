@@ -40,6 +40,10 @@ import {
   isMatterWikiPhoneticFittingEnabled,
 } from "./wiki-capability-preferences-reader";
 import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
+import { deriveWikiDiagnostics } from "../wiki/wiki-diagnostics";
+import { readMatterWikiTransientOutcomes, revokeMatterWikiOccurrences,
+  revokeMatterWikiPassiveBefore } from "./wiki-occurrence-owner";
+import { sameWikiOccurrenceForm } from "../wiki/wiki-occurrence-registry";
 
 // The release table and its learning policy load with this lazy runtime; the
 // initial material graph never reads them.
@@ -65,12 +69,12 @@ type MatterWikiRuntime = Readonly<{
 }>;
 
 type MatterWikiRuntimeSlot = Readonly<{
-  abi: 15;
+  abi: 16;
   runtime: MatterWikiRuntime;
 }>;
 
-// 15: the runtime publishes through a port bound to the canonicalizer.
-const RUNTIME_ABI = 15 as const;
+// 16: V8 lexical state and diagnostics use one fresh coordinator ownership unit.
+const RUNTIME_ABI = 16 as const;
 const MAX_ADMISSION_CAS_ATTEMPTS = 4;
 const RUNTIME_KEY = Symbol.for("ptoq.matter.wiki-runtime");
 const LEGACY_RUNTIME_KEYS = Object.freeze([
@@ -114,7 +118,16 @@ function createMatterWikiRuntime(): MatterWikiRuntime {
     retry,
   );
   const unsubscribe = generationChannel.subscribe((generation) => {
-    void refreshQueue.request(generation);
+    const before = coordinator.readBasis();
+    if (Number.isSafeInteger(generation) && generation > before.snapshot.generation) {
+      revokePassiveSettlementsBefore(before.stateRevision + 1);
+    }
+    void refreshQueue.request(generation).then(() => {
+      const after = coordinator.readBasis();
+      if (after.snapshot.generation > before.snapshot.generation) {
+        revokePassiveSettlementsBefore(after.stateRevision);
+      }
+    });
   });
   return Object.freeze({
     coordinator,
@@ -149,6 +162,20 @@ const runtimeSlot: MatterWikiRuntimeSlot = previousSlot?.abi === RUNTIME_ABI
 runtimeHost[RUNTIME_KEY] = runtimeSlot;
 const runtime = runtimeSlot.runtime;
 const matterWikiCoordinator = runtime.coordinator;
+let diagnosticState: WikiState | null = null;
+let diagnosticTransient = readMatterWikiTransientOutcomes();
+let diagnostics = deriveWikiDiagnostics(diagnosticState, diagnosticTransient);
+
+export function readMatterWikiDiagnostics(): ReturnType<typeof deriveWikiDiagnostics> {
+  const state = matterWikiCoordinator.readState();
+  const transient = readMatterWikiTransientOutcomes();
+  if (state !== diagnosticState || transient !== diagnosticTransient) {
+    diagnosticState = state;
+    diagnosticTransient = transient;
+    diagnostics = deriveWikiDiagnostics(state, transient);
+  }
+  return diagnostics;
+}
 const qualifiedAliasProducers = new Set<WikiAliasEvidenceProducer>(
   MATTER_WIKI_RUNTIME_ALIAS_PRODUCERS,
 );
@@ -231,10 +258,45 @@ export function decideMatterWiki(
 }
 
 /** Records one occurrence settlement against the hydrated origin authority. */
+let settlementTail: Promise<unknown> = Promise.resolve();
+const pendingSettlements = new Set<{ settlement: WikiOccurrenceSettlement; revoked: boolean }>();
+
+function revokePassiveSettlementsBefore(revision: number): void {
+  revokeMatterWikiPassiveBefore(revision);
+  for (const queued of pendingSettlements) {
+    if ((queued.settlement.outcome === "accepted-implicit" || queued.settlement.outcome === "inspected-kept") &&
+        queued.settlement.rule.appliedAtRevision < revision) queued.revoked = true;
+  }
+}
+
 export function settleHydratedMatterWikiOccurrence(
   settlement: WikiOccurrenceSettlement,
 ): Promise<WikiCoordinatorResult> {
-  return publishChanged(matterWikiCoordinator.settle(settlement));
+  if (pendingSettlements.size >= 128) return Promise.resolve({ ok: false, code: "BOUND_EXCEEDED" });
+  const pending = { settlement, revoked: false };
+  pendingSettlements.add(pending);
+  const operation = settlementTail.then(async (): Promise<WikiCoordinatorResult> => {
+    if (pending.revoked) {
+      const basis = matterWikiCoordinator.readBasis();
+      return { ok: true, changed: false, generation: basis.snapshot.generation,
+        stateRevision: basis.stateRevision };
+    }
+    const result = await publishChanged(matterWikiCoordinator.settle(settlement));
+    // The transient tokens cannot outlive this page. Revoke only after the
+    // negative evidence committed, including tokens waiting behind this write.
+    if (result.ok && result.changed && settlement.outcome === "reverted") {
+      revokeMatterWikiOccurrences(settlement.rule, result.stateRevision);
+      for (const queued of pendingSettlements) {
+        if ((queued.settlement.outcome === "accepted-implicit" ||
+            queued.settlement.outcome === "inspected-kept") &&
+            sameWikiOccurrenceForm(queued.settlement.rule, settlement.rule) &&
+            queued.settlement.rule.appliedAtRevision < result.stateRevision) queued.revoked = true;
+      }
+    }
+    return result;
+  }).finally(() => pendingSettlements.delete(pending));
+  settlementTail = operation.catch(() => undefined);
+  return operation;
 }
 
 export function resetCorruptMatterWiki(): Promise<WikiCoordinatorResult> {

@@ -4,6 +4,14 @@ import {
   type ThoughtNode,
   type ThoughtTree,
 } from "./model";
+import {
+  MAX_IMAGE_POINTER_BYTES,
+  MAX_TREE_IMAGE_BYTES,
+  MAX_TREE_IMAGE_NODES,
+  equalImagePointers,
+  parseImagePointer,
+  type ImagePointer,
+} from "./image-pointer";
 import { isWellFormedUnicodeText } from "./unicode-text";
 
 export const MAX_NODE_TEXT_CODE_UNITS = 2_000;
@@ -58,6 +66,14 @@ export function validateThoughtNode(
   if (candidate.role === "document-root" && candidate.text !== "") {
     return failure("TREE_INVARIANT_VIOLATION", `Document root ${candidate.id} must have empty text.`);
   }
+  if (Object.hasOwn(candidate, "image")) {
+    if (candidate.role === "document-root") {
+      return failure("TREE_INVARIANT_VIOLATION", `Document root ${candidate.id} cannot carry an image.`);
+    }
+    if (parseImagePointer(candidate.image) === null) {
+      return failure("TREE_INVARIANT_VIOLATION", `Node ${candidate.id} has an invalid image pointer.`);
+    }
+  }
   if (candidate.role !== "document-root" && candidate.text.trim().length === 0) {
     return failure("TREE_INVARIANT_VIOLATION", `Passage ${candidate.id} must contain non-whitespace text.`);
   }
@@ -88,6 +104,59 @@ export function validateThoughtNode(
     return failure("TREE_INVARIANT_VIOLATION", `Node ${candidate.id} was updated before it was created.`);
   }
   return { ok: true };
+}
+
+type ImageLedgerEntry = "recorded" | "conflict" | "over-bound";
+
+/**
+ * The one count of what a tree's pictures cost against the document bounds:
+ * every picture-bearing passage counts, and equal pictures share one stored
+ * blob, so bytes count each hash once. Validation and the pre-flight capacity
+ * question both read it, so they cannot disagree about what fits.
+ */
+function createImageLedger() {
+  const pointersByHash = new Map<string, ImagePointer>();
+  let passages = 0;
+  let bytes = 0;
+  return {
+    record(pointer: ImagePointer): ImageLedgerEntry {
+      passages += 1;
+      const known = pointersByHash.get(pointer.contentHash);
+      if (known === undefined) {
+        pointersByHash.set(pointer.contentHash, pointer);
+        bytes += pointer.byteLength;
+      } else if (!equalImagePointers(known, pointer)) {
+        return "conflict";
+      }
+      return passages > MAX_TREE_IMAGE_NODES || bytes > MAX_TREE_IMAGE_BYTES
+        ? "over-bound"
+        : "recorded";
+    },
+    /** Whether one more picture of the largest admissible size still fits. */
+    hasRoomForOneMore(): boolean {
+      return passages < MAX_TREE_IMAGE_NODES &&
+        bytes + MAX_IMAGE_POINTER_BYTES <= MAX_TREE_IMAGE_BYTES;
+    },
+  };
+}
+
+/**
+ * Whether a picture drawn for this passage could be kept without breaking a
+ * document bound, judged before anyone pays for it. The passage's own current
+ * picture is the one being replaced, so it is not counted against the room.
+ */
+export function treeCanTakePicture(
+  tree: Readonly<{
+    nodes: Readonly<Record<string, Readonly<{ id: string; role?: ThoughtNode["role"]; image?: ImagePointer }>>>;
+  }>,
+  nodeId: string,
+): boolean {
+  if (!Object.hasOwn(tree.nodes, nodeId) || tree.nodes[nodeId]!.role === "document-root") return false;
+  const ledger = createImageLedger();
+  for (const node of Object.values(tree.nodes)) {
+    if (node.id !== nodeId && node.image !== undefined) ledger.record(node.image);
+  }
+  return ledger.hasRoomForOneMore();
 }
 
 export function createEmptyTree(id: string, revision = 0): ThoughtTree {
@@ -144,12 +213,25 @@ export function validateThoughtTree(tree: unknown): TreeValidationResult {
     return failure("TREE_INVARIANT_VIOLATION", "The tree root does not exist.");
   }
   const incoming = new Map<string, number>();
+  const imageLedger = createImageLedger();
   for (const key of nodeIds) {
     const node = nodes[key];
     const nodeResult = validateThoughtNode(node);
     if (!nodeResult.ok) return nodeResult;
     if (key !== node.id) {
       return failure("TREE_INVARIANT_VIOLATION", `Node record key ${key} differs from its id.`);
+    }
+    if (node.image !== undefined) {
+      const entry = imageLedger.record(node.image);
+      if (entry === "conflict") {
+        return failure(
+          "TREE_INVARIANT_VIOLATION",
+          `Image ${node.image.contentHash} is declared with two different descriptions.`,
+        );
+      }
+      if (entry === "over-bound") {
+        return failure("BOUND_EXCEEDED", "The tree exceeds the image bound.");
+      }
     }
   }
 

@@ -56,6 +56,32 @@ describe("storage persistence", () => {
     expect(storage.persist).toHaveBeenCalledTimes(3);
   });
 
+  it("asks for Keep synchronously, like every other gesture", () => {
+    const storage = { persisted: vi.fn(async () => false), persist: vi.fn(async () => true) };
+    const persistence = createStoragePersistence({ storage, preferences: preferences() });
+
+    void persistence.request("keep");
+    expect(storage.persist).toHaveBeenCalledOnce();
+    expect(storage.persisted).not.toHaveBeenCalled();
+  });
+
+  it("quiets Keep for a cooldown after a refusal, as Retry and Replace, and Export still asks", async () => {
+    let now = 5_000_000;
+    const storage = { persisted: vi.fn(async () => false), persist: vi.fn(async () => false) };
+    const persistence = createStoragePersistence({ storage, preferences: preferences(), now: () => now });
+
+    await expect(persistence.request("keep")).resolves.toBe(false);
+    await expect(persistence.request("keep")).resolves.toBe(false);
+    await expect(persistence.request("retry")).resolves.toBe(false);
+    expect(storage.persist).toHaveBeenCalledOnce();
+    await expect(persistence.request("export")).resolves.toBe(false);
+    expect(storage.persist).toHaveBeenCalledTimes(2);
+
+    now += PERSISTENCE_DENIAL_COOLDOWN_MS;
+    await expect(persistence.request("keep")).resolves.toBe(false);
+    expect(storage.persist).toHaveBeenCalledTimes(3);
+  });
+
   it("never treats the first release's permanent refusal marker as current", async () => {
     const storage = { persisted: vi.fn(async () => false), persist: vi.fn(async () => true) };
     const remembered = preferences({ [DENIAL_KEY]: "1" });

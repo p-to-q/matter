@@ -4,14 +4,16 @@ import {
   selectThoughtThroughMaterialIndex,
 } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
-import { CORNER_GLYPH_DESCENT } from "../features/matter/components/node-handle-position";
+import { CORNER_ACTION_OVERLAP } from "../features/matter/components/node-handle-position";
 
 const PREFERENCES_KEY = "matter.canvas-preferences.v1";
 const ROOT_ID = "thought_fixture_root";
+const previewBranch = process.env.NEXT_PUBLIC_MATTER_PREVIEW_BRANCH === "true";
+const actionCount = previewBranch ? 2 : 3;
 
 for (const viewport of [
-  { name: "laptop", width: 1280, height: 800, cell: { width: "636px", height: "196px" }, column: { width: "520px", gap: "116px" }, horizontalInset: 50, lens: { width: 118, height: 66 } },
-  { name: "narrow", width: 390, height: 844, cell: { width: "344px", height: "172px" }, column: { width: "280px", gap: "64px" }, horizontalInset: 24, lens: { width: 126, height: 70 } },
+  { name: "laptop", width: 1280, height: 800, cell: { width: "636px", height: "196px" }, column: { width: "520px", gap: "116px" }, horizontalInset: 50, lens: { width: 168, height: 66 } },
+  { name: "narrow", width: 390, height: 844, cell: { width: "344px", height: "172px" }, column: { width: "280px", gap: "64px" }, horizontalInset: 24, lens: { width: 180, height: 70 } },
 ]) {
   test(`structural paper and one local action lens remain bounded at ${viewport.name}`, async ({ page }) => {
     const browserErrors: string[] = [];
@@ -143,12 +145,13 @@ for (const viewport of [
     if (viewport.name === "narrow") await rootText.click();
     else await rootText.hover();
     const lens = page.locator("[data-node-action-lens]");
+    const fog = page.locator("[data-node-action-fog]");
     await expect(lens).toBeVisible();
     await expect(lens).toHaveAttribute("aria-label", "材料操作");
     await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
     await expect(lens).toHaveAttribute("aria-orientation", "horizontal");
     await expect(lens).toHaveAttribute("data-relation", "corner");
-    await expect(lens.getByRole("button")).toHaveCount(2);
+    await expect(lens.getByRole("button")).toHaveCount(actionCount);
     const rewriteMaterial = lens.locator("[data-node-action=point-talk]");
     await expect(rewriteMaterial).toBeVisible();
     await expect(rewriteMaterial).toHaveAttribute("aria-label", "用 AI 改写这段材料");
@@ -172,14 +175,15 @@ for (const viewport of [
       };
     })).toEqual({
       ...viewport.lens,
+      width: previewBranch ? (viewport.name === "narrow" ? 126 : 118) : viewport.lens.width,
       centers: viewport.name === "narrow"
-        ? [{ x: 36, y: 35 }, { x: 90, y: 35 }]
-        : [{ x: 34, y: 33 }, { x: 84, y: 33 }],
+        ? [{ x: 36, y: 35 }, { x: 90, y: 35 }, ...(!previewBranch ? [{ x: 144, y: 35 }] : [])]
+        : [{ x: 34, y: 33 }, { x: 84, y: 33 }, ...(!previewBranch ? [{ x: 134, y: 33 }] : [])],
     });
     expect(await lensBoundsAreLawful(page)).toBe(true);
-    expect(await lens.evaluate((element) => getComputedStyle(element, "::before").backdropFilter))
+    expect(await fog.evaluate((element) => getComputedStyle(element, "::before").backdropFilter))
       .toContain("blur(28px)");
-    expect(await lens.evaluate((element) => {
+    expect(await fog.evaluate((element) => {
       const style = getComputedStyle(element, "::before");
       return {
         bottom: style.bottom,
@@ -206,7 +210,7 @@ for (const viewport of [
       right: "-16px",
       top: "-12px",
     });
-    // How far the field may descend is owned by lensBoundsAreLawful above;
+    // The material clearance is owned by lensBoundsAreLawful above;
     // restating it here would give one rule two definitions to drift between.
     expect(await page.evaluate((rootId) => {
       const text = document.querySelector<HTMLElement>(`[data-thought-text-id="${rootId}"]`);
@@ -224,6 +228,7 @@ for (const viewport of [
     await lens.locator("[data-node-action=set-aside]").click();
     await expect(page.locator(`[data-thought-id="${ROOT_ID}"]`)).toHaveAttribute("data-context-excluded", "true");
     await expect(page.locator("[data-node-action-lens]")).toHaveCount(0);
+    await expect(fog).toHaveCount(0);
     await rootText.hover({ force: true });
     await expect(lens.locator("[data-node-action=restore]")).toBeVisible();
     await lens.locator("[data-node-action=restore]").click();
@@ -244,7 +249,7 @@ for (const viewport of [
       await rootText.hover();
       await expect(lens).toBeVisible();
       await expect(lens).toHaveCSS("color", "rgb(243, 244, 241)");
-      expect(await lens.evaluate((element) => getComputedStyle(element, "::before").backdropFilter))
+      expect(await fog.evaluate((element) => getComputedStyle(element, "::before").backdropFilter))
         .toContain("blur(28px)");
       await page.locator('[data-chrome-control="fx"]').click();
       await expect(ruling).not.toHaveAttribute("data-active", "true");
@@ -286,12 +291,12 @@ test("the action fog becomes one system capsule in forced colors", async ({ page
   await page.locator(`[data-thought-id="${ROOT_ID}"] [data-thought-text-id]`).hover();
   const lens = page.locator("[data-node-action-lens]");
   await expect(lens).toBeVisible();
-  expect(await lens.evaluate((element) => {
+  expect(await page.locator("[data-node-action-fog]").evaluate((element) => {
     const style = getComputedStyle(element, "::before");
     return style.content !== "none" && style.borderTopWidth === "1px" && style.backdropFilter === "none";
   })).toBe(true);
   await expect(lens).toHaveCSS("animation-duration", "0.001s");
-  await expect(lens.getByRole("button")).toHaveCount(2);
+  await expect(lens.getByRole("button")).toHaveCount(actionCount);
 });
 
 test("the action lens is hoverable across its clear gap and yields to pan and chrome overlays", async ({ page }) => {
@@ -420,6 +425,10 @@ test("the action lens has one direct keyboard path and restores the thought focu
   await rootText.press("ArrowRight");
   await expect(rewriteMaterial).toBeFocused();
   await page.keyboard.press("ArrowRight");
+  if (!previewBranch) {
+    await expect(lens.locator("[data-node-action=under]")).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+  }
   await expect(setAside).toBeFocused();
   await page.keyboard.press("End");
   await expect(setAside).toBeFocused();
@@ -474,7 +483,7 @@ test.describe("coarse pointer action lens", () => {
     expect(await lens.evaluate((element) => {
       const rect = element.getBoundingClientRect();
       return { width: Math.round(rect.width), height: Math.round(rect.height) };
-    })).toEqual({ width: 126, height: 70 });
+    })).toEqual({ width: previewBranch ? 126 : 180, height: 70 });
     expect(await lens.locator("button").evaluateAll((buttons) => buttons.every((button) => {
       const rect = button.getBoundingClientRect();
       return Math.round(rect.width) === 48 && Math.round(rect.height) === 48;
@@ -523,7 +532,7 @@ test("the 2,000-node canvas still mounts one ruling and one delegated action len
   const next = page.locator('[data-thought-id="perf_thought_0001"] [data-thought-text-id]');
   await hoverExposedMaterial(page, first);
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
-  await expect(page.locator("[data-node-action-lens] button")).toHaveCount(2);
+  await expect(page.locator("[data-node-action-lens] button")).toHaveCount(actionCount);
   await expect(page.locator("[data-node-action-lens]")).toHaveAttribute("data-node-id", "perf_thought_0000");
   await hoverExposedMaterial(page, next);
   await expect(page.locator("[data-node-action-lens]")).toHaveCount(1);
@@ -531,12 +540,11 @@ test("the 2,000-node canvas still mounts one ruling and one delegated action len
 });
 
 /**
- * The glyphs rest on the first line by at most CORNER_GLYPH_DESCENT while the
- * field clears the paper inset, the rail and the guidance line entirely. Fog
- * is decorative overflow and yields at the separately measured corner.
+ * The original bounded corner contact is intentional. Only the corner targets
+ * overlap first-line ink; the full carrier still clears fixed paper chrome.
  */
 async function lensBoundsAreLawful(page: Page): Promise<boolean> {
-  return page.evaluate(({ rootId, descent }) => {
+  return page.evaluate(({ rootId, overlap }) => {
     const lens = document.querySelector<HTMLElement>("[data-node-action-lens]");
     const text = document.querySelector<HTMLElement>(`[data-thought-text-id="${rootId}"]`);
     const paper = document.querySelector<HTMLElement>(".matter-document");
@@ -546,7 +554,7 @@ async function lensBoundsAreLawful(page: Page): Promise<boolean> {
     const lensRect = lens.getBoundingClientRect();
     const paperRect = paper.getBoundingClientRect();
     // The placement rule measures the first line's ink, not the element box:
-    // comparing against the box would add the line's leading to the descent.
+    // comparing against the box would add the line's leading to the overlap.
     const range = document.createRange();
     range.selectNodeContents(text);
     const fragments = Array.from(range.getClientRects()).filter((rect) => rect.width > 0 && rect.height > 0);
@@ -564,21 +572,19 @@ async function lensBoundsAreLawful(page: Page): Promise<boolean> {
       return lensRect.left < rect.right && lensRect.right > rect.left &&
         lensRect.top < rect.bottom && lensRect.bottom > rect.top;
     };
-    // The bound belongs to the glyphs. The fog descends further by design; it
-    // is translucent and the text stays exact underneath.
-    const glyphBottom = Math.max(...Array.from(lens.querySelectorAll("button"))
+    const buttonBottom = Math.max(...Array.from(lens.querySelectorAll("button"))
       .map((button) => button.getBoundingClientRect().bottom));
-    const descentOntoMaterial = glyphBottom - inkTop;
+    const contact = buttonBottom - inkTop;
     return lensRect.left >= paperRect.left + 12 && lensRect.right <= paperRect.right - 12 &&
       lensRect.top >= paperRect.top + 12 && lensRect.bottom <= paperRect.bottom - 12 &&
       // Rounded: the ink measurement is sub-pixel and the bound is a design
       // limit, not a rasteriser guarantee.
-      Math.round(descentOntoMaterial) > 0 && Math.round(descentOntoMaterial) <= descent + 1 &&
+      Math.abs(contact - overlap) <= 1 &&
       Math.abs(lensRect.left + materialCornerX - inkLeft) <= 2 &&
       Math.abs(lensRect.top + materialCornerY - inkTop) <= 2 &&
       lensRect.bottom > inkTop &&
       !overlaps(rail) && !overlaps(guidance);
-  }, { rootId: ROOT_ID, descent: CORNER_GLYPH_DESCENT });
+  }, { rootId: ROOT_ID, overlap: CORNER_ACTION_OVERLAP });
 }
 
 async function rulingCameraReceipt(page: Page) {

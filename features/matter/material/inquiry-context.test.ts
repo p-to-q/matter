@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { PROTOCOL_VERSION, type ThoughtTree } from "../tree/model";
+import { PROTOCOL_VERSION, type ThoughtNode, type ThoughtTree } from "../tree/model";
 import { inquiryContextWeight, projectInquiryContext } from "./inquiry-context";
-import { projectActiveWorkingContext } from "./working-context";
+import { projectActiveViewContext, projectWorkingContext } from "./working-context";
 
 describe("inquiry context", () => {
   it("uses the full virtual tree when no lasso selection exists", () => {
@@ -117,5 +117,13 @@ function node(id: string, parentId: string | null, children: string[], text = id
 }
 
 function working(tree: ThoughtTree, heldAsideNodeIds?: ReadonlySet<string>) {
-  return projectActiveWorkingContext(tree, heldAsideNodeIds);
+  const view: { node: ThoughtNode; depth: number }[] = [];
+  const visit = (nodeId: string, depth: number): void => {
+    const current = tree.nodes[nodeId];
+    if (current === undefined) return;
+    if (current.role !== "document-root") view.push({ node: current, depth });
+    for (const childId of current.children) visit(childId, current.role === "document-root" ? 0 : depth + 1);
+  };
+  if (tree.rootId !== null) visit(tree.rootId, 0);
+  return projectActiveViewContext(view, projectWorkingContext(tree, heldAsideNodeIds).activeNodeIds);
 }

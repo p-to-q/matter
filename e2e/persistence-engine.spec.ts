@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { fixtureUiCopy } from "./matter-ui-copy";
+import { addChildUnder, prewarmAdmissionRoutes, underMark } from "./under-driver";
 
 // The storage engine is one lazy chunk behind a synchronous facade. These
 // journeys hold its fetch back, or fail it, and prove what the paper tells
@@ -30,7 +31,7 @@ async function routeEngineChunk(
 test("a cold engine fetch on a repeat visit shows stored material one round trip later, never lost", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openSaved(page);
-  const childId = await commitBranch(page);
+  const childId = await commitUnderChild(page);
   const storedRevision = await page.evaluate(readStoredRevision);
 
   // A repeat visit whose HTTP cache is cold: the engine chunk crosses the
@@ -55,8 +56,10 @@ test("a cold engine fetch on a repeat visit shows stored material one round trip
   const sidebar = page.locator("aside.material-files");
   await expect(sidebar).toHaveAttribute("data-persistence-phase", "loading");
   await expect(page.locator("main.matter-shell")).toHaveAttribute("data-interaction-pending", "true");
-  await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }))
+  await expect(page.getByRole("button", { name: fixtureUiCopy.toolRail.canvasPan, exact: true }))
     .toBeDisabled();
+  // Nothing durable can be started: no passage is selectable, so no Under mark mounts.
+  await expect(underMark(page)).toHaveCount(0);
   await page.waitForTimeout(HELD_ENGINE_MS);
   expect(await page.evaluate(readStoredRevision)).toBe(storedRevision);
 
@@ -71,7 +74,7 @@ test("a cold engine fetch on a repeat visit shows stored material one round trip
 test("an engine that cannot load guards the person's material and meets the stored row as a load-window conflict", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await openSaved(page);
-  const storedChildId = await commitBranch(page);
+  const storedChildId = await commitUnderChild(page);
   const storedRevision = await page.evaluate(readStoredRevision);
 
   let failEngine = true;
@@ -98,7 +101,7 @@ test("an engine that cannot load guards the person's material and meets the stor
 
   // Material the person makes now is guarded on exit although no controller
   // has received it yet, and nothing reaches the stored row.
-  const heldChildId = await commitBranch(page, false);
+  const heldChildId = await commitUnderChild(page, false);
   expect(await page.evaluate(exitIsGuarded)).toBe(true);
   expect(await page.evaluate(readStoredRevision)).toBe(storedRevision);
 
@@ -124,18 +127,16 @@ test("an engine that cannot load guards the person's material and meets the stor
 });
 
 async function openSaved(page: Page): Promise<void> {
+  await prewarmAdmissionRoutes(page);
   await page.goto("/matter");
   await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
   await expect(page.locator("aside.material-files")).toHaveAttribute("data-persistence-phase", "saved");
 }
 
-async function commitBranch(page: Page, awaitStored = true): Promise<string> {
-  const before = await thoughtIds(page);
-  await page.locator(`[data-thought-id="${rootId}"]`).locator("[data-thought-text-id]").click();
-  await page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
-  await expect.poll(async () => (await thoughtIds(page)).length).toBeGreaterThan(before.length);
-  const childId = (await thoughtIds(page)).find((id) => !before.includes(id));
-  if (childId === undefined) throw new Error("the branch was not created");
+async function commitUnderChild(page: Page, awaitStored = true): Promise<string> {
+  // The child is spoken under the root through the Under mark. Its repair is a
+  // second commit, so the history is at rest before any assertion follows.
+  const childId = await addChildUnder(page, rootId);
   if (awaitStored) {
     await expect(page.locator("aside.material-files")).toHaveAttribute("data-persistence-phase", "saved");
     await expect.poll(async () => {
@@ -144,12 +145,6 @@ async function commitBranch(page: Page, awaitStored = true): Promise<string> {
     }).toBe(true);
   }
   return childId;
-}
-
-async function thoughtIds(page: Page): Promise<string[]> {
-  return page.locator("[data-thought-id]").evaluateAll((nodes) =>
-    nodes.map((node) => node.getAttribute("data-thought-id")).filter((id): id is string => id !== null),
-  );
 }
 
 /** Whether leaving now would ask first; the exit guard cancels `beforeunload`. */

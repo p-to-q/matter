@@ -1,5 +1,27 @@
 # Preview deployment-owner handoff
 
+## Current observation — 2026-10-16
+
+Production health identifies Preview.64. Its material turns report
+`user-configurable`; anonymous `provider-session/4` reports `available: true`
+and `credentialPresent: false`. These configuration reads supersede the old
+unavailable status below, but do not prove saving a lease, a real model action,
+exact deployed source identity, the strict pool gate or immutable publication.
+Issue #104 remains open pending an operator acceptance receipt; do not infer a
+new missing-key action solely from its older description. #68 is closed;
+remaining live-model and spend controls are tracked in #34 and #52.
+
+The integration candidate remains unreleased and the image gate remains off.
+See [`release-readiness.md`](release-readiness.md) for current gates. Deployment
+and credential ownership stay with the existing owner; no token or raw
+configuration belongs here.
+
+## Historical status and operator procedure
+
+The following status paragraphs describe their dated Preview.63/57 receipts.
+Keep their operational procedure, but use the current observation above to
+decide what is still missing rather than repeating a completed environment step.
+
 Status: the public origin identifies itself as Preview.63 through the automatic
 GitHub-linked Production path after PRs #121 and #122 reached `main` at
 `c691cc73f76c98ecf5cf83d425898d1b19023300`. Exact merged-main CI run
@@ -396,11 +418,18 @@ without its environment and SHA is insufficient.
    [`deployment-handoff.md`](deployment-handoff.md#required-vercel-configuration).
 5. Do not set `MATTER_TRANSFORM_ADAPTER=live` or `MATTER_TEXT_SWAP_ADAPTER=live`.
    Their product and promotion gates remain closed.
+6. Image generation is gated by `MATTER_IMAGE_ADAPTER` (`live | fixture | off`)
+   and ships `off` in `vercel.json`; `npm run check:vercel` fails if that value
+   changes. It has no control in the product. Health reports it as
+   `imageGeneration`, and every deployment profile of `check:deployment`
+   requires `unavailable`. Health reports configuration, not that an image
+   relay answered. Do not set `MATTER_IMAGE_ADAPTER=live` in any environment
+   until the distributed edge rule below exists.
 
 ## External controls required before expanding model authority
 
 1. Add distributed edge rate rules for `/api/label`, `/api/repair`,
-   `/api/inquiry`, `/api/transcribe`, and the external-probe lane at
+   `/api/inquiry`, `/api/image`, `/api/transcribe`, and the external-probe lane at
    `POST /api/provider-session`. After the next-source candidate is deployed,
    its source-side ceilings are a per-warm-instance first line of defence, not a
    distributed promise:
@@ -410,6 +439,7 @@ without its environment and SHA is insufficient.
    | `/api/label` | 48 | 6 |
    | `/api/repair` | 12 | 4 |
    | `/api/inquiry` | 12 | 4 |
+   | `/api/image` | 3 | 2 |
    | `/api/transcribe` | 12 | 3 |
    | `POST /api/provider-session` | 8 | 3 |
 
@@ -421,6 +451,12 @@ without its environment and SHA is insufficient.
    DELETE must preserve both `Set-Cookie` headers through the edge: bearer expiry
    and the independent removal-generation rotation. Dropping or coalescing either
    header breaks the cross-tab late-save ordering proof.
+
+   `/api/image` differs from the other rows in one way that matters: each
+   generation is paid for by the platform and costs real money, not a text
+   call's worth. Its source-side numbers are per-instance only and are not a
+   spend control. Under issue #34 this route needs its edge rule and a provider
+   budget before the gate is ever opened, and it stays `off` until both exist.
 2. Set a provider spend cap and delivery channel for budget alerts. Limit the
    key to this deployment and rotate any key that may have left the encrypted
    deployment store.

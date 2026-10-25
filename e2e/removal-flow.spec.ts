@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { selectThoughtThroughMaterialIndex } from "./material-index-driver";
 import { fixtureUiCopy } from "./matter-ui-copy";
+import { UNDER_REPAIRED_TRANSCRIPT, addChildUnder } from "./under-driver";
 
 const rootId = "thought_fixture_root";
 
@@ -13,17 +14,8 @@ for (const viewport of [
     await page.goto("/matter");
     await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
 
-    const root = page.locator(`[data-thought-id="${rootId}"]`);
-    await root.locator("[data-thought-text-id]").click();
-    const before = await page.locator("[data-thought-id]").evaluateAll((nodes) =>
-      nodes.map((node) => node.getAttribute("data-thought-id")),
-    );
-    await page.getByRole("button", { name: fixtureUiCopy.toolRail.extendRelatedThought, exact: true }).click();
-    const after = await page.locator("[data-thought-id]").evaluateAll((nodes) =>
-      nodes.map((node) => node.getAttribute("data-thought-id")),
-    );
-    const childId = after.find((nodeId) => nodeId !== null && !before.includes(nodeId));
-    if (childId === undefined || childId === null) throw new Error("fixture child was not created");
+    // The child is spoken under the root through the Under mark.
+    const childId = await addChildUnder(page, rootId);
     const child = page.locator(`[data-thought-id="${childId}"]`);
     await selectThoughtThroughMaterialIndex(page, childId);
     await expect(child).toHaveAttribute("data-selected", "true");
@@ -32,5 +24,6 @@ for (const viewport of [
     await expect(page.locator(`[data-thought-id="${childId}"]`)).toHaveCount(0);
     await page.getByRole("button", { name: fixtureUiCopy.toolRail.undoLastChange, exact: true }).click();
     await expect(page.locator(`[data-thought-id="${childId}"]`)).toHaveCount(1);
+    await expect(child).toContainText(UNDER_REPAIRED_TRANSCRIPT);
   });
 }

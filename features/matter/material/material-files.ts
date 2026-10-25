@@ -1,3 +1,4 @@
+import { renderSelectionOutline } from "./selection-outline";
 import type { ThoughtNode, ThoughtTree } from "../tree/model";
 import { isDocumentRoot } from "../tree/document-root";
 import type { NavigationState } from "../runtime/navigation";
@@ -28,7 +29,7 @@ export type MaterialFileLabel = Readonly<{
 }>;
 
 export type MaterialSelectionResult =
-  | Readonly<{ ok: true; text: string; nodeIds: readonly string[] }>
+  | Readonly<{ ok: true; text: string; html: string; nodeIds: readonly string[] }>
   | Readonly<{ ok: false; error: "EMPTY_SELECTION" | "STALE_SELECTION" }>;
 
 const ENGLISH_STOPWORDS = new Set([
@@ -412,7 +413,11 @@ function materializeRows(
   return Object.freeze(entries);
 }
 
-/** Copies exact node text in authored preorder; labels and metadata stay out. */
+/**
+ * Copies exact node text in authored preorder; labels and metadata stay out.
+ * Passages that contain one another carry that structure as a plain outline
+ * (and a nested list for rich editors); unrelated passages stay the literal join.
+ */
 export function serializeMaterialSelection(
   tree: ThoughtTree,
   selectedNodeIds: ReadonlySet<string>,
@@ -436,11 +441,33 @@ export function serializeMaterialSelection(
   if (ordered.length !== selectedNodeIds.size) {
     return Object.freeze({ ok: false, error: "STALE_SELECTION" });
   }
+  const outline = renderSelectionOutline(ordered.map((node) => ({
+    text: node.text,
+    depth: relativeSelectionDepth(tree, node.id, selectedNodeIds),
+  })));
   return Object.freeze({
     ok: true,
-    text: ordered.map((node) => node.text).join("\n\n"),
+    text: outline.text,
+    html: outline.html,
     nodeIds: Object.freeze(ordered.map((node) => node.id)),
   });
+}
+
+/** How many selected passages sit above this one; gaps in the tree do not count. */
+function relativeSelectionDepth(
+  tree: ThoughtTree,
+  nodeId: string,
+  selectedNodeIds: ReadonlySet<string>,
+): number {
+  let depth = 0;
+  const seen = new Set<string>([nodeId]);
+  let current = ownNode(tree, nodeId)?.parentId ?? null;
+  while (current !== null && !seen.has(current)) {
+    seen.add(current);
+    if (selectedNodeIds.has(current)) depth += 1;
+    current = ownNode(tree, current)?.parentId ?? null;
+  }
+  return depth;
 }
 
 function splitClauses(text: string): string[] {

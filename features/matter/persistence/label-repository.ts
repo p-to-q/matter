@@ -263,3 +263,5 @@ function storageFailure(error: unknown): LabelWriteReceipt {
 function isStorageFull(error: unknown): boolean {
   return error instanceof DOMException && error.name === "QuotaExceededError";
 }
+
+Object.defineProperty(createIndexedDbLabelRepository, "matterCapability", { value: "matter-capability:labels" });

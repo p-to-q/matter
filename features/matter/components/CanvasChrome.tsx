@@ -1441,6 +1441,11 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     if (!canAsk || submittingRef.current) return;
     const question = inquiryText(state).trim();
     if (question.length === 0) return;
+    const exchangeId = createInquiryRequestId();
+    if (exchangeId === null) {
+      dispatch({ type: "ask-refused", reason: "UNREACHABLE" });
+      return;
+    }
     // React state updates are asynchronous. This ref closes the small window
     // where a double-click or repeated Enter could otherwise submit the same
     // transient question twice before the disabled button is rendered.
@@ -1448,7 +1453,6 @@ const InquiryBubble = forwardRef<InquiryBubbleHandle, {
     setSubmissionPending(true);
     followThreadRef.current = true;
     const answerId = pendingAnswerId(state);
-    const exchangeId = createInquiryRequestId();
     const askedAt = new Date().toISOString();
     dispatch({ type: "ask" });
     pendingSubmissionRef.current = { answerId, question };

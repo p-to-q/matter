@@ -28,6 +28,8 @@ import {
   WIKI_SCORING_VERSION,
   WIKI_STARTER_LEXEMES,
   isWikiStarterLexemeIdentity,
+  isHumanWikiLexeme,
+  WIKI_PRODUCER_FAMILIES,
   type WikiAliasDescriptor,
   type WikiAliasEvidenceAggregate,
   type WikiEvent,
@@ -87,6 +89,8 @@ import {
   transitionSuccess as success,
   type WikiCommit,
 } from "./wiki-transition";
+import { DEFAULT_WIKI_PREFERENCES, wikiNearSoundEnabled } from "./wiki-preferences";
+import { EMPTY_WIKI_OUTCOME_COUNTERS } from "./wiki-diagnostics";
 
 /**
  * Confirmed authority retains its existing maximal score receipt. Provisional
@@ -133,6 +137,8 @@ export function createEmptyWikiState(): WikiState {
     lexemeTombstones: [],
     revertStrikes: [],
     settledOccurrences: [],
+    ruleMaturity: [], outcomeCounters: EMPTY_WIKI_OUTCOME_COUNTERS,
+    preferences: DEFAULT_WIKI_PREFERENCES,
   });
 }
 
@@ -144,7 +150,7 @@ export function createInitialWikiState(): WikiState {
     lexemes: WIKI_STARTER_LEXEMES.map((entry, index) => Object.freeze({
       id: index + 1,
       ...entry,
-      provenance: "aggregate-evidence" as const,
+      provenance: "starter" as const,
       confirmedAtRevision: null,
     })),
     authorities: P_TO_Q_FORMS.map((form) => Object.freeze({
@@ -193,7 +199,7 @@ export function ensureWikiStarterLexemes(state: WikiState): WikiTransitionResult
     changed = true;
   } else if (safeLegacyPToQ && currentPToQ === undefined && !legacyPToQRemoved) {
     lexemes = Object.freeze(lexemes.map((entry) => entry.id === legacyPToQ.id
-      ? Object.freeze({ ...entry, locale: "zh-CN" as const })
+      ? Object.freeze({ ...entry, locale: "zh-CN" as const, provenance: "starter" as const })
       : entry));
     changed = true;
   }
@@ -220,7 +226,7 @@ export function ensureWikiStarterLexemes(state: WikiState): WikiTransitionResult
     lexemes = Object.freeze([...lexemes, Object.freeze({
       id: nextLexemeId,
       ...starter,
-      provenance: "aggregate-evidence" as const,
+      provenance: "starter" as const,
       confirmedAtRevision: null,
     })]);
     nextLexemeId += 1;
@@ -269,7 +275,7 @@ function isAutomaticPToQStarter(state: WikiState, lexeme: WikiLexeme): boolean {
   if (
     lexeme.canonical !== P_TO_Q_CANONICAL ||
     lexeme.scope !== "both" ||
-    lexeme.provenance !== "aggregate-evidence" ||
+    isHumanWikiLexeme(lexeme) ||
     lexeme.confirmedAtRevision !== null ||
     state.termEvidence.some((entry) => lexemeKey(entry) === lexemeKey(lexeme)) ||
     state.aliasEvidence.some((entry) => entry.lexemeId === lexeme.id) ||
@@ -303,7 +309,7 @@ function isPristineLegacyStarterState(state: WikiState): boolean {
       entry.locale === "en-US" &&
       (index === 0 || entry.canonical === tail[index - 1]) &&
       entry.scope === "both" &&
-      entry.provenance === "human-confirmed" &&
+      isHumanWikiLexeme(entry) &&
       entry.confirmedAtRevision === 0);
 }
 
@@ -318,6 +324,16 @@ export function applyWikiEvent(state: WikiState, event: WikiEvent): WikiTransiti
   if (event.type === "replace-rule") return replaceRule(state, event);
   if (event.type === "create-lexeme") return createLexeme(state, event);
   if (event.type === "rename-lexeme") return renameLexeme(state, event);
+  if (event.type === "set-near-sound") {
+    if (wikiNearSoundEnabled(state.preferences, event.locale) === event.enabled) return success(state, false);
+    if (state.revision === Number.MAX_SAFE_INTEGER) return failure("BOUND_EXCEEDED", "The Wiki revision bound is exceeded.");
+    const nearSound = [...state.preferences.nearSound.filter((entry) => entry.locale !== event.locale),
+      Object.freeze({ locale: event.locale, enabled: event.enabled })]
+      .sort((left, right) => left.locale < right.locale ? -1 : 1);
+    return commitAtRevision(state, state.revision + 1, {
+      preferences: Object.freeze({ ...state.preferences, nearSound: Object.freeze(nearSound) }),
+    });
+  }
   return removeLexeme(state, event);
 }
 
@@ -502,7 +518,8 @@ export function projectApplicableWikiRules(
     const lexeme = lexemes.get(aggregate.lexemeId);
     if (lexeme === undefined || !scopeIncludes(lexeme.scope, aggregate.channel)) continue;
     const termEvidence = termEvidenceByIdentity.get(lexemeKey(lexeme));
-    if (lexeme.provenance === "aggregate-evidence" &&
+    if (!wikiNearSoundEnabled(state.preferences, lexeme.locale)) continue;
+    if (!isHumanWikiLexeme(lexeme) &&
         !isWikiStarterLexemeIdentity(lexeme) &&
         !isQualifiedCollectedWikiTermEvidence(termEvidence, qualifiedTermProducers)) continue;
     if (canonicalKeys.has(lexemeKey({
@@ -616,8 +633,8 @@ function observeEvidence(
     const existingLexeme = findLexeme(working, event);
     const index = working.termEvidence.findIndex((entry) =>
       lexemeKey(entry) === lexemeKey(event));
-    if (existingLexeme?.provenance === "human-confirmed" ||
-        (index === -1 && existingLexeme?.provenance === "aggregate-evidence" &&
+    if ((existingLexeme !== undefined && isHumanWikiLexeme(existingLexeme)) ||
+        (index === -1 && existingLexeme !== undefined && !isHumanWikiLexeme(existingLexeme) &&
           isWikiStarterLexemeIdentity(existingLexeme))) {
       return success(state, false);
     }
@@ -654,14 +671,14 @@ function observeEvidence(
       // A producer release change can return a collected term to candidate; its
       // automatic lexeme leaves with it exactly as aging would remove it.
       const lexemes = existingLexeme !== undefined &&
-          existingLexeme.provenance === "aggregate-evidence" &&
+          !isHumanWikiLexeme(existingLexeme) &&
           !isWikiStarterLexemeIdentity(existingLexeme) &&
           !lexemesRetainedByDependents(working).has(existingLexeme.id)
         ? working.lexemes.filter((entry) => entry.id !== existingLexeme.id)
         : working.lexemes;
       return commit(working, revision, { termEvidence, lexemes });
     }
-    const ensured = ensureLexeme(working, event, "aggregate-evidence", revision);
+    const ensured = ensureLexeme(working, event, "collected", revision);
     if (!ensured.ok) return ensured.result;
     return commit(working, revision, {
       lexemes: ensured.lexemes,
@@ -671,7 +688,9 @@ function observeEvidence(
   }
 
   const lexeme = findLexeme(working, event);
-  if (lexeme === undefined || !scopeIncludes(lexeme.scope, event.channel)) {
+  if (lexeme === undefined || !scopeIncludes(lexeme.scope, event.channel) ||
+      !wikiNearSoundEnabled(working.preferences, event.locale) ||
+      !canWriteRelation(working, event, lexeme.id)) {
     return success(state, false);
   }
   const descriptor = aliasDescriptor(event, lexeme.id);
@@ -762,12 +781,16 @@ function isWikiLedgerTick(value: unknown): value is WikiLedgerTick {
 
 function isWikiEvidenceOpportunity(value: unknown): value is WikiEvidenceOpportunity {
   return isPlainRecord(value) &&
-    hasOnlyKeys(value, ["locale", "channel", "scripts"]) &&
+    hasOnlyKeys(value, ["locale", "channel", "scripts", "producerFamilies"]) &&
     typeof value.locale === "string" && isMatterLocale(value.locale) &&
     (value.channel === "spoken" || value.channel === "written") &&
     Array.isArray(value.scripts) &&
     value.scripts.every(isWikiScriptClass) &&
-    new Set(value.scripts).size === value.scripts.length;
+    new Set(value.scripts).size === value.scripts.length &&
+    Array.isArray(value.producerFamilies) && value.producerFamilies.length <= WIKI_PRODUCER_FAMILIES.length &&
+    value.producerFamilies.every((family: unknown) =>
+      WIKI_PRODUCER_FAMILIES.includes(family as (typeof WIKI_PRODUCER_FAMILIES)[number])) &&
+    new Set(value.producerFamilies).size === value.producerFamilies.length;
 }
 
 function observationIdentity(event: WikiObserveEvidenceEvent): string {
@@ -801,9 +824,10 @@ function confirmRule(
   event: Extract<WikiEvent, { type: "confirm-rule" }>,
 ): WikiTransitionResult {
   const revision = state.revision + 1;
-  const ensured = ensureLexeme(state, event, "human-confirmed", revision);
+  const ensured = ensureLexeme(state, event, "learned", revision);
   if (!ensured.ok) return ensured.result;
-  if (hasCanonicalCollision(ensured.lexemes, event.locale, event.form, ensured.lexeme.id)) {
+  if (hasCanonicalCollision(ensured.lexemes, event.locale, event.form, ensured.lexeme.id) ||
+      !canWriteRelation(state, event, ensured.lexeme.id)) {
     return failure("INVALID_EVENT", "A canonical Wiki lexeme already owns this visible form.");
   }
   const target = aliasDescriptor(event, ensured.lexeme.id);
@@ -892,14 +916,16 @@ function replaceRule(
       event.before.boundary === event.after.boundary) return success(state, false);
 
   const revision = state.revision + 1;
-  const ensured = ensureLexeme(state, event.after, "human-confirmed", revision);
+  const ensured = ensureLexeme(state, event.after, "learned", revision);
   if (!ensured.ok) return ensured.result;
   if (hasCanonicalCollision(
     ensured.lexemes,
     event.after.locale,
     event.after.form,
     ensured.lexeme.id,
-  )) return failure("INVALID_EVENT", "A canonical Wiki lexeme already owns this visible form.");
+  ) || !canWriteRelation(state, event.after, ensured.lexeme.id)) {
+    return failure("INVALID_EVENT", "A canonical Wiki lexeme or relation already owns this visible form.");
+  }
   const after = aliasDescriptor(event.after, ensured.lexeme.id);
   const lexemesById = new Map(ensured.lexemes.map((lexeme) => [lexeme.id, lexeme]));
   const afterAlias = storedAliasKey(after, event.after.locale);
@@ -931,7 +957,7 @@ function createLexeme(
   event: Extract<WikiEvent, { type: "create-lexeme" }>,
 ): WikiTransitionResult {
   const revision = state.revision + 1;
-  const ensured = ensureLexeme(state, event, "human-confirmed", revision);
+  const ensured = ensureLexeme(state, event, "manual", revision);
   const lexemeTombstones = removeLexemeTombstone(state.lexemeTombstones, event);
   if (!ensured.ok) return ensured.result;
   if (!ensured.changed && lexemeTombstones === state.lexemeTombstones) {
@@ -962,21 +988,16 @@ function renameLexeme(
   const lexeme = state.lexemes.find((entry) => entry.id === event.lexemeId);
   if (lexeme === undefined) return failure("INVALID_EVENT", "The Wiki lexeme no longer exists.");
   if (lexeme.locale === event.locale && lexeme.canonical === event.canonical &&
-      lexeme.scope === event.scope && lexeme.provenance === "human-confirmed") {
+      lexeme.scope === event.scope && lexeme.provenance === "manual") {
     return success(state, false);
   }
-  if (lexeme.provenance !== "human-confirmed" && !hasHumanLexemeCapacity(state)) {
+  if (!isHumanWikiLexeme(lexeme) && !hasHumanLexemeCapacity(state)) {
     return humanLexemeBoundExceeded();
   }
   if (lexeme.locale === event.locale && lexeme.canonical === event.canonical) {
     const revision = state.revision + 1;
     const lexemes = state.lexemes.map((entry) => entry.id === lexeme.id
-      ? Object.freeze({
-          ...entry,
-          scope: event.scope,
-          provenance: "human-confirmed" as const,
-          confirmedAtRevision: revision,
-        })
+      ? manualLexeme(entry, { scope: event.scope, confirmedAtRevision: revision })
       : entry);
     // Scope is an applicability preference, not ownership of the stored
     // relations. Changing it must remain reversible and cannot tombstone or
@@ -1006,12 +1027,10 @@ function renameLexeme(
   }
   const revision = state.revision + 1;
   const lexemes = state.lexemes.map((entry) => entry.id === lexeme.id
-    ? Object.freeze({
-        ...entry,
+    ? manualLexeme(entry, {
         locale: event.locale,
         canonical: event.canonical,
         scope: event.scope,
-        provenance: "human-confirmed" as const,
         confirmedAtRevision: revision,
       })
     : entry);
@@ -1130,30 +1149,29 @@ function ensureLexeme(
   identity: Pick<WikiRuleDescriptor, "locale" | "canonical"> &
     Partial<Pick<WikiRuleDescriptor, "channel">> &
     Readonly<{ scope?: WikiLexemeScope }>,
-  provenance: WikiLexeme["provenance"],
+  provenance: "manual" | "learned" | "collected",
   revision: number,
 ): EnsureLexemeResult {
   const requestedScope = identity.scope ?? identity.channel ?? "both";
-  const termEvidence = provenance === "human-confirmed"
+  const human = provenance !== "collected";
+  const termEvidence = human
     ? state.termEvidence.filter((entry) => lexemeKey(entry) !== lexemeKey(identity))
     : state.termEvidence;
   const existing = findLexeme(state, identity);
   if (existing !== undefined) {
     if (
-      provenance === "human-confirmed" &&
-      existing.provenance !== "human-confirmed" &&
+      human && !isHumanWikiLexeme(existing) &&
       !hasHumanLexemeCapacity(state)
     ) {
       return { ok: false, result: humanLexemeBoundExceeded() };
     }
-    const scope = existing.provenance === "human-confirmed" && provenance !== "human-confirmed"
+    const scope = isHumanWikiLexeme(existing) && !human
       ? existing.scope
       : identity.scope !== undefined
         ? requestedScope
         : mergeScopes(existing.scope, requestedScope);
     if (
-      provenance !== "human-confirmed" &&
-      existing.provenance === "human-confirmed" &&
+      !human && isHumanWikiLexeme(existing) &&
       scope === existing.scope
     ) {
       return { ok: true, lexeme: existing, lexemes: state.lexemes,
@@ -1162,13 +1180,9 @@ function ensureLexeme(
     const promoted = Object.freeze({
       ...existing,
       scope,
-      provenance: provenance === "human-confirmed"
-        ? "human-confirmed" as const
-        : existing.provenance,
-      confirmedAtRevision: provenance === "human-confirmed"
-        ? revision
-        : existing.confirmedAtRevision,
-    });
+      provenance: human && !isHumanWikiLexeme(existing) ? provenance : existing.provenance,
+      confirmedAtRevision: human && !isHumanWikiLexeme(existing) ? revision : existing.confirmedAtRevision,
+    }) as WikiLexeme;
     if (promoted.scope === existing.scope && promoted.provenance === existing.provenance) {
       return { ok: true, lexeme: existing, lexemes: state.lexemes,
         termEvidence, nextLexemeId: state.nextLexemeId, changed: false };
@@ -1183,7 +1197,7 @@ function ensureLexeme(
       changed: true,
     };
   }
-  if (provenance === "human-confirmed" && !hasHumanLexemeCapacity(state)) {
+  if (human && !hasHumanLexemeCapacity(state)) {
     return { ok: false, result: humanLexemeBoundExceeded() };
   }
   if (state.lexemes.length >= MAX_WIKI_LEXEMES || state.nextLexemeId === Number.MAX_SAFE_INTEGER) {
@@ -1195,7 +1209,7 @@ function ensureLexeme(
     canonical: identity.canonical,
     scope: requestedScope,
     provenance,
-    confirmedAtRevision: provenance === "human-confirmed" ? revision : null,
+    confirmedAtRevision: human ? revision : null,
   });
   return {
     ok: true,
@@ -1207,10 +1221,16 @@ function ensureLexeme(
   };
 }
 
+function manualLexeme(entry: WikiLexeme, replacement: Partial<WikiLexeme>): WikiLexeme {
+  return Object.freeze({ id: entry.id, locale: entry.locale, canonical: entry.canonical,
+    scope: entry.scope, confirmedAtRevision: entry.confirmedAtRevision,
+    ...replacement, provenance: "manual" }) as WikiLexeme;
+}
+
 function hasHumanLexemeCapacity(state: WikiState): boolean {
   let confirmed = 0;
   for (const lexeme of state.lexemes) {
-    if (lexeme.provenance !== "human-confirmed") continue;
+    if (!isHumanWikiLexeme(lexeme)) continue;
     confirmed += 1;
     if (confirmed >= MAX_WIKI_HUMAN_CONFIRMED_LEXEMES) return false;
   }
@@ -1229,6 +1249,31 @@ function hasCanonicalCollision(
 ): boolean {
   return lexemes.some((entry) =>
     entry.id !== targetLexemeId && entry.locale === locale && entry.canonical === form);
+}
+
+/** New edges may not shadow canonical identity or close a legacy relation path.
+ * Old rows remain readable; this is a write-time constraint, not a migration. */
+function canWriteRelation(state: WikiState, rule: WikiRuleDescriptor, targetId: number): boolean {
+  if (rule.form === rule.canonical || hasCanonicalCollision(state.lexemes, rule.locale, rule.form, targetId)) return false;
+  const lexemes = new Map(state.lexemes.map((entry) => [entry.id, entry]));
+  const edges = new Map<string, Set<string>>();
+  for (const entry of [...state.authorities, ...state.aliasEvidence]) {
+    const target = lexemes.get(entry.lexemeId);
+    if (target?.locale !== rule.locale || entry.channel !== rule.channel) continue;
+    const destinations = edges.get(entry.form) ?? new Set<string>();
+    destinations.add(target.canonical);
+    edges.set(entry.form, destinations);
+  }
+  const pending = [rule.canonical];
+  const seen = new Set<string>();
+  while (pending.length !== 0) {
+    const form = pending.pop()!;
+    if (form === rule.form) return false;
+    if (seen.has(form)) continue;
+    seen.add(form);
+    for (const next of edges.get(form) ?? []) pending.push(next);
+  }
+  return true;
 }
 
 function hasLexemeTombstone(
@@ -1341,6 +1386,9 @@ function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[])
 }
 
 function isWikiEvent(event: WikiEvent): boolean {
+  if (event.type === "set-near-sound") {
+    return isMatterLocale(event.locale) && typeof event.enabled === "boolean";
+  }
   if (event.type === "replace-rule") {
     return isWikiDescriptor(event.before) && isWikiDescriptor(event.after);
   }

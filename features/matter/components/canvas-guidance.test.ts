@@ -56,6 +56,33 @@ function attempt(state: AdmissionAttemptPayload): AdmissionAttempt {
 }
 
 describe("canvas guidance projection", () => {
+  it("offers a changed-artifact hint only on otherwise idle, unselected material", () => {
+    const changed = projectCanvasGuidance(input({ deploymentChanged: true }));
+    expect(changed).toEqual({ id: "matter-changed", kind: "recovery", text: "Matter changed. Reload in Archive." });
+    for (const { value: language } of CANVAS_LANGUAGE_OPTIONS) {
+      const localized = localizeCanvasGuidance(changed, language);
+      expect(localized.text.length).toBeGreaterThan(0);
+      if (language === "en-US" || language.startsWith("zh")) {
+        expect(localized.text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+      }
+      if (language !== "en-US") expect(localized.text).not.toBe(changed.text);
+    }
+    for (const overrides of [
+      { admission: attempt({ phase: "recording", startedAtMs: 1 }) },
+      { outcome: { owner: "rewrite", reason: "stale" } as const },
+      { expansion: { kind: "parked" } as const },
+      { rewrite: { kind: "parked" } as const },
+      { material: { kind: "empty" } as const },
+      { material: { kind: "focus" } as const },
+      { material: { kind: "full", selected: { folded: false } } as const },
+      { language: { kind: "lasso-ready" } as const },
+      { language: { kind: "lasso-drawing" } as const },
+      { language: { kind: "selected", stretch: { kind: "pending", amount: 1 } } as const },
+    ]) {
+      expect(projectCanvasGuidance(input({ deploymentChanged: true, ...overrides })).id).not.toBe("matter-changed");
+    }
+  });
+
   it("keeps every locale's guidance table complete instead of spreading another language", () => {
     const source = readFileSync(new URL("./canvas-guidance.ts", import.meta.url), "utf8");
     expect(source).not.toMatch(/Object\.freeze\(\{\s*\.\.\.GUIDANCE_COPY/u);
@@ -155,6 +182,38 @@ describe("canvas guidance projection", () => {
     expect(localizeOutcome(outcome, "zh-CN")).toBe("段落已变化，未恢复。");
     for (const language of ["zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
       expect(localizeOutcome(outcome, language)).not.toBe(localizeOutcome(outcome, "en-US"));
+    }
+  });
+
+  it("says a stale or stopped picture on the line, in every language and inside the narrow budget where one applies", () => {
+    const stale: MaterialOutcome = { owner: "picture", reason: "stale" };
+    const stopped: MaterialOutcome = { owner: "picture", reason: "stopped" };
+    const unavailable: MaterialOutcome = { owner: "picture", reason: "unavailable" };
+    expect(projectCanvasGuidance(input({ outcome: unavailable }))).toEqual({
+      id: "picture-unavailable", kind: "recovery", text: "Drawing unavailable. Nothing sent.",
+    });
+    expect(projectCanvasGuidance(input({ outcome: stale }))).toEqual({
+      id: "picture-stale",
+      kind: "recovery",
+      text: "Passage changed. Not drawn.",
+    });
+    expect(projectCanvasGuidance(input({ outcome: stopped }))).toEqual({
+      id: "picture-stopped",
+      kind: "recovery",
+      text: "Stopped. It may still count.",
+    });
+    expect(outcomeGuidanceId(stale)).toBe("picture-stale");
+    expect(outcomeGuidanceId(stopped)).toBe("picture-stopped");
+    for (const { value: language } of CANVAS_LANGUAGE_OPTIONS) {
+      for (const outcome of [stale, stopped, unavailable]) {
+        const localized = localizeOutcome(outcome, language);
+        // The narrow budget binds the English line and the Chinese ones, as for every other line.
+        if (language === "en-US" || language.startsWith("zh")) {
+          expect(localized.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+        }
+        if (language !== "en-US") expect(localized).not.toBe(localizeOutcome(outcome, "en-US"));
+      }
+      expect(localizeOutcome(stale, language)).not.toBe(localizeOutcome(stopped, language));
     }
   });
 
@@ -414,6 +473,7 @@ describe("canvas guidance projection", () => {
       "text-swap-stale": true,
       "wiki-unsaved": true,
       "wiki-passage-changed": true,
+      "matter-changed": true,
     }) as Array<Exclude<ReturnType<typeof projectCanvasGuidance>["id"], "canvas-zoom">>;
 
     for (const id of states) {

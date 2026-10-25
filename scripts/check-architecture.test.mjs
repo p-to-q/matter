@@ -6,6 +6,7 @@ import {
   findProblems,
   importsOf,
   layerOf,
+  PERSISTED_MATERIAL_MODULE,
 } from "./check-architecture.mjs";
 
 test("the repository holds its own shape", () => {
@@ -106,7 +107,7 @@ test("a check that cannot fail proves nothing", () => {
         ["features/matter/persistence/archive-transport.ts", ["features/matter/wiki/wiki-codec.ts"]],
         ["features/matter/wiki/wiki-codec.ts", []],
       ]),
-      expect: /Archive, snapshot, and history modules carry material only/u,
+      expect: /Archive, snapshot, history, and image-blob modules carry material only/u,
     },
     {
       why: "a snapshot codec that can name a Wiki type",
@@ -114,7 +115,16 @@ test("a check that cannot fail proves nothing", () => {
         ["features/matter/persistence/snapshot-codec.ts", ["features/matter/wiki/wiki-model.ts"]],
         ["features/matter/wiki/wiki-model.ts", []],
       ]),
-      expect: /Archive, snapshot, and history modules carry material only/u,
+      expect: /Archive, snapshot, history, and image-blob modules carry material only/u,
+    },
+    {
+      why: "the image blob repository reaching Wiki through the shared database schema",
+      graph: new Map([
+        ["features/matter/persistence/image-blob-repository.ts", ["features/matter/persistence/matter-database.ts"]],
+        ["features/matter/persistence/matter-database.ts", ["features/matter/wiki/wiki-model.ts"]],
+        ["features/matter/wiki/wiki-model.ts", []],
+      ]),
+      expect: /image-blob-repository\.ts reaches Wiki through .*matter-database\.ts -> features\/matter\/wiki\/wiki-model\.ts/u,
     },
     {
       why: "two transports importing each other",
@@ -168,11 +178,14 @@ test("the Wiki repository may still reach Wiki; only persisted material may not"
   );
   const graph = buildRepositoryGraph();
   const persisted = [...graph.keys()].filter((file) =>
-    /^features\/matter\/persistence\/(?:archive|snapshot|history)-/u.test(file) &&
-    !/\.test\./u.test(file));
+    PERSISTED_MATERIAL_MODULE.test(file) && !/\.test\./u.test(file));
   assert.ok(
     persisted.length >= 4,
     "the rule must see the archive, snapshot, and history modules it holds",
+  );
+  assert.ok(
+    persisted.includes("features/matter/persistence/image-blob-repository.ts"),
+    "the rule must hold the image blob repository",
   );
 });
 

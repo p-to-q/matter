@@ -88,6 +88,7 @@ async function composedSession() {
           locale: "en-US" as const,
           channel: "spoken" as const,
           scripts: Object.freeze(["latin" as const]),
+          producerFamilies: Object.freeze(["en-metaphone" as const]),
         }),
       }),
     }));

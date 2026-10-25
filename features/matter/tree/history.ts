@@ -7,6 +7,7 @@ import type {
   TreeCommand,
   TreeMutation,
 } from "./model";
+import { cloneImagePointer } from "./image-pointer";
 
 export type TreeHistoryEntry = {
   commandId: string;
@@ -455,6 +456,7 @@ function carriesNodeMemento(mutation: TreeMutation, nodeId: string): boolean {
     case "restore-subtree":
       return Object.hasOwn(mutation.detached.nodes, nodeId);
     case "replace-text":
+    case "replace-image":
     case "move-node":
       return mutation.nodeId === nodeId;
     case "replace-title":
@@ -474,7 +476,9 @@ function assertHistoryLimits(limits: TreeHistoryLimits): void {
 }
 
 function cloneThoughtNode(node: ThoughtNode): ThoughtNode {
-  return { ...node, children: [...node.children] };
+  const clone = { ...node, children: [...node.children] };
+  if (node.image !== undefined) clone.image = cloneImagePointer(node.image);
+  return clone;
 }
 
 function cloneDetachedSubtree(detached: DetachedSubtree): DetachedSubtree {
@@ -505,6 +509,12 @@ function cloneTreeMutation(mutation: TreeMutation): TreeMutation {
     case "replace-text":
     case "replace-title":
       return { ...mutation };
+    case "replace-image":
+      return {
+        ...mutation,
+        expectedImage: mutation.expectedImage === null ? null : cloneImagePointer(mutation.expectedImage),
+        image: mutation.image === null ? null : cloneImagePointer(mutation.image),
+      };
     case "move-node":
       return {
         ...mutation,

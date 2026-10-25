@@ -404,12 +404,12 @@ test("capture the Matter launch master", async ({ context, page }) => {
 
   await page.screencast.start({
     path: rawVideoPath,
-    // 1600x900 JPEG frames at 95 can outpace Playwright's single-threaded VP8
+    // 1600x900 JPEG frames can outpace Playwright's single-threaded VP8
     // writer and turn a 68-second take into minutes of interaction lag. The
     // moving leaf field plus four authored branches makes that pressure real;
     // 58 keeps the recorder clock coupled to interaction time on the moving
-    // leaf scene. Final clarity comes from the 1600x900 source, a mild 0.9x
-    // downscale, and CRF 18 slow H.264 rather than an overloaded frame queue.
+    // leaf scene. Final clarity comes from the 1600x900 source and CRF 18 slow
+    // H.264 rather than an overloaded frame queue.
     quality: 58,
     size: { width: CAPTURE_WIDTH, height: CAPTURE_HEIGHT },
   });
@@ -808,8 +808,11 @@ test("capture the Matter launch master", async ({ context, page }) => {
     const inquiryAnswer = inquiry.locator('[data-inquiry-role="matter"]').last();
     await expect(inquiryAnswer).toBeVisible({ timeout: 7_000 });
     await expect.poll(() => inquiryAnswer.evaluate((turn) => {
-      const text = turn.textContent?.trim() ?? "";
-      return text.length > 0 && text === turn.getAttribute("aria-label")?.trim();
+      const visible = turn.querySelector<HTMLElement>("[data-inquiry-answer-text]")
+        ?.textContent?.trim() ?? "";
+      const accessible = turn.querySelector<HTMLElement>(".visually-hidden")
+        ?.textContent?.trim() ?? "";
+      return visible.length > 0 && visible === accessible;
     })).toBe(true);
     expect(inquiryRequests).toBe(1);
     expect(inquiryThoughtCount).toBe(3);

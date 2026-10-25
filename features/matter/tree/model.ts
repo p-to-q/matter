@@ -1,3 +1,5 @@
+import type { ImagePointer } from "./image-pointer";
+
 export const PROTOCOL_VERSION = "0.2" as const;
 
 export type ThoughtNode = {
@@ -5,6 +7,8 @@ export type ThoughtNode = {
   text: string;
   /** Only the synthetic document container may use this role. */
   role?: "document-root";
+  /** Set and cleared only by `replace-image`; never on the document root. */
+  image?: ImagePointer;
   parentId: string | null;
   children: string[];
   createdAt: string;
@@ -48,6 +52,13 @@ export type TreeMutation =
       expectedUpdatedAt: string;
       text: string;
       updatedAt: string;
+    }
+  | {
+      type: "replace-image";
+      nodeId: string;
+      expectedUpdatedAt: string;
+      expectedImage: ImagePointer | null;
+      image: ImagePointer | null;
     }
   | {
       type: "replace-title";

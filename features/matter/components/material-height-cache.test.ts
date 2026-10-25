@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { ThoughtTree } from "../tree/model";
+import { pictureLayoutKey } from "./passage-picture-box";
 import {
+  materialHeightIsReusable,
   materialLayoutDocumentKey,
   reconcileMaterialHeightCache,
   retainMaterialHeight,
@@ -11,6 +14,7 @@ import {
 const measurement = (text: string): MaterialHeightMeasurement => Object.freeze({
   columnWidth: 300,
   height: 48,
+  picture: null,
   root: false,
   text,
 });
@@ -78,5 +82,43 @@ describe("material height cache authority", () => {
     expect(cache.size).toBe(2_000);
     expect(cache.has("node-7999")).toBe(false);
     expect(cache.get("node-9999")?.text).toBe("9999");
+  });
+
+  it("does not reuse a height measured before a picture was attached, replaced, or removed", () => {
+    const pointer = { contentHash: "a".repeat(64), width: 1024, height: 1024 };
+    const subject = { columnWidth: 300, root: false, text: "same words" };
+    const bare = { ...subject, picture: pictureLayoutKey(undefined) };
+    const attached = { ...subject, picture: pictureLayoutKey(pointer) };
+    const measuredBare = Object.freeze({ ...bare, height: 48 });
+    const measuredAttached = Object.freeze({ ...attached, height: 48 + 310 });
+
+    expect(materialHeightIsReusable(measuredBare, bare)).toBe(true);
+    // Attach: the text is identical, so only the picture can tell them apart.
+    expect(materialHeightIsReusable(measuredBare, attached)).toBe(false);
+    expect(materialHeightIsReusable(measuredAttached, attached)).toBe(true);
+    // Undo removes the pointer: the taller entry must not be reused.
+    expect(materialHeightIsReusable(measuredAttached, bare)).toBe(false);
+    // Replace with a picture of another shape or another hash.
+    const wider = { ...subject, picture: pictureLayoutKey({ ...pointer, height: 512 }) };
+    const other = { ...subject, picture: pictureLayoutKey({ ...pointer, contentHash: "b".repeat(64) }) };
+    expect(materialHeightIsReusable(measuredAttached, wider)).toBe(false);
+    expect(materialHeightIsReusable(measuredAttached, other)).toBe(false);
+  });
+
+  it("still keys by text, column width, and role, and has nothing to reuse when empty", () => {
+    const measured = measurement("words");
+    const subject = { columnWidth: 300, picture: null, root: false, text: "words" };
+    expect(materialHeightIsReusable(measured, subject)).toBe(true);
+    expect(materialHeightIsReusable(measured, { ...subject, text: "other" })).toBe(false);
+    expect(materialHeightIsReusable(measured, { ...subject, columnWidth: 301 })).toBe(false);
+    expect(materialHeightIsReusable(measured, { ...subject, root: true })).toBe(false);
+    expect(materialHeightIsReusable(undefined, subject)).toBe(false);
+  });
+
+  it("is the comparison the measured canvas uses, with the picture in what it stores", () => {
+    const source = readFileSync(new URL("./RootedMaterial.tsx", import.meta.url), "utf8");
+    expect(source).toContain("materialHeightIsReusable(cachedHeight, subject)");
+    expect(source).toContain("picture: pictureLayoutKey(item.node.image)");
+    expect(source).toMatch(/Object\.freeze\(\{\s*\.\.\.subject,\s*height,\s*\}\)/u);
   });
 });

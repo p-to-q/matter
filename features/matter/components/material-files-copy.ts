@@ -1,3 +1,4 @@
+// Native review pending: archiveReceipt* and includedAsContext in zh-CN, zh-TW, ja-JP and de-DE.
 import { MATTER_LOCALE, type MatterLocale } from "../config/locales";
 
 const ENGLISH_PLURAL = new Intl.PluralRules(MATTER_LOCALE.english);
@@ -18,6 +19,13 @@ export type MaterialFilesCopy = Readonly<{
   archivePanel: string;
   archiveExportCopy: string;
   archiveImportCopy: string;
+  /** Visible label of the readable-outline download; it is not a backup. */
+  archiveReceiptDownload: string;
+  /** Visible label of the same receipt on the clipboard, and its one-line confirmation. */
+  archiveReceiptCopy: string;
+  archiveReceiptCopied: string;
+  /** The line under the receipt pair: what it is, and that it is not a backup. */
+  archiveReceiptDescription: string;
   archiveRepairLocalStorage: string;
   archiveReloadStoredMaterial: string;
   archiveRetrySaving: string;
@@ -27,6 +35,7 @@ export type MaterialFilesCopy = Readonly<{
   archiveReplacing: string;
   archiveRepairing: string;
   archiveNoteDefault: string;
+  archiveDeploymentChanged: string;
   archiveNoteCorrupt: string;
   archiveNoteConflict: string;
   archiveNoteStorageFull: string;
@@ -62,6 +71,10 @@ export type MaterialFilesCopy = Readonly<{
   archiveNoteUnavailable: string;
   archiveNoteUpgradeBlocked: string;
   archiveReloadPage: string;
+  /** After an export: pictures this device could not produce are not in the archive. */
+  archivePicturesNotExported: (count: number) => string;
+  /** After an import: pictures this device could not store last only as long as the tab. */
+  archivePicturesNotSaved: (count: number) => string;
   durabilityCleared: string;
   durabilityDiverged: string;
   durabilityEngineUnavailable: string;
@@ -91,6 +104,8 @@ export type MaterialFilesCopy = Readonly<{
   historyReleased: string;
   historyUnavailable: string;
   includeWhenCopying: (title: string) => string;
+  /** Read after a checked row that is ticked only because a passage under it is. */
+  includedAsContext: string;
   identityName: string;
   localOnly: string;
   materialFiles: string;
@@ -123,6 +138,10 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   archivePanel: "Material archive",
   archiveExportCopy: "Export a copy",
   archiveImportCopy: "Import a copy",
+  archiveReceiptDownload: "Receipt (.md)",
+  archiveReceiptCopy: "Copy receipt",
+  archiveReceiptCopied: "Receipt copied",
+  archiveReceiptDescription: "Readable outline of the current context for people and AI — no pictures, not a backup.",
   archiveRepairLocalStorage: "Repair local storage",
   archiveReloadStoredMaterial: "Reload stored material",
   archiveRetrySaving: "Retry saving",
@@ -132,6 +151,7 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   archiveReplacing: "Replacing material…",
   archiveRepairing: "Repairing local storage…",
   archiveNoteDefault: "Keep a portable copy, or bring one back into this material.",
+  archiveDeploymentChanged: "Matter changed. Reload is available once this material is saved and nothing you started is in progress.",
   archiveNoteCorrupt: "Stored material is damaged. Export a recovery copy before Matter atomically replaces the local row.",
   archiveNoteConflict: "Another tab saved a newer copy. Reload the stored material here, or export the current copy first.",
   archiveNoteStorageFull: "Local storage is full. Export a copy before freeing browser storage, then retry saving.",
@@ -166,6 +186,10 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   archiveNoteUnavailable: "This browser is not saving Matter material, for example in a private window. Export a copy to keep it.",
   archiveNoteUpgradeBlocked: "Matter is updating local storage. Close other Matter tabs so it can finish.",
   archiveReloadPage: "Reload",
+  archivePicturesNotExported: (count) =>
+    `Exported. ${count} ${counted(ENGLISH_PLURAL, count, "picture file was", "picture files were")} not on this device and ${counted(ENGLISH_PLURAL, count, "is", "are")} not in the archive.`,
+  archivePicturesNotSaved: (count) =>
+    `Imported. ${count} ${counted(ENGLISH_PLURAL, count, "picture", "pictures")} could not be saved on this device and will be gone when you close this tab. Export again to keep ${counted(ENGLISH_PLURAL, count, "it", "them")}.`,
   durabilityCleared: "Local storage was cleared",
   durabilityDiverged: "This page and stored material differ",
   durabilityEngineUnavailable: "Saving could not load",
@@ -196,6 +220,7 @@ const ENGLISH: MaterialFilesCopy = Object.freeze({
   historyReleased: "Older undo steps won’t be kept after reload",
   historyUnavailable: "Earlier changes can no longer be undone",
   includeWhenCopying: (title) => `Include ${title} when copying`,
+  includedAsContext: "Included as context",
   identityName: "Quarrier",
   localOnly: "Kept only on this device",
   materialFiles: "Material files",
@@ -230,6 +255,10 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   archivePanel: "材料归档",
   archiveExportCopy: "导出副本",
   archiveImportCopy: "导入副本",
+  archiveReceiptDownload: "回执 (.md)",
+  archiveReceiptCopy: "复制回执",
+  archiveReceiptCopied: "已复制回执",
+  archiveReceiptDescription: "当前语境的大纲，供人和 AI 阅读；不含图片，不是备份。",
   archiveRepairLocalStorage: "修复本地存储",
   archiveReloadStoredMaterial: "重新载入已存材料",
   archiveRetrySaving: "重新保存",
@@ -239,6 +268,7 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveReplacing: "正在替换材料…",
   archiveRepairing: "正在修复本地存储…",
   archiveNoteDefault: "保留一份可携带的副本，或把一份副本带回这份材料。",
+  archiveDeploymentChanged: "Matter 已变化。材料保存完成、进行中的操作结束后，可以重新载入。",
   archiveNoteCorrupt: "已存材料已损坏。请先导出恢复副本，再让 Matter 原子替换本地记录。",
   archiveNoteConflict: "另一个标签页保存了更新的副本。可在这里重新载入已存材料，或先导出当前副本。",
   archiveNoteStorageFull: "本地存储已满。请先导出副本、释放浏览器存储后，再重试保存。",
@@ -273,6 +303,8 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveNoteUnavailable: "此浏览器没有保存 Matter 材料（例如在无痕窗口中）。请导出副本来保留它。",
   archiveNoteUpgradeBlocked: "Matter 正在更新本地存储。请关闭其他 Matter 标签页，让更新完成。",
   archiveReloadPage: "重新载入",
+  archivePicturesNotExported: (count) => `已导出。有 ${count} 张图片的文件不在此设备上，未包含在归档中。`,
+  archivePicturesNotSaved: (count) => `已导入。有 ${count} 张图片无法保存到此设备，关闭这个标签页后将消失。请再次导出以保留。`,
   durabilityCleared: "本地存储已被清除",
   durabilityDiverged: "这一页与已存材料不一致",
   durabilityEngineUnavailable: "保存功能未能加载",
@@ -302,6 +334,7 @@ const SIMPLIFIED_CHINESE: MaterialFilesCopy = Object.freeze({
   historyReleased: "重新载入后不再保留较早的撤销步骤",
   historyUnavailable: "更早的更改已无法撤销",
   includeWhenCopying: (title) => `复制时包含：${title}`,
+  includedAsContext: "作为上下文一并包含",
   identityName: "采石者",
   localOnly: "仅存于这台设备",
   materialFiles: "材料文件",
@@ -334,6 +367,10 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   archivePanel: "材料封存",
   archiveExportCopy: "匯出副本",
   archiveImportCopy: "匯入副本",
+  archiveReceiptDownload: "回執 (.md)",
+  archiveReceiptCopy: "複製回執",
+  archiveReceiptCopied: "已複製回執",
+  archiveReceiptDescription: "目前語境的大綱，供人與 AI 閱讀；不含圖片，不是備份。",
   archiveRepairLocalStorage: "修復本機儲存",
   archiveReloadStoredMaterial: "重新載入已存材料",
   archiveRetrySaving: "重新儲存",
@@ -343,6 +380,7 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveReplacing: "正在替換材料…",
   archiveRepairing: "正在修復本機儲存…",
   archiveNoteDefault: "保留一份可攜副本，或把一份副本帶回這份材料。",
+  archiveDeploymentChanged: "Matter 已變更。素材儲存完成、進行中的操作結束後，即可重新載入。",
   archiveNoteCorrupt: "已存材料已損壞。請先匯出復原副本，再讓 Matter 原子替換本機記錄。",
   archiveNoteConflict: "另一個分頁儲存了較新的副本。可在這裡重新載入已存材料，或先匯出目前副本。",
   archiveNoteStorageFull: "本機儲存已滿。請先匯出副本、釋放瀏覽器儲存後，再重試儲存。",
@@ -377,6 +415,8 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   archiveNoteUnavailable: "此瀏覽器沒有儲存 Matter 材料（例如在無痕視窗中）。請匯出副本來保留它。",
   archiveNoteUpgradeBlocked: "Matter 正在更新本機儲存。請關閉其他 Matter 分頁，讓更新完成。",
   archiveReloadPage: "重新載入",
+  archivePicturesNotExported: (count) => `已匯出。有 ${count} 張圖片的檔案不在此裝置上，未包含在封存檔中。`,
+  archivePicturesNotSaved: (count) => `已匯入。有 ${count} 張圖片無法儲存到此裝置，關閉這個分頁後將消失。請再次匯出以保留。`,
   durabilityCleared: "本機儲存已被清除",
   durabilityDiverged: "這一頁與已存材料不一致",
   durabilityEngineUnavailable: "儲存功能未能載入",
@@ -406,6 +446,7 @@ const TRADITIONAL_CHINESE: MaterialFilesCopy = Object.freeze({
   historyReleased: "重新載入後不再保留較早的復原步驟",
   historyUnavailable: "較早的變更已無法復原",
   includeWhenCopying: (title) => `複製時包含：${title}`,
+  includedAsContext: "作為上下文一併包含",
   identityName: "採石者",
   localOnly: "僅存於這台裝置",
   materialFiles: "材料檔案",
@@ -438,6 +479,10 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   archivePanel: "素材のアーカイブ",
   archiveExportCopy: "コピーを書き出す",
   archiveImportCopy: "コピーを読み込む",
+  archiveReceiptDownload: "レシート (.md)",
+  archiveReceiptCopy: "レシートをコピー",
+  archiveReceiptCopied: "レシートをコピーしました",
+  archiveReceiptDescription: "現在の文脈を人とAIが読むためのアウトライン。画像は含まず、バックアップではありません。",
   archiveRepairLocalStorage: "端末内ストレージを修復",
   archiveReloadStoredMaterial: "保存済みの素材を再読み込み",
   archiveRetrySaving: "保存を再試行",
@@ -447,6 +492,7 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   archiveReplacing: "素材を置き換えています…",
   archiveRepairing: "端末内ストレージを修復しています…",
   archiveNoteDefault: "持ち運べるコピーを保管するか、この素材にコピーを戻せます。",
+  archiveDeploymentChanged: "Matter が変わりました。素材の保存と進行中の操作が終わると再読み込みできます。",
   archiveNoteCorrupt: "保存済みの素材が壊れています。Matter が端末の記録を原子的に置き換える前に、復旧用コピーを書き出してください。",
   archiveNoteConflict: "別のタブがより新しいコピーを保存しました。ここで保存済みの素材を再読み込みするか、先に現在のコピーを書き出してください。",
   archiveNoteStorageFull: "端末内ストレージがいっぱいです。ブラウザの空き容量を作る前にコピーを書き出し、その後保存を再試行してください。",
@@ -481,6 +527,8 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   archiveNoteUnavailable: "このブラウザは Matter の素材を保存していません（プライベートウィンドウなど）。残すにはコピーを書き出してください。",
   archiveNoteUpgradeBlocked: "Matter が端末内ストレージを更新しています。完了させるには他の Matter タブを閉じてください。",
   archiveReloadPage: "再読み込み",
+  archivePicturesNotExported: (count) => `書き出しました。${count}枚の絵のファイルがこの端末になく、アーカイブに含まれていません。`,
+  archivePicturesNotSaved: (count) => `読み込みました。${count}枚の絵をこの端末に保存できませんでした。このタブを閉じると消えます。もう一度書き出して保管してください。`,
   durabilityCleared: "端末内ストレージが消去されました",
   durabilityDiverged: "このページと保存済みの素材が異なります",
   durabilityEngineUnavailable: "保存機能を読み込めませんでした",
@@ -510,6 +558,7 @@ const JAPANESE: MaterialFilesCopy = Object.freeze({
   historyReleased: "再読み込み後は古い取り消し履歴を保持しません",
   historyUnavailable: "以前の変更は取り消せなくなりました",
   includeWhenCopying: (title) => `コピーに${title}を含める`,
+  includedAsContext: "文脈として含まれています",
   identityName: "石を切る人",
   localOnly: "この端末にのみ保存",
   materialFiles: "素材ファイル",
@@ -542,6 +591,10 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   archivePanel: "Materialarchiv",
   archiveExportCopy: "Kopie exportieren",
   archiveImportCopy: "Kopie importieren",
+  archiveReceiptDownload: "Beleg (.md)",
+  archiveReceiptCopy: "Beleg kopieren",
+  archiveReceiptCopied: "Beleg kopiert",
+  archiveReceiptDescription: "Lesbare Gliederung des aktuellen Kontexts für Mensch und KI — ohne Bilder, keine Sicherung.",
   archiveRepairLocalStorage: "Lokalen Speicher reparieren",
   archiveReloadStoredMaterial: "Gespeichertes Material neu laden",
   archiveRetrySaving: "Speichern erneut versuchen",
@@ -551,6 +604,7 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   archiveReplacing: "Material wird ersetzt…",
   archiveRepairing: "Lokaler Speicher wird repariert…",
   archiveNoteDefault: "Bewahren Sie eine portable Kopie auf oder holen Sie eine Kopie in dieses Material zurück.",
+  archiveDeploymentChanged: "Matter hat sich geändert. Neu laden ist möglich, sobald das Material gespeichert und alle begonnenen Vorgänge beendet sind.",
   archiveNoteCorrupt: "Gespeichertes Material ist beschädigt. Exportieren Sie eine Wiederherstellungskopie, bevor Matter den lokalen Eintrag atomar ersetzt.",
   archiveNoteConflict: "Ein anderer Tab hat eine neuere Kopie gespeichert. Laden Sie hier das gespeicherte Material neu oder exportieren Sie zuerst die aktuelle Kopie.",
   archiveNoteStorageFull: "Der lokale Speicher ist voll. Exportieren Sie eine Kopie, geben Sie Browser-Speicher frei und versuchen Sie das Speichern dann erneut.",
@@ -585,6 +639,10 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   archiveNoteUnavailable: "Dieser Browser speichert kein Matter-Material, zum Beispiel in einem privaten Fenster. Exportieren Sie eine Kopie, um es zu behalten.",
   archiveNoteUpgradeBlocked: "Matter aktualisiert den lokalen Speicher. Schließen Sie andere Matter-Tabs, damit das Update abgeschlossen werden kann.",
   archiveReloadPage: "Neu laden",
+  archivePicturesNotExported: (count) =>
+    `Exportiert. ${count} ${counted(GERMAN_PLURAL, count, "Bilddatei war", "Bilddateien waren")} nicht auf diesem Gerät und ${counted(GERMAN_PLURAL, count, "ist", "sind")} nicht im Archiv.`,
+  archivePicturesNotSaved: (count) =>
+    `Importiert. ${count} ${counted(GERMAN_PLURAL, count, "Bild konnte", "Bilder konnten")} nicht auf diesem Gerät gespeichert werden und ${counted(GERMAN_PLURAL, count, "ist", "sind")} nach dem Schließen dieses Tabs weg. Exportieren Sie erneut, um ${counted(GERMAN_PLURAL, count, "es", "sie")} zu behalten.`,
   durabilityCleared: "Lokaler Speicher wurde gelöscht",
   durabilityDiverged: "Diese Seite und das gespeicherte Material weichen ab",
   durabilityEngineUnavailable: "Speichern konnte nicht geladen werden",
@@ -615,6 +673,7 @@ const GERMAN: MaterialFilesCopy = Object.freeze({
   historyReleased: "Ältere Rückgängig-Schritte bleiben nach dem Neuladen nicht erhalten",
   historyUnavailable: "Frühere Änderungen lassen sich nicht mehr rückgängig machen",
   includeWhenCopying: (title) => `${title} beim Kopieren einbeziehen`,
+  includedAsContext: "Als Kontext enthalten",
   identityName: "Steinbrecher",
   localOnly: "Nur auf diesem Gerät",
   materialFiles: "Materialdateien",
@@ -656,3 +715,5 @@ const BY_LOCALE: Readonly<Record<MatterLocale, MaterialFilesCopy>> = Object.free
 export function materialFilesCopy(locale: MatterLocale): MaterialFilesCopy {
   return BY_LOCALE[locale] ?? SIMPLIFIED_CHINESE;
 }
+
+Object.defineProperty(materialFilesCopy, "matterCapability", { value: "matter-capability:files-copy" });

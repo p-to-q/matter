@@ -9,6 +9,7 @@ import {
 import { PROTOCOL_VERSION } from "../tree/model";
 import { clientMatterBasePath } from "../config/base-path";
 import { readBoundedJsonResponse } from "./bounded-json-response";
+import { mintId } from "./mint-id";
 import { createRequestDeadline } from "./request-deadline";
 
 export type InquiryOutcome =
@@ -37,6 +38,7 @@ export type AskInquiryInput = Readonly<{
 export async function askInquiry(input: AskInquiryInput): Promise<InquiryOutcome> {
   if (input.signal?.aborted) return UNREACHABLE;
   const requestId = input.requestId ?? createInquiryRequestId();
+  if (requestId === null) return UNREACHABLE;
   const parsed = parseInquiryRequest({
     protocolVersion: PROTOCOL_VERSION,
     requestId,
@@ -90,27 +92,9 @@ export async function askInquiry(input: AskInquiryInput): Promise<InquiryOutcome
   }
 }
 
-export function createInquiryRequestId(): string {
-  const runtimeCrypto = typeof globalThis.crypto === "undefined"
-    ? undefined
-    : globalThis.crypto as unknown as Readonly<{
-      randomUUID?: () => string;
-      getRandomValues?: (array: Uint32Array) => Uint32Array;
-    }>;
-  if (typeof runtimeCrypto?.randomUUID === "function") {
-    return `inquiry_${runtimeCrypto.randomUUID().replaceAll("-", "")}`;
-  }
-  if (typeof runtimeCrypto?.getRandomValues === "function") {
-    const words = runtimeCrypto.getRandomValues(new Uint32Array(4));
-    return `inquiry_${Array.from(words, (word) => word.toString(16).padStart(8, "0")).join("")}`;
-  }
-  fallbackInquirySequence = fallbackInquirySequence >= Number.MAX_SAFE_INTEGER
-    ? 1
-    : fallbackInquirySequence + 1;
-  return `inquiry_${Date.now().toString(36)}_${fallbackInquirySequence.toString(36)}_${Math.random().toString(36).slice(2)}`;
+export function createInquiryRequestId(): string | null {
+  return mintId("inquiry");
 }
-
-let fallbackInquirySequence = 0;
 
 const UNREACHABLE: InquiryOutcome = Object.freeze({
   status: "unavailable",

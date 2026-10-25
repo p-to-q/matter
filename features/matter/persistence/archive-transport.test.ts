@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { zipSync } from "fflate";
 import { createSeededDocument } from "../material/seeded-document";
+import { MAX_TREE_IMAGE_BYTES, MAX_TREE_IMAGE_NODES } from "../tree/image-pointer";
 import { treeToBundle } from "./snapshot-codec";
 import { exportSnapshotArchive, importSnapshotArchive } from "./archive-transport";
 
@@ -19,7 +21,23 @@ describe("material ZIP transport", () => {
       ok: true,
       bundle,
       tree: createSeededDocument().tree,
+      blobs: new Map(),
     });
+  });
+
+  // Pinned on the commit before binary entries existed: a tree without pictures
+  // must keep producing exactly the bytes every earlier build produced. Re-pinned
+  // once, when #131 made the entry timestamp timezone-independent; the hash below
+  // is the same under UTC, Asia/Shanghai, America/Los_Angeles and Pacific/Kiritimati.
+  it("keeps the exact bytes of an archive that carries no pictures", async () => {
+    const exported = await exportSnapshotArchive(treeToBundle(createSeededDocument().tree));
+    if (!exported.ok) throw new Error("archive export failed");
+
+    expect(exported.missingImages).toBe(0);
+    expect(exported.bytes.byteLength).toBe(4_270);
+    expect(createHash("sha256").update(exported.bytes).digest("hex")).toBe(
+      "9fe8a3c1bd8c5f983e055f79572ed1ea3d36061ef8c33ac631fcc635215f3e58",
+    );
   });
 
   it("rejects unsafe paths, directory records, and normalized collisions before decoding", async () => {
@@ -115,11 +133,18 @@ describe("material ZIP transport", () => {
   });
 
   it("bounds compressed input before ZIP parsing", async () => {
-    const maxArchiveBytes = 18_000_000 + (2_002 * (2_048 + 76)) + 22;
+    const textArchiveBytes = 18_000_000 + (2_002 * (2_048 + 76)) + 22;
+    // Local and central headers each repeat the 82-byte longest picture path.
+    const pictureArchiveBytes = MAX_TREE_IMAGE_BYTES + MAX_TREE_IMAGE_NODES * (76 + 2 * 82);
+    const maxArchiveBytes = textArchiveBytes + pictureArchiveBytes;
 
     await expect(importSnapshotArchive(new Uint8Array(maxArchiveBytes + 1))).resolves.toMatchObject({
       ok: false,
       error: { code: "ARCHIVE_BOUND_EXCEEDED" },
+    });
+    await expect(importSnapshotArchive(new Uint8Array(maxArchiveBytes))).resolves.toMatchObject({
+      ok: false,
+      error: { code: "ARCHIVE_INVALID" },
     });
   });
 
@@ -158,7 +183,7 @@ describe("material ZIP transport", () => {
         for (const name of ["matter/matter.json", "matter/index.md"]) {
           const file = {
             name,
-            originalSize: 1,
+            originalSize: name === "matter/matter.json" ? 2 : 1,
             compression: 0,
             terminate: () => terminated.push(name),
             start: () => queueMicrotask(() => file.ondata(new Error("corrupt"), new Uint8Array(), false)),
@@ -174,7 +199,7 @@ describe("material ZIP transport", () => {
     }
 
     vi.resetModules();
-    vi.doMock("fflate", () => ({ AsyncUnzipInflate: class {}, Unzip: FakeUnzip }));
+    vi.doMock("fflate", () => ({ UnzipInflate: class {}, Unzip: FakeUnzip }));
     try {
       const transport = await import("./archive-transport");
       await expect(transport.importSnapshotArchive(zip({
@@ -189,6 +214,44 @@ describe("material ZIP transport", () => {
       vi.doUnmock("fflate");
       vi.resetModules();
     }
+  });
+});
+
+describe("material ZIP transport and one picture's description", () => {
+  it("refuses an archive whose pictures describe one hash two ways", async () => {
+    const picture = {
+      mediaType: "image/png" as const,
+      byteLength: 1_000,
+      width: 512,
+      height: 512,
+      contentHash: "ab".repeat(32),
+    };
+    const source = createSeededDocument().tree;
+    const [firstId, secondId] = source.nodes[source.rootId!]!.children;
+    const tree = {
+      ...source,
+      nodes: {
+        ...source.nodes,
+        [firstId!]: { ...source.nodes[firstId!]!, image: picture },
+        [secondId!]: { ...source.nodes[secondId!]!, image: { ...picture, width: 1_024, mediaType: "image/webp" as const } },
+      },
+    };
+    // The encoder refuses it too, so the archive is assembled from a valid tree
+    // whose second picture line is then rewritten in the file.
+    const valid = treeToBundle({
+      ...tree,
+      nodes: { ...tree.nodes, [secondId!]: { ...tree.nodes[secondId!]!, image: picture } },
+    });
+    const files = { ...valid.files } as Record<string, string>;
+    const secondPath = Object.keys(files).find((path) => files[path]!.includes(`id: ${secondId}\n`))!;
+    files[secondPath] = files[secondPath]!.replace(
+      /image: .*\n/u,
+      `image: {"byteLength":1000,"contentHash":"${picture.contentHash}","height":512,"mediaType":"image/webp","width":1024}\n`,
+    );
+    await expect(importSnapshotArchive(zip(files))).resolves.toMatchObject({
+      ok: false,
+      error: { code: "ARCHIVE_INVALID" },
+    });
   });
 });
 

@@ -5,6 +5,7 @@ import "./NodeActionLens.css";
 import {
   useCallback,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -17,9 +18,11 @@ import {
 import type { NavigationState } from "../runtime/navigation";
 import type { ThoughtTree } from "../tree/model";
 import type { MatterLocale } from "../config/locales";
-import { MatterAiIcon, MinusIcon, PlusIcon, WikiChangeIcon } from "./icons";
+import type { UnderBlockReason } from "../runtime/under-child";
+import { MatterAiIcon, MinusIcon, PlusIcon, UnderIcon, WikiChangeIcon } from "./icons";
 import { nodeActionLensCopy } from "./node-action-lens-copy";
 import { useEscapeLayer } from "./escape-layers";
+import { usePictureAvailabilityWarm } from "./use-picture-availability-warm";
 import {
   projectNodeHandleMetrics,
   projectNodeHandlePosition,
@@ -57,6 +60,18 @@ export type NodeActionWikiReview = Readonly<{ id: string; heard: string; canonic
 export const MAX_NODE_ACTION_WIKI_REVIEWS = 3;
 const NO_WIKI_REVIEWS: readonly NodeActionWikiReview[] = Object.freeze([]);
 
+/**
+ * The Under mark starts an admission whose child lands below a passage. The
+ * lens only presents it: the controller owns the predicate and the lifecycle.
+ */
+export type NodeActionUnder = Readonly<{
+  /** Why a passage cannot take a child now, or null when it can. */
+  blockedReason: (nodeId: string) => UnderBlockReason | null;
+  /** The passage whose Under recording is armed; tapping its mark withdraws it. */
+  recordingNodeId: string | null;
+  onActivate: (nodeId: string) => void;
+}>;
+
 export type NodeActionLensProps = Readonly<{
   activeNodeIds: ReadonlySet<string>;
   canvasRef: RefObject<HTMLDivElement | null>;
@@ -73,7 +88,9 @@ export type NodeActionLensProps = Readonly<{
   onToggleHeldAside: (nodeId: string) => void;
   pointTalkEligibleNodeIds: ReadonlySet<string>;
   positioningRef: RefObject<HTMLElement | null>;
+  previewBranch: boolean;
   tree: ThoughtTree;
+  under: NodeActionUnder;
   /** Live, disclosed Wiki changes by passage: the keyboard path to each takeover. */
   wikiReviews?: ReadonlyMap<string, readonly NodeActionWikiReview[]>;
 }>;
@@ -99,10 +116,13 @@ export function NodeActionLens({
   onToggleHeldAside,
   pointTalkEligibleNodeIds,
   positioningRef,
+  previewBranch,
   tree,
+  under,
   wikiReviews,
 }: NodeActionLensProps) {
   const copy = nodeActionLensCopy(locale);
+  const underReasonId = useId();
   const [coarse, setCoarse] = useState(false);
   const [compact, setCompact] = useState(false);
   const [chromeSuppressed, setChromeSuppressed] = useState(false);
@@ -130,22 +150,28 @@ export function NodeActionLens({
     window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = null;
   }, []);
-  const close = useCallback(() => {
+  const releaseTransientTarget = useCallback(() => {
     clearCloseTimer();
     targetElementRef.current = null;
     pendingKeyboardEntryRef.current = null;
     setTarget(null);
-    setPlacement(null);
     noteKeyboardEntry(null);
   }, [clearCloseTimer, noteKeyboardEntry]);
+  const close = useCallback(() => {
+    releaseTransientTarget();
+    setPlacement(null);
+  }, [releaseTransientTarget]);
   const scheduleClose = useCallback(() => {
     clearCloseTimer();
-    closeTimerRef.current = window.setTimeout(close, CLOSE_DELAY_MS);
-  }, [clearCloseTimer, close]);
+    // Departure releases hover, not the placement still owned by a selection.
+    closeTimerRef.current = window.setTimeout(releaseTransientTarget, CLOSE_DELAY_MS);
+  }, [clearCloseTimer, releaseTransientTarget]);
   const focusPendingKeyboardEntry = useCallback((nodeId: string) => {
     const lens = lensRef.current;
     if (pendingKeyboardEntryRef.current !== nodeId || lens?.dataset.nodeId !== nodeId) return false;
-    const button = lens.querySelector<HTMLButtonElement>("button:not(:disabled)");
+    // An unavailable mark stays reachable by arrow keys but is never where entry lands.
+    const button = lens.querySelector<HTMLButtonElement>('button:not(:disabled):not([aria-disabled="true"])') ??
+      lens.querySelector<HTMLButtonElement>("button:not(:disabled)");
     if (button === null) return false;
     button.focus();
     pendingKeyboardEntryRef.current = null;
@@ -320,7 +346,7 @@ export function NodeActionLens({
       ((activeTarget.source === "selection" && coarse) || keyboardNodeId === activeTarget.nodeId)
     ? (wikiReviews?.get(activeTarget.nodeId) ?? NO_WIKI_REVIEWS).slice(0, MAX_NODE_ACTION_WIKI_REVIEWS)
     : NO_WIKI_REVIEWS;
-  const actionCount = activeTarget === null ? 0 : 2 + reviews.length;
+  const actionCount = activeTarget === null ? 0 : (previewBranch ? 2 : 3) + reviews.length;
   const currentPlacement = placement !== null && activeTarget !== null &&
     placement.owner.actionCount === actionCount &&
     placement.owner.coarse === coarse &&
@@ -365,10 +391,7 @@ export function NodeActionLens({
       const paperRect = paper.getBoundingClientRect();
       const positioningRect = positioningRef.current?.getBoundingClientRect() ?? paperRect;
       const textRect = measureFirstLineInkRect(text);
-      // The field belongs to this passage, so it is sized from this passage's
-      // own type rather than one fixed control size for the whole tree.
       const metrics = projectNodeHandleMetrics({
-        inkHeight: textRect.height,
         coarse: coarse || compact,
       });
       const result = projectNodeHandlePosition({
@@ -431,7 +454,28 @@ export function NodeActionLens({
     focusPendingKeyboardEntry(activeTarget.nodeId);
   }, [activeTarget, currentPlacement, focusPendingKeyboardEntry, keyboardNodeId]);
 
+  // Arming Under reserves a lane under the passage and the lens re-places once
+  // the layout settles, which drops the focused mark for a frame. A keyboard
+  // press that armed it gets its focus back; a pointer press never does.
+  const underKeyboardArmedRef = useRef(false);
+  const underRecordingNodeId = under.recordingNodeId;
+  useLayoutEffect(() => {
+    if (!underKeyboardArmedRef.current || underRecordingNodeId === null) return;
+    if (currentPlacement === null || activeTarget?.nodeId !== underRecordingNodeId) return;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return;
+    lensRef.current?.querySelector<HTMLButtonElement>('[data-node-action="under"]')?.focus();
+  }, [activeTarget, currentPlacement, underRecordingNodeId]);
+  useEffect(() => {
+    if (underRecordingNodeId === null) underKeyboardArmedRef.current = false;
+  }, [underRecordingNodeId]);
+
   const lensVisible = activeTarget !== null && currentPlacement !== null && actionCount > 0;
+  // The mark that opens Point and Talk is the moment to learn whether its field
+  // will offer a picture, so the row is settled before the field opens.
+  usePictureAvailabilityWarm(
+    lensVisible && activeTarget.kind === "active" && pointTalkEligibleNodeIds.has(activeTarget.nodeId),
+  );
   // A paper surface: chrome or a panel that covers the paper outranks it.
   useEscapeLayer(lensVisible, "paper", () => {
     if (activeTarget === null) return false;
@@ -468,10 +512,37 @@ export function NodeActionLens({
     buttons[nextIndex]?.focus();
   };
   const stopPointer = (event: ReactPointerEvent<HTMLDivElement>) => event.stopPropagation();
-  const pointTalkEnabled = activeTarget.kind === "active" &&
+  // While an Under recording is armed the passage is spoken for: Point and Talk
+  // and set-aside would each retarget material under a live microphone.
+  const underArmed = under.recordingNodeId !== null;
+  const underRecording = under.recordingNodeId === activeTarget.nodeId;
+  const underReason = underRecording ? null : under.blockedReason(activeTarget.nodeId);
+  const pointTalkEnabled = !underArmed && activeTarget.kind === "active" &&
     pointTalkEligibleNodeIds.has(activeTarget.nodeId);
+  const underLabel = underRecording ? copy.underCancel : copy.under;
+  const underReasonText = underReason === null ? undefined : copy.underBlocked[underReason];
+  const lensStyle = {
+    left: currentPlacement.left,
+    top: currentPlacement.top,
+    "--lens-action-count": actionCount,
+    "--lens-button": `${currentPlacement.metrics.button}px`,
+    "--lens-gap": `${currentPlacement.metrics.gap}px`,
+    "--lens-pad-x": `${currentPlacement.metrics.paddingX}px`,
+    "--lens-pad-y": `${currentPlacement.metrics.paddingY}px`,
+    "--lens-material-x": `${currentPlacement.materialCorner?.x ?? currentPlacement.metrics.paddingX}px`,
+    "--lens-material-y": `${currentPlacement.materialCorner?.y ?? currentPlacement.metrics.paddingY}px`,
+  } as CSSProperties;
 
   return (
+    <>
+    <div
+      aria-hidden="true"
+      className="node-action-fog"
+      data-node-action-fog
+      data-node-id={activeTarget.nodeId}
+      data-relation={currentPlacement.relation}
+      style={lensStyle}
+    />
     <div
       aria-label={copy.actions}
       className="node-action-lens"
@@ -494,16 +565,7 @@ export function NodeActionLens({
       ref={lensRef}
       role="toolbar"
       aria-orientation="horizontal"
-      style={{
-        left: currentPlacement.left,
-        top: currentPlacement.top,
-        "--lens-button": `${currentPlacement.metrics.button}px`,
-        "--lens-gap": `${currentPlacement.metrics.gap}px`,
-        "--lens-pad-x": `${currentPlacement.metrics.paddingX}px`,
-        "--lens-pad-y": `${currentPlacement.metrics.paddingY}px`,
-        "--lens-material-x": `${currentPlacement.materialCorner?.x ?? currentPlacement.metrics.paddingX}px`,
-        "--lens-material-y": `${currentPlacement.materialCorner?.y ?? currentPlacement.metrics.paddingY}px`,
-      } as CSSProperties}
+      style={lensStyle}
     >
       <button
         aria-label={copy.rewrite}
@@ -525,16 +587,44 @@ export function NodeActionLens({
       >
         <MatterAiIcon />
       </button>
+      {!previewBranch && (
+        <>
+          <button
+            aria-describedby={underReasonText === undefined ? undefined : underReasonId}
+            aria-disabled={underReason !== null || undefined}
+            aria-label={underLabel}
+            className="node-action-lens__button"
+            data-node-action="under"
+            data-under-state={underRecording ? "recording" : undefined}
+            onClick={(event) => {
+              // `aria-disabled`, not `disabled`: the mark stays focusable to say why.
+              if (underReason !== null) return;
+              // A keyboard activation has no pointer position (`detail` 0).
+              if (!underRecording) underKeyboardArmedRef.current = event.detail === 0;
+              under.onActivate(activeTarget.nodeId);
+            }}
+            tabIndex={underArmed ? 0 : -1}
+            title={underReasonText === undefined ? underLabel : `${underLabel} — ${underReasonText}`}
+            type="button"
+          >
+            <UnderIcon />
+          </button>
+          {underReasonText === undefined ? null : (
+            <span className="visually-hidden" id={underReasonId}>{underReasonText}</span>
+          )}
+        </>
+      )}
       <button
         aria-label={activeTarget.kind === "active" ? copy.setAside : copy.include}
         className="node-action-lens__button"
         data-node-action={activeTarget.kind === "active" ? "set-aside" : "restore"}
+        disabled={underArmed}
         onClick={() => {
           onToggleHeldAside(activeTarget.nodeId);
           close();
         }}
         title={activeTarget.kind === "active" ? copy.setAsideShort : copy.includeShort}
-        tabIndex={pointTalkEnabled ? -1 : 0}
+        tabIndex={pointTalkEnabled || underArmed ? -1 : 0}
         type="button"
       >
         {activeTarget.kind === "active" ? <MinusIcon /> : <PlusIcon />}
@@ -557,6 +647,7 @@ export function NodeActionLens({
         </button>
       ))}
     </div>
+    </>
   );
 }
 

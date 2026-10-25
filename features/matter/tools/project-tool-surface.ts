@@ -3,9 +3,18 @@ import type { ProjectedTool } from "./model";
 /**
  * The island has a stable physical vocabulary. Capability projection still
  * retains navigation actions for the runtime, but the first-release presenter
- * exposes only the five physical editing slots below.
+ * exposes only the four physical editing slots below. Human child creation is
+ * the Under mark on a passage, not a rail slot; `move` is shown as Pan.
  */
 export const MAIN_RAIL_SLOT_IDS = Object.freeze([
+  "voice",
+  "lasso",
+  "move",
+  "undo",
+] as const);
+
+/** A Preview Branch build (see `config/preview-branch.ts`) restores the fifth slot. */
+export const PREVIEW_BRANCH_RAIL_SLOT_IDS = Object.freeze([
   "voice",
   "lasso",
   "branch",
@@ -13,7 +22,13 @@ export const MAIN_RAIL_SLOT_IDS = Object.freeze([
   "undo",
 ] as const);
 
-export type MainRailSlotId = (typeof MAIN_RAIL_SLOT_IDS)[number];
+export type MainRailSlotId =
+  | (typeof MAIN_RAIL_SLOT_IDS)[number]
+  | (typeof PREVIEW_BRANCH_RAIL_SLOT_IDS)[number];
+
+export function railSlotIds(previewBranch: boolean): readonly MainRailSlotId[] {
+  return previewBranch ? PREVIEW_BRANCH_RAIL_SLOT_IDS : MAIN_RAIL_SLOT_IDS;
+}
 
 export type ProjectedToolSurface = Readonly<{
   main: Readonly<{

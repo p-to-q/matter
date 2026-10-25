@@ -32,6 +32,7 @@ const MUTATION_TYPES: ReadonlySet<unknown> = new Set<TreeMutation["type"]>([
   "remove-subtree",
   "restore-subtree",
   "replace-text",
+  "replace-image",
   "replace-title",
   "move-node",
 ]);

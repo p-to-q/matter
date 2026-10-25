@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator } from "@playwright/test";
 import { fixtureUiCopy } from "./matter-ui-copy";
 
 const PERFORMANCE_ROW_COUNT = 2_000;
@@ -202,12 +202,16 @@ test("windows the 2,000-row material index without losing deep selection or copy
   });
   await expect(first).toBeVisible();
   await first.getByRole("checkbox").check();
-  await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(2));
+  // Ticking a passage ticks its ancestors as context, so the count is the two passages and what is above them.
+  const count = await tickedCount(sidebar);
+  expect(count).toBeGreaterThanOrEqual(2);
 
-  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.copySelectedThoughts(2) }).click();
+  await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.copySelectedThoughts(count) }).click();
   await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.copied);
   const copied = await page.evaluate(() => navigator.clipboard.readText());
-  expect(copied.split("\n\n")).toHaveLength(2);
+  // Passages that contain one another copy as a nested Markdown list: one bullet each.
+  expect(copied.startsWith("- ")).toBe(true);
+  expect(copied.split("\n").filter((line) => /^ *- /u.test(line))).toHaveLength(count);
   expect(await rows.count()).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
 });
 
@@ -387,13 +391,15 @@ for (const viewport of [
     });
     await expect(first).toBeVisible();
     await first.getByRole("checkbox").check();
-    await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.selectedCount(2));
+    const count = await tickedCount(sidebar);
+    expect(count).toBeGreaterThanOrEqual(2);
     expect(await rows.count()).toBeLessThanOrEqual(WINDOWED_ROW_BUDGET);
 
-    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.copySelectedThoughts(2) }).click();
+    await sidebar.getByRole("button", { name: fixtureUiCopy.materialFiles.copySelectedThoughts(count) }).click();
     await expect(sidebar).toContainText(fixtureUiCopy.materialFiles.copied);
     const copied = await page.evaluate(() => navigator.clipboard.readText());
-    expect(copied.split("\n\n")).toHaveLength(2);
+    expect(copied.startsWith("- ")).toBe(true);
+    expect(copied.split("\n").filter((line) => /^ *- /u.test(line))).toHaveLength(count);
   });
 }
 
@@ -452,3 +458,11 @@ test.describe("1024px coarse-pointer material index", () => {
     expect(closeGeometry.height).toBeCloseTo(48, 1);
   });
 });
+
+/** The number in the select footer: every ticked row, the ancestors pulled in as context included. */
+async function tickedCount(sidebar: Locator): Promise<number> {
+  const status = await sidebar.locator(".material-files__copy-status").innerText();
+  const match = /\d+/u.exec(status);
+  if (match === null) throw new Error(`the select footer states no count: ${status}`);
+  return Number(match[0]);
+}

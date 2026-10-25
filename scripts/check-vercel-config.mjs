@@ -47,6 +47,10 @@ export const DEDICATED_DOMAIN_RUNTIME_SHAPE = Object.freeze({
   MATTER_TEXT_SWAP_SURFACE: "public",
   MATTER_TRANSFORM_ADAPTER: "off",
   MATTER_TEXT_SWAP_ADAPTER: "off",
+  // Pinned closed: image generation costs real money per call and has no
+  // distributed rate control yet. Extra keys are tolerated by this checker, so
+  // an unlisted gate could be flipped to `live` without any check noticing.
+  MATTER_IMAGE_ADAPTER: "off",
 });
 
 // This file is committed to a world-readable repository. A provider credential

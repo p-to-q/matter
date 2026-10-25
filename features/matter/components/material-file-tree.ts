@@ -77,3 +77,24 @@ export function pruneMaterialFileNodeIds(
   const next = new Set(Array.from(ids).filter((nodeId) => Object.hasOwn(nodes, nodeId)));
   return next.size === ids.size ? ids : next;
 }
+
+/**
+ * The ancestors of a node, nearest first, excluding the node itself. Derived on
+ * every call and never stored: the index marks this path quietly while a
+ * passage is active, and the path is not what any model receives.
+ *
+ * The walk stops on a repeated id so a malformed parent cycle cannot hang the
+ * render; the tree engine never produces one.
+ */
+export function materialFileAncestorIds(
+  nodes: Readonly<Record<string, Readonly<{ parentId: string | null }> | undefined>>,
+  nodeId: string | null,
+): ReadonlySet<string> {
+  const ancestors = new Set<string>();
+  let current = nodeId === null ? null : nodes[nodeId]?.parentId ?? null;
+  while (current !== null && !ancestors.has(current)) {
+    ancestors.add(current);
+    current = nodes[current]?.parentId ?? null;
+  }
+  return ancestors;
+}

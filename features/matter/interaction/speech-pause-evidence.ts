@@ -4,9 +4,15 @@ const ANALYSIS_FRAME_MS = 20;
 const MIN_CORROBORATED_SILENCE_MS = 120;
 const MAX_TIMED_CHUNKS = 1_024;
 
-type TimedTranscriptChunk = Readonly<{
+/**
+ * A chunk whose text is a non-empty string and timestamp is an array, but
+ * whose individual timestamp values may be null or non-finite (e.g. the
+ * null end-timestamp emitted by transformers.js for final segments).
+ * Used to validate the chunk collection before per-gap timestamp checks.
+ */
+type LooseTranscriptChunk = Readonly<{
   text: string;
-  timestamp: readonly [number, number];
+  timestamp: readonly unknown[];
 }>;
 
 /**
@@ -25,8 +31,7 @@ export function deriveAcousticPauseEvidence(input: Readonly<{
     input.chunks === undefined ||
     input.chunks.length < 2 ||
     input.chunks.length > MAX_TIMED_CHUNKS ||
-    !input.chunks.every(isTimedTranscriptChunk) ||
-    !hasStrictChunkTimeline(input.chunks) ||
+    !input.chunks.every(isLooseTranscriptChunk) ||
     input.chunks.map((chunk) => chunk.text).join("") !== input.transcript ||
     input.audio.length === 0 ||
     !Number.isFinite(input.sampleRate) ||
@@ -58,15 +63,27 @@ export function deriveAcousticPauseEvidence(input: Readonly<{
     offset += current.text.length;
     const next = input.chunks[index + 1];
     if (next === undefined) break;
-    const estimatedGapMs = Math.round((next.timestamp[0] - current.timestamp[1]) * 1_000);
+    // Validate this gap's timestamps independently. A malformed chunk (e.g. a
+    // null end-timestamp from transformers.js for a final segment) drops only
+    // the adjacent gap rather than discarding all pause evidence.
+    const currentStart = current.timestamp[0];
+    const currentEnd = current.timestamp[1];
+    const nextStart = next.timestamp[0];
+    if (
+      typeof currentStart !== "number" || !Number.isFinite(currentStart) ||
+      typeof currentEnd !== "number" || !Number.isFinite(currentEnd) ||
+      typeof nextStart !== "number" || !Number.isFinite(nextStart) ||
+      nextStart <= currentStart
+    ) continue;
+    const estimatedGapMs = Math.round((nextStart - currentEnd) * 1_000);
     if (estimatedGapMs < MIN_CORROBORATED_SILENCE_MS || estimatedGapMs > 65_000) continue;
     const startFrame = clamp(
-      Math.floor(current.timestamp[1] * input.sampleRate / frameSize),
+      Math.floor(currentEnd * input.sampleRate / frameSize),
       0,
       energies.length,
     );
     const endFrame = clamp(
-      Math.ceil(next.timestamp[0] * input.sampleRate / frameSize),
+      Math.ceil(nextStart * input.sampleRate / frameSize),
       startFrame,
       energies.length,
     );
@@ -93,7 +110,7 @@ export function deriveAcousticPauseEvidence(input: Readonly<{
   return Object.freeze(pauses);
 }
 
-function frameEnergies(audio: Float32Array, frameSize: number): number[] {
+export function frameEnergies(audio: Float32Array, frameSize: number): number[] {
   const energies: number[] = [];
   for (let start = 0; start < audio.length; start += frameSize) {
     const end = Math.min(audio.length, start + frameSize);
@@ -130,25 +147,11 @@ function longestSilenceMs(
   return longestFrames * frameDurationMs;
 }
 
-/** Reject the whole timing set before scanning PCM. Equal or reversed starts
- * cannot identify a unique text seam, even when each tuple is valid alone. */
-function hasStrictChunkTimeline(chunks: readonly TimedTranscriptChunk[]): boolean {
-  for (let index = 1; index < chunks.length; index += 1) {
-    if (chunks[index]!.timestamp[0] <= chunks[index - 1]!.timestamp[0]) return false;
-  }
-  return true;
-}
-
-function isTimedTranscriptChunk(value: unknown): value is TimedTranscriptChunk {
+function isLooseTranscriptChunk(value: unknown): value is LooseTranscriptChunk {
   if (typeof value !== "object" || value === null) return false;
   const candidate = value as { text?: unknown; timestamp?: unknown };
   return typeof candidate.text === "string" && candidate.text.length > 0 &&
-    isTimestamp(candidate.timestamp);
-}
-
-function isTimestamp(value: unknown): value is readonly [number, number] {
-  return Array.isArray(value) && value.length === 2 && value.every(Number.isFinite) &&
-    value[0] >= 0 && value[1] >= value[0];
+    Array.isArray(candidate.timestamp);
 }
 
 function percentile(values: readonly number[], quantile: number): number {

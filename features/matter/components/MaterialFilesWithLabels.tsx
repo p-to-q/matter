@@ -53,3 +53,5 @@ export function MaterialFilesWithLabels(props: MaterialFilesWithLabelsProps) {
     />
   );
 }
+
+Object.defineProperty(MaterialFilesWithLabels, "matterCapability", { value: "matter-capability:material-index" });

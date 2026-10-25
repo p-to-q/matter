@@ -92,12 +92,27 @@ canvas appearance, or the right-rail editing tools.
 - One measured frosted action field prefers the upper-left clear space of a
   hovered, keyboard-focused, or selected passage, then tries the other above,
   below, and
-  side positions in a fixed collision-safe order. A fine pointer's click
+  side positions in a fixed collision-safe order. Its instruments have a fixed
+  screen footprint: `44px` targets on desktop and `48px` on compact or
+  coarse-pointer surfaces, independent of passage type size, depth and zoom.
+  One placement receipt drives both paint planes: pointer-inert fog above the
+  ruling but behind the material world, and interactive controls above material.
+  The fog's entry opacity belongs to its own paint, not an ancestor that would
+  interrupt backdrop sampling. Per-control hover/press feedback stays with its
+  interactive target. The preferred corner retains the original `6px`
+  button-box contact with first-line ink; this bounded overlap is intentional,
+  while detached placements and fixed chrome keep full-carrier clearance.
+  Hover never moves the target. A fine pointer's click
   selects the passage it will act on, so the selection keeps the field after
   the pointer leaves, and a press on a passage never closes that passage's
   field; hover or focus elsewhere still takes precedence, and `Escape`
   dismisses the selection's field until that passage is pressed or selected
-  again. The field and all available
+  again. The existing 200ms departure grace releases transient hover/focus,
+  not a placement still owned by a valid selection. Reentry cancels it;
+  another passage's departure returns to the selected passage after fresh
+  measurement. Explicit dismissal, actions, modal chrome and pending work
+  still remove the field. Both paint planes share that single lifecycle.
+  The field and all available
   actions reveal together. Its left control is the supplied AI placeholder and
   opens the node-local Point-and-Talk direction field; its right control reuses the
   material index's working-context transition: `−` sets the active branch aside

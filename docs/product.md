@@ -12,6 +12,46 @@ operates or has promoted a managed material model. Structure keeps the lineage
 between thoughts. AI is intelligence inside the material, not an agent standing
 outside it.
 
+## Why Matter exists
+
+Matter exists to help people meet real problems in real life with more agency.
+Technical capability matters only when it helps a person understand, express,
+decide, make, or act without taking the handle away from them. The product is
+therefore not a showcase for a model. It is a humane computing environment in
+which intelligence can become useful through material a person can perceive,
+shape, keep, and take elsewhere.
+
+That purpose is broader than the proof required from the present product. The
+current web release deliberately proves one narrow loop instead of simulating a
+future system with controls that have no material contract. Its limits must be
+stated honestly, while its boundaries should preserve the road toward smaller,
+more capable, and more private computation.
+
+## The longer direction
+
+Material outlives any model that helps shape it. The rooted tree, its authored
+language, and its portable structure remain the person's authority; a provider
+is a replaceable capability, never the owner of the document, its context, or
+its meaning. Matter should be able to draw that capability from a verified
+private API and, when the platform and model are qualified, from computation on
+the person's own device. The internet may extend connection and capacity, but
+it should not become the authority required to understand, keep, or move a
+person's material.
+
+The present web product may still make explicit network tradeoffs. It does not
+claim offline generative inference merely because the document is local, and a
+future client is not promised before it is proven. The architectural direction
+is nevertheless clear: provider choice, model size, and deployment location
+must not leak into the material model or split the interaction contract.
+
+Text, image, voice, and later generative media may enter Matter only after each
+has a native material life: an explicit human address and direction, one
+perceivable result, bounded context, local authority over acceptance, exact
+reversal, durable export, and an honest privacy boundary. A modality does not
+earn a control merely because an API exists. In this way Matter can gain more
+generative power without becoming a row of AI features or surrendering the
+coherence of the material to any one model generation.
+
 ## The job at this stage
 
 Matter is not trying to become a general workspace, a second brain, or a
@@ -83,7 +123,10 @@ configuration as a promise that every similar-sounding form will be corrected.
 selected, as a first-level thought in the full material view. Selecting an
 existing passage changes the fixed Voice tool from admission to Point and Talk:
 the spoken line becomes a transient rewrite direction for that complete passage,
-never a child insertion chosen by hidden inference. The final admission
+never a child insertion chosen by hidden inference. A child under a selected
+passage is made deliberately instead, with the Under mark on that passage: it
+arms one utterance, which enters as the passage's last child through this same
+admission. The final admission
 transcript first receives deterministic locale punctuation, using genuine audio
 pauses when available and conservative semantic seams otherwise, then enters
 the tree immediately as human material. That first pass inserts formatting but
@@ -194,8 +237,13 @@ lineage     why it belongs here   authored root → selected node
 
 Voice and the one-line field share the same transient direction port. One
 restrained white field aligns to that material's upper-left edge and prefers
-the space above it. Its idle form carries only the muted Voice entry and the
-ink submit action—no separate Cancel button—and may take focus because the
+the space above it. Its idle form carries the muted Voice entry, a plain-text
+picture entry (**绘图**) and the ink submit action—no separate Cancel button.
+The picture entry names an unavailable capability without sending a request;
+only an available opening admits its separate confirmed generation path.
+Choosing an unavailable drawing entry reports once on the paper's existing
+lower-left outcome line; it never adds a visible row beneath the field.
+The field may take focus because the
 person explicitly requested it. A pointer outside the field, a mode or surface
 change, or `Escape` cancels the local turn. It is not a permanent prompt box,
 is not available without a current node, and is never material, history,

@@ -18,6 +18,25 @@ const ATTRIBUTION: WikiOccurrenceAttribution = Object.freeze({
 });
 
 describe("Wiki occurrence registry", () => {
+  it("revokes older applications of the visible form without revoking fresh or other forms", () => {
+    const registry = createWikiOccurrenceRegistry();
+    for (const [id, attribution] of [
+      ["old", ATTRIBUTION],
+      ["explicit", ATTRIBUTION],
+      ["competing", { ...ATTRIBUTION, rule: { ...ATTRIBUTION.rule, canonical: "Different" } }],
+      ["fresh", { ...ATTRIBUTION, rule: { ...ATTRIBUTION.rule, appliedAtRevision: 4 } }],
+      ["other", { ...ATTRIBUTION, rule: { ...ATTRIBUTION.rule, form: "Other" } }],
+    ] as const) {
+      registry.register(id, attribution, 0);
+      registry.claim(id, 0);
+    }
+    registry.revokeAppliedBefore(ATTRIBUTION.rule, 4);
+    expect(registry.take("old", 1, true)).toBeNull();
+    expect(registry.take("competing", 1, true)).toBeNull();
+    expect(registry.take("explicit", 1)).toEqual(ATTRIBUTION);
+    expect(registry.take("fresh", 1)).not.toBeNull();
+    expect(registry.take("other", 1)).not.toBeNull();
+  });
   it("settles a claimed occurrence at most once", () => {
     const registry = createWikiOccurrenceRegistry();
     expect(registry.register("occ_1", ATTRIBUTION, 0)).toBe(true);

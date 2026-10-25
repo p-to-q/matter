@@ -62,6 +62,20 @@ describe("inquiry composer", () => {
     expect(reduceInquiry(state, { type: "type", value: "这是什么" }).notice).toBeNull();
   });
 
+  it("keeps an unsent question usable when request identity is unavailable", () => {
+    const state = reduceInquiry(
+      reduceInquiry(createInquiryState(), { type: "type", value: "这是什么？" }),
+      { type: "ask-refused", reason: "UNREACHABLE" },
+    );
+
+    expect(state).toMatchObject({
+      draft: "这是什么？",
+      turns: [],
+      notice: { kind: "answer", reason: "UNREACHABLE" },
+    });
+    expect(canSubmitInquiry(state)).toBe(true);
+  });
+
   it("withdraws an explicitly cancelled question without a notice", () => {
     let state = reduceInquiry(createInquiryState(), { type: "type", value: "先不问了" });
     const answerId = pendingAnswerId(state);

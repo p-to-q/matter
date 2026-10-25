@@ -15,12 +15,18 @@ afterEach(() => {
 });
 
 describe("inquiry client", () => {
-  it("keeps request identities distinct when no Web Crypto primitive exists", () => {
+  it("fails closed without Web Crypto and never sends a weak request id", async () => {
     vi.stubGlobal("crypto", undefined);
-    vi.spyOn(Date, "now").mockReturnValue(1_777_777_777_777);
-    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const fetchImpl = vi.fn<typeof fetch>();
 
-    expect(createInquiryRequestId()).not.toBe(createInquiryRequestId());
+    expect(createInquiryRequestId()).toBeNull();
+    await expect(askInquiry({
+      question: INPUT.question,
+      locale: INPUT.locale,
+      context: INPUT.context,
+      fetchImpl,
+    })).resolves.toEqual({ status: "unavailable", reason: "UNREACHABLE" });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("sends the bounded question and reads a stated result", async () => {

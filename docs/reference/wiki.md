@@ -3,6 +3,19 @@
 Status: first-release engineering contract. The scoring constants remain a
 corpus-calibration boundary, not a claim of product quality.
 
+Integration status (2026-10-25): the unreleased W0 candidate implements the
+record/state V8 foundation frozen in
+[`../../plans/active-tree-material.md`](../../plans/active-tree-material.md).
+Its physical IndexedDB database remains v7. The V7 discussion below describes
+the accepted predecessor; the active W0 freeze owns the exact additive shape,
+legacy read/first-write boundary, preferences, counters, maturity and byte
+allowance. This is not W1 producer promotion. Adopting an external generation
+now advances a coordinator-owned passive-evidence cutoff, checked on CAS rebase;
+old passive applications are censored while explicit decisions remain eligible.
+Some passive learning across unrelated external writes is deliberately lost.
+The integration and prerelease evidence boundaries are in
+[`closure-wave.md`](closure-wave.md#pr-continuation--2026-10-25).
+
 Wiki is a thin, origin-local authority for forms that Matter can resolve
 deterministically. It exists to make repeated recognition and wording mistakes
 disappear from future material. It is not a notebook, memory system, retrieval
@@ -512,6 +525,23 @@ canonicalization withheld rather than being refused. The content-free ingress re
 lists `lexicalEdits: { start, end, occurrence }[]`; the heard form travels
 only in the transient prepared value.
 
+When the occurrence registry cannot attribute an edit — because the registry is
+full of committed occurrences and cannot mint a new token — the edit's
+disposition depends on its rule authority:
+
+- A **confirmed** rule (human-approved alias) is applied as an ordinary
+  corrected word without a mark. The correction still reaches the person; only
+  the occurrence settlement record is absent.
+- A **provisional** rule (machine-inferred, not yet confirmed) is **withheld**
+  entirely. Applying a provisional change that cannot be settled would produce
+  a hidden rewrite with no disclosure path and no way to record consent. The
+  person therefore sees the heard form, unchanged.
+
+The same withhold applies in the second-normalization path (`prepareAdmissionIngress`)
+when attribution is impossible. `CompiledWikiRule` now carries an `authority`
+field (`"confirmed" | "provisional"`) propagated from `WikiMatchRule` through
+the compiler, so `MaterialIngress` can inspect it at the edit-mapping step.
+
 After a successful commit whose committed node still equals the text those
 edits measured, the store calls one narrow port,
 `publishCommittedLexicalOccurrences({ treeId, documentEpoch, nodeId,
@@ -996,10 +1026,28 @@ policy and scoring versions, all units, gates, weights, precedence, and
 occurrence-outcome constants, the policy source digest, the exact
 qualification catalog, corpus digest, and result digest. Any change to those
 inputs invalidates `npm run qualify:wiki` until the expected replay is
-deliberately requalified: rerun the controlled harnesses, confirm every
-manifest scenario and producer decision still matches, then record the
-reported digests. The manifest owns the expected outcomes; a requalification
-may never edit an expectation to match an unexplained result.
+deliberately requalified. Two commands support this mechanically:
+
+- `npm run qualify:wiki -- --check` re-runs both qualification harnesses,
+  diffs the computed identities against the committed constants in all three
+  constants files, prints which fields changed (file, field name, committed
+  value, computed value), and exits non-zero if any drift is found.
+- `npm run qualify:wiki -- --print-update` re-runs both harnesses and, if
+  every manifest scenario and every producer decision passes, rewrites the
+  digest constants in place across all three files:
+  `wiki-qualified-learning-policy.ts` (`policySourceDigest`,
+  `corpus.corpusDigest`, `resultDigest`, `producerQualificationDigest`);
+  `wiki-qualified-producer-releases.ts`
+  (`MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES`, explicit producers);
+  and `wiki-runtime-producer-releases.ts`
+  (`MATTER_WIKI_RUNTIME_PRODUCER_RELEASES`, runtime producers).
+  It exits non-zero and names the failing scenario or producer without
+  writing anything if any check fails.
+
+Running `--print-update` twice is a no-op: the updater is deterministic and
+the second run writes identical bytes. The manifest owns the expected
+outcomes; a requalification may never edit an expectation to match an
+unexplained result.
 
 Interaction evaluation is a separate labelled corpus. One exact applied
 occurrence reaches exactly one terminal state:

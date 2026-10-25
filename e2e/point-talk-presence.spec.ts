@@ -45,6 +45,13 @@ test.describe("Point and Talk presence", () => {
     });
     const field = page.locator('.point-talk[data-presence="present"]');
     await expect(field).toHaveAttribute("data-placed", "");
+    // Compare two settled boxes. Sampling an animated rect and then a later
+    // boundingBox mixes entry scale/travel with the transform-origin receipt.
+    await field.evaluate(async (element) => {
+      await Promise.all(element.getAnimations()
+        .filter((animation) => animation instanceof CSSAnimation && animation.animationName === "point-talk-enter")
+        .map((animation) => animation.finished));
+    });
     const entrance = await field.evaluate((element) => {
       const style = getComputedStyle(element);
       const rect = element.getBoundingClientRect();
@@ -78,35 +85,47 @@ test.describe("Point and Talk presence", () => {
       .toEqual(stages.slice(opened).map(() => "present"));
   });
 
-  test("a submitted direction stays pending in place, and the result is the ending", async ({ page }) => {
-    await routeRewrite(page, 40);
-    await openSettled(page, DESKTOP);
-    await openField(page);
-    const readStages = await recordField(page);
-    const direction = page.getByRole("textbox", { name: DIRECTION_LABEL });
-    await direction.fill("更凝练一些");
-    await page.getByRole("button", { name: "改写", exact: true }).click();
-    const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
-    await expect(passage).toContainText(REWRITTEN);
-    await expect(page.locator(".point-talk")).toHaveCount(0);
+  for (const submission of ["pointer", "keyboard"] as const) {
+    test(`a ${submission === "pointer" ? "submitted" : "keyboard-submitted"} direction stays pending in place, and the result is the ending`, async ({ page }) => {
+      await routeRewrite(page, submission === "keyboard" ? 0 : 40);
+      await openSettled(page, DESKTOP);
+      const readStages = await recordField(page);
+      await openField(page);
+      const direction = page.getByRole("textbox", { name: DIRECTION_LABEL });
+      await direction.fill("更凝练一些");
+      const rewrite = page.getByRole("button", { name: "改写", exact: true });
+      await expect(rewrite).toBeEnabled();
+      if (submission === "keyboard") {
+        await rewrite.focus();
+        await page.keyboard.press("Enter");
+      } else {
+        await rewrite.click();
+      }
+      const passage = page.locator(`[data-thought-text-id="${ROOT_ID}"]`);
+      await expect(passage).toContainText(REWRITTEN);
+      await expect(page.locator(".point-talk")).toHaveCount(0);
 
-    const stages = await readStages();
-    const pending = stages.find(({ entry }) => entry.startsWith("present:-:pending"));
-    expect(pending).toBeDefined();
-    expect(pending!.status).toBe("正在换一种说法…");
-    expect(pending!.echo).toBe("更凝练一些");
-    const exiting = stages.findIndex(({ entry }) => entry.startsWith("exiting:finished"));
-    expect(exiting).toBeGreaterThan(0);
-    const exit = stages[exiting]!;
-    // The request stayed visibly pending in place for the minimum time before
-    // its result changed the passage, then faded over the change.
-    expect(exit.at - pending!.at).toBeGreaterThanOrEqual(POINT_TALK_TIMING.pendingMinMs - 40);
-    expect(exit.entry).toContain(`|${REWRITTEN.slice(0, 8)}`);
-    expect(stages[exiting - 1]!.entry).not.toContain(`|${REWRITTEN.slice(0, 8)}`);
-    expect(exit.fade).toContain(`${POINT_TALK_TIMING.exitMs.finished / 1_000}s`);
-    const gone = stages.slice(exiting).find(({ entry }) => entry.startsWith("absent"));
-    expect(gone!.at - exit.at).toBeGreaterThanOrEqual(POINT_TALK_TIMING.exitMs.finished - 60);
-  });
+      const stages = await readStages();
+      const pending = stages.find(({ entry }) => entry.startsWith("present:-:pending"));
+      expect(pending).toBeDefined();
+      expect(pending!.status).toBe("正在换一种说法…");
+      expect(pending!.echo).toBe("更凝练一些");
+      const exiting = stages.findIndex(({ entry }) => entry.startsWith("exiting:finished"));
+      expect(exiting).toBeGreaterThan(0);
+      const exit = stages[exiting]!;
+      const firstPlaced = stages.find(({ entry }) => entry.startsWith("present:") && entry.includes(":placed|"));
+      expect(firstPlaced).toBeDefined();
+      // The request stayed visibly pending in place for the minimum time before
+      // its result changed the passage, then faded over the change.
+      expect(exit.at - pending!.at).toBeGreaterThanOrEqual(POINT_TALK_TIMING.pendingMinMs - 40);
+      expect(exit.at - firstPlaced!.at).toBeGreaterThanOrEqual(POINT_TALK_TIMING.minDwellMs - 60);
+      expect(exit.entry).toContain(`|${REWRITTEN.slice(0, 8)}`);
+      expect(stages[exiting - 1]!.entry).not.toContain(`|${REWRITTEN.slice(0, 8)}`);
+      expect(exit.fade).toContain(`${POINT_TALK_TIMING.exitMs.finished / 1_000}s`);
+      const gone = stages.slice(exiting).find(({ entry }) => entry.startsWith("absent"));
+      expect(gone!.at - exit.at).toBeGreaterThanOrEqual(POINT_TALK_TIMING.exitMs.finished - 60);
+    });
+  }
 
   test("a press outside fades and shrinks the field as the person's close", async ({ page }) => {
     await openSettled(page, DESKTOP);

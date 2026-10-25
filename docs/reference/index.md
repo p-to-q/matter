@@ -36,6 +36,7 @@ the contract documents.
 | [`agent-boundary.md`](agent-boundary.md) | model authority and provider boundary |
 | [`prompt-harness.md`](prompt-harness.md) **binding** | how any Matter prompt is built, budgeted, and judged |
 | [`local-ai-demo.md`](local-ai-demo.md) | running and verifying the bounded localhost AI surface without changing production authority |
+| [`generated-image.md`](generated-image.md) | probe findings for one image relay, the selected illustration style, the harness shape, and the gates a bounded image operation needs |
 | [`wiki.md`](wiki.md) **binding** | local lexical authority, evidence, occurrence disclosure and settlement, script routing, commit, privacy, and recovery boundaries |
 | [`../../studio/film/README.md`](../../studio/film/README.md) | recording the private blank-to-material Matter film with DOM-bound camera cues and closed publication fixtures |
 | [`action-lasso-provider-research.md`](action-lasso-provider-research.md) | submitted-operation ownership, complete-path lasso accuracy, and a closed private-provider session |
@@ -45,6 +46,14 @@ the contract documents.
 | [`ambient-workbench-ui.md`](ambient-workbench-ui.md) **binding** | right-side paper, corner controls and their optical geometry, rail, ambient media, `Escape` tiers, and pen/palm rules |
 | [`control-fog.md`](control-fog.md) | the passage-local action field: its surface, size, and placement |
 | [`architecture-governance.md`](architecture-governance.md) | auditing module boundaries, state ownership, caches, and architecture fitness |
+| [`context-receipt.md`](context-receipt.md) **binding** | exact Receipt v1/v2 grammars and refusal/version rules delegated by the material projection matrix: addresses, digest and omissions |
+| [`projections.md`](projections.md) **binding** | the output/scope matrix delegated by `material.md`: one tree, distinct view/copy/receipt/archive/model projections, and no implicit widening or write-back |
+| [`integration-evidence.md`](integration-evidence.md) | 2026-10-16 bounded trail/lock/identity research, primary-source references, alternatives and remaining verification |
+| [`material-connections-design.md`](material-connections-design.md) | **design proposal, not binding**: quiet/reveal/connect/dismiss states, adjacent structural bridges, future manual dashed associations, curve quality and promotion gates |
+| [`claude-resume-audit.md`](claude-resume-audit.md) | read-only recovery evidence for interrupted F1b/W0 patches, actual gaps, serialized implementation lanes and qualification boundaries; not a migration or merge receipt |
+| [`persistence-recovery-audit.md`](persistence-recovery-audit.md) | **research packet, not binding**: physical DB v7 recovery receipts, older-build refusal, future blob reachability/coordination proof and release gates; no migration or deletion authority |
+| [`closure-wave.md`](closure-wave.md) | 2026-10-16 coverage ledger, implemented-versus-qualified evidence, picture payer/admission/recovery gates and the serialized Claude Wiki continuation packet |
+| [`post-preview-research.md`](post-preview-research.md) | planning-only prior art, evidence standards, stop rules, and activation gates for material projection, local intelligence, generated media, and later sync |
 | [`codex-work-line-audit.md`](codex-work-line-audit.md) | *historical* 2026-09-17 evidence snapshot of unmerged work lines, their preservation tags, and why each was stashed or merged; not policy |
 
 Add or revise a note only when a choice will matter to later implementation, or

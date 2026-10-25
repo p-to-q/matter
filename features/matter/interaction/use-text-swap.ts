@@ -33,6 +33,7 @@ import {
 import { requestTextSwap } from "./text-swap-client";
 import { requestTranscription } from "./transcription-client";
 import { useDeliveryWindow } from "./use-delivery-window";
+import { mintId } from "./mint-id";
 
 export type UseTextSwapInput<TCommitted> = Readonly<{
   tree: ThoughtTree;
@@ -50,6 +51,11 @@ export type UseTextSwapInput<TCommitted> = Readonly<{
    * is untouched; zero (the default) delivers as soon as the window opens.
    */
   minimumPendingMs?: number;
+  /**
+   * Absolute monotonic time after which a pending result may deliver. Null
+   * waits for a UI receipt; omitted or zero has no absolute floor.
+   */
+  deliveryNotBeforeMs?: number | null;
   commit: (
     envelope: TextSwapEnvelope,
     plan: TextSwapPlan,
@@ -88,12 +94,13 @@ export function useTextSwap<TCommitted>(
     transcribe: requestTranscription,
     request: requestTextSwap,
     ...toDriverBindings(input),
-    createInteractionId: () => createTextSwapId("interaction"),
-    createRequestId: () => createTextSwapId("request"),
+    createInteractionId: () => mintId("text_swap_interaction"),
+    createRequestId: () => mintId("text_swap_request"),
     monotonicNow,
   }));
   const deliveryAvailableRef = useRef(input.deliveryWindowAvailable !== false);
   const minimumPendingRef = useRef(input.minimumPendingMs ?? 0);
+  const deliveryNotBeforeRef = useRef(normalizeDeliveryNotBefore(input.deliveryNotBeforeMs));
   // When the current request began pending, on the monotonic clock.
   const pendingSinceRef = useRef<Readonly<{ requestId: string; atMs: number }> | null>(null);
 
@@ -109,15 +116,18 @@ export function useTextSwap<TCommitted>(
   // `enter` reads the material current at the gesture, not at the render
   // that created the controller.
   const inputRef = useRef(input);
-  useLayoutEffect(() => {
-    inputRef.current = input;
-    driver.updateBindings(toDriverBindings(input));
-    driver.updateScope(toScope(input, state.phase === "idle" ? null : state.basis));
-  }, [driver, input, state]);
 
   const refreshDeliveryWindow = useDeliveryWindow({
-    isAvailable: () => deliveryAvailableRef.current &&
-      pendingDwellRemainingMs(pendingSinceRef.current, minimumPendingRef.current, monotonicNow()) === 0,
+    isAvailable: () => {
+      const notBeforeMs = deliveryNotBeforeRef.current;
+      return deliveryAvailableRef.current && notBeforeMs !== null &&
+        deliveryDwellRemainingMs(
+          pendingSinceRef.current,
+          minimumPendingRef.current,
+          notBeforeMs,
+          monotonicNow(),
+        ) === 0;
+    },
     onChange: (open) => driver.setDeliveryWindowOpen(open),
     onSuspend: () => driver.suspendCapture(),
     // A back-forward-cache hide only suspends: the page may be shown again
@@ -129,31 +139,51 @@ export function useTextSwap<TCommitted>(
     },
   }, driver);
 
+  const pendingRequestId = state.phase === "pending" ? state.requestId : null;
+  const minimumPendingMs = input.minimumPendingMs ?? 0;
+  const deliveryNotBeforeMs = normalizeDeliveryNotBefore(input.deliveryNotBeforeMs);
   useLayoutEffect(() => {
+    // Close first: updateScope may flush a resolved plan, so it must never see
+    // the previous commit's open window while this commit installs a new
+    // receipt, deadline, binding, or material scope.
+    driver.setDeliveryWindowOpen(false);
+    inputRef.current = input;
     deliveryAvailableRef.current = input.deliveryWindowAvailable !== false;
+    minimumPendingRef.current = minimumPendingMs;
+    deliveryNotBeforeRef.current = deliveryNotBeforeMs;
+    if (pendingRequestId === null) {
+      pendingSinceRef.current = null;
+    } else if (pendingSinceRef.current?.requestId !== pendingRequestId) {
+      pendingSinceRef.current = Object.freeze({ requestId: pendingRequestId, atMs: monotonicNow() });
+    }
+    driver.updateBindings(toDriverBindings(input));
+    driver.updateScope(toScope(input, state.phase === "idle" ? null : state.basis));
     if (!deliveryAvailableRef.current) {
       // Raw capture may not continue behind an unavailable surface. A request
       // that was already submitted remains owned; only its delivery is held.
       driver.suspendCapture();
       return;
     }
-    refreshDeliveryWindow();
-  }, [driver, input.deliveryWindowAvailable, refreshDeliveryWindow]);
-
-  const pendingRequestId = state.phase === "pending" ? state.requestId : null;
-  const minimumPendingMs = input.minimumPendingMs ?? 0;
-  useLayoutEffect(() => {
-    minimumPendingRef.current = minimumPendingMs;
-    if (pendingRequestId === null) {
-      pendingSinceRef.current = null;
-    } else if (pendingSinceRef.current?.requestId !== pendingRequestId) {
-      pendingSinceRef.current = Object.freeze({ requestId: pendingRequestId, atMs: monotonicNow() });
-    }
-    return schedulePendingDwellRefresh(
-      () => pendingDwellRemainingMs(pendingSinceRef.current, minimumPendingMs, monotonicNow()),
+    return scheduleDeliveryDwellRefresh(
+      () => deliveryNotBeforeRef.current === null
+        ? 0
+        : deliveryDwellRemainingMs(
+            pendingSinceRef.current,
+            minimumPendingRef.current,
+            deliveryNotBeforeRef.current,
+            monotonicNow(),
+          ),
       refreshDeliveryWindow,
     );
-  }, [minimumPendingMs, pendingRequestId, refreshDeliveryWindow]);
+  }, [
+    deliveryNotBeforeMs,
+    driver,
+    input,
+    minimumPendingMs,
+    pendingRequestId,
+    refreshDeliveryWindow,
+    state,
+  ]);
 
   useLayoutEffect(() => {
     // Retain in the commit phase. React's development replay performs the
@@ -294,8 +324,23 @@ export function pendingDwellRemainingMs(
   return Math.max(0, pendingSince.atMs + minimumPendingMs - nowMs);
 }
 
+/** The later of the request's pending cue and a UI-owned absolute deadline. */
+export function deliveryDwellRemainingMs(
+  pendingSince: Readonly<{ atMs: number }> | null,
+  minimumPendingMs: number,
+  deliveryNotBeforeMs: number,
+  nowMs: number,
+): number {
+  if (pendingSince === null) return 0;
+  const pendingRemaining = pendingDwellRemainingMs(pendingSince, minimumPendingMs, nowMs);
+  const absoluteRemaining = Number.isFinite(deliveryNotBeforeMs)
+    ? Math.max(0, deliveryNotBeforeMs - nowMs)
+    : 0;
+  return Math.max(pendingRemaining, absoluteRemaining);
+}
+
 /** Re-arm early timers so a fractional dwell cannot hold a resolved turn forever. */
-export function schedulePendingDwellRefresh(
+export function scheduleDeliveryDwellRefresh(
   remainingMs: () => number,
   refresh: () => void,
 ): () => void {
@@ -309,6 +354,11 @@ export function schedulePendingDwellRefresh(
   return () => {
     if (timer !== null) clearTimeout(timer);
   };
+}
+
+function normalizeDeliveryNotBefore(value: number | null | undefined): number | null {
+  if (value === null) return null;
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : 0;
 }
 
 function toScope<TCommitted>(
@@ -372,11 +422,4 @@ function sameLineage(left: TextSwapBasis["lineage"], right: TextSwapBasis["linea
       node.createdAt === other.createdAt &&
       node.updatedAt === other.updatedAt;
   });
-}
-
-function createTextSwapId(kind: "interaction" | "request"): string {
-  const unique = typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID().replaceAll("-", "")
-    : `${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  return `text_swap_${kind}_${unique}`;
 }

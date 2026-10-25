@@ -22,6 +22,10 @@ import {
   MAX_WIKI_OBSERVATIONS_PER_LEDGER,
   MAX_WIKI_FITTING_TARGETS,
   isWikiStarterLexemeIdentity,
+  isHumanWikiLexeme,
+  wikiProducerFamily,
+  type WikiProducerFamily,
+  type WikiPreferences,
   type WikiLexeme,
   type WikiObserveEvidenceEvent,
   type WikiState,
@@ -34,6 +38,7 @@ import {
   routeWikiWord,
   wikiLatinRouteLocale,
 } from "./wiki-script-routing";
+import { DEFAULT_WIKI_PREFERENCES, wikiNearSoundEnabled } from "./wiki-preferences";
 
 const MIN_EDIT_GRAPHEMES = 7;
 const MAX_FIT_GRAPHEMES = 48;
@@ -55,6 +60,7 @@ type FitBucket = Readonly<{
 
 export type WikiFitSnapshot = Readonly<{
   fittingVersion: number;
+  preferences?: WikiPreferences;
   /** Complete release authority that produced this disposable index. */
   qualifiedProducerReleases: readonly WikiQualifiedProducerRelease[];
   identities: readonly Readonly<Pick<
@@ -101,12 +107,12 @@ export function compileWikiFitSnapshot(
     right.id - left.id);
   for (const lexeme of rankedLexemes) {
     if (eligibleLexemeCount >= MAX_WIKI_FITTING_TARGETS) break;
-    if (lexeme.scope === "written") continue;
+    if (lexeme.scope === "written" || !wikiNearSoundEnabled(state.preferences, lexeme.locale)) continue;
     const termEvidence = termEvidenceByIdentity.get(JSON.stringify([
       lexeme.locale,
       lexeme.canonical,
     ]));
-    if (lexeme.provenance === "aggregate-evidence" &&
+    if (!isHumanWikiLexeme(lexeme) &&
         !isWikiStarterLexemeIdentity(lexeme) &&
         !isQualifiedCollectedWikiTermEvidence(termEvidence, qualifiedTermProducers)) {
       continue;
@@ -118,7 +124,7 @@ export function compileWikiFitSnapshot(
     // Only the `en-US` ledger has internal-edit targets. Latin words of an
     // English turn, and Latin words routed out of a Chinese or Japanese turn,
     // reach these; a same-spelling lexeme in any other locale never does.
-    const internalEditTarget = lexeme.provenance === "human-confirmed" ||
+    const internalEditTarget = isHumanWikiLexeme(lexeme) ||
       isWikiStarterLexemeIdentity(lexeme) ||
       termEvidence?.producer === "shape-specific-v1";
     if (qualifiedAliasProducers.has("latin-internal-edit-v2") &&
@@ -142,6 +148,7 @@ export function compileWikiFitSnapshot(
   });
   return Object.freeze({
     fittingVersion: state.fittingVersion,
+    ...(state.preferences.nearSound.length !== 0 ? { preferences: state.preferences } : {}),
     qualifiedProducerReleases,
     identities: Object.freeze(state.lexemes.map((lexeme) => Object.freeze({
       id: lexeme.id,
@@ -170,7 +177,7 @@ export function compileWikiFitSnapshot(
 
 function fitTargetRank(lexeme: WikiLexeme): number {
   if (isWikiStarterLexemeIdentity(lexeme)) return 0;
-  return lexeme.provenance === "human-confirmed" ? 1 : 2;
+  return isHumanWikiLexeme(lexeme) ? 1 : 2;
 }
 
 export function wikiFitSnapshotMatchesState(
@@ -180,6 +187,7 @@ export function wikiFitSnapshotMatchesState(
 ): boolean {
   const qualifiedProducerReleases = freezeQualifiedProducerReleases(releases);
   if (snapshot.fittingVersion !== state.fittingVersion ||
+      JSON.stringify(snapshot.preferences ?? DEFAULT_WIKI_PREFERENCES) !== JSON.stringify(state.preferences) ||
       snapshot.identities.length !== state.lexemes.length ||
       !qualifiedProducerReleasesMatch(
         snapshot.qualifiedProducerReleases,
@@ -318,6 +326,10 @@ export function fitCommittedWikiTextResult(
   if (request.channel !== "spoken" || request.text.length === 0) {
     return CENSORED_FITTING;
   }
+  const ledgerLocale = wikiLatinRouteLocale(request.locale) ?? request.locale;
+  if (!wikiNearSoundEnabled(snapshot.preferences ?? DEFAULT_WIKI_PREFERENCES, ledgerLocale)) {
+    return CENSORED_FITTING;
+  }
   const eligibleRanges = normalizeWikiEligibleRanges(
     request.eligibleRanges,
     request.text.length,
@@ -376,6 +388,11 @@ export function fitCommittedWikiTextResult(
     events: Object.freeze([...events.values()].sort(compareEvent)),
     scannedScripts: wikiScriptClassesFromMask(scannedScripts),
     routedScripts: wikiScriptClassesFromMask(routedScripts),
+    producerFamilies: Object.freeze([...new Set(snapshot.qualifiedProducerReleases
+      .map((release) => release.identity.producerId)
+      .filter((producer) => producer === "latin-internal-edit-v2" &&
+        (enabledProducers === undefined || enabledProducers.has(producer)))
+      .map(wikiProducerFamily).filter((family): family is WikiProducerFamily => family !== null))]),
   });
 }
 

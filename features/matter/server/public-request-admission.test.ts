@@ -77,6 +77,70 @@ describe("public request admission", () => {
   });
 });
 
+describe("an explicit metering rule", () => {
+  const staged = createPublicRequestAdmission({
+    requestsPerWindow: 1,
+    maxConcurrent: 2,
+    metered: (environment) => environment.METERED === "yes",
+  });
+
+  it("replaces the NODE_ENV default in both directions, without rewriting the environment", () => {
+    const staging = Object.freeze({ NODE_ENV: "staging", METERED: "yes" });
+    expect(staged.admit(request(null), staging)).toMatchObject({ ok: false, reason: "ORIGIN" });
+    // Production that the rule does not meter is not metered.
+    expect(staged.admit(request(null), { ...PRODUCTION, METERED: "no" }).ok).toBe(true);
+    expect(staged.admit(request(null), { ...PRODUCTION, METERED: "no" }).ok).toBe(true);
+    expect(Object.keys(staging).sort()).toEqual(["METERED", "NODE_ENV"]);
+  });
+
+  it("applies the rate window to what it meters", () => {
+    const environment = { METERED: "yes", MATTER_PUBLIC_ORIGIN: "https://matter.ptoq.io" };
+    expect(staged.admit(request("https://matter.ptoq.io"), environment, () => 1).ok).toBe(true);
+    expect(staged.admit(request("https://matter.ptoq.io"), environment, () => 2))
+      .toMatchObject({ ok: false, reason: "RATE" });
+  });
+});
+
+describe("who a request is counted as", () => {
+  const SAME = { origin: "https://matter.ptoq.io", "sec-fetch-site": "same-origin" };
+  const from = (headers: Record<string, string>) =>
+    new Request("https://matter.ptoq.io/api/test", { method: "POST", headers: { ...SAME, ...headers } });
+  const spend = (lane: ReturnType<typeof createPublicRequestAdmission>, headers: Record<string, string>) => {
+    const result = lane.admit(from(headers), PRODUCTION, () => 10);
+    if (result.ok) result.release();
+    return result;
+  };
+
+  it("lets the default lane tell callers apart by x-forwarded-for, as it always has", () => {
+    const lane = createPublicRequestAdmission({ requestsPerWindow: 1, maxConcurrent: 4 });
+    expect(spend(lane, { "x-forwarded-for": "198.51.100.1" }).ok).toBe(true);
+    expect(spend(lane, { "x-forwarded-for": "198.51.100.1" })).toMatchObject({ ok: false, reason: "RATE" });
+    expect(spend(lane, { "x-forwarded-for": "198.51.100.2" }).ok).toBe(true);
+  });
+
+  it("does not let a platform-only lane be reset by an address the client invented", () => {
+    const lane = createPublicRequestAdmission({ requestsPerWindow: 1, maxConcurrent: 4, identity: "platform" });
+    expect(spend(lane, { "x-forwarded-for": "198.51.100.1" }).ok).toBe(true);
+    for (const invented of ["198.51.100.2", "198.51.100.3", "203.0.113.9"]) {
+      expect(spend(lane, { "x-forwarded-for": invented }), invented).toMatchObject({ ok: false, reason: "RATE" });
+    }
+  });
+
+  it("counts a platform-only lane's callers by the headers the platform sets", () => {
+    const lane = createPublicRequestAdmission({ requestsPerWindow: 1, maxConcurrent: 4, identity: "platform" });
+    expect(spend(lane, { "x-vercel-forwarded-for": "198.51.100.1" }).ok).toBe(true);
+    expect(spend(lane, { "x-vercel-forwarded-for": "198.51.100.1", "x-forwarded-for": "evil" }))
+      .toMatchObject({ ok: false, reason: "RATE" });
+    expect(spend(lane, { "x-vercel-forwarded-for": "198.51.100.2" }).ok).toBe(true);
+    expect(spend(lane, { "x-real-ip": "198.51.100.3" }).ok).toBe(true);
+    expect(spend(lane, { "x-real-ip": "198.51.100.3", "x-forwarded-for": "other" }))
+      .toMatchObject({ ok: false, reason: "RATE" });
+    expect(spend(lane, { "x-real-ip": "198.51.100.77" }).ok).toBe(true);
+    // The platform's own header outranks the one a client could add.
+    expect(spend(lane, { "x-vercel-forwarded-for": "198.51.100.4", "x-real-ip": "198.51.100.3" }).ok).toBe(true);
+  });
+});
+
 function request(origin: string | null, address = "192.0.2.1"): Request {
   const headers = new Headers({ "x-vercel-forwarded-for": address });
   if (origin !== null) {

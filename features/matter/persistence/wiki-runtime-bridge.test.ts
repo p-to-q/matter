@@ -7,12 +7,29 @@ import {
   DEFAULT_WIKI_CAPABILITY_PREFERENCES,
   serializeWikiCapabilityPreferences,
 } from "./wiki-capability-preferences";
+import { CHUNK_RECOVERY, type ChunkRecoveryHost } from "../interaction/chunk-recovery";
+import { createTestRecoveryHost } from "../interaction/chunk-recovery-test-host";
 
 const LEGACY_BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v5");
 const BRIDGE_KEY = Symbol.for("ptoq.matter.wiki-basis-bridge.v6");
 const bridgeHost = globalThis as unknown as { [key: symbol]: unknown };
 
+// Holds the recovery host for the current test. The vi.mock below intercepts
+// createChunkRecovery at module init time, injecting this host so tests can
+// inspect timers/listeners without any exported test-only setter.
+let _testHost: ChunkRecoveryHost | null = null;
+
+vi.mock("../interaction/chunk-recovery", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../interaction/chunk-recovery")>();
+  return {
+    ...actual,
+    createChunkRecovery: (retry: () => void) =>
+      actual.createChunkRecovery(retry, _testHost),
+  };
+});
+
 afterEach(() => {
+  _testHost = null;
   delete bridgeHost[LEGACY_BRIDGE_KEY];
   delete bridgeHost[BRIDGE_KEY];
   vi.doUnmock("./wiki-runtime-core");
@@ -21,6 +38,37 @@ afterEach(() => {
 });
 
 describe("Wiki runtime bridge", () => {
+  it("lets a durable revert revoke attribution while the lazy settlement import waits", async () => {
+    let release!: (module: { settleHydratedMatterWikiOccurrence: typeof settle }) => void;
+    const settle = vi.fn();
+    vi.doMock("./wiki-runtime-core", () => new Promise((resolve) => { release = resolve; }));
+    const bridge = await import("./wiki-runtime-bridge");
+    const owner = await import("./wiki-occurrence-owner");
+    const occurrence = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
+    bridge.claimMatterWikiPublication(publicationOf([occurrence]));
+    const pending = bridge.settleMatterWikiOccurrence(occurrence, "inspected-kept");
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    owner.revokeMatterWikiOccurrences(ATTRIBUTION.rule, ATTRIBUTION.rule.appliedAtRevision + 1);
+    release({ settleHydratedMatterWikiOccurrence: settle });
+    await expect(pending).resolves.toBe("unattributed");
+    expect(settle).not.toHaveBeenCalled();
+  });
+  it.each(["explicit-confirm", "explicit-reject", "reverted"] as const)(
+    "preserves %s intent when an older application was revoked during lazy loading", async (outcome) => {
+      let release!: (module: { settleHydratedMatterWikiOccurrence: typeof settle }) => void;
+      const settle = vi.fn().mockResolvedValue({ ok: true, changed: true, generation: 3, stateRevision: 2 });
+      vi.doMock("./wiki-runtime-core", () => new Promise((resolve) => { release = resolve; }));
+      const bridge = await import("./wiki-runtime-bridge");
+      const owner = await import("./wiki-occurrence-owner");
+      const occurrence = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
+      bridge.claimMatterWikiPublication(publicationOf([occurrence]));
+      const pending = bridge.settleMatterWikiOccurrence(occurrence, outcome);
+      await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+      owner.revokeMatterWikiOccurrences(ATTRIBUTION.rule, ATTRIBUTION.rule.appliedAtRevision + 1);
+      release({ settleHydratedMatterWikiOccurrence: settle });
+      await expect(pending).resolves.toBe("recorded");
+      expect(settle).toHaveBeenCalledOnce();
+    });
   it("matches the canonical empty basis without loading durable configuration", async () => {
     delete bridgeHost[BRIDGE_KEY];
     vi.resetModules();
@@ -199,6 +247,131 @@ describe("Wiki runtime bridge", () => {
     vi.stubGlobal("crypto", undefined);
     const bridge = await import("./wiki-runtime-bridge");
     expect(bridge.mintMatterWikiOccurrence(ATTRIBUTION)).toBeNull();
+  });
+
+  describe("honest loader — observe", () => {
+    it("sets failed receipt and skips call during backoff when wiki-runtime-core rejects", async () => {
+      const clock = createTestRecoveryHost();
+      _testHost = clock.host;
+      // localStorage: null → both capabilities enabled (bit 1 | 2 = 3).
+      vi.stubGlobal("localStorage", { getItem: () => null });
+      vi.doMock("./wiki-runtime-core", () => { throw new Error("offline"); });
+      const bridge = await import("./wiki-runtime-bridge");
+
+      expect(bridge.readWikiRuntimeCoreLoadStatus()).toBe("pending");
+      bridge.observeMatterWikiEvidence(ADMISSION);
+      await vi.dynamicImportSettled();
+
+      expect(bridge.readWikiRuntimeCoreLoadStatus()).toBe("failed");
+      // Inside the backoff window the next call is skipped (degraded behaviour).
+      const observe = vi.fn();
+      vi.doMock("./wiki-runtime-core", () => ({ observeMatterWikiCommittedMaterial: observe }));
+      bridge.observeMatterWikiEvidence(ADMISSION);
+      await vi.dynamicImportSettled();
+      expect(observe).not.toHaveBeenCalled();
+      expect(clock.timers).toBe(1);
+      expect(clock.listening).toBe(true);
+    });
+
+    it("retries observe on a recovery signal and clears receipt on success", async () => {
+      const clock = createTestRecoveryHost();
+      _testHost = clock.host;
+      vi.stubGlobal("localStorage", { getItem: () => null });
+      vi.doMock("./wiki-runtime-core", () => { throw new Error("offline"); });
+      const bridge = await import("./wiki-runtime-bridge");
+
+      bridge.observeMatterWikiEvidence(ADMISSION);
+      await vi.dynamicImportSettled();
+      expect(bridge.readWikiRuntimeCoreLoadStatus()).toBe("failed");
+
+      // Recovery signal: the retry imports the (now-unblocked) chunk.
+      const observe = vi.fn();
+      vi.doMock("./wiki-runtime-core", () => ({ observeMatterWikiCommittedMaterial: observe }));
+      clock.signal();
+      await vi.dynamicImportSettled();
+
+      expect(bridge.readWikiRuntimeCoreLoadStatus()).toBe("ok");
+      // Timers and listeners released after success.
+      expect(clock.timers).toBe(0);
+      expect(clock.listening).toBe(false);
+    });
+
+    it("retries observe after the backoff elapses", async () => {
+      const clock = createTestRecoveryHost();
+      _testHost = clock.host;
+      vi.stubGlobal("localStorage", { getItem: () => null });
+      vi.doMock("./wiki-runtime-core", () => { throw new Error("offline"); });
+      const bridge = await import("./wiki-runtime-bridge");
+
+      bridge.observeMatterWikiEvidence(ADMISSION);
+      await vi.dynamicImportSettled();
+      expect(bridge.readWikiRuntimeCoreLoadStatus()).toBe("failed");
+
+      const observe = vi.fn();
+      vi.doMock("./wiki-runtime-core", () => ({ observeMatterWikiCommittedMaterial: observe }));
+      clock.advance(CHUNK_RECOVERY.initialDelayMs);
+      await vi.dynamicImportSettled();
+
+      expect(bridge.readWikiRuntimeCoreLoadStatus()).toBe("ok");
+      expect(clock.timers).toBe(0);
+      expect(clock.listening).toBe(false);
+    });
+  });
+
+  describe("honest loader — settle", () => {
+    it("sets failed receipt when wiki-runtime-core rejects during settlement", async () => {
+      const clock = createTestRecoveryHost();
+      _testHost = clock.host;
+      vi.doMock("./wiki-runtime-core", () => { throw new Error("offline"); });
+      const bridge = await import("./wiki-runtime-bridge");
+
+      const occurrenceId = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
+      bridge.claimMatterWikiPublication(publicationOf([occurrenceId]));
+
+      await expect(bridge.settleMatterWikiOccurrence(occurrenceId, "accepted-implicit"))
+        .resolves.toBe("failed");
+      expect(bridge.readWikiRuntimeCoreLoadStatus()).toBe("failed");
+      expect(clock.timers).toBe(1);
+      expect(clock.listening).toBe(true);
+    });
+
+    it("retries settle chunk on a recovery signal after a load failure", async () => {
+      const clock = createTestRecoveryHost();
+      _testHost = clock.host;
+      vi.doMock("./wiki-runtime-core", () => { throw new Error("offline"); });
+      const bridge = await import("./wiki-runtime-bridge");
+
+      const occurrenceId = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
+      bridge.claimMatterWikiPublication(publicationOf([occurrenceId]));
+      await bridge.settleMatterWikiOccurrence(occurrenceId, "accepted-implicit");
+
+      const settle = vi.fn().mockResolvedValue({ ok: true, changed: true, generation: 1, stateRevision: 1 });
+      vi.doMock("./wiki-runtime-core", () => ({ settleHydratedMatterWikiOccurrence: settle }));
+      clock.signal();
+      await vi.dynamicImportSettled();
+
+      expect(bridge.readWikiRuntimeCoreLoadStatus()).toBe("ok");
+      expect(clock.timers).toBe(0);
+      expect(clock.listening).toBe(false);
+    });
+
+    it("does not arm retry for settle runtime errors after the chunk loaded", async () => {
+      const clock = createTestRecoveryHost();
+      _testHost = clock.host;
+      const settle = vi.fn().mockRejectedValue(new Error("runtime error"));
+      vi.doMock("./wiki-runtime-core", () => ({ settleHydratedMatterWikiOccurrence: settle }));
+      const bridge = await import("./wiki-runtime-bridge");
+
+      const occurrenceId = bridge.mintMatterWikiOccurrence(ATTRIBUTION)!;
+      bridge.claimMatterWikiPublication(publicationOf([occurrenceId]));
+      await expect(bridge.settleMatterWikiOccurrence(occurrenceId, "accepted-implicit"))
+        .resolves.toBe("failed");
+
+      // Chunk loaded fine — status is ok and no retry was armed.
+      expect(bridge.readWikiRuntimeCoreLoadStatus()).toBe("ok");
+      expect(clock.timers).toBe(0);
+      expect(clock.listening).toBe(false);
+    });
   });
 });
 

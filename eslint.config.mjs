@@ -8,8 +8,12 @@ export default defineConfig([
   globalIgnores([
     "**/.next/**",
     "**/.next-e2e/**",
+    "**/.next-review/**",
     "**/.vercel/**",
     "coverage/**",
+    // Retained browser proofs may contain generated bundles and dependency code.
+    "test-results/**",
+    "playwright-report/**",
     "next-env.d.ts",
     "omi/**",
     "tmp/**",

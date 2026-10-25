@@ -3,6 +3,7 @@ import type {
   WikiChannel,
   WikiLedgerTick,
   WikiObservationTick,
+  WikiProducerFamily,
   WikiObserveEvidenceEvent,
 } from "./wiki-model";
 import type { WikiEligibleRange } from "./canonicalize-wiki-text";
@@ -42,6 +43,7 @@ export type WikiAdmissionProducerResult = Readonly<{
   events: readonly WikiObserveEvidenceEvent[];
   scannedScripts: readonly WikiScriptClass[];
   routedScripts?: readonly WikiScriptClass[];
+  producerFamilies?: readonly WikiProducerFamily[];
 }>;
 
 export type WikiAdmissionBatch = Readonly<{
@@ -151,6 +153,7 @@ function ledgerTick(
     locale: observation.locale,
     channel: observation.channel,
     scripts: result.scannedScripts,
+    producerFamilies: result.producerFamilies ?? Object.freeze([]),
   });
   const routedLocale = wikiLatinRouteLocale(observation.locale);
   const routedScripts = result.routedScripts ?? [];
@@ -164,6 +167,7 @@ function ledgerTick(
       locale: routedLocale,
       channel: observation.channel,
       scripts: routedScripts,
+      producerFamilies: result.producerFamilies ?? Object.freeze([]),
     }),
   });
 }

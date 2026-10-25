@@ -2,19 +2,21 @@ import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { projectToolSurface } from "../tools/project-tool-surface";
+import { projectToolSurface, railSlotIds } from "../tools/project-tool-surface";
 import { projectTools } from "../tools/project-tools";
 import { CANVAS_LANGUAGE_OPTIONS } from "./canvas-preferences";
 import { ToolRail, type ToolRailProps } from "./ToolRail";
 import { toolRailCopy } from "./tool-rail-copy";
 
-const EXPECTED_RAIL_IDS = ["voice", "lasso", "branch", "move", "undo"];
+const EXPECTED_RAIL_IDS = ["voice", "lasso", "move", "undo"];
+const PREVIEW_BRANCH_RAIL_IDS = ["voice", "lasso", "branch", "move", "undo"];
 
 describe("ToolRail", () => {
   it.each([
     {
       name: "selected branch",
       context: {
+        previewBranch: false,
         view: "full" as const,
         selected: { nodeId: "branch", hasChildren: true, isFolded: false },
         canUndo: true,
@@ -24,6 +26,7 @@ describe("ToolRail", () => {
     {
       name: "focused thought",
       context: {
+        previewBranch: false,
         view: "focus" as const,
         selected: { nodeId: "branch", hasChildren: true, isFolded: false },
         canUndo: false,
@@ -36,14 +39,34 @@ describe("ToolRail", () => {
     });
 
     expect(toolIds(markup)).toEqual(EXPECTED_RAIL_IDS);
-    expect(markup).not.toMatch(/data-tool-id="(?:focus|fold|unfold|show-all)"/);
+    expect(markup).not.toMatch(/data-tool-id="(?:focus|fold|unfold|show-all|branch)"/);
+    expect(markup).not.toContain("Extend related thought");
     expect(markup).toContain('aria-label="Editing tools"');
+  });
+
+  it("restores the fifth Branch slot, between Lasso and Pan, only in a Preview Branch build", () => {
+    const markup = renderToolRail({
+      previewBranch: true,
+      surface: projectToolSurface(projectTools({
+        previewBranch: true,
+        view: "full",
+        selected: { nodeId: "branch", hasChildren: true, isFolded: false },
+        canUndo: true,
+        interaction: "idle",
+      })),
+    });
+
+    expect(toolIds(markup)).toEqual(PREVIEW_BRANCH_RAIL_IDS);
+    expect(toolIds(markup)).toEqual(railSlotIds(true));
+    expect(toolIds(renderToolRail({}))).toEqual(railSlotIds(false));
+    expect(markup).toContain('aria-label="Extend related thought"');
   });
 
   it("exposes semantic names for voice, selection, generation, movement, and undo", () => {
     const markup = renderToolRail({
       lassoActive: true,
       surface: projectToolSurface(projectTools({
+        previewBranch: false,
         view: "full",
         selected: { nodeId: "branch", hasChildren: true, isFolded: false },
         canUndo: true,
@@ -53,7 +76,6 @@ describe("ToolRail", () => {
 
     expect(markup).toContain('aria-label="Record a top-level thought"');
     expect(markup).toContain('aria-label="Exit language selection"');
-    expect(markup).toContain('aria-label="Extend related thought"');
     expect(markup).toContain('aria-label="Return to canvas pan"');
     expect(markup).toContain('aria-label="Undo last change"');
     expect(markup).not.toContain("Redo");
@@ -74,9 +96,10 @@ describe("ToolRail", () => {
     const idle = renderToolRail({});
     // Native `disabled` would drop focus the moment a pending operation flips it.
     expect(idle).not.toMatch(/<button[^>]*\sdisabled=""/);
-    expect(idle).toMatch(/aria-disabled="true"[^>]*data-tool-id="branch"/);
     expect(idle).toMatch(/aria-disabled="true"[^>]*data-tool-id="undo"/);
-    expect(idle).toContain(">Select a thought first.</span>");
+    const branchIdle = renderToolRail({ previewBranch: true });
+    expect(branchIdle).toMatch(/aria-disabled="true"[^>]*data-tool-id="branch"/);
+    expect(branchIdle).toContain(">Select a thought first.</span>");
     expect(idle).toContain(">Nothing to undo yet.</span>");
     expect(idle).toMatch(/aria-describedby="[^"]+"[^>]*data-tool-id="undo"/);
 
@@ -108,12 +131,12 @@ describe("ToolRail", () => {
 
     expect(markup).toContain(`aria-label="${copy.editingTools}"`);
     expect(markup).toContain(`aria-label="${copy.circleSelectLanguage}"`);
-    expect(markup).toContain(`aria-label="${copy.extendRelatedThought}"`);
+    expect(markup).not.toContain(`aria-label="${copy.extendRelatedThought}"`);
     expect(markup).toContain(`aria-label="${copy.canvasPan}"`);
     expect(markup).toContain(`aria-label="${copy.undoLastChange}"`);
     expect(markup).toContain(`>${copy.voice}</span>`);
     expect(markup).toContain(`>${copy.lasso}</span>`);
-    expect(markup).toContain(`>${copy.branch}</span>`);
+    expect(markup).not.toContain(`>${copy.branch}</span>`);
     expect(markup).toContain(`>${copy.pan}</span>`);
     expect(markup).toContain(`>${copy.undo}</span>`);
   });
@@ -130,7 +153,9 @@ function renderToolRail(overrides: Partial<ToolRailProps>): string {
     onMove: vi.fn(),
     onVoice: vi.fn(),
     panActive: false,
+    previewBranch: false,
     surface: projectToolSurface(projectTools({
+      previewBranch: false,
       view: "full",
       selected: null,
       canUndo: false,

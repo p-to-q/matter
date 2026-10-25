@@ -2,7 +2,11 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { RootedMaterial } from "./RootedMaterial";
-import { useMatterStore, useWikiOccurrences } from "./use-matter-store";
+import { PictureBytesContext } from "./picture-bytes-context";
+import { PictureAuthoringContext } from "./picture-authoring-context";
+import { usePictureAuthoring } from "./use-picture-authoring";
+import { usePictureStore } from "./use-picture-store";
+import { useMatterStore, useMatterStoreAccess, useWikiOccurrences } from "./use-matter-store";
 import { createAdmissionAnchor } from "../runtime/admission";
 import { admissionHoldsSubmittedWords } from "../runtime/admission-interaction";
 import { useAdmission } from "../interaction/use-admission";
@@ -27,27 +31,40 @@ import {
   type SeededBranchTextResolver,
 } from "../material/seeded-material-core";
 import type { SeededSessionRelocalizer } from "../material/seeded-session-localization";
+import { subscribeSeededBranchCopyResolver } from "../interaction/seeded-branch-copy-loader";
 import { useWikiAuthority } from "../persistence/use-wiki-authority";
 import { useStoragePersistence } from "../persistence/use-storage-persistence";
 import type { MaterialFilesCopy } from "./material-files-copy";
+import { downloadLocalBytes } from "./download-local-bytes";
 import type { MatterLocale } from "../config/locales";
 import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
+import { requestDeploymentReload } from "../interaction/deployment-version-watch";
+import { useDeploymentVersion } from "./use-deployment-version";
+
+// Synchronous per-locale floor used in archiveFailure's catch arm when the
+// material-files-copy chunk cannot load. Values match archiveErrorAction from
+// each locale's MaterialFilesCopy to keep the floor consistent.
+const ARCHIVE_ERROR_ACTION_FLOOR: Readonly<Record<string, string>> = Object.freeze({
+  "en-US": "Archive action could not finish.",
+  "zh-CN": "归档操作未能完成。",
+  "zh-TW": "封存操作未能完成。",
+  "ja-JP": "アーカイブの操作を完了できませんでした。",
+  "de-DE": "Die Archivaktion konnte nicht abgeschlossen werden.",
+});
 
 // Archive bytes move only after a Files-panel gesture. The transport and its
 // snapshot encoder load after first paint, and the zip codec when Archive
 // opens, so neither Export nor a chosen file waits on a code fetch.
-const loadArchiveTransport = () => Promise.all([
-  import("../persistence/archive-transport"),
-  import("../persistence/snapshot-codec"),
-]).then(([transport, codec]) => Object.freeze({
+const loadArchiveTransport = () => import("../persistence/archive-transport").then((transport) => Object.freeze({
   exportSnapshotArchive: transport.exportSnapshotArchive,
   importSnapshotArchive: transport.importSnapshotArchive,
   preloadArchiveCodec: transport.preloadArchiveCodec,
-  treeToBundle: codec.treeToBundle,
+  treeToBundle: transport.treeToBundle,
 }));
 
 export function MatterApp() {
   useWikiAuthority();
+  const pictureStore = usePictureStore();
   const tree = useMatterStore((state) => state.tree);
   const documentEpoch = useMatterStore((state) => state.documentEpoch);
   const history = useMatterStore((state) => state.history);
@@ -82,6 +99,7 @@ export function MatterApp() {
   const [paperActivity, setPaperActivity] = useState<PaperActivity>(IDLE_PAPER_ACTIVITY);
   // One signal gates every replacement of the loaded document instance.
   const materialTurns = { admission: admission.state.phase, paper: paperActivity };
+  const materialIdle = materialIsIdle(materialTurns);
   const persistence = useMaterialPersistence(
     tree,
     history,
@@ -89,29 +107,45 @@ export function MatterApp() {
     documentEpoch,
     hydrateSnapshot,
     switchDocument,
-    materialIsIdle(materialTurns),
+    materialIdle,
     admissionHoldsSubmittedWords(admission.state),
   );
   const storagePersistence = useStoragePersistence();
   const requestStoragePersistence = storagePersistence.request;
+  const storeAccess = useMatterStoreAccess();
+  const pictureAuthoring = usePictureAuthoring(
+    pictureStore,
+    storeAccess,
+    requestStoragePersistence,
+  );
   const archiveLanguage = canvasPreferences.preferences.language;
+  const deploymentVersion = useDeploymentVersion(materialIdle && persistence.initialReconciliationComplete);
+  const deploymentReloadRef = useRef({ tree, history, documentEpoch, materialIdle, deploymentVersion,
+    hydrated: persistence.initialReconciliationComplete, status: persistence.status });
+  useLayoutEffect(() => {
+    deploymentReloadRef.current = { tree, history, documentEpoch, materialIdle, deploymentVersion,
+      hydrated: persistence.initialReconciliationComplete, status: persistence.status };
+  });
+  const reloadChangedDeployment = useCallback(() => requestDeploymentReload(() => {
+    const basis = deploymentReloadRef.current;
+    const current = storeAccess.getState();
+    return {
+      different: basis.deploymentVersion === "different", idle: basis.materialIdle,
+      hydrated: basis.hydrated && basis.status.phase === "saved", unsaved: basis.status.unsaved,
+      visible: document.visibilityState === "visible" && document.hasFocus(),
+      current: current.tree === basis.tree && current.history === basis.history && current.documentEpoch === basis.documentEpoch,
+    };
+  }, () => window.location.reload()), [storeAccess]);
   const branchTextResolverRef = useRef<SeededBranchTextResolver>(seededFallbackBranchTexts);
   const [seededSessionRelocalizer, setSeededSessionRelocalizer] =
     useState<SeededSessionRelocalizer | null>(null);
   useEffect(() => {
-    let active = true;
-    void import("../material/seeded-branch-copy").then(
-      ({ seededBranchTexts }) => {
-        if (active) branchTextResolverRef.current = seededBranchTexts;
-      },
-      () => {
-        // Branch remains a synchronous, local action on the closed five-locale
-        // floor if its richer interaction-only copy chunk cannot be loaded.
-      },
-    );
-    return () => {
-      active = false;
-    };
+    // Branch remains a synchronous, local action on the closed five-locale
+    // floor if the richer copy chunk cannot be loaded; the recovery arms a
+    // retry so any later recovery signal may still deliver the richer text.
+    return subscribeSeededBranchCopyResolver((resolver) => {
+      branchTextResolverRef.current = resolver;
+    });
   }, []);
   useEffect(() => {
     if (seededSessionRelocalizer !== null) return;
@@ -133,8 +167,10 @@ export function MatterApp() {
     documentEpoch,
     seededSessionRelocalizer,
   ]);
-  // Export, Replace, and Retry are the only gestures that may ask the browser
-  // to keep storage persistent; each asks before its first await.
+  // Export, Replace, Retry, and a picture's Keep are the only gestures that may
+  // ask the browser to keep storage persistent; each asks before its first await.
+  // Replace is the import gesture: it covers the pictures an archive restores,
+  // and asking again after the awaits would run without the gesture's activation.
   const exportArchive = useCallback(async () => {
     requestStoragePersistence("export");
     if (persistence.status.errorCode === "PERSISTENCE_CORRUPT") {
@@ -153,13 +189,21 @@ export function MatterApp() {
     }
     // Always exported from memory: superseded or cleared storage cannot be read.
     const { exportSnapshotArchive, treeToBundle } = await loadArchiveTransport();
-    const archive = await exportSnapshotArchive(treeToBundle(tree));
+    // Pictures a device can no longer produce are left out and counted, never
+    // a reason to refuse the export.
+    const blobs = await pictureStore.collectBlobs(tree);
+    const archive = await exportSnapshotArchive(treeToBundle(tree), blobs);
     if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
     downloadLocalBytes(archive.bytes, `${tree.id}.matter.zip`, "application/zip");
     // The exported copy carries every word whose address still holds.
     wikiOccurrences.noteExported();
-    return Object.freeze({ ok: true } as const);
-  }, [archiveLanguage, persistence, requestStoragePersistence, tree, wikiOccurrences]);
+    return archive.missingImages > 0
+      ? Object.freeze({
+          ok: true,
+          notice: Object.freeze({ kind: "pictures-not-exported", count: archive.missingImages }),
+        } as const)
+      : Object.freeze({ ok: true } as const);
+  }, [archiveLanguage, persistence, pictureStore, requestStoragePersistence, tree, wikiOccurrences]);
   const validateArchive = useCallback(async (file: File) => {
     const { importSnapshotArchive } = await loadArchiveTransport();
     const archive = await importSnapshotArchive(file);
@@ -181,19 +225,43 @@ export function MatterApp() {
     const { importSnapshotArchive } = await loadArchiveTransport();
     const archive = await importSnapshotArchive(file);
     if (!archive.ok) return archiveFailure(archive.error.code, archiveLanguage);
+    // The bytes must be readable by the first render of the imported document,
+    // so they are held before it is committed. A durable-write refusal may use
+    // the session cache, but an unavailable holder cannot admit the import.
+    const pictures = await pictureStore.restoreBlobs(archive.blobs, archive.tree);
+    if (pictures === null) return archiveFailure("ARCHIVE_ACTION_FAILED", archiveLanguage);
     const imported = await persistence.importMaterial(archive.tree, basis, options);
-    return imported.status === "switched"
-      ? Object.freeze({ ok: true } as const)
-      : archiveFailure(imported.errorCode, archiveLanguage);
-  }, [archiveLanguage, documentEpoch, persistence, requestStoragePersistence, tree.id, tree.revision]);
+    if (imported.status !== "switched") return archiveFailure(imported.errorCode, archiveLanguage);
+    return pictures.keptInSession > 0
+      ? Object.freeze({
+          ok: true,
+          notice: Object.freeze({ kind: "pictures-not-saved", count: pictures.keptInSession }),
+        } as const)
+      : Object.freeze({ ok: true } as const);
+  }, [
+    archiveLanguage,
+    documentEpoch,
+    persistence,
+    pictureStore,
+    requestStoragePersistence,
+    tree.id,
+    tree.revision,
+  ]);
   useEffect(() => preloadWhenIdle([loadArchiveTransport]), []);
-  const archive = useMemo(() => Object.freeze({
+  const deploymentCanReload = deploymentVersion === "different" && materialIdle && persistence.initialReconciliationComplete &&
+    persistence.status.phase === "saved" && !persistence.status.unsaved;
+  const archive = useMemo(() => ({
     prepare: () => preloadNow(() => loadArchiveTransport()
       .then((transport) => transport.preloadArchiveCodec())),
     exportCopy: exportArchive,
     validateImport: validateArchive,
     replaceImport: replaceArchive,
-  }), [exportArchive, replaceArchive, validateArchive]);
+    deploymentUpdate: {
+      available: deploymentVersion === "different",
+      canReload: deploymentCanReload,
+      reload: reloadChangedDeployment,
+    },
+  }), [deploymentCanReload, deploymentVersion, exportArchive, reloadChangedDeployment, replaceArchive, validateArchive]);
   const retrySaving = persistence.retry;
   const persistenceSurface = useMemo(() => Object.freeze({
     status: persistence.status,
@@ -304,6 +372,8 @@ export function MatterApp() {
     return materialTurnResult(receipt, "textSwapChange" in receipt ? receipt.textSwapChange : null);
   }, [commitTextSwap]);
   return (
+    <PictureBytesContext.Provider value={pictureStore.bytes}>
+    <PictureAuthoringContext.Provider value={pictureAuthoring}>
     <RootedMaterial
       canUndo={history.entries.length > 0}
       canRedo={history.redoEntries.length > 0}
@@ -347,6 +417,8 @@ export function MatterApp() {
       tree={tree}
       wikiOccurrences={wikiOccurrences}
     />
+    </PictureAuthoringContext.Provider>
+    </PictureBytesContext.Provider>
   );
 }
 
@@ -374,17 +446,31 @@ function isHistoryUnavailable(receipt: MatterStoreReceipt): boolean {
 
 // A failure is reported only in answer to an archive gesture made in the Files
 // panel, whose lazy chunk already holds this copy, so the import resolves
-// without a network fetch. The copy stays out of the initial graph.
+// without a network fetch. The copy stays out of the initial graph. If the
+// chunk itself cannot load (e.g. a deployment moved on), a content-free empty
+// message is returned so the calling gesture can still resolve without hanging.
 async function archiveFailure(code: string, language: MatterLocale) {
-  const { materialFilesCopy } = await import("./material-files-copy");
-  return Object.freeze({
-    ok: false as const,
-    message: archiveMessage(code, materialFilesCopy(language)),
-  });
+  try {
+    const { materialFilesCopy } = await import("./material-files-copy");
+    return Object.freeze({
+      ok: false as const,
+      message: archiveMessage(code, materialFilesCopy(language)),
+    });
+  } catch {
+    // The copy chunk failed to load. Return the per-locale archiveErrorAction
+    // floor so the caller still resolves to { ok: false } with a readable
+    // one-sentence message, never a blank string.
+    return Object.freeze({
+      ok: false as const,
+      message: ARCHIVE_ERROR_ACTION_FLOOR[language] ?? "Archive action could not finish.",
+    });
+  }
 }
 
 function archiveMessage(code: string, copy: MaterialFilesCopy): string {
   switch (code) {
+    case "ARCHIVE_ACTION_FAILED":
+      return copy.archiveErrorAction;
     case "IMPORT_STALE":
       return copy.archiveErrorStale;
     case "IMPORT_BUSY":
@@ -419,21 +505,4 @@ function archiveMessage(code: string, copy: MaterialFilesCopy): string {
     default:
       return copy.archiveErrorInvalid;
   }
-}
-
-function downloadLocalBytes(bytes: Uint8Array, fileName: string, type: string): void {
-  const copy = new Uint8Array(bytes.byteLength);
-  copy.set(bytes);
-  const url = URL.createObjectURL(new Blob([copy.buffer], { type }));
-  // A detached anchor is not reliable in every browser (Safari ignores the
-  // download attribute off-document), so append, click, then remove. The object
-  // URL is revoked well after the browser has started the download.
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName;
-  link.style.display = "none";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

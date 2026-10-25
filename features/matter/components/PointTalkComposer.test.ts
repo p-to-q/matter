@@ -15,6 +15,7 @@ import {
   pointTalkOutsidePointerDismisses,
   pointTalkPhaseLabel,
   pointTalkRecoveryAction,
+  pointTalkReserveStyle,
   pointTalkStatusInput,
 } from "./PointTalkComposer";
 
@@ -89,6 +90,23 @@ describe("Point Talk recovery", () => {
       insideSlotOwner: true,
       insideVoiceTool: false,
       submitted: false,
+    })).toBe(false);
+  });
+
+  it("never reads a press elsewhere as the end of a picture that is drawn or waits for Keep", () => {
+    const outside = {
+      insideBubble: false,
+      insideCanvasChrome: false,
+      insideVoiceTool: false,
+      submitted: false,
+    } as const;
+    expect(pointTalkOutsidePointerDismisses(outside)).toBe(true);
+    expect(pointTalkOutsidePointerDismisses({ ...outside, holdsPaidWork: false })).toBe(true);
+    expect(pointTalkOutsidePointerDismisses({ ...outside, holdsPaidWork: true })).toBe(false);
+    expect(pointTalkOutsidePointerDismisses({
+      ...outside,
+      insideCanvasChrome: true,
+      holdsPaidWork: true,
     })).toBe(false);
   });
 
@@ -169,5 +187,14 @@ describe("Point and Talk pending echo", () => {
     expect(echo?.endsWith("…")).toBe(true);
     // Elision never splits a surrogate pair.
     expect(condensePointTalkDirection("😀".repeat(40))).toBe(`${"😀".repeat(23)}…`);
+  });
+});
+
+describe("the room the picture control lends the field", () => {
+  it("is carried to the stylesheet as one unscaled length, and only when there is a control", () => {
+    expect(pointTalkReserveStyle(46)).toEqual({ "--point-talk-control-reserve": "46px" });
+    expect(pointTalkReserveStyle(71)).toEqual({ "--point-talk-control-reserve": "71px" });
+    expect(pointTalkReserveStyle(0)).toEqual({});
+    expect(pointTalkReserveStyle(-4)).toEqual({});
   });
 });

@@ -73,6 +73,28 @@ describe("Matter store", () => {
     expect(store.getState().tree.title).toBe("我已经改过的画布名");
   });
 
+  it("refuses to hydrate material whose pictures describe one hash two ways", () => {
+    const store = createMatterStore("expanded", { documentRoot: true });
+    const stored = structuredClone(store.getState().tree) as ThoughtTree;
+    stored.revision += 1;
+    const picture = {
+      mediaType: "image/png" as const,
+      byteLength: 1_000,
+      width: 512,
+      height: 512,
+      contentHash: "ab".repeat(32),
+    };
+    stored.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedLives]!.image = picture;
+    stored.nodes[SEEDED_DOCUMENT_NODE_IDS.imaginedTime]!.image = { ...picture, mediaType: "image/webp" };
+    const before = store.getState().tree;
+    expect(store.getState().hydrateSnapshot(stored)).toMatchObject({
+      operation: "hydrate",
+      status: "rejected",
+      errorCode: "TREE_INVARIANT_VIOLATION",
+    });
+    expect(store.getState().tree).toBe(before);
+  });
+
   it("migrates only the seeded demo's superseded document title", () => {
     const store = createMatterStore("expanded", {
       documentRoot: true,
@@ -296,7 +318,9 @@ describe("Matter store", () => {
       transcript: "a thought",
       expectedDocumentEpoch: 0,
     })).toMatchObject({ status: "committed" });
-    expect(store.getState().tree.nodes.voice_node_wiki_loading.text).toBe("a thought.");
+    // Store locale defaults to zh-CN; locale-bound normalization (Task 1) now
+    // applies zh-CN sentence-end punctuation even to Latin-script text.
+    expect(store.getState().tree.nodes.voice_node_wiki_loading.text).toBe("a thought。");
     expect(store.getState().history.entries).toHaveLength(1);
   });
 

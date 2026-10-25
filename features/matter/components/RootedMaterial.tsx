@@ -7,6 +7,9 @@ import dynamic from "next/dynamic";
 import type { CSSProperties, MouseEvent as ReactMouseEvent } from "react";
 import type { NavigationState } from "../runtime/navigation";
 import { admissionTargetExists } from "../runtime/admission";
+import { previewBranchEnabled } from "../config/preview-branch";
+import { createUnderAnchor, underBlockReason } from "../runtime/under-child";
+import { routeVoiceTool, voiceToolIsAvailable } from "../runtime/voice-tool-route";
 import type { TextSwapInteractionState } from "../runtime/text-swap-interaction";
 import { layoutColumnarTree } from "../layout/columnar-layout";
 import type { ColumnarLayout, LayoutNode } from "../layout/model";
@@ -104,6 +107,7 @@ import {
   type CanvasTurnGuidanceState,
 } from "./canvas-guidance";
 import { useOutcomeAcknowledgement, useOutcomeLine } from "./use-outcome-line";
+import type { PictureHold, PictureOutcomeReason } from "./picture-surface";
 import type { PersistenceStatus } from "../persistence/persistence-controller";
 import type { StoredReloadOutcome } from "../persistence/persistence-status";
 import {
@@ -128,6 +132,7 @@ import { preloadableComponent } from "./preloadable-component";
 import { WikiOccurrenceLayer } from "./wiki-occurrence-layer-chunk";
 import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
 import { CanvasRuling } from "./CanvasRuling";
+import { operationTarget, trailPresentation } from "./operation-target";
 import {
   MaterialAddressLayer,
   materialAddressVariantOutline,
@@ -136,12 +141,16 @@ import {
 import type { CanvasPreferencesBinding } from "./use-canvas-preferences";
 import type { CanvasLanguage } from "./canvas-preferences";
 import {
+  materialHeightIsReusable,
   materialLayoutDocumentKey,
   reconcileMaterialHeightCache,
   retainMaterialHeight,
   type MaterialHeightCacheBasis,
   type MaterialHeightMeasurement,
+  type MaterialHeightSubject,
 } from "./material-height-cache";
+import { LazyPassagePicture } from "./LazyPassagePicture";
+import { pictureLayoutKey } from "./passage-picture-box";
 import {
   canMoveNodeToParent,
   createNodeMovePolicy,
@@ -152,6 +161,7 @@ import { projectInquiryContext } from "../material/inquiry-context";
 import {
   createHeldAsideNodeIds,
   isNodeHeldAside,
+  projectActiveViewContext,
   projectWorkingContext,
   reconcileHeldAsideNodeIds,
   restoreHeldAsideLineage,
@@ -241,6 +251,10 @@ const PointTalkExit = preloadableComponent(
 const NodeActionLens = preloadableComponent(
   () => import("./NodeActionLens").then((module) => module.NodeActionLens),
 );
+// The trail mounts with the first selection, so its chunk loads with the rest.
+const OperationTrailLayer = preloadableComponent(
+  () => import("./OperationTrail").then((module) => module.OperationTrailLayer),
+);
 const MaterialFilesWithLabels = dynamic(
   () => import("./MaterialFilesWithLabels").then((module) => module.MaterialFilesWithLabels),
   { ssr: false },
@@ -252,12 +266,14 @@ const PAPER_GESTURE_CHUNKS = Object.freeze([
   PointTalkExit.preload,
   NodeActionLens.preload,
   WikiOccurrenceLayer.preload,
+  OperationTrailLayer.preload,
 ]);
 // Keep the complete grapheme and candidate policy behind the lazy turn. This
 // cheap bound admits every ordinary passage the exact policy can safely size;
 // the turn still owns the authoritative validation before it exposes input.
 const POINT_TALK_FAST_SOURCE_LIMIT = Math.ceil(MAX_REPLACEMENT_TEXT_CODE_UNITS / .75);
 const EMPTY_NODE_IDS: ReadonlySet<string> = new Set<string>();
+const EMPTY_NODE_ID_LIST: readonly string[] = Object.freeze([]);
 const ACTIVE_LAYOUT_NODE_SELECTOR = "[data-layout-node-id][data-thought-id]";
 // The CSS fade of every leaving surface lasts exactly as long as its unmount.
 const PRESENCE_EXIT_STYLE = Object.freeze({
@@ -511,6 +527,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
     wikiOccurrences?.setSurfaceAvailable(materialPresentationAvailable);
   }, [materialPresentationAvailable, wikiOccurrences]);
   const [pointTalkPhase, setPointTalkPhase] = useState<TextSwapInteractionState["phase"]>("idle");
+  // Whether the open field holds a picture turn a press elsewhere must not end.
+  const [pointTalkPictureHold, setPointTalkPictureHold] = useState<PictureHold>("free");
+  const [pictureAnnouncement, setPictureAnnouncement] = useState<Readonly<{
+    id: number;
+    text: string;
+    /** The outcome line's last report when this was said. */
+    afterOutcomeId: number;
+  }> | null>(null);
+  const lastOutcomeIdRef = useRef(0);
+  const reportPictureAnnouncement = useCallback((text: string) => {
+    setPictureAnnouncement((current) => ({
+      id: (current?.id ?? 0) + 1,
+      text,
+      afterOutcomeId: lastOutcomeIdRef.current,
+    }));
+  }, []);
+  const reportPictureOutcome = useCallback((reason: PictureOutcomeReason) => {
+    reportOutcome({ owner: "picture", reason });
+  }, [reportOutcome]);
   const [pointTalkExitHandoff] = useState(() => createPresenceHandoff<PointTalkSurfaceView>());
   const reportPointTalkOutcome = useCallback((reason: PointTalkReleasedOutcome) => {
     reportOutcome({ owner: "rewrite", reason });
@@ -826,11 +861,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const publicationKey = viewportRenderer
     ? `${layoutDocumentKey}:${measureRevision}:viewport-research`
     : `${layoutDocumentKey}:${measureRevision}`;
-  const activeWorkingProjection = useMemo(
-    () => projection
-      .filter(({ node }) => workingContext.activeNodeIds.has(node.id))
-      .map(({ node, depth }) => Object.freeze({ nodeId: node.id, depth })),
+  // The active view's two inputs, once: Inquiry reads them as a projection and
+  // the Receipt download as a working-tree address, so both see the same view.
+  const activeTreeReceiptBasis = useMemo(
+    () => Object.freeze({ view: projection, activeNodeIds: workingContext.activeNodeIds }),
     [projection, workingContext.activeNodeIds],
+  );
+  const activeWorkingProjection = useMemo(
+    () => projectActiveViewContext(activeTreeReceiptBasis.view, activeTreeReceiptBasis.activeNodeIds),
+    [activeTreeReceiptBasis],
   );
   const completePublication = published?.key === publicationKey ? published : null;
   const completeLayout = completePublication?.layout ?? null;
@@ -1347,6 +1386,20 @@ export function RootedMaterial(props: RootedMaterialProps) {
   );
   const activePointTalkNodeId = pointTalkPresented ? pointTalkHostNodeId : null;
   const pointTalkSelectionCurrent = pointTalkHostNodeId !== null;
+  // Selecting another passage ends an unsent draft, but not a picture that is
+  // being drawn or waits for Keep: its scope is fixed for the rest of the
+  // opening once it holds paid work. The passage's own words still end it.
+  const livePointTalkScopeKey = `${navigationKey}:${workingContextState.epoch}:point-talk`;
+  const [pointTalkScopeHold, setPointTalkScopeHold] = useState<Readonly<{
+    openingId: number;
+    key: string;
+  }> | null>(null);
+  if (pointTalkPictureHold === "paid" && pointTalkScopeHold?.openingId !== pointTalkOpeningId) {
+    setPointTalkScopeHold({ openingId: pointTalkOpeningId, key: livePointTalkScopeKey });
+  }
+  const pointTalkScopeKey = pointTalkScopeHold?.openingId === pointTalkOpeningId
+    ? pointTalkScopeHold.key
+    : livePointTalkScopeKey;
   // One opening of the field, owned by the turn's target so it outlives that
   // target: a vanished passage still names the field that must leave.
   const pointTalkPresenceIdentity = pointTalkOwner === null
@@ -1375,10 +1428,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
       pointTalkOwner.treeId === tree.id;
     if (sameDocument && (
       pointTalkPresented || pointTalkPhase === "pending" || pointTalkPhase === "transcribing"
-    )) reportOutcome({ owner: "rewrite", reason: "stale" });
+    )) {
+      reportOutcome(pointTalkPictureHold === "free"
+        ? { owner: "rewrite", reason: "stale" }
+        : { owner: "picture", reason: "stale" });
+    }
     closePointTalk(sameDocument ? "target-changed" : "cut");
     setPointTalkOwner(null);
     if (pointTalkPhase !== "idle") setPointTalkPhase("idle");
+    if (pointTalkPictureHold !== "free") setPointTalkPictureHold("free");
   }
   const stretchSelection = eligibleStretchSelection({
     candidate: lasso.selections.length === 1 && lasso.selection?.type === "segment-range"
@@ -1426,19 +1484,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
       cancelPointTalkFocusRestore();
     };
   }, [cancelPointTalkFocusRestore]);
-  const publishPointTalkChange = useCallback((change: TextSwapCommittedChange) => {
-    publishMaterialTextChange(change);
-    // The rewritten passage is the ending: the field fades over it.
+  const finishPointTalk = useCallback((basis: PointTalkFocusRestorationBasis) => {
+    // The changed passage is the ending: the field fades over it.
     closePointTalk("result");
     setPointTalkOwner(null);
     setPointTalkPhase("idle");
     setPointTalkVoiceCommand(null);
     cancelPointTalkFocusRestore();
-    const basis = Object.freeze({
-      documentEpoch: change.documentEpoch,
-      nodeId: change.nodeId,
-      treeId: change.treeId,
-    });
     if (!pointTalkFocusRestorationIsCurrent(basis, tree, props.documentEpoch)) return;
     const frameId = requestAnimationFrame(() => {
       const pending = pointTalkFocusFrameRef.current;
@@ -1462,13 +1514,15 @@ export function RootedMaterial(props: RootedMaterialProps) {
       }
     });
     pointTalkFocusFrameRef.current = Object.freeze({ basis, frameId });
-  }, [
-    cancelPointTalkFocusRestore,
-    closePointTalk,
-    props.documentEpoch,
-    publishMaterialTextChange,
-    tree,
-  ]);
+  }, [cancelPointTalkFocusRestore, closePointTalk, props.documentEpoch, tree]);
+  const publishPointTalkChange = useCallback((change: TextSwapCommittedChange) => {
+    publishMaterialTextChange(change);
+    finishPointTalk(Object.freeze({
+      documentEpoch: change.documentEpoch,
+      nodeId: change.nodeId,
+      treeId: change.treeId,
+    }));
+  }, [finishPointTalk, publishMaterialTextChange]);
   const admissionLifecycleState = props.admission.state;
   const setAdmissionDeliveryTarget = props.admission.setDeliveryTarget;
   useLayoutEffect(() => {
@@ -1496,6 +1550,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
   ]);
   const stretchRecoveryRef = useRef<() => void>(() => undefined);
   const admissionCapturePending = admissionCaptureIsActive(props.admission.state);
+  // Under arms ONE utterance: the attempt it began owns the capture until it
+  // returns to idle, and the token is how nothing else can claim it.
+  const [underToken, setUnderToken] = useState<string | null>(null);
+  const underAdmission = props.admission.state.phase !== "idle" &&
+    props.admission.state.token === underToken &&
+    props.admission.state.anchor.kind === "child"
+    ? props.admission.state
+    : null;
+  const underOwnsCapture = underAdmission !== null && admissionCapturePending;
+  const underRecordingNodeId = underAdmission !== null && underAdmission.anchor.kind === "child" &&
+      (underAdmission.phase === "requesting" || underAdmission.phase === "recording")
+    ? underAdmission.anchor.parentNodeId
+    : null;
+  // Escape withdraws the armed recording before any layer beneath it closes.
+  const cancelAdmission = props.admission.cancel;
+  useEscapeLayer(underRecordingNodeId !== null, "gesture", () => {
+    cancelAdmission();
+    return true;
+  });
   const elasticSelection = persistenceLoading || admissionCapturePending
     ? null
     : stretchSelection;
@@ -1527,19 +1600,59 @@ export function RootedMaterial(props: RootedMaterialProps) {
     const activity: PaperActivity = Object.freeze({
       elastic: transformState.phase,
       textSwap: pointTalkPhase,
+      pictureHeld: pointTalkPictureHold === "paid",
       inquiryHeld,
       editingHeld,
     });
     if (samePaperActivity(reportedPaperActivityRef.current, activity)) return;
     reportedPaperActivityRef.current = activity;
     reportPaperActivity?.(activity);
-  }, [editingHeld, inquiryHeld, pointTalkPhase, reportPaperActivity, transformState.phase]);
+  }, [
+    editingHeld,
+    inquiryHeld,
+    pointTalkPhase,
+    pointTalkPictureHold,
+    reportPaperActivity,
+    transformState.phase,
+  ]);
   useLayoutEffect(() => () => {
     // Unmounting the paper releases what it held, so the root must not keep
     // waiting on activity nobody will report again.
     reportedPaperActivityRef.current = IDLE_PAPER_ACTIVITY;
     reportPaperActivity?.(IDLE_PAPER_ACTIVITY);
   }, [reportPaperActivity]);
+  // What the canvas trail shows, derived in render and never stored: it joins
+  // the root to the passage an AI operation is addressed at, else to the
+  // selected passage, and only for the layout epoch that is published. Hover and
+  // focus never name a passage.
+  const activeOperation = operationTarget({
+    elastic: {
+      nodeId: transformState.basis?.documentEpoch === props.documentEpoch
+        ? transformState.basis.selection.nodeId
+        : null,
+      phase: transformState.phase,
+    },
+    pointTalk: {
+      hostNodeId: pointTalkHostNodeId,
+      phase: pointTalkPhase,
+      pictureHold: pointTalkPictureHold,
+      presented: pointTalkPresented,
+    },
+  });
+  const operationTrailPresentation = trailPresentation({
+    selectedNodeId: navigation.selectedNodeId,
+    operationTargetNodeId: activeOperation?.nodeId ?? null,
+    operationWorking: activeOperation?.working ?? false,
+    viewMode: navigation.mode === "focus" ? "focus" : "full",
+    // The one source of what Ask Matter is addressed to: the lassoed passages
+    // `projectInquiryPayload` reads, while its bubble is open. A whole-tree
+    // inquiry names no passage.
+    inquiryNodeIds: canvasOverlay === "inquiry" ? lasso.selections.map(({ nodeId }) => nodeId) : EMPTY_NODE_ID_LIST,
+    lassoActive: lasso.active,
+    layoutEpoch: activeLayout?.layoutEpoch ?? null,
+    publishedEpoch: completePublication?.layout.layoutEpoch ?? null,
+    nodeExists: (nodeId) => Object.hasOwn(tree.nodes, nodeId),
+  });
   const startFixedExpansion = useCallback((basis: Parameters<typeof startTransform>[0]) => {
     canvasChromeRef.current?.closeInquiry();
     startTransform(basis);
@@ -1611,9 +1724,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
   // way a leaving Point Talk field is painted differs.
   /** The person acted elsewhere: presentations leave as the person's close. */
   const dismissPaperPresentations = useCallback(() => {
-    closePointTalk("person");
+    // A picture that is being drawn, or waits for Keep, is paid work: a press
+    // elsewhere does not end it. Only its own controls, or another owner
+    // taking the slot, do.
+    if (pointTalkPictureHold !== "paid") closePointTalk("person");
     abortElasticExpansion();
-  }, [abortElasticExpansion, closePointTalk]);
+  }, [abortElasticExpansion, closePointTalk, pointTalkPictureHold]);
   /** Another owner takes the paper's slot: a Point Talk field fades quickly. */
   const yieldPaperPresentations = useCallback(() => {
     closePointTalk("slot");
@@ -2046,6 +2162,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         dismissPaperPresentations();
         return props.archive!.replaceImport(file, options);
       },
+      deploymentUpdate: props.archive.deploymentUpdate,
     });
   }, [dismissPaperPresentations, props.archive]);
   useEffect(() => {
@@ -2332,6 +2449,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     voiceAdmissionIsEnabled() &&
     voiceReadiness.status === "ready";
   const pointTalkVoiceStartable = activePointTalkNodeId !== null &&
+    pointTalkPictureHold === "free" &&
     (pointTalkPhase === "eligible" || pointTalkPhase === "ready" || pointTalkPhase === "error");
   const pointTalkVoiceRecording = activePointTalkNodeId !== null && pointTalkPhase === "recording";
   const selectedRewriteAvailable = selectedRewriteNodeId !== null &&
@@ -2344,11 +2462,14 @@ export function RootedMaterial(props: RootedMaterialProps) {
       : admissionVoiceAvailable;
   const admissionVoiceToolAvailable = admissionVoiceAvailable &&
     (props.admission.state.phase === "idle" || props.admission.state.phase === "recording");
-  const voiceToolAvailable = pointTalkHostNodeId !== null
-    ? activePointTalkNodeId !== null && voiceAvailable
-    : selectedNode !== null
-      ? voiceAvailable
-      : admissionVoiceToolAvailable;
+  const voiceToolAvailable = voiceToolIsAvailable({
+    admissionPhase: props.admission.state.phase,
+    pointTalkHosted: pointTalkHostNodeId !== null,
+    pointTalkActive: activePointTalkNodeId !== null,
+    targetVoiceAvailable: voiceAvailable,
+    passageSelected: selectedNode !== null,
+    admissionToolAvailable: admissionVoiceToolAvailable,
+  });
   const admissionFocusContextRef = useRef({ tree, documentEpoch: props.documentEpoch });
   const admissionFocusFrameRef = useRef<Readonly<{
     basis: AdmissionFocusRestorationBasis;
@@ -2414,9 +2535,39 @@ export function RootedMaterial(props: RootedMaterialProps) {
     });
     admissionFocusFrameRef.current = Object.freeze({ basis, frameId });
   }, [cancelAdmissionFocusRestore, props.documentEpoch, tree]);
+  const underBlocked = (nodeId: string) => underBlockReason({
+    tree,
+    nodeId,
+    voiceAdmissionAvailable: admissionVoiceAvailable,
+    heldAside: heldAsideRootIds.has(nodeId) || !workingContext.activeNodeIds.has(nodeId),
+    interactionBusy: persistenceLoading || props.admission.state.phase !== "idle",
+  });
+  const startUnder = (nodeId: string) => {
+    // The mark is a toggle: while its utterance is armed, tapping it withdraws.
+    if (underRecordingNodeId === nodeId) {
+      props.admission.cancel();
+      return;
+    }
+    if (underBlocked(nodeId) !== null) return;
+    const handle = createUnderAnchor(tree, navigation, nodeId);
+    if (!handle.ok || handle.anchor.target !== "child") return;
+    dismissPaperPresentations();
+    if (lasso.active) lasso.deactivate();
+    // The mark may sit on a passage that is only hovered. Selecting it keeps
+    // the rule that speaking again appends the next child to the same parent.
+    if (navigation.selectedNodeId !== nodeId) props.onSelectNode(nodeId);
+    setUnderToken(props.admission.start({
+      kind: "child",
+      treeId: handle.anchor.treeId,
+      baseRevision: handle.anchor.baseRevision,
+      parentNodeId: handle.anchor.parentNodeId,
+    }));
+  };
+  const previewBranch = previewBranchEnabled();
   const tools = useMemo(
     () =>
       projectTools({
+        previewBranch,
         view: navigation.mode,
           selected:
           toolTargetNode === null
@@ -2429,7 +2580,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         canUndo,
         interaction: interactionPending ? "pending" : "idle",
       }),
-    [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, toolTargetNode],
+    [canUndo, interactionPending, navigation.foldedNodeIds, navigation.mode, previewBranch, toolTargetNode],
   );
   const toolSurface = useMemo(() => projectToolSurface(tools), [tools]);
   const projectInquiryPayload = useCallback(
@@ -2498,6 +2649,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
       outcome: outcomeLine.current,
       language: languageGuidance,
       material: materialGuidance,
+      deploymentChanged: props.archive?.deploymentUpdate?.canReload === true &&
+        outcomePresentationAvailable && !interactionPending && !pointTalkPresented &&
+        !inquiryHeld && !editingHeld && pointTalkPictureHold !== "paid",
     }),
     canvasPreferences.preferences.language,
   );
@@ -2508,6 +2662,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
     ? outcomeLine.current
     : null;
   useOutcomeAcknowledgement(shownOutcome, outcomeLine.acknowledge);
+  useEffect(() => {
+    lastOutcomeIdRef.current = outcomeLine.lastId;
+  });
   const parkedRelease = guidance.id === "expansion-parked"
     ? discardParkedExpansion
     : guidance.id === "text-swap-parked"
@@ -2596,6 +2753,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
       locale: props.locale,
       styleEpoch: measureRevision,
     });
+    // The typography ledger measures text alone, so a passage that carries a
+    // picture would be published too short. Fail closed until it learns the box.
+    if (projection.some((item) => item.node.image !== undefined)) {
+      failViewportCandidate(canvas, "picture-unsupported");
+      return;
+    }
     const token = authority.begin(publicationKey);
     if (token === null) {
       failViewportCandidate(canvas, "typography-not-ready");
@@ -2809,10 +2972,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
       const element = elements[index];
       const root = item.parentId === null;
       const cachedHeight = measuredHeightCacheRef.current.get(item.node.id);
-      const heightCacheHit = cachedHeight !== undefined &&
-        cachedHeight.columnWidth === columnWidth &&
-        cachedHeight.root === root &&
-        cachedHeight.text === item.node.text;
+      const subject = {
+        columnWidth,
+        picture: pictureLayoutKey(item.node.image),
+        root,
+        text: item.node.text,
+      } satisfies MaterialHeightSubject;
+      const heightCacheHit = materialHeightIsReusable(cachedHeight, subject);
       // Viewport transforms must never leak camera scale into world geometry.
       // `offsetHeight` is the untransformed CSS box height; bounding rects are
       // screen-space and would apply zoom once here and again on publication.
@@ -2841,10 +3007,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
       }
       if (!heightCacheHit) {
         retainMaterialHeight(measuredHeightCacheRef.current, item.node.id, Object.freeze({
-          columnWidth,
+          ...subject,
           height,
-          root,
-          text: item.node.text,
         }));
       }
       const baseNode = {
@@ -3093,7 +3257,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
   } as CSSProperties;
   const nodeActionsEnabled = activeLayout !== null &&
     canvasMode === "material" &&
-    !interactionPending &&
+    !persistenceLoading &&
+    (!admissionCapturePending || underOwnsCapture) &&
     !lasso.active &&
     !lasso.drawing &&
     !stretch.dragging &&
@@ -3775,7 +3940,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
           <span key={`outcome_${shownOutcome.id}`}>{localizeOutcome(shownOutcome, props.locale)}</span>
         ) : guidance.id === "expansion-parked" || guidance.id === "text-swap-parked" ? (
           <span key={guidance.id}>{guidance.text}</span>
-        ) : null}
+        ) : pictureAnnouncement === null || pictureAnnouncement.afterOutcomeId !== outcomeLine.lastId
+          // An outcome reported since supersedes it; said once, it is not said again.
+          ? null
+          : (
+          <span key={`picture_${pictureAnnouncement.id}`}>{pictureAnnouncement.text}</span>
+        )}
       </span>
       <PaperTexture />
       <header className="matter-header" data-canvas-interactive>
@@ -3793,6 +3963,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         <span className="matter-brand__product">matter</span>
       </header>
       <MaterialFilesWithLabels
+        activeWorkingTree={activeTreeReceiptBasis}
         archive={indexArchive}
         documentEpoch={props.documentEpoch}
         interactionPending={interactionPending || lasso.active}
@@ -3870,13 +4041,25 @@ export function RootedMaterial(props: RootedMaterialProps) {
           dispatchToolIntent(intent, props);
         }}
         onVoice={() => {
-          if (pointTalkHostNodeId !== null && activePointTalkNodeId === null) return;
-          if (activePointTalkNodeId !== null) {
-            if (pointTalkVoiceRecording) issuePointTalkVoiceCommand("stop");
-            else if (pointTalkVoiceStartable) issuePointTalkVoiceCommand("start");
+          const action = routeVoiceTool({
+            admissionPhase: props.admission.state.phase,
+            pointTalkHosted: pointTalkHostNodeId !== null,
+            pointTalkActive: activePointTalkNodeId !== null,
+            pointTalkRecording: pointTalkVoiceRecording,
+            pointTalkStartable: pointTalkVoiceStartable,
+            rewriteTargeted: selectedRewriteNodeId !== null,
+            admissionStartable: props.admissionAnchor !== null,
+          });
+          if (action === "none") return;
+          if (action === "stop-point-talk") {
+            issuePointTalkVoiceCommand("stop");
             return;
           }
-          if (selectedRewriteNodeId !== null) {
+          if (action === "start-point-talk") {
+            issuePointTalkVoiceCommand("start");
+            return;
+          }
+          if (action === "open-point-talk" && selectedRewriteNodeId !== null) {
             canvasChromeRef.current?.closeInquiry();
             abortElasticExpansion();
             if (lasso.active) exitLasso();
@@ -3894,9 +4077,9 @@ export function RootedMaterial(props: RootedMaterialProps) {
             return;
           }
           dismissPaperPresentations();
-          if (props.admission.state.phase === "recording") {
+          if (action === "stop-admission") {
             props.admission.stop();
-          } else if (props.admissionAnchor !== null) {
+          } else if (action === "start-admission" && props.admissionAnchor !== null) {
             // Admission temporarily owns the surface, while the validated
             // lasso address stays available to re-arm after cancellation.
             if (lasso.active) lasso.deactivate();
@@ -3905,6 +4088,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         }}
         surface={toolSurface}
         panActive={!lasso.active && canvasMode === "pan"}
+        previewBranch={previewBranch}
         voiceActive={props.admission.state.phase === "recording" ||
           pointTalkVoiceRecording ||
           (activePointTalkNodeId !== null && pointTalkPhase === "permission")}
@@ -3979,6 +4163,16 @@ export function RootedMaterial(props: RootedMaterialProps) {
             inert={viewportRenderer && activeLayout === null ? true : undefined}
             ref={canvasRef}
           >
+            <OperationTrailLayer
+              key={props.documentEpoch}
+              canvasRef={canvasRef}
+              currentLayoutEpoch={completePublication?.layout.layoutEpoch ?? null}
+              layout={activeLayout}
+              pointTalkPhase={pointTalkPhase}
+              presentation={operationTrailPresentation}
+              tree={tree}
+              viewport={viewport}
+            />
             {viewportRenderer && renderedProjection.length === 0 ? (
               <ViewportMaterialGlimpse text={projection[0]?.node.text ?? ""} />
             ) : (
@@ -4039,7 +4233,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
             locale={props.locale}
             navigation={navigation}
             onOpenPointTalk={(nodeId, origin) => {
-              if (pointTalkHostNodeId !== null) return;
+              if (pointTalkHostNodeId !== null || props.admission.state.phase !== "idle") return;
               canvasChromeRef.current?.closeInquiry();
               abortElasticExpansion();
               props.admission.clearRepairPresentations();
@@ -4059,7 +4253,13 @@ export function RootedMaterial(props: RootedMaterialProps) {
             }}
             pointTalkEligibleNodeIds={pointTalkEligibleNodeIds}
             positioningRef={materialPlaneRef}
+            previewBranch={previewBranch}
             tree={tree}
+            under={{
+              blockedReason: underBlocked,
+              recordingNodeId: underRecordingNodeId,
+              onActivate: startUnder,
+            }}
             wikiReviews={wikiReviews}
           />
         ) : null}
@@ -4134,7 +4334,8 @@ export function RootedMaterial(props: RootedMaterialProps) {
             enabled={pointTalkSelectionCurrent && !persistenceLoading}
             geometryKey={`${activeLayout?.layoutEpoch ?? 0}:${viewport.x}:${viewport.y}:${viewport.zoom}:${navigation.mode}:${indexOverlayOpen ? "index-open" : "index-closed"}:${materialPresentationAvailable ? "surface" : "occluded"}`}
             exitHandoff={pointTalkExitHandoff}
-            interactionScopeKey={`${navigationKey}:${workingContextState.epoch}:point-talk`}
+            interactionPending={interactionPending || transformState.phase === "requesting"}
+            interactionScopeKey={pointTalkScopeKey}
             key={`${props.documentEpoch}:${pointTalkHostNodeId}:${pointTalkOpeningId}`}
             locale={props.locale}
             nodeId={pointTalkHostNodeId}
@@ -4142,6 +4343,10 @@ export function RootedMaterial(props: RootedMaterialProps) {
             onCommitted={publishPointTalkChange}
             onDeliveryParkedChange={reportPointTalkParked}
             onPhaseChange={setPointTalkPhase}
+            onPictureAnnouncement={reportPictureAnnouncement}
+            onPictureHoldChange={setPointTalkPictureHold}
+            onPictureKept={finishPointTalk}
+            onPictureOutcome={reportPictureOutcome}
             onReleased={releasePointTalkJob}
             onReleasedOutcome={reportPointTalkOutcome}
             origin={pointTalkOrigin}
@@ -4406,6 +4611,7 @@ const CanvasThoughtList = memo(function CanvasThoughtList({
                 ? <span className="spatial-thought__label">{materialText}</span>
                 : materialText}
             </button>
+            {node.image === undefined ? null : <LazyPassagePicture locale={locale} pointer={node.image} />}
             {isTransformPending && transformStatus.announce ? (
               <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
                 {transformStatus.text}
@@ -5390,6 +5596,7 @@ function dispatchToolIntent(intent: ToolIntent, props: RootedMaterialProps) {
   if (
     !isCurrentToolIntent(
       {
+        previewBranch: previewBranchEnabled(),
         view: navigation.mode,
         selected:
           toolTargetNode === null
@@ -5475,8 +5682,10 @@ export function voiceToolLabel(input: Readonly<{
 }>): string {
   const copy = voiceToolCopy(input.locale);
   if (input.rewriteRecording) return copy.stopRewriteDirection;
-  if (input.rewriteTargeted) return copy.recordRewriteDirection;
+  // A live admission recording outranks a selected passage: Under records
+  // while a passage stays selected, and Voice then stops it.
   if (input.isRecording) return copy.stopRecording;
+  if (input.rewriteTargeted) return copy.recordRewriteDirection;
   if (input.firstAdmission) return copy.recordRootThought;
   if (input.anchor?.kind === "root") return copy.recordRootThought;
   if (input.anchor?.kind === "child" && input.anchor.parentNodeId === input.rootId) {

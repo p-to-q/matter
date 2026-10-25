@@ -16,7 +16,7 @@
  * weighs more while older evidence still counts.
  */
 
-export const WIKI_LEARNING_POLICY_VERSION = 4 as const;
+export const WIKI_LEARNING_POLICY_VERSION = 5 as const;
 export const WIKI_EVIDENCE_UNITS_PER_OBSERVATION = 4;
 const MAX_WIKI_LEARNING_OBSERVATIONS = 255;
 /** V6 stored whole observations up to 255; this bound scales them exactly. */

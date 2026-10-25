@@ -154,3 +154,5 @@ function success<Value>(value: Value): RepositoryResult<Value> {
 function failure(code: RepositoryErrorCode, message: string): RepositoryResult<never> {
   return Object.freeze({ ok: false, error: Object.freeze({ code, message }) });
 }
+
+Object.defineProperty(createIndexedDbInquiryRecordRepository, "matterCapability", { value: "matter-capability:inquiry-record" });

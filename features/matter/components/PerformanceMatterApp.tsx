@@ -31,7 +31,7 @@ const INERT_ADMISSION: AdmissionController = Object.freeze({
   state: createAdmissionInteractionState(),
   settlement: null,
   repairPresentations: NO_REPAIR_PRESENTATIONS,
-  start: () => undefined,
+  start: () => null,
   stop: () => undefined,
   cancel: () => undefined,
   retry: () => undefined,
