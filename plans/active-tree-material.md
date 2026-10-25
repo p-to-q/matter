@@ -9,6 +9,14 @@ main integration only; restore blocking before the next prerelease. Other
 engineering/browser failures still require diagnosis. Older passing receipts do
 not qualify the new source, and main integration is not prerelease acceptance.
 
+Deployment exception: Vercel uses `build-main-integration.mjs` for this
+integration. It compiles normally, executes the unchanged budget checker, and
+accepts only the three recorded Wiki diagnostics at package version
+`0.2.0-preview.64`. A new version, unrelated/global budget failure, malformed
+output, checker error or compilation failure remains blocking. The strict
+`npm run build`/`npm run check` commands are unchanged. Two focused policy tests
+hold acceptance/expiry and failure rejection; CI includes them in `npm test`.
+
 External Wiki cutoff amendment: independent review found that an outer queue
 flag cannot revoke a passive settlement already inside coordinator CAS rebase.
 The coordinator now retains a bounded transient revision cutoff whenever it

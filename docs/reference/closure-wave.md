@@ -2,6 +2,20 @@
 
 ## PR continuation — 2026-10-25
 
+PR: [#136](https://github.com/p-to-q/matter/pull/136), ready for review on
+`codex/engineering-closure`. CI is running. CodeRabbit reports a successful
+status but explicitly **skipped review**: 416 changed files exceed its 100-file
+limit. No CodeRabbit review is claimed; local independent passes remain their
+own evidence. The owner subsequently prioritized main integration with explicit
+budget debt.
+
+Vercel's build entry now uses the bounded integration wrapper. Only the three
+recorded Wiki budget diagnostics are accepted, and only for package version
+`0.2.0-preview.64`; version changes, unknown/global budgets, malformed diagnostics
+and compilation/checker errors still fail. The ordinary local build/check stay
+strict. Policy/config checks 19/19 pass. Hosted deployment is still being
+verified, rather than inferred from this local policy result.
+
 Status: main integration authorized, prerelease acceptance withheld. The
 isolated `codex/engineering-closure` branch incorporates the current main
 maintenance change while preserving the original dirty `claude/preview-65`
