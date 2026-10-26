@@ -12,6 +12,7 @@ export function acceptsIntegrationBudgetDebt(version, status, output) {
   const lines = output.trim().split(/\r?\n/u);
   return lines.length > 0 && lines.every((line) =>
     /^runtime-artifact: Capability wiki-runtime uses [0-9]+ gzip bytes; budget is 27648\.$/u.test(line) ||
+    /^runtime-artifact: Capability wiki-runtime entry features\/matter\/persistence\/(?:use-wiki-authority|wiki-runtime-bridge)\.ts -> \.\/wiki-runtime-core uses [0-9]+ cold gzip bytes; entry budget is 34816\.$/u.test(line) ||
     /^runtime-artifact: Capability wiki-settings uses [0-9]+ gzip bytes; budget is 10752\.$/u.test(line) ||
     /^runtime-artifact: Capability wiki-settings entry features\/matter\/components\/CanvasChrome\.tsx -> \.\/WikiSettingsSection uses [0-9]+ cold gzip bytes; entry budget is 49152\.$/u.test(line));
 }

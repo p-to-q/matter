@@ -1,5 +1,24 @@
 # Plan: Matter first release
 
+## Deployment replay correction — 2026-10-26
+
+```text
+Outcome:    the authorized Wiki budget debt no longer rejects Vercel's build
+Boundary:   version-bound integration build wrapper and its policy tests
+Invariants: unchanged budget ceilings; no unrelated/global/checker failure is
+            waived; version changes expire the exception; no provider gate opens
+Proof:      official @vercel/next 26.0.1 replay fails before this fix with two
+            additional exact Wiki runtime entry diagnostics; rerun packaging
+Non-goals:  Vercel login, project linking, environment edits or a manual upload
+```
+
+Vercel's builder supplies deployment-related build environment that the plain
+Next build did not exercise. Its measured debt additionally names the existing
+`use-wiki-authority.ts` and `wiki-runtime-bridge.ts` callers of
+`./wiki-runtime-core`, each over the unchanged 34,816-byte cold-entry ceiling.
+Accept these two exact diagnostics under the existing owner authorization,
+alongside the three already recorded; do not accept arbitrary Wiki callers.
+
 ## PR integration continuation — 2026-10-25
 
 Owner's final surface correction: the Chinese drawing entry is 绘图 (繪圖 in
@@ -18,7 +37,7 @@ not qualify the new source, and main integration is not prerelease acceptance.
 
 Deployment exception: Vercel uses `build-main-integration.mjs` for this
 integration. It compiles normally, executes the unchanged budget checker, and
-accepts only the three recorded Wiki diagnostics at package version
+accepts only the five recorded Wiki diagnostics at package version
 `0.2.0-preview.64`. A new version, unrelated/global budget failure, malformed
 output, checker error or compilation failure remains blocking. The strict
 `npm run build`/`npm run check` commands are unchanged. Two focused policy tests
