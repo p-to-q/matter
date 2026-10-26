@@ -1,5 +1,29 @@
 # Integration closure — 2026-10-16
 
+## Vercel build replay — 2026-10-26
+
+PR #136 is merged as `f22a3a1`; its required CI passed, including 340 browser
+journeys with 18 intentional skips and compiled recovery N1–N5. The GitHub-linked
+production deployment failed; existing account access cannot read its logs.
+
+An isolated replay using the cached official `@vercel/next` 26.0.1 builder
+reproduced a concrete build rejection without login or upload. Next compilation
+succeeded, but deployment-mode output adds two Wiki runtime cold-entry failures
+(35,175 / 34,816 gzip bytes) to the three known diagnostics. The wrapper's
+three-diagnostic allow-list rejected them, returning exit 1 before packaging.
+The correction accepts only those two exact existing caller paths, retains every
+ceiling and version expiry, and still rejects unknown callers or other failures.
+This is a local reproduction, not access to the hosted failure log or proof of
+a successful deployment. Raw replay output is local under
+`/private/tmp/matter-vercel-replay-20261026/`.
+
+After the narrow correction, the same official builder completes server tracing,
+serverless function generation and static collection (155 output entries).
+The replay uses an isolated tracked-source snapshot with existing local
+dependencies, not a clean Linux install; no account was authenticated and no
+artifact uploaded. Policy/config tests 19/19, focused ESLint and local Markdown
+links pass. The unchanged budget checker continues to report the five failures.
+
 ## PR continuation — 2026-10-25
 
 PR: [#136](https://github.com/p-to-q/matter/pull/136), ready for review on
