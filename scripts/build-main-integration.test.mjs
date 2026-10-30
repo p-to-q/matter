@@ -7,7 +7,7 @@ const settings = "runtime-artifact: Capability wiki-settings uses 11745 gzip byt
 const entry = "runtime-artifact: Capability wiki-settings entry features/matter/components/CanvasChrome.tsx -> ./WikiSettingsSection uses 49420 cold gzip bytes; entry budget is 49152.";
 const authorityEntry = "runtime-artifact: Capability wiki-runtime entry features/matter/persistence/use-wiki-authority.ts -> ./wiki-runtime-core uses 35175 cold gzip bytes; entry budget is 34816.";
 const bridgeEntry = "runtime-artifact: Capability wiki-runtime entry features/matter/persistence/wiki-runtime-bridge.ts -> ./wiki-runtime-core uses 35175 cold gzip bytes; entry budget is 34816.";
-const initialAssets = "runtime-artifact: initial gzip assets uses 406022 gzip bytes; budget is 405504.";
+const initialAssets = "runtime-artifact: initial gzip assets uses 406022 bytes; budget is 405504.";
 
 test("accepts only the named integration debt and expires on version change", () => {
   for (const output of [runtime, settings, entry, authorityEntry, bridgeEntry, initialAssets,
