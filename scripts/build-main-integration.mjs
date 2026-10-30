@@ -37,7 +37,7 @@ function main() {
   if (!budget.error && budget.status === 0) return 0;
   const { version } = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
   if (!budget.error && acceptsIntegrationBudgetDebt(version, budget.status, `${budget.stdout ?? ""}${budget.stderr ?? ""}`)) {
-    console.warn("Runtime budget: FAILED. Owner-approved Wiki debt for main integration only; restore strict deployment build before the next prerelease.");
+    console.warn("Runtime budget: FAILED. Owner-approved integration debts for main integration only; restore strict deployment build before the next prerelease.");
     return 0;
   }
   return budget.status || 1;
