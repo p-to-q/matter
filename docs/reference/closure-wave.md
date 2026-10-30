@@ -27,6 +27,21 @@ budget 2,048 / entry 4,096) is registered in the capability manifest. Full
 Vitest 5,567 passed / 7 skipped, typegen, types, focused lint and the wrapper
 build pass; the hosted replay is the remaining receipt.
 
+The hosted replay then measured the remaining drift exactly: initial
+406,022 / 405,504 gzip on Linux — the deployment-version code is fully out of
+the initial graph, and what remains is the integration wave's diffuse page
+growth (page chunk +7,495 gzip since 10/12, a new shared text-codec chunk,
+dynamic-import runtime) plus Linux gzip variance, against a cap calibrated on
+macOS output. No further module can leave the initial graph without changing
+owner-reviewed product behavior (Copy codec, picture rendering, trail). The
+owner's standing recovery instruction accepted this as the **sixth
+main-integration budget debt**: the wrapper accepts only the exact
+`initial gzip assets ... budget is 405504` diagnostic at package version
+`0.2.0-preview.64`, policy-tested for acceptance and expiry like the five
+Wiki debts; `npm run check` and CI's strict budget path stay unchanged, and
+this debt restores blocking and is repaid alongside the Wiki debts before the
+next prerelease. It must not be described as passed.
+
 ## Vercel build replay — 2026-10-26
 
 PR #136 is merged as `f22a3a1`; its required CI passed, including 340 browser
