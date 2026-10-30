@@ -42,6 +42,18 @@ Wiki debts; `npm run check` and CI's strict budget path stay unchanged, and
 this debt restores blocking and is repaid alongside the Wiki debts before the
 next prerelease. It must not be described as passed.
 
+Deployed receipt: after correcting the acceptance pattern to the checker's
+emitted wording (`uses N bytes`, not `gzip bytes` — the first pattern never
+matched the real diagnostic, recorded here as it happened), `126342f`
+deployed to Production successfully (Vercel commit status `success`,
+2026-10-30 20:24 UTC). The public no-store health readback identifies the new
+build by `buildId: dpl_2rQDSi1UDqbwegdojW3AXVV8jyxT` and now reports the
+`imageGeneration` surface — the first confirmed production deployment since
+2026-10-12. The replay workflow's red run on the same commit was the
+corrupted-builder-install artifact (missing `dist/server-launcher.js` after
+an in-repository `npm i --no-save`), not a build failure; the builder now
+installs into an isolated tree resolved through `MATTER_VERCEL_BUILDER_ROOT`.
+
 ## Vercel build replay — 2026-10-26
 
 PR #136 is merged as `f22a3a1`; its required CI passed, including 340 browser

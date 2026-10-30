@@ -11,9 +11,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // run here instead; nothing is uploaded and no credentials are used. The
 // builder streams the buildCommand output, which includes the exact
 // runtime-artifact diagnostics the integration wrapper accepts or rejects.
-// Install @vercel/next and @vercel/build-utils first (the CI workflow does
-// `npm i --no-save @vercel/next@latest @vercel/build-utils@latest`); latest
-// is deliberate, to track what the hosted pipeline currently runs.
+// Install @vercel/next and @vercel/build-utils into their own directory and
+// point MATTER_VERCEL_BUILDER_ROOT at it: an npm --no-save install inside the
+// repository node_modules has repeatedly produced corrupted builder installs
+// (missing dist files), and the repository tree prunes extraneous packages on
+// the next npm run. Latest is deliberate, to track what the hosted pipeline
+// currently runs.
 const vercelJson = JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8"));
 for (const [key, value] of Object.entries(vercelJson.build?.env ?? {})) {
   process.env[key] = value;
@@ -23,7 +26,7 @@ process.env.VERCEL_ENV = "production";
 process.env.NEXT_TELEMETRY_DISABLED = "1";
 process.env.VERCEL_DEPLOYMENT_ID ??= `replay${Date.now()}`;
 
-const require = createRequire(import.meta.url);
+const require = createRequire(process.env.MATTER_VERCEL_BUILDER_ROOT ?? import.meta.url);
 const { build } = require("@vercel/next");
 
 try {

@@ -22,5 +22,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm i --no-save @vercel/next@latest @vercel/build-utils@latest
+      # The builder installs into its own tree: npm inside the repository
+      # node_modules has produced corrupted @vercel/next installs (missing
+      # dist files) and prunes extraneous packages on later npm runs.
+      - run: npm i --prefix "$RUNNER_TEMP/vercel-builder" @vercel/next@latest @vercel/build-utils@latest
       - run: node scripts/replay-vercel-build.mjs
+        env:
+          MATTER_VERCEL_BUILDER_ROOT: ${{ runner.temp }}/vercel-builder/node_modules/
