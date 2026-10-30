@@ -1,10 +1,11 @@
 name: vercel-build-replay
 
-# Vercel commit statuses show failure for every main deployment since PR #136
+# Vercel commit statuses show failure for every main deployment since 2026-10-25
 # and expose no error text; the deployment account is inaccessible from here.
-# `vercel build` runs the same hosted builders and the vercel.json buildCommand
-# on this runner without credentials, upload, or deployment, so the production
-# build failure becomes diagnosable from these logs.
+# The plain `vercel build` CLI refuses to run without pulled project settings,
+# so scripts/replay-vercel-build.mjs drives the official @vercel/next builder
+# directly: same builders, vercel.json buildCommand, no credentials, no upload,
+# no deployment. The failure then becomes diagnosable from these logs.
 on:
   push:
     branches: [main]
@@ -21,4 +22,5 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx --yes vercel@latest build
+      - run: npm i --no-save @vercel/next@latest @vercel/build-utils@latest
+      - run: node scripts/replay-vercel-build.mjs

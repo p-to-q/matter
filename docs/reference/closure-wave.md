@@ -1,5 +1,33 @@
 # Integration closure — 2026-10-16
 
+## Deployment diagnosis — 2026-10-29
+
+Vercel commit statuses show `failure` for every `main` deployment since
+`f22a3a1` (2026-10-25), including `fca8a33`, `7680cc5`, and the PR #137 branch
+head. The failure is posted 71–80 seconds after each push (pending → failure),
+too fast for the multi-minute production build, and no error text is exposed
+to any accessible surface; the deployment account remains inaccessible.
+
+Reproduction attempts, all without Vercel credentials and all **passing**:
+
+- `scripts/replay-vercel-build.mjs` drives the official `@vercel/next` builder
+  over the `vercel.json` buildCommand. On this source at `next` 16.3.8 it
+  completes compilation, budget acceptance, tracing, serverless creation and
+  static collection (155 output entries) on both `@vercel/next` 26.0.1 and
+  28.0.0, with `VERCEL=1 VERCEL_ENV=production` and the `vercel.json`
+  `build.env`, without `.env.local`. An earlier `server-launcher.js` ENOENT
+  was a corrupted local `node_modules` install, disproved by a clean-install
+  rerun; no builder/next incompatibility exists.
+- Hosted CI already passes the production build on Ubuntu at the same commits.
+
+Conclusion: the build this repository can drive is green on both local and
+hosted runners; the hosted rejection happens in the deployment pipeline stages
+that only the Vercel project can observe (creation, project settings, queue,
+or account limits). Resolving it requires reading one deployment build log
+with project access, e.g. deployment `2W1aZ2uRYaUWQSunHt5jC99Hw3b4` for
+`fca8a33`. The `vercel-build-replay` workflow now replays the same build on
+every `main` push as a standing instrument.
+
 ## Vercel build replay — 2026-10-26
 
 PR #136 is merged as `f22a3a1`; its required CI passed, including 340 browser
