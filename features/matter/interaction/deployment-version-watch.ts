@@ -1,3 +1,7 @@
+// Part of the deployment-version watcher chunk, which MatterApp loads through
+// a dynamic import after first paint; this module must stay out of the initial
+// deployment bundle, whose frozen 396 KiB gzip budget has no room for the
+// observer once a platform build id is present.
 import { parseMatterBuildId } from "../config/build-identity";
 import { clientMatterBasePath } from "../config/base-path";
 import { readBoundedJsonResponse } from "./bounded-json-response";
@@ -118,21 +122,4 @@ export function createDeploymentVersionWatch(options: Readonly<{
     setIdle(next: boolean) { idle = next; demand(); },
     dispose() { disposed = true; cancel(); unsubscribe(); },
   });
-}
-
-export type DeploymentReloadState = Readonly<{
-  different: boolean;
-  idle: boolean;
-  hydrated: boolean;
-  unsaved: boolean;
-  visible: boolean;
-  current: boolean;
-}>;
-
-/** Read at the actual click, not at the render that enabled the button. */
-export function requestDeploymentReload(read: () => DeploymentReloadState, reload: () => void): boolean {
-  const state = read();
-  if (!state.different || !state.idle || !state.hydrated || state.unsaved || !state.visible || !state.current) return false;
-  reload();
-  return true;
 }

@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DeploymentVersion } from "../interaction/deployment-version-watch";
 
 const hooks = vi.hoisted(() => ({ effects: [] as Array<() => void | (() => void)>, setVersion: vi.fn(), read: vi.fn() }));
 vi.mock("react", async (original) => ({ ...await original<typeof import("react")>(),
-  useState: (value: DeploymentVersion) => [value, hooks.setVersion],
   useRef: <Value,>(value: Value) => ({ current: value }),
   useLayoutEffect: (effect: () => void) => effect(),
   useEffect: (effect: () => void | (() => void)) => { hooks.effects.push(effect); },
@@ -12,7 +10,7 @@ vi.mock("../config/build-identity", async (original) => ({ ...await original<typ
 vi.mock("../interaction/deployment-version-watch", async (original) => ({
   ...await original<typeof import("../interaction/deployment-version-watch")>(), readDeploymentVersion: hooks.read,
 }));
-import { useDeploymentVersion } from "./use-deployment-version";
+import { useDeploymentVersionLifecycle } from "./deployment-version-watcher";
 
 const flush = async () => { for (let count = 0; count < 10; count += 1) await Promise.resolve(); };
 let pageWindow: EventTarget;
@@ -35,7 +33,7 @@ afterEach(() => { cleanup?.(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 describe("deployment-version browser binding", () => {
   it("survives Strict Mode setup/cleanup without duplicate initial requests", async () => {
-    useDeploymentVersion(true);
+    useDeploymentVersionLifecycle(true, hooks.setVersion);
     const effect = hooks.effects[0]!;
     const rehearsal = effect(); rehearsal?.(); cleanup = effect();
     await flush();
@@ -45,7 +43,7 @@ describe("deployment-version browser binding", () => {
   });
 
   it("checks focus/online/visibility/page lifetime and removes every listener", async () => {
-    useDeploymentVersion(true); cleanup = hooks.effects[0]!(); await flush();
+    useDeploymentVersionLifecycle(true, hooks.setVersion); cleanup = hooks.effects[0]!(); await flush();
     focused = false; pageWindow.dispatchEvent(new Event("blur"));
     expect(hooks.setVersion).toHaveBeenLastCalledWith("unknown");
     now += 60_000; pageWindow.dispatchEvent(new Event("online")); await flush(); expect(hooks.read).toHaveBeenCalledOnce();
@@ -64,13 +62,13 @@ describe("deployment-version browser binding", () => {
   });
 
   it("does not request while the root is busy", async () => {
-    useDeploymentVersion(false); cleanup = hooks.effects[0]!();
+    useDeploymentVersionLifecycle(false, hooks.setVersion); cleanup = hooks.effects[0]!();
     pageWindow.dispatchEvent(new Event("focus")); await flush();
     expect(hooks.read).not.toHaveBeenCalled();
   });
 
   it("a new effect owner clears a retained answer before its new read settles", async () => {
-    useDeploymentVersion(true);
+    useDeploymentVersionLifecycle(true, hooks.setVersion);
     const effect = hooks.effects[0]!;
     const first = effect(); await flush(); expect(hooks.setVersion).toHaveBeenLastCalledWith("different");
     const publications = hooks.setVersion.mock.calls.length;

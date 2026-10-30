@@ -4,29 +4,28 @@
 
 Vercel commit statuses show `failure` for every `main` deployment since
 `f22a3a1` (2026-10-25), including `fca8a33`, `7680cc5`, and the PR #137 branch
-head. The failure is posted 71–80 seconds after each push (pending → failure),
-too fast for the multi-minute production build, and no error text is exposed
-to any accessible surface; the deployment account remains inaccessible.
+head, each posted 71–80 seconds after the push with no readable error text and
+no account access. An earlier "platform-side" conclusion below was **wrong**
+and is corrected here.
 
-Reproduction attempts, all without Vercel credentials and all **passing**:
+Root cause, established by `scripts/replay-vercel-build.mjs` driving the
+official `@vercel/next` builder (26.0.1 and 28.0.0, same source) and then by
+the `vercel-build-replay` workflow on hosted Ubuntu: on Linux the hosted build
+reports `runtime-artifact: initial gzip assets uses 406893 bytes; budget is
+405504` — 1,389 gzip bytes over the frozen 396 KiB cap. That diagnostic is not
+in the integration wrapper's acceptance list, so the wrapper exits 1 and the
+deployment fails before packaging. Local macOS builds and hosted CI never saw
+it because their gzip output is smaller and CI has no `VERCEL_DEPLOYMENT_ID`,
+so the deployment-version observer added by PR #136 stayed at the margin.
 
-- `scripts/replay-vercel-build.mjs` drives the official `@vercel/next` builder
-  over the `vercel.json` buildCommand. On this source at `next` 16.3.8 it
-  completes compilation, budget acceptance, tracing, serverless creation and
-  static collection (155 output entries) on both `@vercel/next` 26.0.1 and
-  28.0.0, with `VERCEL=1 VERCEL_ENV=production` and the `vercel.json`
-  `build.env`, without `.env.local`. An earlier `server-launcher.js` ENOENT
-  was a corrupted local `node_modules` install, disproved by a clean-install
-  rerun; no builder/next incompatibility exists.
-- Hosted CI already passes the production build on Ubuntu at the same commits.
-
-Conclusion: the build this repository can drive is green on both local and
-hosted runners; the hosted rejection happens in the deployment pipeline stages
-that only the Vercel project can observe (creation, project settings, queue,
-or account limits). Resolving it requires reading one deployment build log
-with project access, e.g. deployment `2W1aZ2uRYaUWQSunHt5jC99Hw3b4` for
-`fca8a33`. The `vercel-build-replay` workflow now replays the same build on
-every `main` push as a standing instrument.
+Fix (no cap raised, no debt list widened): the observer moved out of the
+initial graph — `MatterApp` mounts a new `deployment-version-watcher` module
+through a dynamic import (the repository's standard lazy-component shape),
+`requestDeploymentReload` moved to `interaction/deployment-reload.ts`, and the
+new `deployment-version` capability (measured 1,606 gzip bytes on macOS,
+budget 2,048 / entry 4,096) is registered in the capability manifest. Full
+Vitest 5,567 passed / 7 skipped, typegen, types, focused lint and the wrapper
+build pass; the hosted replay is the remaining receipt.
 
 ## Vercel build replay — 2026-10-26
 

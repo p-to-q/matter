@@ -30,4 +30,5 @@ export const MATTER_CAPABILITIES = [
   { id: "node-actions", sentinel: "node-action-lens", tier: "gesture", budgetGzip: 7680, entryBudgetGzip: 10240 },
   { id: "operation-trail", sentinel: "operation-trail__chevron", tier: "gesture", budgetGzip: 7680, entryBudgetGzip: 9216 },
   { id: "material-index", sentinel: "matter-capability:material-index", tier: "background", budgetGzip: 28160, entryBudgetGzip: 52224 },
+  { id: "deployment-version", sentinel: "matter-capability:deployment-version", tier: "background", budgetGzip: 2048, entryBudgetGzip: 4096 },
 ] as const;

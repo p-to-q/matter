@@ -1,11 +1,23 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 import { MATTER_BUILD_ID } from "../config/build-identity";
 import { createDeploymentVersionWatch, readDeploymentVersion, type DeploymentVersion } from "../interaction/deployment-version-watch";
 
-export function useDeploymentVersion(idle: boolean): DeploymentVersion {
-  const [version, setVersion] = useState<DeploymentVersion>("unknown");
+/**
+ * Loaded through a dynamic import from MatterApp: the observer and the watch
+ * module behind it must stay out of the initial deployment bundle, whose
+ * frozen gzip budget a platform build id otherwise pushes over the cap.
+ */
+export function DeploymentVersionWatcher(options: Readonly<{
+  idle: boolean;
+  onVersion: (version: DeploymentVersion) => void;
+}>): null {
+  useDeploymentVersionLifecycle(options.idle, options.onVersion);
+  return null;
+}
+
+export function useDeploymentVersionLifecycle(idle: boolean, onVersion: (version: DeploymentVersion) => void): void {
   const idleRef = useRef(idle);
   const watcherRef = useRef<ReturnType<typeof createDeploymentVersionWatch> | null>(null);
   const checkClockRef = useRef({ lastAttempt: Number.NEGATIVE_INFINITY });
@@ -20,7 +32,7 @@ export function useDeploymentVersion(idle: boolean): DeploymentVersion {
       buildId: MATTER_BUILD_ID,
       clock: checkClockRef.current,
       read: (id, signal) => readDeploymentVersion(id, { signal }),
-      publish: setVersion,
+      publish: onVersion,
       host: {
         now: () => performance.now(),
         isAvailable: () => entered && document.visibilityState === "visible" && document.hasFocus() && navigator.onLine,
@@ -48,8 +60,14 @@ export function useDeploymentVersion(idle: boolean): DeploymentVersion {
     watcher.setIdle(idleRef.current);
     return () => {
       watcher.dispose();
-      if (watcherRef.current === watcher) watcherRef.current = null;
+      watcherRef.current = null;
     };
-  }, []);
-  return version;
+  }, [onVersion]);
 }
+
+// Capability identity for the runtime-artifact budget checker; the property
+// keeps the export alive through tree shaking and marks this module as the
+// single source owner of the deployment-version capability.
+Object.defineProperty(DeploymentVersionWatcher, "matterCapability", {
+  value: "matter-capability:deployment-version",
+});

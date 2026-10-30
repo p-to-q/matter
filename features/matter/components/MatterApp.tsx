@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { RootedMaterial } from "./RootedMaterial";
 import { PictureBytesContext } from "./picture-bytes-context";
 import { PictureAuthoringContext } from "./picture-authoring-context";
@@ -38,8 +38,8 @@ import type { MaterialFilesCopy } from "./material-files-copy";
 import { downloadLocalBytes } from "./download-local-bytes";
 import type { MatterLocale } from "../config/locales";
 import { preloadNow, preloadWhenIdle } from "../interaction/idle-preload";
-import { requestDeploymentReload } from "../interaction/deployment-version-watch";
-import { useDeploymentVersion } from "./use-deployment-version";
+import { requestDeploymentReload } from "../interaction/deployment-reload";
+import type { DeploymentVersion } from "../interaction/deployment-version-watch";
 
 // Synchronous per-locale floor used in archiveFailure's catch arm when the
 // material-files-copy chunk cannot load. Values match archiveErrorAction from
@@ -61,6 +61,12 @@ const loadArchiveTransport = () => import("../persistence/archive-transport").th
   preloadArchiveCodec: transport.preloadArchiveCodec,
   treeToBundle: transport.treeToBundle,
 }));
+
+// The deployment version observer loads after first paint: with a platform
+// build id present it would otherwise enter the initial bundle and push the
+// frozen initial-gzip budget over its cap.
+const DeploymentVersionWatcher = lazy(() =>
+  import("./deployment-version-watcher").then((watcher) => ({ default: watcher.DeploymentVersionWatcher })));
 
 export function MatterApp() {
   useWikiAuthority();
@@ -119,7 +125,7 @@ export function MatterApp() {
     requestStoragePersistence,
   );
   const archiveLanguage = canvasPreferences.preferences.language;
-  const deploymentVersion = useDeploymentVersion(materialIdle && persistence.initialReconciliationComplete);
+  const [deploymentVersion, setDeploymentVersion] = useState<DeploymentVersion>("unknown");
   const deploymentReloadRef = useRef({ tree, history, documentEpoch, materialIdle, deploymentVersion,
     hydrated: persistence.initialReconciliationComplete, status: persistence.status });
   useLayoutEffect(() => {
@@ -417,6 +423,12 @@ export function MatterApp() {
       tree={tree}
       wikiOccurrences={wikiOccurrences}
     />
+    <Suspense fallback={null}>
+      <DeploymentVersionWatcher
+        idle={materialIdle && persistence.initialReconciliationComplete}
+        onVersion={setDeploymentVersion}
+      />
+    </Suspense>
     </PictureAuthoringContext.Provider>
     </PictureBytesContext.Provider>
   );

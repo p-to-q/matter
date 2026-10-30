@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { materialIsIdle, IDLE_PAPER_ACTIVITY } from "../components/material-turn-activity";
 import { createDeploymentVersionWatch, DEPLOYMENT_CHECK_INTERVAL_MS, readDeploymentVersion,
-  requestDeploymentReload, type DeploymentReloadState, type DeploymentVersion } from "./deployment-version-watch";
+  type DeploymentVersion } from "./deployment-version-watch";
+import { requestDeploymentReload, type DeploymentReloadState } from "./deployment-reload";
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 const flush = async () => { for (let count = 0; count < 8; count += 1) await Promise.resolve(); };
