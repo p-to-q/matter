@@ -19,12 +19,7 @@ import {
 } from
   "../wiki/wiki-runtime-producer-releases";
 import type { WikiOccurrenceSettlement, WikiState } from "../wiki/wiki-model";
-import {
-  planWikiAdmissionBatch,
-  type WikiAdmissionTurn,
-} from "../wiki/wiki-admission";
-import { collectCommittedWikiTermsResult } from "../wiki/wiki-term-collection";
-import { fitCommittedWikiTextResult } from "../wiki/wiki-fitting";
+import type { WikiAdmissionTurn } from "../wiki/wiki-admission";
 import {
   createWikiAdmissionQueue,
   type WikiAdmissionQueue,
@@ -40,9 +35,7 @@ import {
   isMatterWikiPhoneticFittingEnabled,
 } from "./wiki-capability-preferences-reader";
 import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
-import { deriveWikiDiagnostics } from "../wiki/wiki-diagnostics";
-import { readMatterWikiTransientOutcomes, revokeMatterWikiOccurrences,
-  revokeMatterWikiPassiveBefore } from "./wiki-occurrence-owner";
+import { revokeMatterWikiOccurrences, revokeMatterWikiPassiveBefore } from "./wiki-occurrence-owner";
 import { sameWikiOccurrenceForm } from "../wiki/wiki-occurrence-registry";
 
 // The release table and its learning policy load with this lazy runtime; the
@@ -162,20 +155,6 @@ const runtimeSlot: MatterWikiRuntimeSlot = previousSlot?.abi === RUNTIME_ABI
 runtimeHost[RUNTIME_KEY] = runtimeSlot;
 const runtime = runtimeSlot.runtime;
 const matterWikiCoordinator = runtime.coordinator;
-let diagnosticState: WikiState | null = null;
-let diagnosticTransient = readMatterWikiTransientOutcomes();
-let diagnostics = deriveWikiDiagnostics(diagnosticState, diagnosticTransient);
-
-export function readMatterWikiDiagnostics(): ReturnType<typeof deriveWikiDiagnostics> {
-  const state = matterWikiCoordinator.readState();
-  const transient = readMatterWikiTransientOutcomes();
-  if (state !== diagnosticState || transient !== diagnosticTransient) {
-    diagnosticState = state;
-    diagnosticTransient = transient;
-    diagnostics = deriveWikiDiagnostics(state, transient);
-  }
-  return diagnostics;
-}
 const qualifiedAliasProducers = new Set<WikiAliasEvidenceProducer>(
   MATTER_WIKI_RUNTIME_ALIAS_PRODUCERS,
 );
@@ -212,6 +191,9 @@ async function observeHydratedMatterWikiCommittedMaterial(
 ): Promise<void> {
   if (request.observed.locale !== request.committed.locale ||
       request.observed.channel !== request.committed.channel) return;
+  // A failed chunk loses only this optional observation. The bounded queue
+  // discards the failed observation; the next admission retries the same import.
+  const { planRuntimeWikiAdmission } = await import("../wiki/wiki-admission-producers");
   for (let attempt = 0; attempt < MAX_ADMISSION_CAS_ATTEMPTS; attempt += 1) {
     const permissions = Object.freeze({
       automaticCollection: isMatterWikiAutomaticCollectionEnabled(),
@@ -219,19 +201,8 @@ async function observeHydratedMatterWikiCommittedMaterial(
     });
     if (!permissions.automaticCollection && !permissions.phoneticFitting) return;
     const basis = readMatterWikiBasis();
-    const batch = planWikiAdmissionBatch(
-      request,
-      permissions.automaticCollection
-        ? collectCommittedWikiTermsResult(request.committed, qualifiedTermProducers)
-        : null,
-      permissions.phoneticFitting
-        ? fitCommittedWikiTextResult(
-            basis.fitSnapshot,
-            request.observed,
-            qualifiedAliasProducers,
-          )
-        : null,
-    );
+    const batch = planRuntimeWikiAdmission(request, basis.fitSnapshot, permissions,
+      qualifiedTermProducers, qualifiedAliasProducers);
     const result = await publishChanged(matterWikiCoordinator.observe(
       batch.events,
       batch.tick,

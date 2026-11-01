@@ -3,8 +3,8 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import {
   compileWikiFitSnapshot,
-  fitCommittedWikiText,
 } from "../../../features/matter/wiki/wiki-fitting";
+import { fitCommittedWikiText } from "../../../features/matter/wiki/wiki-fitting-observation";
 import {
   WIKI_PRODUCER_QUALIFICATION_VERSION,
   digestWikiProducerArtifact,
@@ -36,6 +36,7 @@ import { createEmptyWikiState } from "../../../features/matter/wiki/wiki-evidenc
 const ROOT = resolve(import.meta.dirname, "../../..");
 const PRODUCER_FILES = Object.freeze([
   "features/matter/wiki/wiki-fitting.ts",
+  "features/matter/wiki/wiki-fitting-observation.ts",
   "features/matter/wiki/canonicalize-wiki-text.ts",
   "features/matter/wiki/wiki-text-safety.ts",
   "features/matter/wiki/wiki-learning-policy.ts",

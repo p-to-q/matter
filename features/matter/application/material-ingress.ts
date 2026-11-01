@@ -39,7 +39,7 @@ import {
 import { projectExpandGeneratedRanges } from "../protocol/expand-in-place-policy";
 import type { MatterLocale } from "../config/locales";
 
-export type MaterialIngressStage = "admission" | "repair" | "transform" | "text-swap";
+export type MaterialIngressStage = "admission" | "repair" | "transform" | "text-swap" | "branch";
 
 /** Where one attributed lexical edit landed in the committed node text. */
 export type MaterialIngressLexicalEdit = Readonly<{

@@ -22,7 +22,7 @@ import {
 } from
   "../wiki/wiki-runtime-producer-releases";
 import { collectCommittedWikiTermsResult } from "../wiki/wiki-term-collection";
-import { fitCommittedWikiTextResult } from "../wiki/wiki-fitting";
+import { fitCommittedWikiTextResult } from "../wiki/wiki-fitting-observation";
 import type { WikiState } from "../wiki/wiki-model";
 
 describe("Wiki automation baseline", () => {

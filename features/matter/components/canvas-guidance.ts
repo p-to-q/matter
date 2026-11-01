@@ -41,6 +41,7 @@ export type CanvasTurnGuidanceState =
   | Readonly<{ kind: "parked" }>;
 
 export type CanvasGuidanceInput = Readonly<{
+  branchPending?: boolean;
   admission: AdmissionInteractionState;
   camera: CanvasCameraGuidanceState;
   expansion?: CanvasTurnGuidanceState;
@@ -54,6 +55,9 @@ export type CanvasGuidanceInput = Readonly<{
 }>;
 
 type CanvasActionGuidanceId =
+  | "branch-wait"
+  | "branch-unavailable"
+  | "branch-stale"
   | "allow-microphone"
   | "speak-recording"
   | "wait-recording"
@@ -95,6 +99,9 @@ export const CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT = 34;
 const NOT_PARKED: CanvasTurnGuidanceState = Object.freeze({ kind: "none" });
 
 const EN_US_LINES = Object.freeze({
+  "branch-wait": "Extending this thought.",
+  "branch-unavailable": "Not extended. Material unchanged.",
+  "branch-stale": "Material changed. Nothing added.",
   "allow-microphone": "Allow microphone access.",
   "speak-recording": "Speak your thought.",
   "wait-recording": "Wait for recording to finish.",
@@ -132,6 +139,9 @@ const EN_US_LINES = Object.freeze({
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 
 const ZH_CN_LINES = Object.freeze({
+  "branch-wait": "正在延展相关想法。",
+  "branch-unavailable": "未能延展，材料未改变。",
+  "branch-stale": "材料已改变，未添加新想法。",
   "allow-microphone": "允许使用麦克风。",
   "speak-recording": "说出你的想法。",
   "wait-recording": "请等待录音结束。",
@@ -201,6 +211,7 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
   if (input.outcome !== undefined && input.outcome !== null) {
     return guidance(outcomeGuidanceId(input.outcome), "recovery");
   }
+  if (input.branchPending) return guidance("branch-wait", "progress");
   // A parked result outranks lasso guidance: while it waits off-screen it also
   // blocks its owner, so the line must say why and offer the release.
   if ((input.expansion ?? NOT_PARKED).kind === "parked") {
@@ -281,6 +292,8 @@ export function projectCanvasGuidance(input: CanvasGuidanceInput): CanvasGuidanc
 /** The guidance line that says one outcome. */
 export function outcomeGuidanceId(outcome: MaterialOutcome): CanvasActionGuidanceId {
   switch (outcome.owner) {
+    case "branch":
+      return outcome.reason === "stale" ? "branch-stale" : "branch-unavailable";
     case "expansion":
       return outcome.reason === "stale" ? "expansion-stale" : "expansion-unavailable";
     case "rewrite":
@@ -318,6 +331,9 @@ export function localizeCanvasGuidance(
 }
 
 const ZH_TW_LINES = Object.freeze({
+  "branch-wait": "正在延展相關想法。",
+  "branch-unavailable": "未能延展，材料未改變。",
+  "branch-stale": "材料已改變，未加入新想法。",
   "allow-microphone": "允許使用麥克風。",
   "speak-recording": "說出你的想法。",
   "wait-recording": "請等待錄音結束。",
@@ -354,6 +370,9 @@ const ZH_TW_LINES = Object.freeze({
   "matter-changed": "Matter 已變更，可在封存重新載入。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const JA_JP_LINES = Object.freeze({
+  "branch-wait": "関連する考えを広げています。",
+  "branch-unavailable": "広げられませんでした。素材は変わっていません。",
+  "branch-stale": "素材が変わったため、考えを追加しませんでした。",
   "allow-microphone": "マイクの使用を許可してください。",
   "speak-recording": "考えを話してください。",
   "wait-recording": "録音が終わるまで待ってください。",
@@ -390,6 +409,9 @@ const JA_JP_LINES = Object.freeze({
   "matter-changed": "Matter が変わりました。アーカイブで再読み込み。",
 } satisfies Readonly<Record<CanvasActionGuidanceId, string>>);
 const DE_DE_LINES = Object.freeze({
+  "branch-wait": "Der Gedanke wird erweitert.",
+  "branch-unavailable": "Nicht erweitert. Material unverändert.",
+  "branch-stale": "Material geändert. Kein Gedanke hinzugefügt.",
   "allow-microphone": "Mikrofonzugriff erlauben.",
   "speak-recording": "Sprich deinen Gedanken aus.",
   "wait-recording": "Warte, bis die Aufnahme beendet ist.",

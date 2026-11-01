@@ -40,8 +40,8 @@ describe("Preview Branch flag", () => {
     expect(readers).toEqual(["config/preview-branch.ts"]);
   });
 
-  it("is never set by the deployed configuration", () => {
+  it("restores the demo in the deployed build", () => {
     const vercel = readFileSync(join(import.meta.dirname, "..", "..", "..", "vercel.json"), "utf8");
-    expect(vercel).not.toContain("PREVIEW_BRANCH");
+    expect(JSON.parse(vercel).build.env.NEXT_PUBLIC_MATTER_PREVIEW_BRANCH).toBe("true");
   });
 });

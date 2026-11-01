@@ -34,6 +34,7 @@ import {
  */
 
 export type MatterScenarioId =
+  | "matter-branch"
   | "matter-transcript-repair"
   | "matter-thought-label"
   | "matter-inquiry"
@@ -668,6 +669,7 @@ function boundedScalar(value: number, maximum: number): number {
 
 function safeScenarioId(value: MatterScenarioId): MatterScenarioId | "unknown" {
   switch (value) {
+    case "matter-branch":
     case "matter-transcript-repair":
     case "matter-thought-label":
     case "matter-inquiry":

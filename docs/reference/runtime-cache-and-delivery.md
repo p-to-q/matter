@@ -120,6 +120,10 @@ boundary:
 | persistence engine | controller, IndexedDB repository, snapshot codec, undo journal | when the main chunk evaluates (below) |
 | Ask Matter record store | record repository, database handle, `idb` | on the record's first load after hydration |
 | Wiki runtime | coordinator, release table and learning policy, fitting mode, canonicalizer | at hydration, by the Wiki authority |
+| Wiki admission producers | term discovery and observation batching | first committed human admission; a failed import drops only that optional observation and the next admission retries |
+| Wiki settings copy | complete five-locale editor copy | resolves with the settings loader before the editor mounts; a failed preload retries on the next open |
+| Chrome information | About, privacy, pricing and terms bodies | after first paint; a failed load is said in the dialog and the next opening retries |
+| Branch client and ingress | strict request/response parsing and generated child command preparation | rail activation, before spending a provider request |
 | late repair | repair floor, expression decorator, repair client, store adjudicator | after first paint; again when recording starts |
 | Model API form | form and provider-session client | after first paint; when a settings menu opens |
 | Wiki settings | dictionary editor and its stylesheet | when a settings menu opens; when a takeover opens |
@@ -169,7 +173,7 @@ The `deferred-persistence-controller` has its own independent grace
 | --- | --- | --- |
 | `readWikiRuntimeCoreLoadStatus()` | `features/matter/persistence/wiki-runtime-bridge.ts` | `observeMatterWikiEvidence` is a no-op; `settleMatterWikiOccurrence` returns `"failed"` |
 | `readWikiAuthorityLoadStatus()` | `features/matter/persistence/use-wiki-authority.ts` | Wiki stays on identity / last-good basis; authority never starts |
-| `readSeededBranchCopyLoadStatus()` | `features/matter/interaction/seeded-branch-copy-loader.ts` | Branch keeps the synchronous five-locale floor |
+| Branch request outcome | `features/matter/interaction/branch-client.ts` | failed requests leave material unchanged; no sample fallback |
 
 The `exportFile` boundary (`features/matter/persistence/wiki-runtime.ts`) has no
 module-level recovery (one-shot user action); chunk failure returns

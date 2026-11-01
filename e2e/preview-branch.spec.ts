@@ -13,6 +13,17 @@ const previewBranch = process.env.NEXT_PUBLIC_MATTER_PREVIEW_BRANCH === "true";
 const rootId = "thought_fixture_root";
 const imaginedLivesId = "thought_fixture_imagined_lives";
 
+// Browser evidence fixes provider output; route/harness tests exercise the API.
+// Production never installs this interception or substitutes sample prose.
+test.beforeEach(async ({ page }) => {
+  await page.route("**/api/branch", async (route) => {
+    const input = route.request().postDataJSON();
+    await route.fulfill({ json: { version: input.version, requestId: input.requestId,
+      treeId: input.treeId, revision: input.revision, parentId: input.parentId,
+      text: "让尚未发生的生活保留余地" } });
+  });
+});
+
 async function railToolIds(page: import("@playwright/test").Page): Promise<(string | null)[]> {
   return page.getByRole("navigation", { name: fixtureUiCopy.toolRail.editingTools })
     .locator("[data-tool-id]")

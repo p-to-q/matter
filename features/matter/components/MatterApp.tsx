@@ -26,12 +26,8 @@ import {
   materialTurnsHoldBasis,
   type PaperActivity,
 } from "./material-turn-activity";
-import {
-  seededFallbackBranchTexts,
-  type SeededBranchTextResolver,
-} from "../material/seeded-material-core";
+import { useBranch } from "../interaction/use-branch";
 import type { SeededSessionRelocalizer } from "../material/seeded-session-localization";
-import { subscribeSeededBranchCopyResolver } from "../interaction/seeded-branch-copy-loader";
 import { useWikiAuthority } from "../persistence/use-wiki-authority";
 import { useStoragePersistence } from "../persistence/use-storage-persistence";
 import type { MaterialFilesCopy } from "./material-files-copy";
@@ -76,7 +72,7 @@ export function MatterApp() {
   const history = useMatterStore((state) => state.history);
   const untouchedTree = useMatterStore((state) => state.untouchedTree);
   const navigation = useMatterStore((state) => state.navigation);
-  const extendMaterial = useMatterStore((state) => state.extendMaterial);
+  const commitBranch = useMatterStore((state) => state.commitBranch);
   const localizeSeededMaterial = useMatterStore((state) => state.localizeSeededMaterial);
   const undo = useMatterStore((state) => state.undo);
   const redo = useMatterStore((state) => state.redo);
@@ -105,7 +101,12 @@ export function MatterApp() {
   const [paperActivity, setPaperActivity] = useState<PaperActivity>(IDLE_PAPER_ACTIVITY);
   // One signal gates every replacement of the loaded document instance.
   const materialTurns = { admission: admission.state.phase, paper: paperActivity };
-  const materialIdle = materialIsIdle(materialTurns);
+  const storeAccess = useMatterStoreAccess();
+  const [branchDeliveryAvailable, setBranchDeliveryAvailable] = useState(false);
+  const branch = useBranch({ read: storeAccess.getState, commit: commitBranch,
+    locale: canvasPreferences.preferences.language, available: materialIsIdle(materialTurns),
+    deliveryAvailable: branchDeliveryAvailable });
+  const materialIdle = branch.status !== "pending" && materialIsIdle(materialTurns);
   const persistence = useMaterialPersistence(
     tree,
     history,
@@ -118,7 +119,6 @@ export function MatterApp() {
   );
   const storagePersistence = useStoragePersistence();
   const requestStoragePersistence = storagePersistence.request;
-  const storeAccess = useMatterStoreAccess();
   const pictureAuthoring = usePictureAuthoring(
     pictureStore,
     storeAccess,
@@ -142,17 +142,8 @@ export function MatterApp() {
       current: current.tree === basis.tree && current.history === basis.history && current.documentEpoch === basis.documentEpoch,
     };
   }, () => window.location.reload()), [storeAccess]);
-  const branchTextResolverRef = useRef<SeededBranchTextResolver>(seededFallbackBranchTexts);
   const [seededSessionRelocalizer, setSeededSessionRelocalizer] =
     useState<SeededSessionRelocalizer | null>(null);
-  useEffect(() => {
-    // Branch remains a synchronous, local action on the closed five-locale
-    // floor if the richer copy chunk cannot be loaded; the recovery arms a
-    // retry so any later recovery signal may still deliver the richer text.
-    return subscribeSeededBranchCopyResolver((resolver) => {
-      branchTextResolverRef.current = resolver;
-    });
-  }, []);
   useEffect(() => {
     if (seededSessionRelocalizer !== null) return;
     let active = true;
@@ -286,7 +277,7 @@ export function MatterApp() {
     retrySaving,
     storagePersistence.persisted,
   ]);
-  const turnsHoldSeedBasis = materialTurnsHoldBasis(materialTurns);
+  const turnsHoldSeedBasis = branch.status === "pending" || materialTurnsHoldBasis(materialTurns);
   const reportHistoryUnavailable = persistence.reportHistoryUnavailable;
   // Reconciliation completes once, after the first load; save phases are not
   // a reason to look at the seed again.
@@ -345,17 +336,6 @@ export function MatterApp() {
     ...(targetIndex === undefined ? {} : { targetIndex }),
     createdAt: new Date().toISOString(),
   }), [moveNode]);
-  // Branch is the one durable mutation whose material the product composes
-  // rather than the person speaking it. Its identity and time are still theirs.
-  const extendChild = useCallback((parentNodeId: string) => extendMaterial(
-    parentNodeId,
-    {
-      nodeId: `thought_${createOperationId()}`,
-      createdAt: new Date().toISOString(),
-    },
-    canvasPreferences.preferences.language,
-    branchTextResolverRef.current,
-  ), [canvasPreferences.preferences.language, extendMaterial]);
   const renameCurrentDocument = useCallback((title: string) => renameDocument({
     commandId: `human_title_${createOperationId()}`,
     title,
@@ -415,7 +395,11 @@ export function MatterApp() {
       onPaperActivityChange={setPaperActivity}
       onExitFocus={showFull}
       onFocusNode={focus}
-      onInsertChild={extendChild}
+      onInsertChild={branch.start}
+      branchStatus={branch.status}
+      branchParentId={branch.parentId}
+      onBranchDeliveryAvailableChange={setBranchDeliveryAvailable}
+      onBranchStatusDismiss={branch.dismiss}
       onSelectNode={select}
       onToggleFold={toggleFold}
       onUndo={undoWithPresentationReset}

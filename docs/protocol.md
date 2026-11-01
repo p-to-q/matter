@@ -5,6 +5,30 @@ evidence score, applied rule, or lexical hint is serialized to a model-facing
 request. Canonicalization happens only after a response returns to the
 browser-side material ingress boundary.
 
+## Child heading — branch/1
+
+`POST /api/branch` accepts exactly `version`, `requestId`, `treeId`, `revision`,
+`parentId`, `locale`, `parentText`, and `children`. It reads only the explicitly
+addressed parent and its direct children. Reference limits are 4,000 code units
+per passage, 32 children and 8,000 total code units; exceeding them refuses the
+action rather than silently widening or clipping context. The request body is
+bounded at 40 KiB. The server constructs the append-only response basis and
+returns one model heading under `text`; no model-selected address or mutation
+is accepted. The strict response echoes version, request, tree, revision and
+parent, plus a single trimmed heading of 2–160 code units, without list or
+Markdown wrappers. Normalized duplicate parent/child headings are refused.
+
+The browser repeats response validation, applies the written lexical ingress,
+then validates again before one `agent` insert-node tree command. A suggestion
+that would break the heading contract is withheld. Only a matching document
+epoch, tree revision, parent text and child sequence can commit. Each commit is
+one pointer-undoable change. No generated child teaches Wiki. Request, route,
+scenario and client ceilings are bounded; the client ceiling is 16 seconds.
+Failures never substitute local demo prose. Responses are no-store; credentials
+remain inside the existing request-local provider lease. The route uses the
+shared public admission perimeter (eight requests/window, two concurrent per
+instance); this is not a claim of a distributed spend ceiling.
+
 ## Locale contract
 
 Locale fields use the supported BCP 47 values `zh-CN`, `en-US`, `ja-JP`,

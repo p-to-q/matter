@@ -1,5 +1,14 @@
 # Architecture
 
+The Branch rail action uses `interaction/use-branch.ts` for one bounded flight,
+`protocol/branch-contract.ts` for the strict wire, and `server/branch-route.ts`
+with `branch-harness.ts` for generation on the shared provider foundation.
+`application/branch-ingress.ts` owns the parent/revision basis and written
+lexical suggestion; Store alone publishes the insert through the tree engine.
+The pending flight holds hydration, seed relocalization and deployment reload.
+No Branch request or raw answer is cached or logged. Seeded Branch copy remains
+test/historical material and no longer supplies the visible rail action.
+
 ## Runtime paths
 
 Human material enters without a generative model call:

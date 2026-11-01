@@ -17,7 +17,7 @@ import {
 import { seededBranchTexts } from "../material/seeded-branch-copy";
 import { relocalizeSeededSession } from "../material/seeded-session-localization";
 import { MAX_NODE_TEXT_CODE_UNITS } from "../tree/invariants";
-import { createMatterStore } from "./matter-store";
+import { createDemoMatterStore as createMatterStore } from "../testing/demo-store";
 import type { ThoughtTree } from "../tree/model";
 import type { TreeHistory } from "../tree/history";
 import { buildTransformPlan, parseTransformEnvelope } from "../protocol/transform-contract";

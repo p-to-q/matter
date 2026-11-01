@@ -1,5 +1,48 @@
 # Release readiness
 
+## API-backed Branch candidate — 2026-11-02
+
+The current PR candidate restores the rail action with an independent
+`branch/1` scenario, shared provider execution, strict parent/children context,
+an injected on-use written ingress, one tree-engine commit and pointer Undo.
+An answer waits for a visible, pointer-idle delivery window. Branch outcomes
+use the existing guidance queue and never acknowledge an obscured outcome.
+The hover carrier follows bounded camera zoom. Sample Branch composition is
+now explicit test tooling rather than a production fallback.
+
+Cold-path work splits Wiki editor copy, admission observation and information
+bodies along existing owners. Fitting index compilation stays with authority;
+word scanning loads only for human admission. The algorithm, corpus decisions,
+weights and permissions are unchanged; its artifact and catalog digests were
+requalified. Settlement remains with its existing synchronous queue owner.
+The latest measured build passed every unchanged capability ceiling and the
+396 KiB initial ceiling at 393.2 KiB gzip. CI and deployment now use the strict
+budget check again. The package is Preview.65; final CI and exact Production
+readback still precede publication.
+
+Fresh anonymous Production readback on 2026-11-02 reports Model API
+`available: true`, `credentialPresent: false` with no reset required. The
+deployment identifies Preview.64 and both material surfaces as
+`user-configurable`. Issue #104's earlier unavailable readback is stale;
+private Test/Save qualification and broader provider-quality proof are not
+established by an anonymous health GET. Image spend remains closed.
+
+Independent review found and corrected a stale English outcome exceeding the
+narrow-line contract, zoomed Wiki-review actions overflowing narrow touch paper,
+a missing fitting-observation source in the producer digest, and CI building
+without the deployment's Branch flag. Two vulnerable development-only
+transitive dependencies were patched to Vite 8.3.3 and Zod 4.6.6; the refreshed
+audit reports zero high/critical findings, with moderate tooling findings still
+present. No production dependency or budget ceiling was widened.
+
+Hosted managed Branch is pinned `off`: no distributed-rate/hard-spend receipt
+has been established for the new paid surface. Its real API, explicit local
+live adapter and request-local verified user lease remain implemented, with no
+sample fallback. Two private Production Model API acceptance attempts on
+2026-11-02 returned HTTP 504 before verification or saving; no credential was
+saved, and no credential or cookie is retained in this repository. Issue #104
+therefore remains open despite the now-available anonymous session boundary.
+
 ## Main integration — 2026-10-25
 
 An isolated `codex/engineering-closure` branch includes the current main

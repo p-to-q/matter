@@ -293,6 +293,10 @@ export type RootedMaterialProps = {
   onExitFocus: () => void;
   onFocusNode: (nodeId: string) => void;
   onInsertChild: (parentNodeId: string) => void;
+  branchStatus?: "idle" | "pending" | "failed" | "stale";
+  branchParentId?: string | null;
+  onBranchDeliveryAvailableChange?: (available: boolean) => void;
+  onBranchStatusDismiss?: () => void;
   onRemoveSelected: () => void;
   onMoveNode: (nodeId: string, targetParentId: string, targetIndex?: number) => void;
   onRenameDocument: (title: string) => void;
@@ -519,6 +523,12 @@ export function RootedMaterial(props: RootedMaterialProps) {
   const wikiDismissingPressRef = useRef<Readonly<{ pointerId: number; occurrenceId: string }> | null>(null);
   const outcomeLine = useOutcomeLine(props.documentEpoch);
   const reportOutcome = outcomeLine.report;
+  const dismissBranchStatus = props.onBranchStatusDismiss;
+  useEffect(() => {
+    if (props.branchStatus !== "failed" && props.branchStatus !== "stale") return;
+    reportOutcome({ owner: "branch", reason: props.branchStatus === "stale" ? "stale" : "unavailable" });
+    dismissBranchStatus?.();
+  }, [props.branchStatus, reportOutcome, dismissBranchStatus]);
   useEffect(() => wikiOccurrences?.subscribeUnsaved(() => {
     reportOutcome({ owner: "wiki", reason: "unsaved" });
   }), [reportOutcome, wikiOccurrences]);
@@ -1370,6 +1380,11 @@ export function RootedMaterial(props: RootedMaterialProps) {
     [activeLayout, renderedProjection],
   );
   const setAdmissionDeliveryVisibleNodeIds = props.admission.setDeliveryVisibleNodeIds;
+  const setBranchDeliveryAvailable = props.onBranchDeliveryAvailableChange;
+  useLayoutEffect(() => {
+    setBranchDeliveryAvailable?.(materialPresentationAvailable && props.branchParentId != null &&
+      visiblyLaidOutNodeIds.has(props.branchParentId));
+  }, [materialPresentationAvailable, props.branchParentId, setBranchDeliveryAvailable, visiblyLaidOutNodeIds]);
   useLayoutEffect(() => {
     setAdmissionDeliveryVisibleNodeIds(visiblyLaidOutNodeIds);
   }, [setAdmissionDeliveryVisibleNodeIds, visiblyLaidOutNodeIds]);
@@ -1819,7 +1834,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
     tree,
   ) ? transformPresentation.change : null;
   const lassoHasSelectionGeometry = lasso.selectionRects.length > 0;
-  const interactionPending = persistenceLoading || admissionCapturePending;
+  const interactionPending = persistenceLoading || admissionCapturePending || props.branchStatus === "pending";
   const nativeSelectionPresentation = useNativeMaterialSelection({
     documentEpoch: props.documentEpoch,
     enabled: !lasso.active && !lassoHasSelectionGeometry &&
@@ -2640,6 +2655,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       : { kind: "none" };
   const guidance = localizeCanvasGuidance(
     projectCanvasGuidance({
+      branchPending: props.branchStatus === "pending",
       admission: props.admission.state,
       camera: !lasso.active && canvasMode === "pan"
         ? { kind: "pan", zoom: viewport.zoom }
@@ -3938,7 +3954,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
       <span aria-atomic="true" aria-live="polite" className="visually-hidden" role="status">
         {shownOutcome !== null ? (
           <span key={`outcome_${shownOutcome.id}`}>{localizeOutcome(shownOutcome, props.locale)}</span>
-        ) : guidance.id === "expansion-parked" || guidance.id === "text-swap-parked" ? (
+        ) : guidance.id === "branch-wait" || guidance.id === "expansion-parked" || guidance.id === "text-swap-parked" ? (
           <span key={guidance.id}>{guidance.text}</span>
         ) : pictureAnnouncement === null || pictureAnnouncement.afterOutcomeId !== outcomeLine.lastId
           // An outcome reported since supersedes it; said once, it is not said again.
@@ -4222,6 +4238,7 @@ export function RootedMaterial(props: RootedMaterialProps) {
         )}
         {nodeActionsEnabled ? (
           <NodeActionLens
+            zoom={viewport.zoom}
             activeNodeIds={workingContext.activeNodeIds}
             canvasRef={canvasRef}
             documentRef={documentRef}

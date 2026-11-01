@@ -80,7 +80,7 @@ vi.mock("./wiki-generation-channel", () => ({
 vi.mock("./wiki-repository", () => ({
   createIndexedDbWikiRepository: () => ({}),
 }));
-vi.mock("../wiki/wiki-fitting", () => ({
+vi.mock("../wiki/wiki-fitting-observation", () => ({
   fitCommittedWikiTextResult: (
     snapshot: unknown,
     request: unknown,

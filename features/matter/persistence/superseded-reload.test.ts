@@ -9,7 +9,7 @@ import {
   SUPERSEDED_RELOAD_MAX_BACKOFF_MS,
   type SupersededReloadEnvironment,
 } from "./superseded-reload";
-import { createMatterStore } from "../store/matter-store";
+import { createDemoMatterStore as createMatterStore } from "../testing/demo-store";
 import type { TreeHistory } from "../tree/history";
 import type { ThoughtTree } from "../tree/model";
 

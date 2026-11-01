@@ -119,12 +119,22 @@ configuration as a promise that every similar-sounding form will be corrected.
 
 ## Two kinds of turn
 
+The right-hand Branch action grows one new child heading beneath the selected
+passage, or the first visible root thought when nothing is selected. Each tap
+submits one real API request using only that parent and its existing children.
+One valid distinct result arrives as one undoable material change. Failure or
+changed material is said once and leaves the tree unchanged; the product never
+substitutes a sample heading for an unavailable model. The Branch build flag
+restores this entry and the two-action AI/context hover; its API contract is
+[`protocol.md`](protocol.md#child-heading--branch1).
+
 **Material admission.** A person speaks at the empty root or, when no passage is
 selected, as a first-level thought in the full material view. Selecting an
 existing passage changes the fixed Voice tool from admission to Point and Talk:
 the spoken line becomes a transient rewrite direction for that complete passage,
 never a child insertion chosen by hidden inference. A child under a selected
-passage is made deliberately instead, with the Under mark on that passage: it
+passage in a build with the Branch demo explicitly disabled is made deliberately
+instead, with the Under mark on that passage: it
 arms one utterance, which enters as the passage's last child through this same
 admission. The final admission
 transcript first receives deterministic locale punctuation, using genuine audio

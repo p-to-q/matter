@@ -72,8 +72,9 @@ position and mounts one shared lens regardless of tree size. Lasso, stretch,
 pan, node drag, pending work, modal chrome, held descendants, and lack of clear
 adjacent space all suppress it. A held root alone retains the local `+` recovery
 and disables AI so set-aside text cannot become a transformation target.
-The lens's screen targets stay fixed at 44px desktop / 48px compact-or-coarse,
-not proportional to material text or camera zoom. Its main decorative fog
+The lens's fine-pointer targets follow type size (34–44px at 100% camera zoom)
+and camera zoom, bounded to 28–60px. Compact-or-coarse targets follow zoom with
+a 48px minimum and 64px maximum. Its main decorative fog
 shares the exact placement but paints behind the material world; the
 interactive controls remain in front. Neither paint plane owns another target,
 observer, action lifecycle, or material copy.
@@ -111,25 +112,30 @@ level (`MAX_TREE_DEPTH`), holds `MAX_CHILDREN_PER_NODE` children, the tree holds
 
 `NEXT_PUBLIC_MATTER_PREVIEW_BRANCH=true`, read only by
 `config/preview-branch.ts` and allow-listed in `next.config.ts`, keeps the retired Branch
-tool: the fifth rail slot, the `insert-child` intent, `extendMaterial` and the seeded-branch
-prose. It defaults to `false`, is documented in `.env.example`, and is never set in
-`vercel.json`, so the deployed product has no Branch. `npm run test:e2e:preview-branch`
-proves the five-slot rail; the default run proves four.
+tool: the fifth rail slot and the `insert-child` intent. The owner's 2026-11-02
+correction restores this entry in `vercel.json`'s
+build environment. Local review uses the same flag set to `true`; unflagged
+builds retain Under and its existing four-slot test matrix.
 The owner review build restores the stable pre-Under two-action hover:
 AI and `−` / restore `+`, with no middle Branch or Under mark. The reference is
 `6b70e794`, not a whole-file rollback; optional Wiki reviews keep their bounded
-keyboard/touch contract. Fixed 44/48px sizing and behind-material fog are
-explicit current overrides of that historical visual baseline.
-Branch remains only on the preview rail and follows its selected parent or the
-default root, never the hovered passage. It uses the existing local fixture
-command, tree-engine history and Undo, with no generation or transcription
-request. The command appends the
-last direct child; layout derives its next-column position and authored sibling
-order. Known seed parents have continuation samples; arbitrary text gets the
-existing locale fallback, not an answer derived from that text. Future adjacent
-context, ideas and references require their own bounded-context freeze.
+keyboard/touch contract. Fine-pointer controls follow the passage's computed
+font size, from 34px on small text to 44px at 28px type at 100% zoom. Camera
+zoom scales the carrier once; the desktop bounds are 28–60px, and touch bounds
+are 48–64px.
+Fog padding and outsets follow the same metric receipt.
+Branch follows its selected parent or the default root, never the hovered
+passage. It now submits `POST /api/branch` through the separate `branch/1`
+scenario. The frozen reference is that parent and its direct child headings;
+one bounded distinct answer appends the last direct child through ingress and
+the tree engine. Layout derives its next-column position and sibling order.
+History and pointer Undo own the committed change. Failure and stale bases
+leave material unchanged with one guidance outcome. The visible action no
+longer invokes `extendMaterial` or any seed fallback. Broader contextual ideas
+and references require their own bounded-context freeze.
 The owner's correction reopens the historical retirement/placement decision;
-this review build does not settle the formal default or Under's eventual place.
+the default now restores Branch while Under remains in an explicitly disabled
+Branch build.
 The earlier three-mark Branch hover and 14px detached-clearance experiments are
 superseded by the owner's later review; their evidence stays in the active
 plan and handoff, not as instructions to reintroduce them.
