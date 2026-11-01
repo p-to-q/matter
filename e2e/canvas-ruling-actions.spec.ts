@@ -186,29 +186,29 @@ for (const viewport of [
     expect(await fog.evaluate((element) => {
       const style = getComputedStyle(element, "::before");
       return {
-        bottom: style.bottom,
+        bottom: Number.parseFloat(style.bottom),
         contactSize: style.maskSize.split(",").at(-1)?.trim(),
         contactIsUniform: style.maskImage.includes("linear-gradient"),
         coreIsStable: style.maskImage.includes("58%"),
-        left: style.left,
+        left: Number.parseFloat(style.left),
         masked: style.maskImage !== "none",
         maskSubtractsUniformRegion: style.maskComposite.split(",")
           .every((operation) => operation.trim() === "subtract"),
         pointerEvents: style.pointerEvents,
-        right: style.right,
-        top: style.top,
+        right: Number.parseFloat(style.right),
+        top: Number.parseFloat(style.top),
       };
     })).toEqual({
-      bottom: "-12px",
+      bottom: expect.closeTo(-12 * expectedTarget / 44, 3),
       contactSize: viewport.name === "narrow" ? "24px 24px" : "22px 22px",
       contactIsUniform: true,
       coreIsStable: true,
-      left: "-16px",
+      left: expect.closeTo(-16 * expectedTarget / 44, 3),
       masked: true,
       maskSubtractsUniformRegion: true,
       pointerEvents: "none",
-      right: "-16px",
-      top: "-12px",
+      right: expect.closeTo(-16 * expectedTarget / 44, 3),
+      top: expect.closeTo(-12 * expectedTarget / 44, 3),
     });
     // The material clearance is owned by lensBoundsAreLawful above;
     // restating it here would give one rule two definitions to drift between.
