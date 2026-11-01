@@ -1,5 +1,29 @@
 # Release readiness
 
+## API-backed Branch candidate — 2026-11-02
+
+The current PR candidate restores the rail action with an independent
+`branch/1` scenario, shared provider execution, strict parent/children context,
+an injected on-use written ingress, one tree-engine commit and pointer Undo.
+An answer waits for a visible, pointer-idle delivery window. Branch outcomes
+use the existing guidance queue and never acknowledge an obscured outcome.
+The hover carrier follows bounded camera zoom. Sample Branch composition is
+now explicit test tooling rather than a production fallback.
+
+Cold-path work splits Wiki editor copy, admission producers and settlement
+execution along existing owners. No byte ceiling is raised. The latest measured
+build cleared settings budgets, while Wiki runtime was still 28,188 / 27,648
+gzip bytes and the initial graph 407,187 / 405,504. These are failed release
+gates, not permission to reuse the main-integration exception for a prerelease.
+The package is still Preview.64; no Preview.65 publication is claimed.
+
+Fresh anonymous Production readback on 2026-11-02 reports Model API
+`available: true`, `credentialPresent: false` with no reset required. The
+deployment identifies Preview.64 and both material surfaces as
+`user-configurable`. Issue #104's earlier unavailable readback is stale;
+private Test/Save qualification and broader provider-quality proof are not
+established by an anonymous health GET. Image spend remains closed.
+
 ## Main integration — 2026-10-25
 
 An isolated `codex/engineering-closure` branch includes the current main

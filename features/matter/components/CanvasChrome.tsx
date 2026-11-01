@@ -65,7 +65,7 @@ const ApiSettingsForm = preloadableComponent(() =>
 // must not tax the paper's initial interaction bundle. It loads when a menu
 // offering it opens, or when a word's takeover that links to it opens.
 const WikiSettingsSection = preloadableComponent(() =>
-  import("./WikiSettingsSection").then((module) => module.WikiSettingsSection));
+  import("./WikiSettingsSection").then((module) => module.loadWikiSettingsSection()));
 
 /** Intent signal from the paper: a surface that can open Wiki has opened. */
 export function preloadWikiSettings(): void {

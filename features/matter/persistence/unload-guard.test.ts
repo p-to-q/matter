@@ -5,7 +5,7 @@ import { createPersistenceController } from "./persistence-controller";
 import { holdsUnsavedPersonMaterial } from "./persistence-status";
 import { createUnloadGuard, SLOW_SAVE_MS, type UnloadGuardEnvironment, type UnloadRisk } from "./unload-guard";
 import { relocalizeSeededSession } from "../material/seeded-session-localization";
-import { createMatterStore } from "../store/matter-store";
+import { createDemoMatterStore as createMatterStore } from "../testing/demo-store";
 import type { TreeHistory } from "../tree/history";
 import type { ThoughtTree } from "../tree/model";
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useStore } from "zustand";
+import { readBranchIngress } from "../interaction/branch-ingress-runtime";
 import type { StoreApi } from "zustand/vanilla";
 import {
   DEFAULT_MATTER_DOCUMENT_TITLE,
@@ -66,6 +67,7 @@ const wikiOccurrences: LazyWikiOccurrenceDriver = createLazyWikiOccurrenceDriver
 
 const matterStore = createMatterStore(singletonInitialDocument, {
   documentRoot: true,
+  branchIngress: readBranchIngress,
   // A Wiki change is disclosed once, never hidden. While its disclosure cannot
   // load (a failed chunk, until a retry succeeds), Wiki applies nothing and
   // material commits as heard; the check is one synchronous read per turn.

@@ -6,11 +6,15 @@
  * not claim later dynamic imports, worker assets or model downloads are free.
  */
 export const MATTER_CAPABILITIES = [
+  { id: "wiki-settlement-queue", sentinel: "matter-capability:wiki-settlement-queue", tier: "on-use", budgetGzip: 3072, entryBudgetGzip: 5120 },
+  { id: "branch-ingress", sentinel: "matter-capability:branch-ingress", tier: "on-use", budgetGzip: 3072, entryBudgetGzip: 5120 },
+  { id: "wiki-admission-producers", sentinel: "matter-capability:wiki-admission-producers", tier: "background", budgetGzip: 8192, entryBudgetGzip: 12288 },
+  { id: "wiki-settings-copy", sentinel: "matter-capability:wiki-settings-copy", tier: "gesture", budgetGzip: 5120, entryBudgetGzip: 6144 },
   { id: "wiki-occurrences", sentinel: "matter-capability:wiki-occurrences", tier: "gesture", budgetGzip: 5120, entryBudgetGzip: 8192 },
   { id: "picture-store", sentinel: "matter-capability:picture-store", tier: "on-use", budgetGzip: 3328, entryBudgetGzip: 6144 },
   { id: "wiki-takeover", sentinel: "wiki-takeover__heard", tier: "gesture", budgetGzip: 8960, entryBudgetGzip: 18432 },
   { id: "local-transcription", sentinel: "matter-capability:local-transcription", tier: "on-use", budgetGzip: 2816, entryBudgetGzip: 3072 },
-  { id: "seeded-branch-copy", sentinel: "matter-capability:seeded-branch-copy", tier: "background", budgetGzip: 5120, entryBudgetGzip: 6144 },
+  { id: "branch-client", sentinel: "matter-capability:branch-client", tier: "on-use", budgetGzip: 5120, entryBudgetGzip: 6144 },
   { id: "transcript-repair", sentinel: "matter-capability:transcript-repair", tier: "background", budgetGzip: 4608, entryBudgetGzip: 5120 },
   { id: "repair-adjudication", sentinel: "matter-capability:repair-adjudication", tier: "background", budgetGzip: 4352, entryBudgetGzip: 5120 },
   { id: "archive-codec", sentinel: "matter-capability:archive-codec", tier: "on-use", budgetGzip: 512, entryBudgetGzip: 9216 },

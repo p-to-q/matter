@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { WikiSettingsSection } from "./WikiSettingsSection";
+import { beforeAll, describe, expect, it } from "vitest";
+import { WikiSettingsSection, loadWikiSettingsSection } from "./WikiSettingsSection";
+beforeAll(async () => { await loadWikiSettingsSection(); });
 
 describe("WikiSettingsSection", () => {
   it("keeps every locale's copy complete instead of spreading another language", () => {
-    const source = readFileSync(new URL("./WikiSettingsSection.tsx", import.meta.url), "utf8");
+    const source = readFileSync(new URL("./wiki-settings-copy.ts", import.meta.url), "utf8");
     // A spread lets a missing key fall back to English or Simplified Chinese
     // without failing the type check.
     expect(source).not.toMatch(/Object\.freeze\(\{\s*\.\.\.[A-Z_]+,/u);
@@ -25,7 +26,8 @@ describe("WikiSettingsSection", () => {
       active: false,
       language: "zh-CN",
     }));
-    const source = readFileSync(new URL("./WikiSettingsSection.tsx", import.meta.url), "utf8");
+    const source = readFileSync(new URL("./WikiSettingsSection.tsx", import.meta.url), "utf8") +
+      readFileSync(new URL("./wiki-settings-copy.ts", import.meta.url), "utf8");
 
     expect(markup).toContain('aria-label="词典 WIKI"');
     expect(markup).toContain("只有已验证并发布的本地规则可以改写材料");

@@ -17,7 +17,8 @@ import { selectLineage } from "../tree/selectors";
 import { compileWikiBasis } from "../wiki/wiki-basis";
 import { applyWikiEvent, createEmptyWikiState } from "../wiki/wiki-evidence";
 import { createWikiMaterialLexicalPort } from "../application/wiki-material-lexical-adapter";
-import { createMatterStore, type MatterStore } from "./matter-store";
+import { type MatterStore } from "./matter-store";
+import { createDemoMatterStore as createMatterStore } from "../testing/demo-store";
 import { adjudicateAdmissionRepair } from "../runtime/admission-repair-adjudication";
 
 // The repair runtime supplies this adjudicator; the product loads it lazily.

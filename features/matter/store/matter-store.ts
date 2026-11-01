@@ -1,11 +1,13 @@
 import { createStore } from "zustand/vanilla";
+import type { prepareBranchIngress } from "../application/branch-ingress";
+import type { BranchRequest, BranchAnswer } from "../protocol/branch-contract";
 import {
-  createBranchChildCommand,
   createSeededDocument,
   SEEDED_DOCUMENT_TREE_ID,
   SEEDED_ROOT_ONLY_TREE_ID,
   type SeededDocumentVariant,
 } from "../material/seeded-document";
+import type { createBranchChildCommand } from "../material/seeded-document";
 import {
   DEFAULT_MATTER_DOCUMENT_TITLE,
   EMPTY_MATTER_DOCUMENT_TITLE,
@@ -284,6 +286,8 @@ type MatterStoreInternalState = Omit<RuntimeState, "lastError"> & {
     locale?: MatterLocale,
     resolveBranchTexts?: SeededBranchTextResolver,
   ) => MatterStoreReceipt;
+  commitBranch: (request: BranchRequest, answer: BranchAnswer, values: BranchValues,
+    expectedDocumentEpoch: number) => MatterStoreReceipt;
   localizeSeededMaterial: (
     locale: MatterLocale,
     relocalize: SeededSessionRelocalizer,
@@ -374,6 +378,9 @@ export function createMatterStore(
     initialTitle?: string;
     monotonicNow?: () => number;
     materialLexical?: MaterialLexicalPort;
+    branchIngress?: () => typeof prepareBranchIngress | null;
+    /** Explicit test/demo capability; the product never supplies sample prose. */
+    demoBranch?: typeof createBranchChildCommand;
     humanAdmissionObservation?: MaterialLexicalObservationPort;
     lexicalOccurrences?: MaterialLexicalOccurrencePort;
     /**
@@ -431,7 +438,7 @@ export function createMatterStore(
     ) => {
       let receipt: MatterStoreReceipt | undefined;
       set((current) => {
-        if (!Object.hasOwn(current.tree.nodes, parentId)) {
+        if (options.demoBranch === undefined || !Object.hasOwn(current.tree.nodes, parentId)) {
           const error: MatterStoreError = {
             code: "INVALID_COMMAND",
             message: "The parent thought does not exist.",
@@ -444,7 +451,7 @@ export function createMatterStore(
           };
           return freezeState({ ...current, lastError: protectValue(error), lastReceipt: protectValue(receipt) });
         }
-        const command = createBranchChildCommand(
+        const command = options.demoBranch(
           current.tree,
           parentId,
           values,
@@ -462,6 +469,31 @@ export function createMatterStore(
           lastReceipt: protectValue(receipt),
         });
       });
+      return requireSynchronousReceipt(receipt);
+    },
+
+    commitBranch: (request, answer, values, expectedDocumentEpoch) => {
+      let receipt: MatterStoreReceipt | undefined;
+      let publication: MaterialLexicalOccurrencePublication | null = null;
+      set((current) => {
+        const prepare = options.branchIngress?.();
+        const prepared = current.documentEpoch === expectedDocumentEpoch && prepare != null
+          ? prepare(current.tree, request, answer, values.nodeId, values.createdAt,
+            captureMaterialLexicalSession(materialLexical)) : null;
+        if (prepared === null) {
+          receipt = { operation: "commit", status: "rejected", revision: current.tree.revision, errorCode: "INVALID_COMMAND" };
+          return current;
+        }
+        const result = commitSessionCommand(runtimeState(current), prepared.command, HISTORY_LIMITS);
+        receipt = result.receipt;
+        if (receipt.status === "committed" && prepared.edits.length > 0) publication = {
+          treeId: current.tree.id, documentEpoch: current.documentEpoch, nodeId: values.nodeId,
+          nodeUpdatedAt: values.createdAt, stage: "branch", channel: "written", locale: request.locale,
+          edits: prepared.edits,
+        };
+        return freezeState({ ...current, ...protectDomain(result.state), lastReceipt: protectValue(receipt) });
+      });
+      publishOccurrences(publication);
       return requireSynchronousReceipt(receipt);
     },
 

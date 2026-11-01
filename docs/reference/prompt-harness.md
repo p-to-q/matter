@@ -30,6 +30,19 @@ in [`generated-image.md`](generated-image.md).
 
 ## Problem
 
+The Branch action added on 2026-11-02 is a separate `matter-branch@branch/1`
+scenario on this same harness and pool. It receives the parent and existing
+direct children as fenced reference, and returns one short, distinct child
+heading anchored in the parent's subject. It cannot choose a target, modify
+existing language, return a list, or claim an imagined possibility as fact.
+Static adjudication checks bounds, one-line material shape and normalized
+duplicates. It cannot prove semantic relevance; synthetic live smoke and
+subsequent multilingual quality evaluation remain separate evidence. There is
+no sample fallback. Its floor is unchanged material with one visible outcome.
+Managed access uses `MATTER_BRANCH_ADAPTER=live`; the existing verified user
+lease may provide a request-local candidate independently. The server keeps
+all provider work in `server/`; Wiki data never enters this scenario.
+
 Five text scenarios in Matter need a model: repairing a heard transcript, naming a
 thought, answering one bounded question, expanding a stretched passage, and
 restating one selected passage from a bounded direction. Nothing about the

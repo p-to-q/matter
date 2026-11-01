@@ -19,12 +19,7 @@ import {
 } from
   "../wiki/wiki-runtime-producer-releases";
 import type { WikiOccurrenceSettlement, WikiState } from "../wiki/wiki-model";
-import {
-  planWikiAdmissionBatch,
-  type WikiAdmissionTurn,
-} from "../wiki/wiki-admission";
-import { collectCommittedWikiTermsResult } from "../wiki/wiki-term-collection";
-import { fitCommittedWikiTextResult } from "../wiki/wiki-fitting";
+import type { WikiAdmissionTurn } from "../wiki/wiki-admission";
 import {
   createWikiAdmissionQueue,
   type WikiAdmissionQueue,
@@ -40,10 +35,7 @@ import {
   isMatterWikiPhoneticFittingEnabled,
 } from "./wiki-capability-preferences-reader";
 import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
-import { deriveWikiDiagnostics } from "../wiki/wiki-diagnostics";
-import { readMatterWikiTransientOutcomes, revokeMatterWikiOccurrences,
-  revokeMatterWikiPassiveBefore } from "./wiki-occurrence-owner";
-import { sameWikiOccurrenceForm } from "../wiki/wiki-occurrence-registry";
+import { revokeMatterWikiPassiveBefore } from "./wiki-occurrence-owner";
 
 // The release table and its learning policy load with this lazy runtime; the
 // initial material graph never reads them.
@@ -162,20 +154,6 @@ const runtimeSlot: MatterWikiRuntimeSlot = previousSlot?.abi === RUNTIME_ABI
 runtimeHost[RUNTIME_KEY] = runtimeSlot;
 const runtime = runtimeSlot.runtime;
 const matterWikiCoordinator = runtime.coordinator;
-let diagnosticState: WikiState | null = null;
-let diagnosticTransient = readMatterWikiTransientOutcomes();
-let diagnostics = deriveWikiDiagnostics(diagnosticState, diagnosticTransient);
-
-export function readMatterWikiDiagnostics(): ReturnType<typeof deriveWikiDiagnostics> {
-  const state = matterWikiCoordinator.readState();
-  const transient = readMatterWikiTransientOutcomes();
-  if (state !== diagnosticState || transient !== diagnosticTransient) {
-    diagnosticState = state;
-    diagnosticTransient = transient;
-    diagnostics = deriveWikiDiagnostics(state, transient);
-  }
-  return diagnostics;
-}
 const qualifiedAliasProducers = new Set<WikiAliasEvidenceProducer>(
   MATTER_WIKI_RUNTIME_ALIAS_PRODUCERS,
 );
@@ -212,6 +190,9 @@ async function observeHydratedMatterWikiCommittedMaterial(
 ): Promise<void> {
   if (request.observed.locale !== request.committed.locale ||
       request.observed.channel !== request.committed.channel) return;
+  // A failed chunk loses only this optional observation. The bounded queue
+  // records failure, and the next committed admission retries the same import.
+  const { planRuntimeWikiAdmission } = await import("../wiki/wiki-admission-producers");
   for (let attempt = 0; attempt < MAX_ADMISSION_CAS_ATTEMPTS; attempt += 1) {
     const permissions = Object.freeze({
       automaticCollection: isMatterWikiAutomaticCollectionEnabled(),
@@ -219,19 +200,8 @@ async function observeHydratedMatterWikiCommittedMaterial(
     });
     if (!permissions.automaticCollection && !permissions.phoneticFitting) return;
     const basis = readMatterWikiBasis();
-    const batch = planWikiAdmissionBatch(
-      request,
-      permissions.automaticCollection
-        ? collectCommittedWikiTermsResult(request.committed, qualifiedTermProducers)
-        : null,
-      permissions.phoneticFitting
-        ? fitCommittedWikiTextResult(
-            basis.fitSnapshot,
-            request.observed,
-            qualifiedAliasProducers,
-          )
-        : null,
-    );
+    const batch = planRuntimeWikiAdmission(request, basis.fitSnapshot, permissions,
+      qualifiedTermProducers, qualifiedAliasProducers);
     const result = await publishChanged(matterWikiCoordinator.observe(
       batch.events,
       batch.tick,
@@ -257,46 +227,35 @@ export function decideMatterWiki(
   return publishChanged(matterWikiCoordinator.decide(event, expectedStateRevision));
 }
 
-/** Records one occurrence settlement against the hydrated origin authority. */
-let settlementTail: Promise<unknown> = Promise.resolve();
-const pendingSettlements = new Set<{ settlement: WikiOccurrenceSettlement; revoked: boolean }>();
+/** One bounded queue loads only when an occurrence actually settles. */
+type SettlementQueue = ReturnType<typeof import("./wiki-settlement-queue").createWikiSettlementQueue>;
+let settlementQueue: SettlementQueue | null = null;
+let settlementLoading: Promise<SettlementQueue> | null = null;
+let pendingSettlementCount = 0;
+let passiveCutoff = 0;
 
 function revokePassiveSettlementsBefore(revision: number): void {
+  passiveCutoff = Math.max(passiveCutoff, revision);
   revokeMatterWikiPassiveBefore(revision);
-  for (const queued of pendingSettlements) {
-    if ((queued.settlement.outcome === "accepted-implicit" || queued.settlement.outcome === "inspected-kept") &&
-        queued.settlement.rule.appliedAtRevision < revision) queued.revoked = true;
-  }
+  settlementQueue?.revokeBefore(revision);
 }
 
-export function settleHydratedMatterWikiOccurrence(
+export async function settleHydratedMatterWikiOccurrence(
   settlement: WikiOccurrenceSettlement,
 ): Promise<WikiCoordinatorResult> {
-  if (pendingSettlements.size >= 128) return Promise.resolve({ ok: false, code: "BOUND_EXCEEDED" });
-  const pending = { settlement, revoked: false };
-  pendingSettlements.add(pending);
-  const operation = settlementTail.then(async (): Promise<WikiCoordinatorResult> => {
-    if (pending.revoked) {
-      const basis = matterWikiCoordinator.readBasis();
-      return { ok: true, changed: false, generation: basis.snapshot.generation,
-        stateRevision: basis.stateRevision };
-    }
-    const result = await publishChanged(matterWikiCoordinator.settle(settlement));
-    // The transient tokens cannot outlive this page. Revoke only after the
-    // negative evidence committed, including tokens waiting behind this write.
-    if (result.ok && result.changed && settlement.outcome === "reverted") {
-      revokeMatterWikiOccurrences(settlement.rule, result.stateRevision);
-      for (const queued of pendingSettlements) {
-        if ((queued.settlement.outcome === "accepted-implicit" ||
-            queued.settlement.outcome === "inspected-kept") &&
-            sameWikiOccurrenceForm(queued.settlement.rule, settlement.rule) &&
-            queued.settlement.rule.appliedAtRevision < result.stateRevision) queued.revoked = true;
-      }
-    }
-    return result;
-  }).finally(() => pendingSettlements.delete(pending));
-  settlementTail = operation.catch(() => undefined);
-  return operation;
+  if (pendingSettlementCount >= 128) return { ok: false, code: "BOUND_EXCEEDED" };
+  pendingSettlementCount++;
+  try {
+    settlementLoading ??= import("./wiki-settlement-queue").then(({ createWikiSettlementQueue }) => {
+      settlementQueue = createWikiSettlementQueue({
+        settle: (value) => publishChanged(matterWikiCoordinator.settle(value)),
+        readBasis: matterWikiCoordinator.readBasis,
+        cutoff: () => passiveCutoff,
+      });
+      return settlementQueue;
+    }).catch((error) => { settlementLoading = null; throw error; });
+    return await (await settlementLoading).settle(settlement);
+  } finally { pendingSettlementCount--; }
 }
 
 export function resetCorruptMatterWiki(): Promise<WikiCoordinatorResult> {

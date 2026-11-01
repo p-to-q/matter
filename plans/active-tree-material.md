@@ -1,5 +1,33 @@
 # Plan: Matter first release
 
+## Branch API — 2026-11-02
+
+```text
+Outcome:    the rail appends one API-generated child heading, pointer-undoable
+Boundary:   branch/1 request, shared scenario harness, browser lifecycle, ingress and tree commit
+Invariants: one fixed parent; parent/direct children only; no Wiki/model coupling;
+            no sample fallback; failed or stale work leaves material unchanged
+Proof:      strict wire/harness/store tests; network browser journey; synthetic live smoke
+Non-goals:  batch generation, hidden retrieval, citations, managed Elastic promotion
+```
+
+The existing Branch build flag controls presentation; `MATTER_BRANCH_ADAPTER=live`
+independently permits the managed pool. A verified user Model API lease may
+supply the public Branch action. One request freezes parent text, direct child
+texts and revision. A conflicting revision or document replacement refuses
+delivery, and the guidance line says the action did not land. The API has no
+fixture adapter. Tests intercept the network explicitly for deterministic UI proof.
+
+Local receipt: strict branch wire/harness/store tests pass; the request-model
+pool and harness regression set passes 74 tests. Chromium Branch journeys pass
+5 cases with the opposite-build case skipped. A real local managed-pool request
+added one heading through the visible rail, and pointer Undo restored the exact
+node count. TypeScript, zero-warning lint, architecture, Markdown links and Wiki
+qualification pass. Production compilation succeeds, but the artifact gate
+still reports Wiki chunk/entry debt and initial transfer of 407,785 gzip bytes
+against 405,504. No ceiling was raised. This is local capability evidence;
+there is no merged-source, CI or deployed Branch receipt yet.
+
 ## Deployment replay correction — 2026-10-26
 
 ```text

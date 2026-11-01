@@ -11,12 +11,29 @@ import {
   decideMatterWiki,
   getMatterWikiStatus,
   readMatterWikiState,
-  readMatterWikiDiagnostics,
   resetCorruptMatterWiki,
   retryMatterWikiAuthority,
   startMatterWikiAuthority,
   subscribeMatterWikiAuthority,
 } from "./wiki-runtime-core";
+import { deriveWikiDiagnostics } from "../wiki/wiki-diagnostics";
+import { readMatterWikiTransientOutcomes } from "./wiki-occurrence-owner";
+import type { WikiState } from "../wiki/wiki-model";
+
+let diagnosticState: WikiState | null = null;
+let diagnosticTransient = readMatterWikiTransientOutcomes();
+let diagnostics = deriveWikiDiagnostics(diagnosticState, diagnosticTransient);
+
+function readMatterWikiDiagnostics(): ReturnType<typeof deriveWikiDiagnostics> {
+  const state = readMatterWikiState();
+  const transient = readMatterWikiTransientOutcomes();
+  if (state !== diagnosticState || transient !== diagnosticTransient) {
+    diagnosticState = state;
+    diagnosticTransient = transient;
+    diagnostics = deriveWikiDiagnostics(state, transient);
+  }
+  return diagnostics;
+}
 
 export type MatterWikiConfigurationSnapshot = Readonly<{
   status: WikiCoordinatorStatus;

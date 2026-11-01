@@ -17,6 +17,45 @@ Forecloses: what this makes harder or impossible
 
 ---
 
+## 2026-11-02 — passage controls follow bounded camera zoom
+
+Changed: the local action carrier, glyphs, padding and fog follow camera zoom.
+Fine-pointer buttons are 34–44px at 100%, bounded to 28–60px; compact and touch
+buttons are bounded to 48–64px. Placement uses the same scaled metric receipt.
+
+Why: small passages need proportionate controls, and zoom should preserve
+their visual relationship while keeping a usable target.
+
+Forecloses: fixed-size controls at every camera zoom and double-scaling the
+carrier through the material transform.
+
+## 2026-11-02 — Branch generates one child through its own bounded API scenario
+
+Changed: the rail reads one parent and its existing direct children through
+`branch/1`, generates one heading via the shared harness/provider pool, and
+commits through written ingress and the tree engine. The managed adapter is
+independently gated; a user Model API lease can supply the request. Pending
+work holds document adoption. Failed or stale answers leave material unchanged.
+
+Why: the owner needs real related-thought generation instead of seeded demo
+prose, under the same bounded context and reversible material contracts.
+
+Forecloses: fixture fallback on provider failure, model-chosen targets, batch
+generation, and using generated headings as Wiki learning evidence.
+
+## 2026-11-02 — restore the Branch demo and scale passage controls by typography
+
+Changed: the deployment build restores the local seeded Branch rail action and
+the two-action AI/context hover. Fine-pointer controls use smaller metrics for
+smaller material; touch retains 48px targets. Explicitly disabling Branch still
+selects Under. Branch uses the existing local tree command and pointer Undo.
+
+Why: the owner needs the original demo action and a control field proportionate
+to the passage, without the confusing middle admission mark.
+
+Forecloses: treating local Branch samples as model-generated output or using
+camera zoom to shrink touch targets.
+
 ## 2026-10-25 — deployment recovery requires an explicit safe reload
 Changed:    one build-frozen public identity reaches the client and health
             response; a bounded idle observer may offer a manual Archive reload

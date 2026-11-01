@@ -14,6 +14,7 @@
  */
 
 export type MaterialOutcome =
+  | Readonly<{ owner: "branch"; reason: "unavailable" | "stale" }>
   /** A submitted Elastic expansion changed nothing. */
   | Readonly<{ owner: "expansion"; reason: "unavailable" | "stale" }>
   /** A submitted Point-and-Talk rewrite ended with no field left to say so. */

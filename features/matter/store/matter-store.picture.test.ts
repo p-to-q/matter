@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { SEEDED_DOCUMENT_NODE_IDS } from "../material/seeded-document";
 import type { ImagePointer } from "../tree/image-pointer";
-import { createMatterStore } from "./matter-store";
+import { createDemoMatterStore as createMatterStore } from "../testing/demo-store";
 
 const TARGET = SEEDED_DOCUMENT_NODE_IDS.imaginedLives;
 const OTHER = SEEDED_DOCUMENT_NODE_IDS.bodilyMemory;

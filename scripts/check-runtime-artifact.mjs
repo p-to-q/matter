@@ -39,6 +39,7 @@ export const RUNTIME_ARTIFACT_BUDGETS = Object.freeze({
 });
 
 const API_ROUTES = Object.freeze([
+  "/api/branch",
   "/api/health",
   // Costs real money per call, so a prerendered copy would be a surface served
   // without the gate. Omitting a route here passes silently.

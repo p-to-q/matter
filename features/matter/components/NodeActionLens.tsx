@@ -78,6 +78,7 @@ export type NodeActionLensProps = Readonly<{
   documentRef: RefObject<HTMLElement | null>;
   enabled: boolean;
   geometryKey: string;
+  zoom?: number;
   heldAsideRootIds: ReadonlySet<string>;
   interaction: "idle" | "pending";
   locale: MatterLocale;
@@ -107,6 +108,7 @@ export function NodeActionLens({
   documentRef,
   enabled,
   geometryKey,
+  zoom = 1,
   heldAsideRootIds,
   interaction,
   locale,
@@ -393,6 +395,8 @@ export function NodeActionLens({
       const textRect = measureFirstLineInkRect(text);
       const metrics = projectNodeHandleMetrics({
         coarse: coarse || compact,
+        fontSize: Number.parseFloat(getComputedStyle(text).fontSize),
+        zoom,
       });
       const result = projectNodeHandlePosition({
         documentRect: paperRect,
@@ -447,7 +451,7 @@ export function NodeActionLens({
       positioningElement?.removeEventListener("transitionend", finishPositioningTransition);
       window.removeEventListener("resize", update);
     };
-  }, [actionCount, activeTarget, canvasRef, close, coarse, compact, documentRef, enabled, geometryKey, positioningRef]);
+  }, [actionCount, activeTarget, canvasRef, close, coarse, compact, documentRef, enabled, geometryKey, positioningRef, zoom]);
 
   useLayoutEffect(() => {
     if (currentPlacement === null || activeTarget === null || pendingKeyboardEntryRef.current !== activeTarget.nodeId) return;
@@ -529,6 +533,8 @@ export function NodeActionLens({
     "--lens-gap": `${currentPlacement.metrics.gap}px`,
     "--lens-pad-x": `${currentPlacement.metrics.paddingX}px`,
     "--lens-pad-y": `${currentPlacement.metrics.paddingY}px`,
+    "--lens-fog-outset-x": `${currentPlacement.metrics.button * 16 / 44}px`,
+    "--lens-fog-outset-y": `${currentPlacement.metrics.button * 12 / 44}px`,
     "--lens-material-x": `${currentPlacement.materialCorner?.x ?? currentPlacement.metrics.paddingX}px`,
     "--lens-material-y": `${currentPlacement.materialCorner?.y ?? currentPlacement.metrics.paddingY}px`,
   } as CSSProperties;

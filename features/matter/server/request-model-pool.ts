@@ -26,6 +26,7 @@ export type RequestModelResolution = Readonly<{
 export type LeasedScenarioId = Exclude<MatterScenarioId, "matter-image-brief" | "matter-image">;
 
 const SCENARIO_GATES: Readonly<Record<LeasedScenarioId, string>> = Object.freeze({
+  "matter-branch": "MATTER_BRANCH_ADAPTER",
   "matter-transcript-repair": "MATTER_REPAIR_ADAPTER",
   "matter-thought-label": "MATTER_LABEL_ADAPTER",
   "matter-inquiry": "MATTER_INQUIRY_ADAPTER",
@@ -37,6 +38,7 @@ const SCENARIO_GATES: Readonly<Record<LeasedScenarioId, string>> = Object.freeze
 // may supply their provider even when Matter's managed adapter is intentionally
 // disabled. Material mutations carry a separate product-surface gate below.
 const USER_PROVIDER_PUBLIC_SCENARIOS: ReadonlySet<LeasedScenarioId> = new Set([
+  "matter-branch",
   "matter-transcript-repair",
   "matter-thought-label",
   "matter-inquiry",

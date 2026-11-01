@@ -15,7 +15,7 @@ for (const surface of [
   test.describe(surface.name, () => {
     test.use({ viewport: surface.viewport, hasTouch: surface.hasTouch });
 
-    test("local controls keep screen size and their fog stays behind material", async ({ page }) => {
+    test("local controls follow bounded camera zoom and their fog stays behind material", async ({ page }) => {
       await page.addInitScript(({ key }) => {
         localStorage.setItem(key, JSON.stringify({
           version: 1, language: "zh-CN", leafFx: false, appearance: "light",
@@ -74,9 +74,14 @@ for (const surface of [
             expect(receipt.overlap).toBeLessThanOrEqual(7);
           }
           expect(receipt.buttons).toHaveLength(previewBranch ? 2 : 3);
+          const base = surface.name === "desktop"
+            ? 44 * (nodeId === CHILD ? 0.78 : 1) : surface.target;
+          const actualZoom = Number(await page.locator("main.matter-shell").getAttribute("data-viewport-zoom"));
+          const target = Math.round(Math.max(surface.name === "desktop" ? 28 : 48,
+            Math.min(surface.name === "desktop" ? 60 : 64, base * actualZoom)));
           for (const button of receipt.buttons) {
-            expect(button.width).toBe(surface.target);
-            expect(button.height).toBe(surface.target);
+            expect(button.width).toBe(target);
+            expect(button.height).toBe(target);
           }
         }
       }

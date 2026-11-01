@@ -138,7 +138,7 @@ export function resolveMatterRepairEnabled(
   return resolvePublicBoolean(override, adapter !== "off");
 }
 
-/** The retired Branch tool ships only in a build that asks for it by name. */
+/** The Branch demo is selected explicitly by the deployment or local build. */
 export function resolveMatterPreviewBranch(override?: string): boolean {
   return resolvePublicBoolean(override, false);
 }

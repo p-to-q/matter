@@ -7,6 +7,28 @@ const rect = (left: number, top: number, width: number, height: number) => ({
 const metricsFor = (coarse: boolean) => projectNodeHandleMetrics({ coarse });
 
 describe("projectNodeHandleMetrics", () => {
+  it("reduces the entire fine-pointer carrier for smaller hierarchy levels", () => {
+    const root = projectNodeHandleMetrics({ coarse: false, fontSize: 28 });
+    const child = projectNodeHandleMetrics({ coarse: false, fontSize: 22 });
+    const leaf = projectNodeHandleMetrics({ coarse: false, fontSize: 17 });
+    expect(root.button).toBe(44);
+    expect(child.button).toBe(35);
+    expect(leaf.button).toBe(34);
+    expect(child.paddingX).toBeLessThan(root.paddingX);
+    expect(leaf.paddingY).toBeLessThanOrEqual(child.paddingY);
+    expect(projectNodeHandleMetrics({ coarse: true, fontSize: 17 }).button).toBe(48);
+  });
+  it("tracks camera zoom with bounded desktop and touch targets", () => {
+    expect(projectNodeHandleMetrics({ coarse: false, fontSize: 28, zoom: 1.25 }).button).toBe(55);
+    expect(projectNodeHandleMetrics({ coarse: false, fontSize: 17, zoom: 0.65 }).button).toBe(28);
+    expect(projectNodeHandleMetrics({ coarse: false, fontSize: 17, zoom: 1.25 }).button).toBe(43);
+    expect(projectNodeHandleMetrics({ coarse: false, zoom: 100 }).button).toBe(60);
+    expect(projectNodeHandleMetrics({ coarse: true, zoom: 0.1 }).button).toBe(48);
+    expect(projectNodeHandleMetrics({ coarse: true, zoom: 1.25 }).button).toBe(60);
+    for (const zoom of [NaN, Infinity, 0, -1]) {
+      expect(projectNodeHandleMetrics({ coarse: false, zoom }).button).toBe(44);
+    }
+  });
   it("keeps fine-pointer controls at one fixed screen size", () => {
     expect(metricsFor(false)).toEqual({ button: 44, gap: 6, paddingX: 12, paddingY: 11 });
   });
