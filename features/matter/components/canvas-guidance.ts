@@ -101,7 +101,7 @@ const NOT_PARKED: CanvasTurnGuidanceState = Object.freeze({ kind: "none" });
 const EN_US_LINES = Object.freeze({
   "branch-wait": "Extending this thought.",
   "branch-unavailable": "Not extended. Material unchanged.",
-  "branch-stale": "Material changed. No thought added.",
+  "branch-stale": "Material changed. Nothing added.",
   "allow-microphone": "Allow microphone access.",
   "speak-recording": "Speak your thought.",
   "wait-recording": "Wait for recording to finish.",

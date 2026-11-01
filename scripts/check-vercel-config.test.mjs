@@ -28,6 +28,12 @@ test("accepts a minimal configuration carrying both shapes", () => {
   assert.deepEqual(inspectVercelConfig(validConfig()), []);
 });
 
+test("keeps unqualified managed Branch spend closed", () => {
+  const config = validConfig();
+  config.env.MATTER_BRANCH_ADAPTER = "live";
+  assert.match(inspectVercelConfig(config).join("\n"), /MATTER_BRANCH_ADAPTER/);
+});
+
 test("rejects a configuration with no region pinned near the model pool", () => {
   const config = validConfig();
   delete config.regions;

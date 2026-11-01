@@ -24,6 +24,7 @@ export function useBranch({ read, commit, locale, available, deliveryAvailable }
   const [status, setStatus] = useState<BranchStatus>("idle");
   const refreshDelivery = useDeliveryWindow({
     isAvailable: () => deliveryAvailable,
+    onExit: (exit) => { if (!exit.persisted) flight.current?.abort(); },
     onChange: (open) => {
       const result = ready.current;
       if (result === null) return;
@@ -33,11 +34,7 @@ export function useBranch({ read, commit, locale, available, deliveryAvailable }
     },
   }, flight);
   useEffect(() => { refreshDelivery(); });
-  useEffect(() => {
-    const leave = () => flight.current?.abort();
-    window.addEventListener("pagehide", leave);
-    return () => { leave(); window.removeEventListener("pagehide", leave); };
-  }, []);
+  useEffect(() => () => flight.current?.abort(), []);
   const dismiss = useCallback(() => setStatus((value) => value === "pending" ? value : "idle"), []);
   const start = useCallback((parentId: string) => {
     if (flight.current !== null || !available) return;

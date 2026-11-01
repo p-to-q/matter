@@ -397,6 +397,8 @@ export function NodeActionLens({
         coarse: coarse || compact,
         fontSize: Number.parseFloat(getComputedStyle(text).fontSize),
         zoom,
+        availableWidth: paperRect.width - 24,
+        toolCount: actionCount,
       });
       const result = projectNodeHandlePosition({
         documentRect: paperRect,

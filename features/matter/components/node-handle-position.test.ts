@@ -7,6 +7,17 @@ const rect = (left: number, top: number, width: number, height: number) => ({
 const metricsFor = (coarse: boolean) => projectNodeHandleMetrics({ coarse });
 
 describe("projectNodeHandleMetrics", () => {
+  it("fits zoomed Wiki review actions on narrow touch paper without losing the touch floor", () => {
+    for (const zoom of [1.25, 2, 3]) {
+      const metrics = projectNodeHandleMetrics({ coarse: true, zoom, toolCount: 4, availableWidth: 280 });
+      expect(metrics.button).toBeGreaterThanOrEqual(48);
+      expect(4 * metrics.button + 3 * metrics.gap + 2 * metrics.paddingX).toBeLessThanOrEqual(280);
+      expect(projectNodeHandlePosition({
+        documentRect: rect(8, 66, 304, 646), guidanceRect: null, railRect: null,
+        textRect: rect(72, 264, 120, 62), toolCount: 4, metrics,
+      })).not.toBeNull();
+    }
+  });
   it("reduces the entire fine-pointer carrier for smaller hierarchy levels", () => {
     const root = projectNodeHandleMetrics({ coarse: false, fontSize: 28 });
     const child = projectNodeHandleMetrics({ coarse: false, fontSize: 22 });

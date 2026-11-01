@@ -42,6 +42,9 @@ no sample fallback. Its floor is unchanged material with one visible outcome.
 Managed access uses `MATTER_BRANCH_ADAPTER=live`; the existing verified user
 lease may provide a request-local candidate independently. The server keeps
 all provider work in `server/`; Wiki data never enters this scenario.
+Hosted managed Branch is pinned `off` until distributed rate and hard spend
+controls are verified. The per-instance admission guard is not that proof;
+verified user-owned leases and explicit local live qualification stay separate.
 
 Five text scenarios in Matter need a model: repairing a heard transcript, naming a
 thought, answering one bounded question, expanding a stretched passage, and

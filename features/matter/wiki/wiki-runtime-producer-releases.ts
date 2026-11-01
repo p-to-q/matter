@@ -15,7 +15,7 @@ export const MATTER_WIKI_RUNTIME_PRODUCER_RELEASES = Object.freeze([
   release(
     "latin-internal-edit-v2",
     "2.2.0",
-    "sha256:f67dbe7292fbb2b1c661ad4acc6153ef0a64f763c87256befc34d731cdf3a22b",
+    "sha256:e24e7f4ad2aba1a67163cab471e83b9e7aac83fb39858da269e1d08b86ea2ccb",
     "ascii-latin",
     "1.2.0",
     "sha256:f294e081d89131d77d2df4e27decbd82c5f97c79572f0aee17ab8d7ef673b45f",

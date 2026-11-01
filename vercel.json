@@ -20,7 +20,7 @@
     "MATTER_PUBLIC_ORIGIN": "https://matter.ptoq.io",
     "MATTER_TRANSCRIPTION_ADAPTER": "browser",
     "MATTER_LABEL_ADAPTER": "live",
-    "MATTER_BRANCH_ADAPTER": "live",
+    "MATTER_BRANCH_ADAPTER": "off",
     "MATTER_REPAIR_ADAPTER": "live",
     "MATTER_INQUIRY_ADAPTER": "live",
     "MATTER_TRANSFORM_SURFACE": "public",

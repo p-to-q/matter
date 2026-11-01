@@ -40,6 +40,36 @@ test("an unavailable API leaves material unchanged and says so", async ({ page }
   expect(await page.locator("[data-thought-text-id]").allTextContents()).toEqual(before);
 });
 
+test("a submitted Branch survives a back-forward-cache suspension", async ({ page }) => {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route("**/api/branch", async (route) => {
+    const input = route.request().postDataJSON();
+    await gate;
+    await route.fulfill({ json: { version: input.version, requestId: input.requestId, treeId: input.treeId,
+      revision: input.revision, parentId: input.parentId, text: "给尚未决定的日常留出空间" } });
+  });
+  await page.goto("/matter");
+  await expect(page.locator(".matter-canvas")).toHaveAttribute("data-layout-ready", "true");
+  const before = await page.locator("[data-thought-id]").count();
+  const request = page.waitForRequest("**/api/branch");
+  await branchButton(page).click();
+  await request;
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+  });
+  const response = page.waitForResponse("**/api/branch");
+  release();
+  await response;
+  expect(await page.locator("[data-thought-id]").count()).toBe(before);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  });
+  await expect(page.locator("[data-thought-id]")).toHaveCount(before + 1);
+});
+
 test("a completed answer waits until a covering dialog closes", async ({ page }) => {
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });

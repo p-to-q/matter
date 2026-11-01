@@ -44,7 +44,7 @@ jobs:
         run: |
           mkdir -p test-results
           git ls-files -z -- app features e2e scripts public .github package.json package-lock.json next.config.ts next.config.test.ts tsconfig.json eslint.config.mjs vitest.config.mts playwright.config.ts playwright.production.config.ts | xargs -0 sha256sum > test-results/ci-build-inputs.sha256
-      - run: npx next build --webpack
+      - run: NEXT_PUBLIC_MATTER_PREVIEW_BRANCH=true npx next build --webpack
       - name: Runtime budget (blocking)
         run: npm run check:runtime
       - name: Verify production build inputs stayed fixed

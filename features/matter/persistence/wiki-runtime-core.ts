@@ -192,7 +192,7 @@ async function observeHydratedMatterWikiCommittedMaterial(
   if (request.observed.locale !== request.committed.locale ||
       request.observed.channel !== request.committed.channel) return;
   // A failed chunk loses only this optional observation. The bounded queue
-  // records failure, and the next committed admission retries the same import.
+  // discards the failed observation; the next admission retries the same import.
   const { planRuntimeWikiAdmission } = await import("../wiki/wiki-admission-producers");
   for (let attempt = 0; attempt < MAX_ADMISSION_CAS_ATTEMPTS; attempt += 1) {
     const permissions = Object.freeze({

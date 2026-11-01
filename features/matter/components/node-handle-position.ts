@@ -35,6 +35,8 @@ type MetricsInput = Readonly<{
   coarse: boolean;
   fontSize?: number;
   zoom?: number;
+  availableWidth?: number;
+  toolCount?: number;
 }>;
 
 /**
@@ -51,8 +53,16 @@ export function projectNodeHandleMetrics(input: MetricsInput): NodeHandleMetrics
     : Math.max(0.78, Math.min(1, input.fontSize / 28));
   const zoom = input.zoom !== undefined && Number.isFinite(input.zoom) && input.zoom > 0 ? input.zoom : 1;
   const base = input.coarse ? 48 : 44;
-  const button = Math.round(Math.max(input.coarse ? 48 : 28,
+  const floor = input.coarse ? 48 : 28;
+  let button = Math.round(Math.max(floor,
     Math.min(input.coarse ? 64 : 60, base * hierarchy * zoom)));
+  // Zoom yields to the paper width before sacrificing a safe touch target.
+  const count = input.toolCount;
+  if (count !== undefined && Number.isInteger(count) && count > 0 &&
+      input.availableWidth !== undefined && Number.isFinite(input.availableWidth)) {
+    while (button > floor && count * button + (count - 1) * Math.round(6 * button / base) +
+      2 * Math.round(12 * button / base) > input.availableWidth) button -= 1;
+  }
   const scale = button / base;
   return Object.freeze({
     button,

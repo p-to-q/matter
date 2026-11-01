@@ -56,6 +56,15 @@ function attempt(state: AdmissionAttemptPayload): AdmissionAttempt {
 }
 
 describe("canvas guidance projection", () => {
+  it.each(["unavailable", "stale"] as const)("renders a %s Branch outcome within the narrow line", (reason) => {
+    const outcome: MaterialOutcome = { owner: "branch", reason };
+    const line = projectCanvasGuidance(input({ outcome }));
+    expect(line.id).toBe(`branch-${reason}`);
+    expect(line.text.length).toBeLessThanOrEqual(CANVAS_GUIDANCE_NARROW_CHARACTER_LIMIT);
+    for (const language of ["en-US", "zh-CN", "zh-TW", "ja-JP", "de-DE"] as const) {
+      expect(localizeCanvasGuidance(line, language).text).toBe(localizeOutcome(outcome, language));
+    }
+  });
   it("offers a changed-artifact hint only on otherwise idle, unselected material", () => {
     const changed = projectCanvasGuidance(input({ deploymentChanged: true }));
     expect(changed).toEqual({ id: "matter-changed", kind: "recovery", text: "Matter changed. Reload in Archive." });
