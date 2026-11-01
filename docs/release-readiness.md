@@ -10,12 +10,15 @@ use the existing guidance queue and never acknowledge an obscured outcome.
 The hover carrier follows bounded camera zoom. Sample Branch composition is
 now explicit test tooling rather than a production fallback.
 
-Cold-path work splits Wiki editor copy, admission producers and settlement
-execution along existing owners. No byte ceiling is raised. The latest measured
-build cleared settings budgets, while Wiki runtime was still 28,188 / 27,648
-gzip bytes and the initial graph 407,187 / 405,504. These are failed release
-gates, not permission to reuse the main-integration exception for a prerelease.
-The package is still Preview.64; no Preview.65 publication is claimed.
+Cold-path work splits Wiki editor copy, admission observation and information
+bodies along existing owners. Fitting index compilation stays with authority;
+word scanning loads only for human admission. The algorithm, corpus decisions,
+weights and permissions are unchanged; its artifact and catalog digests were
+requalified. Settlement remains with its existing synchronous queue owner.
+The latest measured build passed every unchanged capability ceiling and the
+396 KiB initial ceiling at 393.3 KiB gzip. CI and deployment now use the strict
+budget check again. The package is Preview.65; final CI and exact Production
+readback still precede publication.
 
 Fresh anonymous Production readback on 2026-11-02 reports Model API
 `available: true`, `credentialPresent: false` with no reset required. The

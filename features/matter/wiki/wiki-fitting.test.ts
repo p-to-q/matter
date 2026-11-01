@@ -6,10 +6,9 @@ import {
 } from "./wiki-evidence";
 import {
   compileWikiFitSnapshot,
-  fitCommittedWikiText,
-  fitCommittedWikiTextResult,
   wikiFitSnapshotMatchesState,
 } from "./wiki-fitting";
+import { fitCommittedWikiText, fitCommittedWikiTextResult } from "./wiki-fitting-observation";
 import { MAX_WIKI_FITTING_TARGETS, type WikiState } from "./wiki-model";
 import type { WikiQualifiedProducerRelease } from "./wiki-producer-qualification";
 import {

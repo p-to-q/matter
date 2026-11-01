@@ -1,6 +1,7 @@
 import { planWikiAdmissionBatch, type WikiAdmissionTurn } from "./wiki-admission";
 import { collectCommittedWikiTermsResult } from "./wiki-term-collection";
-import { fitCommittedWikiTextResult, type WikiFitSnapshot } from "./wiki-fitting";
+import { fitCommittedWikiTextResult } from "./wiki-fitting-observation";
+import type { WikiFitSnapshot } from "./wiki-fitting";
 import type { WikiAliasEvidenceProducer, WikiTermEvidenceProducer } from "./wiki-learning-policy";
 
 /** Background discovery is loaded by committed human admission, never ingress. */

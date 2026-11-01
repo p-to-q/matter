@@ -1,11 +1,11 @@
 import { clientMatterBasePath } from "../config/base-path";
 import { BRANCH_TIMEOUT_MS, parseBranchAnswer, parseBranchRequest, type BranchRequest } from "../protocol/branch-contract";
 import { installBranchIngress } from "./branch-ingress-runtime";
+import { prepareBranchIngress } from "../application/branch-ingress";
 import { readBoundedJsonResponse } from "./bounded-json-response";
 
 export async function requestBranch(input: BranchRequest, signal: AbortSignal) {
   if (signal.aborted || parseBranchRequest(input) === null) throw new Error("INVALID_BRANCH_REQUEST");
-  const { prepareBranchIngress } = await import("../application/branch-ingress");
   if (signal.aborted) throw new Error("BRANCH_CANCELLED");
   installBranchIngress(prepareBranchIngress);
   const deadline = AbortSignal.any([signal, AbortSignal.timeout(BRANCH_TIMEOUT_MS)]);

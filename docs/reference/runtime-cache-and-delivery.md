@@ -121,8 +121,8 @@ boundary:
 | Ask Matter record store | record repository, database handle, `idb` | on the record's first load after hydration |
 | Wiki runtime | coordinator, release table and learning policy, fitting mode, canonicalizer | at hydration, by the Wiki authority |
 | Wiki admission producers | term discovery and observation batching | first committed human admission; a failed import drops only that optional observation and the next admission retries |
-| Wiki settlement queue | serialized occurrence settlement and passive revocation | first settlement; the eager owner bounds all pending loads and settles at 128 |
 | Wiki settings copy | complete five-locale editor copy | resolves with the settings loader before the editor mounts; a failed preload retries on the next open |
+| Chrome information | About, privacy, pricing and terms bodies | after first paint; a failed load is said in the dialog and the next opening retries |
 | Branch client and ingress | strict request/response parsing and generated child command preparation | rail activation, before spending a provider request |
 | late repair | repair floor, expression decorator, repair client, store adjudicator | after first paint; again when recording starts |
 | Model API form | form and provider-session client | after first paint; when a settings menu opens |

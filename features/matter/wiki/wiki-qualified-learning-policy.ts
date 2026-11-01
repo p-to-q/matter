@@ -99,5 +99,5 @@ export const MATTER_WIKI_QUALIFIED_LEARNING_POLICY = Object.freeze({
     scenarioCount: 21,
   }),
   resultDigest: "sha256:c92f297933a2fbb7a67f7b8477558e1096ade435e3fbd19a7fef91632817b127",
-  producerQualificationDigest: "sha256:2bb99dfe637e615aba61e7a20c9023a4b330dc39eba2fb38a7c4a236df9692ca",
+  producerQualificationDigest: "sha256:dfebc06b253789320a09a9656d3d8400911f14944f2a58a2b9308eeafe522abe",
 }) satisfies WikiQualifiedLearningPolicyRelease;

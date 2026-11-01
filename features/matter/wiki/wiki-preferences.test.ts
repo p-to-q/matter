@@ -4,7 +4,7 @@ import { applyWikiEvent, applyWikiObservationBatch, createEmptyWikiState,
   createWikiProjectionPolicy, projectApplicableWikiRules } from "./wiki-evidence";
 import { freezeWikiState } from "./wiki-invariants";
 import { compileWikiBasis } from "./wiki-basis";
-import { fitCommittedWikiTextResult } from "./wiki-fitting";
+import { fitCommittedWikiTextResult } from "./wiki-fitting-observation";
 import { planWikiAdmissionBatch } from "./wiki-admission";
 import { parseWikiEvent } from "./wiki-codec";
 import { MATTER_WIKI_QUALIFIED_PRODUCER_RELEASES } from "./wiki-qualified-producer-releases";

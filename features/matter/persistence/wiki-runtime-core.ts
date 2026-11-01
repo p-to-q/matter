@@ -35,7 +35,8 @@ import {
   isMatterWikiPhoneticFittingEnabled,
 } from "./wiki-capability-preferences-reader";
 import { canonicalizeWikiText } from "../wiki/canonicalize-wiki-text";
-import { revokeMatterWikiPassiveBefore } from "./wiki-occurrence-owner";
+import { revokeMatterWikiOccurrences, revokeMatterWikiPassiveBefore } from "./wiki-occurrence-owner";
+import { sameWikiOccurrenceForm } from "../wiki/wiki-occurrence-registry";
 
 // The release table and its learning policy load with this lazy runtime; the
 // initial material graph never reads them.
@@ -227,35 +228,46 @@ export function decideMatterWiki(
   return publishChanged(matterWikiCoordinator.decide(event, expectedStateRevision));
 }
 
-/** One bounded queue loads only when an occurrence actually settles. */
-type SettlementQueue = ReturnType<typeof import("./wiki-settlement-queue").createWikiSettlementQueue>;
-let settlementQueue: SettlementQueue | null = null;
-let settlementLoading: Promise<SettlementQueue> | null = null;
-let pendingSettlementCount = 0;
-let passiveCutoff = 0;
+/** Records one occurrence settlement against the hydrated origin authority. */
+let settlementTail: Promise<unknown> = Promise.resolve();
+const pendingSettlements = new Set<{ settlement: WikiOccurrenceSettlement; revoked: boolean }>();
 
 function revokePassiveSettlementsBefore(revision: number): void {
-  passiveCutoff = Math.max(passiveCutoff, revision);
   revokeMatterWikiPassiveBefore(revision);
-  settlementQueue?.revokeBefore(revision);
+  for (const queued of pendingSettlements) {
+    if ((queued.settlement.outcome === "accepted-implicit" || queued.settlement.outcome === "inspected-kept") &&
+        queued.settlement.rule.appliedAtRevision < revision) queued.revoked = true;
+  }
 }
 
-export async function settleHydratedMatterWikiOccurrence(
+export function settleHydratedMatterWikiOccurrence(
   settlement: WikiOccurrenceSettlement,
 ): Promise<WikiCoordinatorResult> {
-  if (pendingSettlementCount >= 128) return { ok: false, code: "BOUND_EXCEEDED" };
-  pendingSettlementCount++;
-  try {
-    settlementLoading ??= import("./wiki-settlement-queue").then(({ createWikiSettlementQueue }) => {
-      settlementQueue = createWikiSettlementQueue({
-        settle: (value) => publishChanged(matterWikiCoordinator.settle(value)),
-        readBasis: matterWikiCoordinator.readBasis,
-        cutoff: () => passiveCutoff,
-      });
-      return settlementQueue;
-    }).catch((error) => { settlementLoading = null; throw error; });
-    return await (await settlementLoading).settle(settlement);
-  } finally { pendingSettlementCount--; }
+  if (pendingSettlements.size >= 128) return Promise.resolve({ ok: false, code: "BOUND_EXCEEDED" });
+  const pending = { settlement, revoked: false };
+  pendingSettlements.add(pending);
+  const operation = settlementTail.then(async (): Promise<WikiCoordinatorResult> => {
+    if (pending.revoked) {
+      const basis = matterWikiCoordinator.readBasis();
+      return { ok: true, changed: false, generation: basis.snapshot.generation,
+        stateRevision: basis.stateRevision };
+    }
+    const result = await publishChanged(matterWikiCoordinator.settle(settlement));
+    // The transient tokens cannot outlive this page. Revoke only after the
+    // negative evidence committed, including tokens waiting behind this write.
+    if (result.ok && result.changed && settlement.outcome === "reverted") {
+      revokeMatterWikiOccurrences(settlement.rule, result.stateRevision);
+      for (const queued of pendingSettlements) {
+        if ((queued.settlement.outcome === "accepted-implicit" ||
+            queued.settlement.outcome === "inspected-kept") &&
+            sameWikiOccurrenceForm(queued.settlement.rule, settlement.rule) &&
+            queued.settlement.rule.appliedAtRevision < result.stateRevision) queued.revoked = true;
+      }
+    }
+    return result;
+  }).finally(() => pendingSettlements.delete(pending));
+  settlementTail = operation.catch(() => undefined);
+  return operation;
 }
 
 export function resetCorruptMatterWiki(): Promise<WikiCoordinatorResult> {

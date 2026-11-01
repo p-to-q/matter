@@ -1,6 +1,6 @@
 {
   "framework": "nextjs",
-  "buildCommand": "node scripts/build-main-integration.mjs",
+  "buildCommand": "npm run build",
   "regions": ["hkg1"],
   "build": {
     "env": {

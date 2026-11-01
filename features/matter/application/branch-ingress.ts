@@ -22,4 +22,3 @@ export function prepareBranchIngress(tree: ThoughtTree, request: BranchRequest, 
   return { command, edits: useLexical ? lexical.edits.filter((edit): edit is MaterialLexicalOccurrenceEdit =>
     edit.occurrence !== undefined) : [] };
 }
-Object.defineProperty(prepareBranchIngress, "matterCapability", { value: "matter-capability:branch-ingress" });

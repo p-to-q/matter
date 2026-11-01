@@ -3,8 +3,8 @@ import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import {
   compileWikiFitSnapshot,
-  fitCommittedWikiText,
 } from "../../../features/matter/wiki/wiki-fitting";
+import { fitCommittedWikiText } from "../../../features/matter/wiki/wiki-fitting-observation";
 import {
   WIKI_PRODUCER_QUALIFICATION_VERSION,
   digestWikiProducerArtifact,

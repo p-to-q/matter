@@ -6,8 +6,7 @@
  * not claim later dynamic imports, worker assets or model downloads are free.
  */
 export const MATTER_CAPABILITIES = [
-  { id: "wiki-settlement-queue", sentinel: "matter-capability:wiki-settlement-queue", tier: "on-use", budgetGzip: 3072, entryBudgetGzip: 5120 },
-  { id: "branch-ingress", sentinel: "matter-capability:branch-ingress", tier: "on-use", budgetGzip: 3072, entryBudgetGzip: 5120 },
+  { id: "chrome-info", sentinel: "matter-capability:chrome-info", tier: "background", budgetGzip: 8192, entryBudgetGzip: 10240 },
   { id: "wiki-admission-producers", sentinel: "matter-capability:wiki-admission-producers", tier: "background", budgetGzip: 8192, entryBudgetGzip: 12288 },
   { id: "wiki-settings-copy", sentinel: "matter-capability:wiki-settings-copy", tier: "gesture", budgetGzip: 5120, entryBudgetGzip: 6144 },
   { id: "wiki-occurrences", sentinel: "matter-capability:wiki-occurrences", tier: "gesture", budgetGzip: 5120, entryBudgetGzip: 8192 },

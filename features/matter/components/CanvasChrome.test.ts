@@ -2,13 +2,13 @@ import { readFileSync } from "node:fs";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
+import { CANVAS_CHROME_INFO } from "./canvas-chrome-info";
 import {
   CANVAS_LANGUAGE_OPTIONS,
   DEFAULT_CANVAS_PREFERENCES,
   type CanvasLanguage,
 } from "./canvas-preferences";
 import {
-  CANVAS_CHROME_INFO,
   CanvasChrome,
   INQUIRY_CANCEL_ARM_MS,
   canvasOverlayOwnsSurface,
