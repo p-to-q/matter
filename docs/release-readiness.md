@@ -252,7 +252,7 @@ Two independent gates still prevent normal production AI qualification:
 strict pool gate       the paced six-round release-profile probe must identify the
                        exact public version and pass. Preview.65 reached
                        Repair 0/6, Label 0/6 and Inquiry 1/6; every other call
-                       ended in MODEL_TIMEOUT. Earlier failures remain trace
+                       ended in MODEL_TIMEOUT. Earlier failures remain traceable
 session acceptance     issue #104: the independent sealing ring now passes
                        anonymous availability and strict deployment checks.
                        Private provider Test/Save acceptance remains unproved;

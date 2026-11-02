@@ -204,9 +204,10 @@ The Model API settings item is separately available only when the deployment has
 valid credential-sealing key ring:
 
 For local development the same requirement applies: create an independent
-32-byte random key in the ignored `.env.local`, with a short key id, and retain
-it across restarts. Next loads this server-only value on startup or environment
-reload. Its absence makes every browser report the same save-unavailable state;
+32-byte random key in the ignored `.env.local`, with a unique 1–16 character
+key id using only letters, digits, underscores or hyphens (`[A-Za-z0-9_-]`),
+and retain it across restarts. Next loads this server-only value on startup or
+environment reload. Its absence makes every browser report the same save-unavailable state;
 changing browsers or clearing storage cannot supply a server key. Never copy
 the Production ring into a local environment. Local fake-IP DNS may separately
 prevent verification when it resolves provider hosts to non-public addresses;
