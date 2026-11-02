@@ -1,5 +1,30 @@
 # Release readiness
 
+## Owner-requested Preview.65 publication — 2026-11-02
+
+[Preview.65](https://github.com/p-to-q/matter/releases/tag/v0.2.0-preview.65)
+is an annotated, non-draft GitHub prerelease at
+`5f57669cae16d73ecb2cac8c705436a9578e9973`, published after the owner explicitly
+requested publication with the operational failures already disclosed. This
+is a publication exception, not qualification of those failed capabilities or
+a relaxation of the normal gates for later releases. Hosted PR and main CI
+pass. Production reads the same version with build
+`dpl_6iqZtFCtiYifGjiLfYduPxdXsinQ`.
+
+The exact-version six-round probe with 65-second pacing failed: Repair and
+Label each timed out 6/6; Inquiry produced one model answer and five timeouts.
+Anonymous Model API availability is true, while private Test/Save acceptance
+remains unproved. Hosted managed Branch, Elastic, Text Swap and image generation
+remain off; a verified user-owned lease may supply the implemented text paths.
+
+The localhost save-unavailable report had a separate configuration cause:
+its independent sealing ring was absent. Initializing it in ignored
+`.env.local` restored `available: true` and enabled the form without changing
+runtime code or weakening credential protection. Further local connection
+tests encountered the machine's fake-IP DNS, which maps provider hosts into
+the non-public `198.18.0.0/15` range. Public-address validation still refuses
+that range. No global proxy or DNS setting was modified.
+
 ## API-backed Branch candidate — 2026-11-02
 
 The current PR candidate restores the rail action with an independent
@@ -219,24 +244,19 @@ This document keeps the current slice, the latest receipts, and the gates.
 
 ## Publication state
 
-No preview after Preview.52 has an annotated tag or GitHub prerelease, although
-Preview.53 through Preview.57 and Preview.63 have recorded Production receipts
-from `main`. Two independent gates withhold publication:
+Preview.65 has an owner-requested annotated tag and prerelease under the
+exception recorded above. Intermediate Preview.53–64 versions were not tagged.
+Two independent gates still prevent normal production AI qualification:
 
 ```text
 strict pool gate       the paced six-round release-profile probe must identify the
-                       exact public version and pass; the newest recorded run
-                       (Preview.57) reached Label 6/6 (four accepted, two
-                       rejected) and returned accepted Inquiry answers 6/6, but
-                       ended Repair in MODEL_TIMEOUT 6/6. Preview.53–56 also
-                       failed it on Repair, Label, or Inquiry. Repair's
-                       one-completable-attempt correction (2026-09-18) still
-                       needs its own fresh release-profile receipt
-session-sealing ring   issue #104: until the deployment owner installs
-                       MATTER_PROVIDER_SESSION_KEYS and a fresh deployment reads
-                       back, Model API reports available:false, both public
-                       material surfaces read unavailable, and the strict
-                       material-user-provider checker fails by design
+                       exact public version and pass. Preview.65 reached
+                       Repair 0/6, Label 0/6 and Inquiry 1/6; every other call
+                       ended in MODEL_TIMEOUT. Earlier failures remain traceable
+session acceptance     issue #104: the independent sealing ring now passes
+                       anonymous availability and strict deployment checks.
+                       Private provider Test/Save acceptance remains unproved;
+                       availability alone does not close the issue
 ```
 
 Open operational issues that no source receipt can close: #104 (session ring),

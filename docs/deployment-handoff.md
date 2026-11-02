@@ -203,6 +203,16 @@ MATTER_TEXT_SWAP_ADAPTER=off
 The Model API settings item is separately available only when the deployment has a
 valid credential-sealing key ring:
 
+For local development the same requirement applies: create an independent
+32-byte random key in the ignored `.env.local`, with a unique 1–16 character
+key id using only letters, digits, underscores or hyphens (`[A-Za-z0-9_-]`),
+and retain it across restarts. Next loads this server-only value on startup or
+environment reload. Its absence makes every browser report the same save-unavailable state;
+changing browsers or clearing storage cannot supply a server key. Never copy
+the Production ring into a local environment. Local fake-IP DNS may separately
+prevent verification when it resolves provider hosts to non-public addresses;
+do not relax the public-address guard to make such a connection pass.
+
 ```text
 MATTER_PROVIDER_SESSION_KEYS=202609:<32-byte-base64url>,202608:<previous-32-byte-base64url>
 ```
@@ -210,8 +220,8 @@ MATTER_PROVIDER_SESSION_KEYS=202609:<32-byte-base64url>,202608:<previous-32-byte
 Each value is exactly 32 random bytes encoded as unpadded base64url (43
 characters); the short id before `:` is unique. The first entry seals new
 cookies and at most three later entries decrypt leases issued before rotation.
-Generate and store values only in the Vercel encrypted server environment—never
-in this repository, `.env.example`, a shell transcript, CI output, issue, or
+For Production, generate and store values only in the Vercel encrypted server
+environment—never in tracked source, `.env.example`, a shell transcript, CI output, issue, or
 deployment receipt. Normal rotation prepends a new key, leaves the previous key
 for at least the fixed 30-day lease window, then removes it. Emergency removal is
 immediate revocation for every lease sealed by that key. A malformed or absent
